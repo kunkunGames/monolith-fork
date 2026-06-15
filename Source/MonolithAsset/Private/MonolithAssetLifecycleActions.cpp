@@ -240,6 +240,21 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report targets without deleting"), TEXT("false"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force-delete referenced assets after closing open editors. Default false"), TEXT("false"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("import_texture_from_file"),
+		{ TEXT("import image"), TEXT("png to texture"), TEXT("load texture from disk"), TEXT("ingest external image"), TEXT("texture2d from file") },
+		{ TEXT("import texture"), TEXT("add texture"), TEXT("create texture from image") },
+		{ TEXT("import D:/art/rock.png as a Texture2D under /Game/Textures"), TEXT("bring this PNG into the project as a texture") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("save_asset"),
+		{ TEXT("write to disk"), TEXT("persist asset"), TEXT("flush package"), TEXT("commit changes"), TEXT("unsaved asset") },
+		{ TEXT("save package"), TEXT("save"), TEXT("save changes") },
+		{ TEXT("save /Game/Textures/T_Rock to disk"), TEXT("persist my edits to this asset") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("delete_assets"),
+		{ TEXT("remove asset"), TEXT("erase asset"), TEXT("force delete referenced"), TEXT("clean up assets"), TEXT("delete multiple") },
+		{ TEXT("delete asset"), TEXT("remove"), TEXT("trash asset") },
+		{ TEXT("delete /Game/Old/T_Unused"), TEXT("remove these unreferenced assets safely") });
 }
 
 FMonolithActionResult FMonolithAssetLifecycleActions::ImportTextureFromFile(const TSharedPtr<FJsonObject>& Params)

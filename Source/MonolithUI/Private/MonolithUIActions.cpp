@@ -231,6 +231,31 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
             .Build(),
         TEXT("WidgetCRUD")
     );
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("create_widget_blueprint"),
+		{ TEXT("new WBP"), TEXT("make HUD widget"), TEXT("UMG widget blueprint"), TEXT("UserWidget asset"), TEXT("menu screen") },
+		{ TEXT("create_widget"), TEXT("new_widget_blueprint"), TEXT("make_wbp"), TEXT("create_umg") },
+		{ TEXT("create a WBP_HUD widget blueprint under /Game/UI"), TEXT("make a new UMG menu widget from CommonActivatableWidget") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("get_widget_tree"),
+		{ TEXT("widget hierarchy"), TEXT("list widgets in WBP"), TEXT("inspect UMG layout"), TEXT("child widgets"), TEXT("widget names") },
+		{ TEXT("dump_widget_tree"), TEXT("read_widget_hierarchy"), TEXT("get_widgets"), TEXT("show_widget_tree") },
+		{ TEXT("show the widget hierarchy of WBP_HUD"), TEXT("what widgets are inside this UMG blueprint") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("add_widget"),
+		{ TEXT("insert widget"), TEXT("add button to panel"), TEXT("place TextBlock"), TEXT("new child widget"), TEXT("add image to canvas") },
+		{ TEXT("create_widget_element"), TEXT("add_child_widget"), TEXT("insert_widget"), TEXT("add_umg_element") },
+		{ TEXT("add a Button named PlayButton to the root canvas of WBP_Menu"), TEXT("put a TextBlock inside the VerticalBox") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("set_widget_property"),
+		{ TEXT("set widget text"), TEXT("change widget color"), TEXT("edit widget opacity"), TEXT("widget visibility"), TEXT("mark as variable") },
+		{ TEXT("edit_widget_property"), TEXT("update_widget"), TEXT("set_text"), TEXT("configure_widget") },
+		{ TEXT("set the Text of TitleLabel to 'Start Game'"), TEXT("change the HealthBar fill color in WBP_HUD") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("compile_widget"),
+		{ TEXT("compile WBP"), TEXT("build widget blueprint"), TEXT("check widget compile errors"), TEXT("recompile UMG"), TEXT("validate widget") },
+		{ TEXT("compile_widget_blueprint"), TEXT("build_wbp"), TEXT("recompile_widget"), TEXT("compile_umg") },
+		{ TEXT("compile WBP_HUD and report any errors"), TEXT("recompile the menu widget after editing it") });
 }
 
 // --- create_widget_blueprint ---

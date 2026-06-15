@@ -431,6 +431,31 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("context_paths"), TEXT("array"), TEXT("Specific InputMappingContext paths; omitted means all contexts"))
 			.Optional(TEXT("path"), TEXT("string"), TEXT("Optional package path root when context_paths is omitted"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("create_input_action"),
+		{ TEXT("enhanced input"), TEXT("IA asset"), TEXT("value type"), TEXT("axis2d"), TEXT("boolean action"), TEXT("jump fire move") },
+		{ TEXT("new_input_action"), TEXT("make_ia"), TEXT("add_input_action") },
+		{ TEXT("create an Input Action asset IA_Jump"), TEXT("make a 2D axis input action for movement") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("create_input_mapping_context"),
+		{ TEXT("enhanced input"), TEXT("IMC asset"), TEXT("mapping context"), TEXT("input context"), TEXT("default mapping") },
+		{ TEXT("new_input_mapping_context"), TEXT("make_imc"), TEXT("create_imc") },
+		{ TEXT("create an Input Mapping Context IMC_Default"), TEXT("make a new IMC for the player") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("add_input_mapping"),
+		{ TEXT("bind key"), TEXT("key mapping"), TEXT("map key to action"), TEXT("FKey"), TEXT("spacebar gamepad"), TEXT("keybind") },
+		{ TEXT("map_key"), TEXT("bind_key"), TEXT("add_key_mapping"), TEXT("add_keybinding") },
+		{ TEXT("bind SpaceBar to IA_Jump in IMC_Default"), TEXT("map a gamepad key to an input action") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("validate_input_mappings"),
+		{ TEXT("duplicate key"), TEXT("key conflict"), TEXT("missing action"), TEXT("unbound"), TEXT("lint input"), TEXT("check bindings") },
+		{ TEXT("check_input_mappings"), TEXT("lint_input"), TEXT("find_key_conflicts") },
+		{ TEXT("find duplicate key bindings across mapping contexts"), TEXT("check input mappings for missing actions") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("get_input_action"),
+		{ TEXT("inspect IA"), TEXT("value type"), TEXT("triggers modifiers"), TEXT("action properties"), TEXT("read input action") },
+		{ TEXT("describe_input_action"), TEXT("show_ia"), TEXT("read_input_action") },
+		{ TEXT("what value type does IA_Move use"), TEXT("inspect an Input Action's triggers and modifiers") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("get_input_mapping_context"),
+		{ TEXT("inspect IMC"), TEXT("list mappings"), TEXT("which keys"), TEXT("context bindings"), TEXT("read mapping context") },
+		{ TEXT("describe_input_mapping_context"), TEXT("show_imc"), TEXT("list_mappings") },
+		{ TEXT("what keys are bound in IMC_Default"), TEXT("inspect the mappings of an Input Mapping Context") });
 }
 
 FMonolithActionResult FMonolithGASInputAssetActions::HandleListInputActions(const TSharedPtr<FJsonObject>& Params)

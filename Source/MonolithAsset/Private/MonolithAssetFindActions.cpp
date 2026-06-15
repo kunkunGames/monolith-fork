@@ -428,4 +428,9 @@ void FMonolithAssetFindActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("include_score_breakdown"), TEXT("boolean"), TEXT("Include reason, matched_tokens, distance, and per-field score breakdown."), TEXT("false"))
 			.Optional(TEXT("allow_transposition"), TEXT("boolean"), TEXT("Count adjacent character swaps as one typo edit for fuzzy token matching."), TEXT("true"), { TEXT("bAllowTransposition") })
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("find_assets"),
+		{ TEXT("locate asset by name"), TEXT("fuzzy asset search"), TEXT("typo tolerant search"), TEXT("search content browser"), TEXT("asset registry lookup") },
+		{ TEXT("find asset"), TEXT("search assets"), TEXT("lookup asset"), TEXT("where is asset") },
+		{ TEXT("find the rock texture under /Game"), TEXT("search for a blueprint named BP_Player") });
 }

@@ -554,6 +554,11 @@ void FMonolithGASAbilityActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Required(TEXT("parameters"), TEXT("array"), TEXT("Array of {name, type} objects for factory function parameters"))
 			.Required(TEXT("delegates"), TEXT("array"), TEXT("Array of {name, params?} objects for broadcast delegates"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("create_ability"),
+		{ TEXT("new ability"), TEXT("GA"), TEXT("skill"), TEXT("spell"), TEXT("attack"), TEXT("power") },
+		{ TEXT("create_gameplay_ability"), TEXT("make ability"), TEXT("new GameplayAbility"), TEXT("add ability") },
+		{ TEXT("create a new GameplayAbility for a fireball"), TEXT("make a dash ability blueprint") });
 }
 
 // ============================================================

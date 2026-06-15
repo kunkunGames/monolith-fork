@@ -17,6 +17,11 @@ void FMonolithAssetHygieneActions::RegisterActions(FMonolithToolRegistry& Regist
 {
 	RegisterValidateNamingConventions(Registry);
 	RegisterBatchRenameAssets(Registry);
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("batch_rename_assets"),
+		{ TEXT("rename many assets"), TEXT("find and replace names"), TEXT("add prefix to assets"), TEXT("strip suffix"), TEXT("bulk rename") },
+		{ TEXT("rename assets"), TEXT("mass rename"), TEXT("rename in bulk") },
+		{ TEXT("add the T_ prefix to these texture assets"), TEXT("rename all assets replacing Old with New") });
 }
 
 void FMonolithAssetHygieneActions::RegisterValidateNamingConventions(FMonolithToolRegistry& Registry)

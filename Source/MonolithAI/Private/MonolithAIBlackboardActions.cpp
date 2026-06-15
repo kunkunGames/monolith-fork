@@ -399,6 +399,23 @@ void FMonolithAIBlackboardActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_blackboard"),
+		{ TEXT("BB data asset"), TEXT("ai memory store"), TEXT("shared brain data"), TEXT("blackboard key container") },
+		{ TEXT("new_blackboard"), TEXT("make_bb"), TEXT("add_blackboard_asset") },
+		{ TEXT("create a blackboard data asset for the enemy AI") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_bb_key"),
+		{ TEXT("blackboard variable"), TEXT("target actor key"), TEXT("vector key"), TEXT("object reference key"), TEXT("enum key") },
+		{ TEXT("add_blackboard_variable"), TEXT("new_bb_key"), TEXT("create_blackboard_key") },
+		{ TEXT("add a TargetActor object key to the blackboard"), TEXT("create a MoveToLocation vector blackboard key") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("batch_add_bb_keys"),
+		{ TEXT("add many blackboard keys"), TEXT("bulk blackboard variables"), TEXT("multiple keys at once") },
+		{ TEXT("bulk_add_bb_keys"), TEXT("add_blackboard_keys") },
+		{ TEXT("add target, last known location and is-alerted keys to the blackboard in one call") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("get_blackboard"),
+		{ TEXT("list blackboard keys"), TEXT("inspect blackboard"), TEXT("dump bb keys"), TEXT("inherited keys") },
+		{ TEXT("read_blackboard"), TEXT("inspect_bb"), TEXT("list_bb_keys") },
+		{ TEXT("show all keys on this blackboard including inherited ones") });
+
 // ============================================================
 //  1. create_blackboard
 // ============================================================

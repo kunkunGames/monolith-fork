@@ -132,6 +132,36 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 				TEXT("false"))
 			.Build());
 #endif // WITH_EDITOR
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("resolve_setting"),
+		{ TEXT("effective ini value"), TEXT("merged config value"), TEXT("what is this setting set to"), TEXT("read project setting"), TEXT("DefaultEngine.ini value"), TEXT("resolve config key") },
+		{ TEXT("get_config"), TEXT("get_setting"), TEXT("read_ini"), TEXT("get_ini_value") },
+		{ TEXT("what is r.ScreenPercentage set to in Engine config"), TEXT("get the effective value of bUseFixedFrameRate in Game"), TEXT("read the RendererSettings DefaultFeatureAntiAliasing value") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("get_cvar"),
+		{ TEXT("console variable value"), TEXT("r. variable"), TEXT("current cvar setting"), TEXT("cvar flags"), TEXT("read only cheat cvar"), TEXT("console var lookup") },
+		{ TEXT("get_console_variable"), TEXT("read_cvar"), TEXT("cvar_value"), TEXT("show_cvar") },
+		{ TEXT("what is the value of r.ScreenPercentage"), TEXT("get the cvar t.MaxFPS"), TEXT("is sg.ShadowQuality read-only") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("find_cvars"),
+		{ TEXT("list console variables"), TEXT("search cvars by prefix"), TEXT("all r. variables"), TEXT("find scalability cvars"), TEXT("console variable autocomplete"), TEXT("matching cvars") },
+		{ TEXT("search_cvars"), TEXT("list_cvars"), TEXT("cvar_search"), TEXT("grep_cvars") },
+		{ TEXT("list all cvars starting with r.Shadow"), TEXT("find console variables containing Nanite"), TEXT("show every sg. scalability cvar") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("get_section"),
+		{ TEXT("read ini section"), TEXT("all keys in a section"), TEXT("dump config block"), TEXT("settings under a header"), TEXT("Script section entries"), TEXT("bracketed ini header") },
+		{ TEXT("read_section"), TEXT("dump_section"), TEXT("get_ini_section"), TEXT("section_entries") },
+		{ TEXT("read the /Script/Engine.RendererSettings section in DefaultEngine"), TEXT("show all keys under /Script/EngineSettings.GameMapsSettings"), TEXT("dump the SystemSettings section") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("diff_from_default"),
+		{ TEXT("overrides vs defaults"), TEXT("what did the project change"), TEXT("non-default settings"), TEXT("customized config"), TEXT("compare to engine base"), TEXT("modified added removed keys") },
+		{ TEXT("config_diff"), TEXT("show_overrides"), TEXT("diff_config"), TEXT("compare_config") },
+		{ TEXT("what Engine config does this project override"), TEXT("show settings that differ from engine defaults"), TEXT("diff the Game config against base") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("config"), TEXT("set_developer_setting"),
+		{ TEXT("change a setting at runtime"), TEXT("edit project settings"), TEXT("set developer settings property"), TEXT("mutate settings CDO"), TEXT("write config and save"), TEXT("toggle a settings flag") },
+		{ TEXT("set_setting"), TEXT("set_config"), TEXT("update_setting"), TEXT("set_project_setting") },
+		{ TEXT("set bIndexMarketplacePluginReflection to true on MonolithReflectionIntelSettings"), TEXT("change a project setting and save it to the ini"), TEXT("toggle a developer settings boolean property") });
 }
 
 // ============================================================================

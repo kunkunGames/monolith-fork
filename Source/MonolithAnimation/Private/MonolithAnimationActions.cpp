@@ -1321,6 +1321,32 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("auto_map"), TEXT("string"), TEXT("Chain auto-map mode if ops must be seeded on run: 'fuzzy' (default) or 'exact'"), TEXT("fuzzy"))
 			.Build());
 
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("create_montage"),
+		{ TEXT("anim montage"), TEXT("attack montage"), TEXT("slot animation"), TEXT("new montage asset"), TEXT("AnimMontage") },
+		{ TEXT("new_montage"), TEXT("make_montage"), TEXT("add_montage") },
+		{ TEXT("create a new animation montage for an attack"), TEXT("make a montage from a skeleton") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("create_anim_blueprint"),
+		{ TEXT("ABP"), TEXT("AnimInstance"), TEXT("animation blueprint"), TEXT("character anim bp"), TEXT("new animbp") },
+		{ TEXT("create_abp"), TEXT("new_anim_blueprint"), TEXT("make_animbp") },
+		{ TEXT("create an animation blueprint for a character skeleton"), TEXT("make a new ABP asset") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("add_notify"),
+		{ TEXT("anim notify"), TEXT("play sound notify"), TEXT("footstep event"), TEXT("notify keyframe"), TEXT("trigger event on animation") },
+		{ TEXT("add_anim_notify"), TEXT("insert_notify"), TEXT("create_notify") },
+		{ TEXT("add a footstep notify to a walk animation"), TEXT("put a play-sound notify at a time in the sequence") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("create_blend_space"),
+		{ TEXT("2D blendspace"), TEXT("locomotion blend"), TEXT("speed direction blend"), TEXT("BlendSpace asset"), TEXT("movement blend") },
+		{ TEXT("create_blendspace"), TEXT("new_blend_space"), TEXT("make_blendspace") },
+		{ TEXT("create a 2D locomotion blend space"), TEXT("make a blendspace driven by speed and direction") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("build_state_machine"),
+		{ TEXT("anim state machine"), TEXT("locomotion FSM"), TEXT("states and transitions"), TEXT("idle walk run"), TEXT("declarative state graph") },
+		{ TEXT("create_state_machine"), TEXT("make_state_machine"), TEXT("build_fsm"), TEXT("author_state_machine") },
+		{ TEXT("build a locomotion state machine with idle walk run states"), TEXT("author states and transitions in one shot") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("set_transition_rule"),
+		{ TEXT("transition condition"), TEXT("state change rule"), TEXT("bool variable transition"), TEXT("auto rule"), TEXT("numeric comparison transition") },
+		{ TEXT("set_transition_condition"), TEXT("edit_transition"), TEXT("add_transition_rule") },
+		{ TEXT("set the condition that triggers a state transition"), TEXT("make idle to walk transition when speed greater than zero") });
+
 }
 
 // ---------------------------------------------------------------------------

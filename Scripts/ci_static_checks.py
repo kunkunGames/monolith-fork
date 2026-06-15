@@ -13,6 +13,8 @@ import json
 import os
 import queue
 import re
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -818,6 +820,162 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
         log_tmp.cleanup()
 
 
+def _endpoint_reachable(url: str, timeout: float = 1.5) -> bool:
+    """Quick TCP probe of the host:port in an http(s) URL (no HTTP request)."""
+    match = re.match(r"https?://([^/:]+)(?::(\d+))?", url)
+    if not match:
+        return False
+    host = match.group(1)
+    port = int(match.group(2) or (443 if url.startswith("https") else 80))
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def check_skill_catalog_drift(ctx: CheckContext) -> None:
+    """Gate skill action/param tables against the live catalog via check_skill_catalog_drift.ps1.
+
+    Catalog source preference: committed offline dumps (-DumpDir) -> live editor at mcp_url ->
+    skip. Only a hard-drift result (script exit 2) blocks; an unavailable catalog (no dumps and
+    no editor, or operational exit 3) is a non-blocking advisory so headless CI never fails for
+    lack of a running editor. Commit dumps (generated from a live editor) to make this a hard
+    gate on GitHub. See Docs/specs/SPEC_MonolithSkillCatalogDrift.md.
+    """
+    config = ctx.config.get("skill_drift", {})
+    if not config.get("enabled", False):
+        return
+
+    script = ctx.path(str(config.get("script", "Scripts/check_skill_catalog_drift.ps1")))
+    if not script.is_file():
+        ctx.block("skill-drift", "Skill catalog drift script is missing", script)
+        return
+
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if not pwsh:
+        ctx.advisory("skill-drift", "skipped: no PowerShell (pwsh/powershell) available to run the drift guard")
+        return
+
+    mcp_url = str(config.get("mcp_url", "http://localhost:9316/mcp"))
+    dump_dir_cfg = config.get("dump_dir")
+    dump_dir = ctx.path(str(dump_dir_cfg)) if dump_dir_cfg else None
+    args = [pwsh, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
+
+    if dump_dir and dump_dir.is_dir() and any(dump_dir.glob("*.json")):
+        args += ["-Offline", "-DumpDir", str(dump_dir)]
+        mode = f"offline:{ctx.rel(dump_dir)}"
+    elif _endpoint_reachable(mcp_url):
+        args += ["-McpUrl", mcp_url]
+        mode = f"live:{mcp_url}"
+    else:
+        ctx.advisory(
+            "skill-drift",
+            "skipped: no committed catalog dumps and live editor unreachable at "
+            f"{mcp_url}. Run with the editor up, or commit dumps to enable headless gating "
+            "(Docs/specs/SPEC_MonolithSkillCatalogDrift.md).",
+        )
+        return
+
+    try:
+        proc = subprocess.run(
+            args, cwd=ctx.root, capture_output=True, text=True,
+            timeout=float(config.get("timeout_seconds", 180)),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        ctx.advisory("skill-drift", f"skipped: drift guard did not complete ({mode}): {exc}")
+        return
+
+    stdout = proc.stdout or ""
+    result_line = next((ln for ln in reversed(stdout.splitlines()) if ln.startswith("RESULT=")), "")
+    if proc.returncode == 0:
+        return  # clean (feature-gated actions are reported but do not fail)
+    if proc.returncode == 2:
+        drift_lines = [ln for ln in stdout.splitlines() if ln.startswith("DRIFT")][:6]
+        detail = "; ".join(drift_lines) if drift_lines else (result_line or "hard drift")
+        ctx.block("skill-drift", f"Skill docs drift from live catalog ({mode}). {detail}")
+        return
+    # exit 3 / other: catalog unavailable or usage error -> non-blocking (not a code defect)
+    reason = result_line or (proc.stderr or "").strip().splitlines()[-1:] or ["operational error"]
+    ctx.advisory("skill-drift", f"skipped: drift guard non-gating exit {proc.returncode} ({mode}): {reason if isinstance(reason, str) else reason[0]}")
+
+
+def _load_sibling_module(script: Path, alias: str) -> Any | None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(alias, script)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_offline_exe_freshness(ctx: CheckContext) -> None:
+    """Block when the shipped offline CLI is stale relative to its tracked source.
+
+    Reuses Scripts/check_offline_exe_fresh.py so the hashed source inputs match
+    build.bat exactly. Action-schema/alias fixes only help agents once the shipped
+    monolith_query.exe carries them, so a stale exe must fail CI (6A binary-lag).
+
+    Graceful skips keep headless CI green when the exe is a local/release artifact
+    that is not present, or cannot be executed on the CI host (e.g. a Windows PE
+    binary on a Linux runner): those are advisories, not blockers. Only a present,
+    runnable, hash-mismatched exe blocks.
+    """
+    config = ctx.config.get("offline_exe_freshness", {})
+    if not config.get("enabled", False):
+        return
+
+    script = ctx.path(str(config.get("script", "Scripts/check_offline_exe_fresh.py")))
+    if not script.is_file():
+        ctx.block("offline-exe-fresh", "Offline-exe freshness script is missing", script)
+        return
+
+    try:
+        fresh = _load_sibling_module(script, "monolith_check_offline_exe_fresh")
+    except Exception as exc:  # noqa: BLE001 - report load failure as a finding.
+        ctx.block("offline-exe-fresh", f"Could not load offline-exe freshness script: {exc}", script)
+        return
+    if fresh is None:
+        ctx.block("offline-exe-fresh", "Could not load offline-exe freshness script", script)
+        return
+
+    missing_sources = [path for path in fresh.SRC_PATHS if not path.exists()]
+    if missing_sources:
+        ctx.block(
+            "offline-exe-fresh",
+            "Offline CLI source missing: " + ", ".join(ctx.rel(path) for path in missing_sources),
+        )
+        return
+
+    if not fresh.EXE_PATH.exists():
+        ctx.advisory(
+            "offline-exe-fresh",
+            f"skipped: {ctx.rel(fresh.EXE_PATH)} not present in this checkout "
+            "(offline CLI is a local/release artifact; build via Tools/MonolithQuery/build.bat)",
+        )
+        return
+
+    src_hash = fresh.compute_source_hash(fresh.SRC_PATHS)
+    try:
+        exe_hash = fresh.read_exe_source_hash(fresh.EXE_PATH)
+    except (ValueError, OSError) as exc:
+        ctx.advisory(
+            "offline-exe-fresh",
+            f"skipped: could not run {ctx.rel(fresh.EXE_PATH)} --version on this host: {exc}",
+        )
+        return
+
+    if exe_hash != src_hash:
+        ctx.block(
+            "offline-exe-fresh",
+            f"Stale {ctx.rel(fresh.EXE_PATH)}: built from source_hash={exe_hash} but current "
+            f"Tools/MonolithQuery source hashes to {src_hash}; rebuild via Tools/MonolithQuery/build.bat",
+            fresh.EXE_PATH,
+        )
+
+
 def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
     check_automation_test_names(ctx)
@@ -830,6 +988,8 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_secrets(ctx)
     check_workflow_scope(ctx)
     check_proxy_smoke(ctx)
+    check_skill_catalog_drift(ctx)
+    check_offline_exe_freshness(ctx)
     return ctx.findings
 
 

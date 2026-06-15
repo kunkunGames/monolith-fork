@@ -491,6 +491,30 @@ void FMonolithToolRegistry::RegisterAction(
 	UE_LOG(LogMonolith, Verbose, TEXT("Registered action: %s — %s"), *Key, *Description);
 }
 
+bool FMonolithToolRegistry::SetActionSearchMetadata(
+	const FString& Namespace,
+	const FString& Action,
+	const TArray<FString>& Keywords,
+	const TArray<FString>& Aliases,
+	const TArray<FString>& Examples)
+{
+	FScopeLock Lock(&RegistryLock);
+
+	FRegisteredAction* RegAction = Actions.Find(MakeKey(Namespace, Action));
+	if (!RegAction)
+	{
+		UE_LOG(LogMonolith, Warning,
+			TEXT("SetActionSearchMetadata: unknown action %s.%s — metadata not applied"),
+			*Namespace, *Action);
+		return false;
+	}
+
+	RegAction->Info.SearchMetadata.Keywords = Keywords;
+	RegAction->Info.SearchMetadata.Aliases = Aliases;
+	RegAction->Info.SearchMetadata.Examples = Examples;
+	return true;
+}
+
 void FMonolithToolRegistry::RegisterOwnedActions(const FString& Owner, TFunctionRef<void(FMonolithToolRegistry&)> Register)
 {
 	if (Owner.IsEmpty())

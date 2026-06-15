@@ -175,6 +175,22 @@ public:
 	);
 
 	/**
+	 * Attach search metadata (keywords/aliases/examples) to an already-registered action
+	 * for monolith.find ranking (see BuildFindSearchMetadataText). Safe post-registration
+	 * setter: it does NOT touch execution policy, unlike passing SearchMetadata as the 8th
+	 * RegisterAction positional arg (which would force re-specifying Category/ExecutionPolicy
+	 * and could downgrade a write action's transaction policy). Idempotent; call after the
+	 * action's RegisterAction (typically at the end of a module's RegisterAll).
+	 * @return true if the action existed and was updated; false (with a warning) otherwise.
+	 */
+	bool SetActionSearchMetadata(
+		const FString& Namespace,
+		const FString& Action,
+		const TArray<FString>& Keywords,
+		const TArray<FString>& Aliases = TArray<FString>(),
+		const TArray<FString>& Examples = TArray<FString>());
+
+	/**
 	 * Register a batch of actions as owned by a module or action bundle.
 	 * Owner tags allow module shutdown to remove only its own actions from shared namespaces.
 	 */

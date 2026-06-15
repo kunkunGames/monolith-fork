@@ -684,6 +684,27 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("sample_rate"), TEXT("integer"), TEXT("Sample rate in Hz; allowlist {22050, 44100, 48000} (default 44100)"))
 			.Optional(TEXT("amplitude"), TEXT("number"), TEXT("Peak amplitude in (0.0, 1.0] (default 0.5)"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_attenuation"),
+		{ TEXT("3d falloff"), TEXT("distance attenuation"), TEXT("spatialization settings"), TEXT("occlusion and falloff"), TEXT("how loud by distance") },
+		{ TEXT("new_attenuation"), TEXT("make_attenuation"), TEXT("create_attenuation_asset") },
+		{ TEXT("create a sound attenuation asset for 3d falloff"), TEXT("make an attenuation setting so sounds get quieter with distance") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_class"),
+		{ TEXT("audio category"), TEXT("bus grouping"), TEXT("music sfx voice group"), TEXT("volume group"), TEXT("class hierarchy") },
+		{ TEXT("new_sound_class"), TEXT("make_sound_class"), TEXT("create_audio_class") },
+		{ TEXT("create a SoundClass for music"), TEXT("make an audio category group for sfx volume control") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_mix"),
+		{ TEXT("ducking"), TEXT("eq settings"), TEXT("class volume adjusters"), TEXT("snapshot mix"), TEXT("lower music when dialogue plays") },
+		{ TEXT("new_sound_mix"), TEXT("make_sound_mix"), TEXT("create_audio_mix") },
+		{ TEXT("create a SoundMix that ducks music during dialogue"), TEXT("make a sound mix with eq and class adjusters") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_submix"),
+		{ TEXT("effects bus"), TEXT("reverb send"), TEXT("submix effect chain"), TEXT("master bus routing"), TEXT("audio routing graph") },
+		{ TEXT("new_submix"), TEXT("make_submix"), TEXT("create_audio_bus") },
+		{ TEXT("create a sound submix with a reverb effect chain"), TEXT("make an effects bus to route sounds through") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_concurrency"),
+		{ TEXT("voice limiting"), TEXT("max instances"), TEXT("stop oldest sound"), TEXT("prevent audio spam"), TEXT("polyphony cap") },
+		{ TEXT("new_concurrency"), TEXT("make_concurrency"), TEXT("create_voice_limit") },
+		{ TEXT("create a concurrency asset that caps a sound to 4 instances"), TEXT("limit how many copies of a sound can play at once") });
 }
 
 // ============================================================================

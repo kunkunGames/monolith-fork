@@ -196,6 +196,23 @@ void FMonolithMeshTechArtActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Optional(TEXT("region_max"), TEXT("array"), TEXT("Region max corner [x, y, z]"))
 			.Optional(TEXT("target_density"), TEXT("number"), TEXT("Target lightmap texels/cm"), TEXT("4.0"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("analyze_texel_density"),
+		{ TEXT("texels per cm"), TEXT("texture resolution adequacy"), TEXT("UV density"), TEXT("texel ratio"), TEXT("undertextured"), TEXT("overtextured") },
+		{ TEXT("check_texel_density"), TEXT("texture_density"), TEXT("uv_pixel_density") },
+		{ TEXT("is this prop under-textured"), TEXT("measure texel density for this actor"), TEXT("are textures the right resolution for this region") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("set_mesh_collision"),
+		{ TEXT("collision shape"), TEXT("convex decomposition"), TEXT("complex as simple"), TEXT("physics body"), TEXT("hull"), TEXT("collision preset") },
+		{ TEXT("add_collision"), TEXT("setup_collision"), TEXT("make_collidable"), TEXT("build_collision") },
+		{ TEXT("add a box collider to this static mesh"), TEXT("generate convex collision for this prop"), TEXT("make this mesh use complex as simple collision") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("auto_generate_lods"),
+		{ TEXT("level of detail"), TEXT("reduce triangles"), TEXT("decimate"), TEXT("lod chain"), TEXT("screen size"), TEXT("simplify mesh asset") },
+		{ TEXT("build_lods"), TEXT("create_lods"), TEXT("make_lods"), TEXT("generate_lod_chain") },
+		{ TEXT("create 3 LODs for this static mesh"), TEXT("auto generate level of detail for this asset"), TEXT("add reduced LODs with screen sizes") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("import_mesh"),
+		{ TEXT("FBX"), TEXT("glTF"), TEXT("ingest model"), TEXT("bring in mesh"), TEXT("rigged character import"), TEXT("import animations") },
+		{ TEXT("load_mesh"), TEXT("import_fbx"), TEXT("import_model"), TEXT("add_mesh_from_file") },
+		{ TEXT("import this FBX into the content folder"), TEXT("bring in a rigged character with animations"), TEXT("import a glTF mesh and auto generate collision") });
 }
 
 // ============================================================================

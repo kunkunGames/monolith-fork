@@ -204,6 +204,10 @@ void FMonolithMeshSceneActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.OptionalAssetPath(TEXT("new_folder"), TEXT("New folder path (for rename/move destination)"))
 			.Optional(TEXT("include_subfolders"), TEXT("boolean"), TEXT("Include actors in subfolders"), TEXT("true"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("spawn_actor"), { TEXT("place actor"), TEXT("add to level") }, { TEXT("create actor") }, { TEXT("spawn a mesh at 0,0,100") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("move_actor"), { TEXT("set transform"), TEXT("reposition") }, { TEXT("translate") }, { TEXT("move the chair to 200,0,0") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("delete_actors"), { TEXT("remove from level"), TEXT("destroy actor") }, { TEXT("remove actor") }, { TEXT("delete the crate actors") });
 }
 
 // ============================================================================

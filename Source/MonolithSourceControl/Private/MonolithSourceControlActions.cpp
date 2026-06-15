@@ -324,6 +324,36 @@ void FMonolithSourceControlActions::RegisterActions()
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert unchanged"), TEXT("false"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("get_status"),
+		{ TEXT("perforce"), TEXT("p4"), TEXT("checked out by"), TEXT("depot revision"), TEXT("changelist"), TEXT("pending changes") },
+		{ TEXT("file_status"), TEXT("p4_status"), TEXT("sc_status"), TEXT("who_has_checked_out") },
+		{ TEXT("is this asset checked out in perforce"), TEXT("show source control status for these files"), TEXT("who has this file checked out") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("checkout"),
+		{ TEXT("perforce"), TEXT("p4 edit"), TEXT("open for edit"), TEXT("prepare for edit"), TEXT("make writable"), TEXT("lock file") },
+		{ TEXT("check_out"), TEXT("p4_edit"), TEXT("open_for_edit"), TEXT("edit_file") },
+		{ TEXT("check out this asset before editing"), TEXT("open these files for edit in perforce"), TEXT("make this ini writable in source control") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("add"),
+		{ TEXT("perforce"), TEXT("p4 add"), TEXT("add to depot"), TEXT("track new file"), TEXT("stage new file"), TEXT("submit new asset") },
+		{ TEXT("mark_for_add"), TEXT("p4_add"), TEXT("add_to_source_control"), TEXT("add_file") },
+		{ TEXT("mark this new asset for add"), TEXT("add these new files to perforce"), TEXT("start tracking this file in source control") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("checkout_or_add"),
+		{ TEXT("perforce"), TEXT("prepare for edit"), TEXT("open or add"), TEXT("make writable"), TEXT("ensure tracked"), TEXT("edit existing or add new") },
+		{ TEXT("checkout_or_add"), TEXT("prepare_for_mutation"), TEXT("edit_or_add"), TEXT("ensure_writable") },
+		{ TEXT("prepare these files for mutation in source control"), TEXT("check out if tracked otherwise add this file"), TEXT("make sure these assets are writable before saving") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("mark_for_delete"),
+		{ TEXT("perforce"), TEXT("p4 delete"), TEXT("remove from depot"), TEXT("open for delete"), TEXT("stage deletion"), TEXT("untrack file") },
+		{ TEXT("delete"), TEXT("p4_delete"), TEXT("remove_from_source_control"), TEXT("delete_file") },
+		{ TEXT("mark this asset for delete in perforce"), TEXT("remove these files from source control"), TEXT("open these files for delete in p4") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("revert"),
+		{ TEXT("perforce"), TEXT("p4 revert"), TEXT("discard changes"), TEXT("undo checkout"), TEXT("restore file"), TEXT("roll back edits") },
+		{ TEXT("discard"), TEXT("p4_revert"), TEXT("undo_changes"), TEXT("restore_file") },
+		{ TEXT("revert my changes to this file"), TEXT("discard the checkout on these assets"), TEXT("undo edits and restore from depot") });
 }
 
 FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const TSharedPtr<FJsonObject>& /*Params*/)

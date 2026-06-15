@@ -148,6 +148,9 @@ Recommended options:
 | `--min-severity <level>` | `info` | Filter findings by severity. |
 | `--include-heartbeats` | false | Include routine heartbeat/status records in top findings. By default they are summarized but excluded from ROI ranking. |
 | `--include-synthetic-tests` | false | Include known synthetic test actions such as `__missing_action_*` in missing-action recommendations. |
+| `--recent-days <n>` | `3` | Recency window = the last N present date folders. Drives `still_open` and `recency_score` (see 7.6). |
+| `--fix-boundary yyyyMMdd` | unset | Dates on or after the boundary count as `recent`; everything earlier is `historical`. Overrides `--recent-days` so per-item fix dates can be respected. |
+| `--rank-by-recency` | false | Re-rank ranked findings by `recency_score` instead of the lifetime `score`. Default off keeps the legacy ordering; the recency fields are emitted either way. |
 
 The command exits with:
 
@@ -354,6 +357,43 @@ Output:
   generic actions are frequent enough to justify mining their bounded payloads
   for new action contracts.
 
+#### Recency dimension (still-open vs newly-quiet)
+
+Lifetime counts alone are recency-blind: an action fixed weeks ago keeps a high
+lifetime score even though it stopped failing, so a one-shot fix can be
+mis-ranked as "open and worsening" (this happened to `describe.action_schema`
+and `imagegen.generate_image_via_ima2` during backlog authoring). Every
+per-action finding therefore carries a `recency` block derived from a
+**recent vs historical** split of that action's calls/errors.
+
+- **Window.** The recent window is the last `--recent-days` *present* date
+  folders (default 3), or — with `--fix-boundary yyyyMMdd` — every folder on or
+  after the boundary. `--fix-boundary` lets a reviewer respect a known per-item
+  fix date instead of the rolling default. The window is computed over dated
+  folders only; non-dated (`direct`) files never count as recent.
+- **Metric.** Error-shaped findings (schema, high-error, unknown-action, retry,
+  expected-slow-domain) key `still_open` on **recent errors**; cost/activity
+  findings (`maintenance_loop`, `large_result`, `slow_action`,
+  `child_query_bottleneck`) key it on **recent calls**, because the CRG
+  maintenance loop bleeds wall-time with ~0 errors and must not read as closed.
+- **`still_open` and no-data vs zero-error.** For error-metric findings,
+  `still_open=true` when recent errors > 0; `false` (`newly_quiet`/`stable_quiet`)
+  when there are recent calls but no recent errors; and `null`
+  (`no_recent_data`) when the action had **no calls** in the window — a missing
+  signal is not a passing one (an editor action with 0 calls on the latest days
+  is *no-data*, not a proven fix).
+- **`recency_status`** is one of `still_open`, `regressed` (recent error rate ≥
+  historical), `newly_quiet` (was loud, now quiet), `stable_quiet`, or
+  `no_recent_data`.
+- **Scoring.** `recency_score = score * weight(recency_status)`. It is always
+  emitted but only changes ranking when `--rank-by-recency` is passed, so the
+  default `score`/`rank` ordering is unchanged for existing consumers.
+- **Views.** `findings.json` gains a top-level `recency` object with
+  `still_open`, `regressions`, `newly_quiet`, and `no_recent_data` lists (rank
+  order), and the markdown report adds matching sections plus a `Recency`
+  column on the High ROI Backlog. These are additive; legacy fields and the
+  default rank/score are unchanged.
+
 ## 8. Output Contract
 
 Each run writes an output directory outside `Logs/`:
@@ -446,11 +486,33 @@ Report: Saved/Monolith/LogAnalysis/20260607-143022/summary.md
         "error_class": "missing_param",
         "missing_param": "target_namespace",
         "provided_param": "namespace"
+      },
+      "still_open": false,
+      "recency_status": "newly_quiet",
+      "recency_score": 261.0,
+      "recency": {
+        "metric": "errors",
+        "status": "newly_quiet",
+        "still_open": false,
+        "weight": 0.15,
+        "recent_calls": 4,
+        "recent_errors": 0,
+        "historical_errors": 109,
+        "last_call_date": "20260612",
+        "recency_score": 261.0
       }
     }
   ]
 }
 ```
+
+Per-action findings carry `action_key`, plus the additive `still_open`,
+`recency_status`, `recency_score`, and `recency` fields described in 7.6.
+`still_open` is `true`/`false`/`null` (`null` = no recent calls, i.e. no-data,
+not a proven fix). The top-level `recency` object groups findings into
+`still_open`, `regressions`, `newly_quiet`, and `no_recent_data` lists alongside
+the recent-window metadata (`recent_days`, `fix_boundary`, `recent_dates`,
+`rank_by_recency`).
 
 Evidence objects should include handles and bounded summaries, not full raw
 payloads. Full local paths require `--include-paths`.

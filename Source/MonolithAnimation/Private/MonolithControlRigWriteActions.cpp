@@ -171,6 +171,12 @@ void FMonolithControlRigWriteActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("default_value"), TEXT("string"), TEXT("Trait default value for add"))
 			.Optional(TEXT("pin_index"), TEXT("integer"), TEXT("Pin index for add, default -1"))
 			.Build());
+
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("add_control_rig_node"),
+		{ TEXT("rig unit"), TEXT("RigVM node"), TEXT("control rig graph node"), TEXT("set transform node"), TEXT("CR node") },
+		{ TEXT("add_rig_node"), TEXT("create_control_rig_node"), TEXT("add_rigvm_node") },
+		{ TEXT("add a SetTransform rig unit to a control rig graph"), TEXT("place a RigVM node in the control rig") });
 }
 
 // ---------------------------------------------------------------------------

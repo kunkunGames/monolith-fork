@@ -246,6 +246,21 @@ void FMonolithPaper2DActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("include_tags"), TEXT("boolean"), TEXT("Include bounded AssetRegistry tag rows. Default: true."))
 			.Optional(TEXT("tag_limit"), TEXT("integer"), TEXT("Maximum tag rows to return, clamped to 0..200. Default: 50."))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("paper2d"), TEXT("list_assets"),
+		{ TEXT("find sprites"), TEXT("2d sprite atlas"), TEXT("flipbook animation"), TEXT("tile set"), TEXT("tile map"), TEXT("papersprite paperflipbook papertileset papertilemap") },
+		{ TEXT("find sprites"), TEXT("list flipbooks"), TEXT("list tilesets"), TEXT("browse paper2d assets") },
+		{ TEXT("list all paper2d sprites under /Game"), TEXT("find every flipbook in the project"), TEXT("show the tile maps and tile sets") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("paper2d"), TEXT("get_asset"),
+		{ TEXT("inspect sprite"), TEXT("flipbook details"), TEXT("tile set metadata"), TEXT("sprite asset tags"), TEXT("papersprite info") },
+		{ TEXT("describe sprite"), TEXT("sprite details"), TEXT("show flipbook"), TEXT("paper2d asset info") },
+		{ TEXT("inspect a single paper2d sprite asset"), TEXT("get the metadata tags for a flipbook"), TEXT("show details for a tile map asset") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("paper2d"), TEXT("get_status"),
+		{ TEXT("is paper2d enabled"), TEXT("2d sprite plugin available"), TEXT("paper2d module loaded"), TEXT("flipbook support"), TEXT("sprite tooling availability") },
+		{ TEXT("paper2d availability"), TEXT("paper2d health"), TEXT("check sprite plugin"), TEXT("paper2d capabilities") },
+		{ TEXT("check if the paper2d plugin is available"), TEXT("is the sprite module loaded"), TEXT("what paper2d actions are supported") });
 }
 
 FMonolithActionResult FMonolithPaper2DActions::GetStatus(const TSharedPtr<FJsonObject>& Params)

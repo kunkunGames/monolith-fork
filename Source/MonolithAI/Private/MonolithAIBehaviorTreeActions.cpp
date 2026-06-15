@@ -1862,6 +1862,31 @@ void FMonolithAIBehaviorTreeActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_behavior_tree_from_spec"),
+		{ TEXT("declarative tree authoring"), TEXT("json spec to BT"), TEXT("selector sequence composite"), TEXT("generate full behavior tree"), TEXT("npc decision tree") },
+		{ TEXT("make_behavior_tree"), TEXT("author_bt"), TEXT("create_bt_from_json") },
+		{ TEXT("build a patrol-and-chase behavior tree from a spec"), TEXT("generate an enemy BT with selector, sequence and tasks") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_bt_node"),
+		{ TEXT("composite"), TEXT("selector"), TEXT("sequence"), TEXT("task node"), TEXT("attach child"), TEXT("wire under composite") },
+		{ TEXT("insert_bt_node"), TEXT("create_bt_task"), TEXT("add_bt_task") },
+		{ TEXT("add a MoveTo task under the root selector"), TEXT("insert a sequence composite into the behavior tree") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_bt_decorator"),
+		{ TEXT("blackboard condition"), TEXT("conditional branch"), TEXT("abort logic"), TEXT("observer aborts"), TEXT("gate node") },
+		{ TEXT("add_bt_condition"), TEXT("attach_decorator") },
+		{ TEXT("add a blackboard-based decorator to gate an attack branch"), TEXT("put a condition decorator on the chase node") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_bt_service"),
+		{ TEXT("periodic tick update"), TEXT("refresh blackboard"), TEXT("sensing service"), TEXT("interval logic") },
+		{ TEXT("attach_service"), TEXT("add_bt_tick") },
+		{ TEXT("add a service that updates the target blackboard key every second") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("validate_behavior_tree"),
+		{ TEXT("lint BT"), TEXT("check broken blackboard keys"), TEXT("empty composite"), TEXT("unreachable branch"), TEXT("sanity check") },
+		{ TEXT("check_behavior_tree"), TEXT("lint_bt"), TEXT("verify_bt") },
+		{ TEXT("validate the behavior tree for broken blackboard references and empty composites") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("get_behavior_tree"),
+		{ TEXT("inspect tree structure"), TEXT("dump nodes"), TEXT("read BT hierarchy"), TEXT("tree as json") },
+		{ TEXT("read_behavior_tree"), TEXT("inspect_bt"), TEXT("dump_bt") },
+		{ TEXT("show me the full structure of this behavior tree") });
+
 // ============================================================
 //  13. create_behavior_tree
 // ============================================================

@@ -511,6 +511,27 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Required(TEXT("x"), TEXT("number"), TEXT("X position"))
 			.Required(TEXT("y"), TEXT("number"), TEXT("Y position"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_metasound_source"),
+		{ TEXT("metasound"), TEXT("procedural audio graph"), TEXT("synth source"), TEXT("audio output graph"), TEXT("MetaSoundSource asset") },
+		{ TEXT("new_metasound"), TEXT("make_metasound"), TEXT("create_metasound") },
+		{ TEXT("create a new MetaSound source for a gunshot"), TEXT("make a stereo metasound that outputs audio") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_metasound_patch"),
+		{ TEXT("reusable dsp graph"), TEXT("processing only metasound"), TEXT("no audio output graph"), TEXT("metasound subgraph"), TEXT("effect patch") },
+		{ TEXT("new_metasound_patch"), TEXT("create_patch"), TEXT("make_metasound_patch") },
+		{ TEXT("create a reusable MetaSound patch for filtering"), TEXT("make a metasound processing graph with no output") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("build_metasound_from_spec"),
+		{ TEXT("author whole metasound at once"), TEXT("declarative metasound"), TEXT("json audio graph"), TEXT("nodes inputs connections in one call"), TEXT("assemble metasound graph") },
+		{ TEXT("build_metasound"), TEXT("compose_metasound"), TEXT("create_metasound_graph") },
+		{ TEXT("build a complete metasound from a json spec"), TEXT("assemble a metasound graph with inputs nodes and wiring in one shot") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_oneshot_sfx"),
+		{ TEXT("play a wav once"), TEXT("simple sfx metasound"), TEXT("wave player to output"), TEXT("fire and forget sound"), TEXT("trigger one shot") },
+		{ TEXT("oneshot_metasound"), TEXT("create_sfx"), TEXT("make_oneshot") },
+		{ TEXT("make a one-shot sfx metasound that plays a wav"), TEXT("create a simple metasound that fires a sound once") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("add_metasound_node"),
+		{ TEXT("insert dsp node"), TEXT("place oscillator"), TEXT("add operator to graph"), TEXT("drop node by class"), TEXT("sine wave player node") },
+		{ TEXT("insert_metasound_node"), TEXT("place_metasound_node"), TEXT("create_metasound_node") },
+		{ TEXT("add a sine oscillator node to this metasound"), TEXT("insert a wave player node into the metasound graph") });
 }
 
 // ============================================================================

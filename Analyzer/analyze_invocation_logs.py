@@ -44,6 +44,31 @@ LONG_GAP_MS = 60_000.0
 MIN_ERROR_RATE_COUNT = 10
 MIN_DUPLICATE_RETRY_COUNT = 5
 MIN_ESCAPE_HATCH_COUNT = 5
+# Recency dimension (6B): the "recent" window is the last N present date folders
+# (or, with --fix-boundary, every folder on/after a yyyyMMdd). still_open and the
+# recency-adjusted score are derived from this split. Defaults to 3 to match the
+# backlog spec's "latest 3 days" recency check.
+DEFAULT_RECENT_DAYS = 3
+# Categories whose ROI is driven by activity/cost (calls), not error volume, so
+# their still_open is keyed on recent *calls* rather than recent *errors*. The
+# CRG maintenance loop is the canonical example: ~0 errors but still bleeding
+# wall-time daily, so "no recent errors" must NOT read as closed for these.
+CALLS_METRIC_CATEGORIES = (
+    "maintenance_loop",
+    "large_result",
+    "slow_action",
+    "child_query_bottleneck",
+)
+# Recency status -> ROI weight applied to a finding's base score to form
+# recency_score. still_open/regressed keep or boost the score; quiet/closed
+# findings are damped; no_recent_data is uncertain (kept mid-weight, never 0).
+RECENCY_WEIGHTS = {
+    "regressed": 1.3,
+    "still_open": 1.0,
+    "no_recent_data": 0.5,
+    "stable_quiet": 0.4,
+    "newly_quiet": 0.15,
+}
 SYNTHETIC_ARGUMENT_MARKERS = (
     "__test_",
     "paramguard",
@@ -336,6 +361,8 @@ class Finding:
     score: float = 0.0
     sample: Dict[str, Any] = field(default_factory=dict)
     evidence: List[Evidence] = field(default_factory=list)
+    action_key: str = ""
+    recency: Optional[Dict[str, Any]] = None
 
     def to_json(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
@@ -353,6 +380,14 @@ class Finding:
             data["score"] = round(self.score, 3)
         if self.sample:
             data["sample"] = self.sample
+        # Recency dimension (6B). Additive: existing consumers ignore the extra
+        # keys. still_open is the headline flag (True/False/None where None means
+        # no recent calls -> cannot conclude closed, per the spec's no-data caveat).
+        if self.recency is not None:
+            data["recency"] = self.recency
+            data["still_open"] = self.recency.get("still_open")
+            data["recency_status"] = self.recency.get("status")
+            data["recency_score"] = self.recency.get("recency_score", round(self.score, 3))
         return data
 
 
@@ -489,6 +524,14 @@ class Analyzer:
         self.trace_versions: Dict[str, Counter[int]] = defaultdict(Counter)
         self.trace_events: Dict[str, int] = defaultdict(int)
         self.mixed_schema_days: Dict[str, Counter[int]] = defaultdict(Counter)
+        # Recency dimension (6B): per-(action, date) call/error tallies feed the
+        # last-K-days vs rest split. Kept separate from lifetime counters so
+        # existing aggregates are untouched.
+        self.count_by_action_date: Counter[Tuple[str, str]] = Counter()
+        self.error_by_action_date: Counter[Tuple[str, str]] = Counter()
+        self.all_date_keys: set = set()
+        self._recent_dates_cache: Optional[set] = None
+        self._action_date_index: Optional[Dict[str, Dict[str, List[int]]]] = None
         self.normalized_output = None
 
     def analyze_files(self, files: Sequence[Path]) -> None:
@@ -549,6 +592,12 @@ class Analyzer:
         self.status_by_action[(event.action_key, event.status)] += 1
         self.noise_counts[event.noise_class] += 1
         self.noise_by_action[(event.noise_class, event.action_key)] += 1
+        date_key = event.date_key
+        # all_date_keys defines the recent window over every real log day (noise
+        # included), so the window is stable; the per-action recency tallies below
+        # are gated to the same population as the findings they annotate.
+        if date_key != "direct":
+            self.all_date_keys.add(date_key)
         self._record_environment(event)
         self.duration_by_action[event.action_key].add(event.duration_ms)
         self.payload_by_action[event.action_key] += event.payload_bytes
@@ -563,9 +612,16 @@ class Analyzer:
 
         if not self._exclude_from_problem_findings(event):
             self.finding_count_by_action[event.action_key] += 1
+            # Recency per-date tallies share the finding population so the
+            # recent/historical split and recency_score weight are computed over
+            # the same rows the finding's base score is (heartbeat/synthetic
+            # excluded unless --include-* is passed); otherwise an action whose
+            # only recent traffic is synthetic CI would flip no_recent_data -> closed.
+            self.count_by_action_date[(event.action_key, date_key)] += 1
             if event.status != "success":
                 self.finding_error_by_action[event.action_key] += 1
                 self.finding_error_evidence[event.action_key].add(event)
+                self.error_by_action_date[(event.action_key, date_key)] += 1
 
         if event.outcome:
             self.outcome_by_action[(event.action_key, event.outcome)] += 1
@@ -653,6 +709,113 @@ class Analyzer:
         if env.get("active_profile_id"):
             self.profile_counts[str(env.get("active_profile_id"))] += 1
 
+    def _recent_date_set(self) -> set:
+        """Dates that count as 'recent' for the recency split.
+
+        With --fix-boundary, every dated folder on or after the boundary; else
+        the last --recent-days *present* date folders (robust to gaps). 'direct'
+        (non-dated) files are never recent.
+        """
+        if self._recent_dates_cache is not None:
+            return self._recent_dates_cache
+        dates = sorted(self.all_date_keys)
+        if self.args.fix_boundary:
+            recent = {d for d in dates if d >= self.args.fix_boundary}
+        elif dates:
+            recent = set(dates[-max(1, self.args.recent_days):])
+        else:
+            recent = set()
+        self._recent_dates_cache = recent
+        return recent
+
+    def _action_date_index_build(self) -> Dict[str, Dict[str, List[int]]]:
+        if self._action_date_index is None:
+            index: Dict[str, Dict[str, List[int]]] = defaultdict(dict)
+            for (action_key, date_key), count in self.count_by_action_date.items():
+                errors = self.error_by_action_date.get((action_key, date_key), 0)
+                index[action_key][date_key] = [count, errors]
+            self._action_date_index = index
+        return self._action_date_index
+
+    def compute_recency(self, action_key: str, metric: str = "errors") -> Dict[str, Any]:
+        """Split an action's calls/errors into recent vs historical and classify.
+
+        metric='errors' (default): still_open keyed on recent *errors*; 0 recent
+        calls -> no_recent_data/None (the spec's no-data-vs-fixed caveat). Used by
+        error-shaped findings (schema, high-error, unknown-action, retry, slow-domain).
+
+        metric='calls': still_open keyed on recent *calls* — used by cost/activity
+        findings (maintenance loop, large result) where errors are ~0 but the
+        expensive activity itself is what must stop.
+        """
+        index = self._action_date_index_build().get(action_key, {})
+        recent_dates = self._recent_date_set()
+        recent_calls = recent_errors = 0
+        hist_calls = hist_errors = 0
+        last_call_date = ""
+        for date_key, (calls, errors) in index.items():
+            if date_key != "direct" and (not last_call_date or date_key > last_call_date):
+                last_call_date = date_key
+            if date_key in recent_dates:
+                recent_calls += calls
+                recent_errors += errors
+            else:
+                hist_calls += calls
+                hist_errors += errors
+        recent_error_rate = recent_errors / recent_calls if recent_calls else 0.0
+        hist_error_rate = hist_errors / hist_calls if hist_calls else 0.0
+
+        if metric == "calls":
+            if recent_calls > 0:
+                still_open: Optional[bool] = True
+                status = "still_open"
+            else:
+                still_open = False
+                status = "newly_quiet" if hist_calls > 0 else "stable_quiet"
+        else:
+            if recent_calls == 0:
+                still_open = None
+                status = "no_recent_data"
+            elif recent_errors == 0:
+                still_open = False
+                status = "newly_quiet" if hist_errors > 0 else "stable_quiet"
+            else:
+                still_open = True
+                status = (
+                    "regressed"
+                    if hist_error_rate > 0 and recent_error_rate >= hist_error_rate
+                    else "still_open"
+                )
+
+        return {
+            "metric": metric,
+            "status": status,
+            "still_open": still_open,
+            "weight": RECENCY_WEIGHTS.get(status, 0.5),
+            "recent_calls": recent_calls,
+            "recent_errors": recent_errors,
+            "recent_error_rate": round(recent_error_rate, 4),
+            "historical_calls": hist_calls,
+            "historical_errors": hist_errors,
+            "historical_error_rate": round(hist_error_rate, 4),
+            "last_call_date": last_call_date,
+            "has_recent_data": recent_calls > 0,
+        }
+
+    def _attach_recency(self, findings: List[Finding]) -> None:
+        for finding in findings:
+            if not finding.action_key:
+                continue
+            metric = "calls" if finding.category in CALLS_METRIC_CATEGORIES else "errors"
+            recency = self.compute_recency(finding.action_key, metric)
+            recency["recency_score"] = round(finding.score * recency["weight"], 3)
+            finding.recency = recency
+
+    def _finding_rank_score(self, finding: Finding) -> float:
+        if self.args.rank_by_recency and finding.recency is not None:
+            return float(finding.recency.get("recency_score", finding.score))
+        return finding.score
+
     def build_findings(self) -> List[Finding]:
         findings: List[Finding] = []
         findings.extend(self._build_noise_findings())
@@ -673,7 +836,11 @@ class Analyzer:
         if self.args.category:
             wanted = set(self.args.category)
             findings = [f for f in findings if f.category in wanted]
-        findings.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 0), f.score, f.confidence), reverse=True)
+        self._attach_recency(findings)
+        findings.sort(
+            key=lambda f: (SEVERITY_RANK.get(f.severity, 0), self._finding_rank_score(f), f.confidence),
+            reverse=True,
+        )
         for rank, finding in enumerate(findings, 1):
             if finding.category in {"high_roi_candidate", "maintenance_loop", "schema_fix", "escape_hatch_replacement"}:
                 finding.rank = rank
@@ -744,6 +911,7 @@ class Analyzer:
                         "total_duration_sec": round(total_ms / 1000.0, 3),
                         "avg_duration_ms": round(total_ms / count, 3),
                     },
+                    action_key=action_key,
                     evidence=self.maintenance_evidence[action_key].items,
                 )
             )
@@ -770,6 +938,7 @@ class Analyzer:
                         "or clearer schema text."
                     ),
                     sample={"count": count, "detail": detail},
+                    action_key=action_key,
                     evidence=self.schema_evidence[group].items,
                 )
             )
@@ -794,6 +963,7 @@ class Analyzer:
                         "action, or a clearer routing hint in discovery output."
                     ),
                     sample={"count": count},
+                    action_key=group,
                     evidence=self.unknown_evidence[group].items,
                 )
             )
@@ -819,6 +989,7 @@ class Analyzer:
                         "patterns into first-class Monolith actions or stronger discovery guidance."
                     ),
                     sample={"count": count, "errors": error_count},
+                    action_key=action_key,
                     evidence=self.escape_hatch_evidence[action_key].items,
                 )
             )
@@ -851,6 +1022,7 @@ class Analyzer:
                         "error_rate": round(error_rate, 3),
                         "total_duration_sec": round(total_ms / 1000.0, 3),
                     },
+                    action_key=action_key,
                     evidence=self.expected_slow_evidence[action_key].items,
                 )
             )
@@ -885,6 +1057,7 @@ class Analyzer:
                         "parent_duration_sec": round(parent_total_ms / 1000.0, 3),
                         "child_parent_ratio": round(dominance, 3),
                     },
+                    action_key=action_key,
                     evidence=self.child_process_evidence[action_key].items,
                 )
             )
@@ -910,6 +1083,7 @@ class Analyzer:
                         "behavior for this action."
                     ),
                     sample={"max_payload_bytes": payload, "total_payload_bytes": self.payload_by_action[action_key]},
+                    action_key=action_key,
                     evidence=[evidence],
                 )
             )
@@ -940,6 +1114,7 @@ class Analyzer:
                         "actions should become self-correcting or return stronger hints."
                     ),
                     sample={"count": count, "errors": errors, "error_rate": round(rate, 3)},
+                    action_key=action_key,
                     evidence=self.finding_error_evidence[action_key].items,
                 )
             )
@@ -969,6 +1144,7 @@ class Analyzer:
                         "or missing a cached/freshness-aware action."
                     ),
                     sample={"count": count, "retry_signature": retry_signature},
+                    action_key=action_key,
                     evidence=self.retry_evidence[(action_key, retry_signature)].items,
                 )
             )
@@ -995,6 +1171,7 @@ class Analyzer:
                     title="{0} has slow p95 latency".format(action_key),
                     recommendation="Inspect phase timing and result shape before treating this as a code hot path.",
                     sample=row,
+                    action_key=action_key,
                     evidence=[item for item in self.slow_calls.items_desc() if item.surface + ":" + item.namespace + "." + item.action == action_key][:DEFAULT_EVIDENCE_LIMIT],
                 )
             )
@@ -1073,7 +1250,11 @@ class Analyzer:
                 "max_lines": self.args.max_lines,
                 "include_heartbeats": self.args.include_heartbeats,
                 "include_synthetic_tests": self.args.include_synthetic_tests,
+                "recent_days": self.args.recent_days,
+                "fix_boundary": self.args.fix_boundary,
+                "rank_by_recency": self.args.rank_by_recency,
             },
+            "recency": self.recency_views(findings),
             "summary": {
                 "records_scanned": self.records_scanned,
                 "files_scanned": self.files_scanned,
@@ -1145,6 +1326,44 @@ class Analyzer:
                 }
             )
         return rows
+
+    def recency_views(self, findings: Sequence[Finding]) -> Dict[str, Any]:
+        """Recency-split views (6B): still-open, regressions, newly-quiet, no-data.
+
+        Findings arrive already sorted by build_findings, so each list is in rank
+        order. no_recent_data is kept distinct from quiet so an editor action with
+        0 recent calls is never silently read as 'passing' (spec §6B item 4).
+        """
+        def row(finding: Finding) -> Dict[str, Any]:
+            rec = finding.recency or {}
+            return {
+                "finding_id": finding.finding_id,
+                "category": finding.category,
+                "action_key": finding.action_key,
+                "severity": finding.severity,
+                "score": round(finding.score, 3),
+                "recency_score": rec.get("recency_score", round(finding.score, 3)),
+                "still_open": rec.get("still_open"),
+                "status": rec.get("status"),
+                "metric": rec.get("metric"),
+                "recent_calls": rec.get("recent_calls"),
+                "recent_errors": rec.get("recent_errors"),
+                "historical_errors": rec.get("historical_errors"),
+                "last_call_date": rec.get("last_call_date"),
+            }
+
+        scored = [finding for finding in findings if finding.recency is not None]
+        top = self.args.top
+        return {
+            "recent_days": self.args.recent_days,
+            "fix_boundary": self.args.fix_boundary,
+            "rank_by_recency": self.args.rank_by_recency,
+            "recent_dates": sorted(self._recent_date_set()),
+            "still_open": [row(f) for f in scored if f.recency.get("still_open") is True][:top],
+            "regressions": [row(f) for f in scored if f.recency.get("status") == "regressed"][:top],
+            "newly_quiet": [row(f) for f in scored if f.recency.get("status") == "newly_quiet"][:top],
+            "no_recent_data": [row(f) for f in scored if f.recency.get("status") == "no_recent_data"][:top],
+        }
 
 
 class StrictParseError(Exception):
@@ -1635,6 +1854,20 @@ def render_markdown_summary(analyzer: Analyzer, findings: Sequence[Finding]) -> 
     lines.append("- Files scanned: `{0}`".format(analyzer.files_scanned))
     lines.append("- Parse warnings: `{0}`".format(len(analyzer.parse_warnings)))
     lines.append("- Output: `{0}`".format(analyzer.args.out))
+    if analyzer.all_date_keys:
+        recent = sorted(analyzer._recent_date_set())
+        window = (
+            "fix_boundary >= {0}".format(analyzer.args.fix_boundary)
+            if analyzer.args.fix_boundary
+            else "last {0} present day(s)".format(analyzer.args.recent_days)
+        )
+        lines.append(
+            "- Recency window: `{0}` -> `{1}`{2}".format(
+                window,
+                ", ".join(recent) if recent else "(none)",
+                " (rank-by-recency)" if analyzer.args.rank_by_recency else "",
+            )
+        )
     lines.append("")
 
     lines.append("## Surface Status")
@@ -1716,20 +1949,50 @@ def render_markdown_summary(analyzer: Analyzer, findings: Sequence[Finding]) -> 
         "large_result",
         "high_error_rate",
     }
-    lines.append("| Rank | Category | Score | Evidence |")
-    lines.append("|---:|---|---:|---|")
+    lines.append("| Rank | Category | Score | Recency | Evidence |")
+    lines.append("|---:|---|---:|---|---|")
     rank = 0
     for finding in findings:
         if finding.category not in high_roi_categories:
             continue
         rank += 1
-        sample = compact_message(stable_json(finding.sample), 180)
+        sample = compact_message(stable_json(finding.sample), 160)
         lines.append(
-            "| {0} | `{1}` | {2:.2f} | {3} |".format(rank, finding.category, finding.score, escape_md(sample))
+            "| {0} | `{1}` | {2:.2f} | {3} | {4} |".format(
+                rank, finding.category, finding.score, recency_label(finding), escape_md(sample)
+            )
         )
         if rank >= analyzer.args.top:
             break
     lines.append("")
+
+    recency_views = analyzer.recency_views(findings)
+    for title, key in (
+        ("Recency - Still Open", "still_open"),
+        ("Recency - Regressions", "regressions"),
+        ("Recency - Newly Quiet", "newly_quiet"),
+    ):
+        rows = recency_views.get(key, [])
+        if not rows:
+            continue
+        lines.append("## {0}".format(title))
+        lines.append("")
+        lines.append("| Action | Category | Status | Recent err | Recent calls | Hist err | Last call | Recency score |")
+        lines.append("|---|---|---|---:|---:|---:|---|---:|")
+        for row in rows[: analyzer.args.top]:
+            lines.append(
+                "| `{0}` | `{1}` | `{2}` | {3} | {4} | {5} | `{6}` | {7:.2f} |".format(
+                    row["action_key"],
+                    row["category"],
+                    row["status"],
+                    row.get("recent_errors") or 0,
+                    row.get("recent_calls") or 0,
+                    row.get("historical_errors") or 0,
+                    row.get("last_call_date") or "",
+                    float(row.get("recency_score") or 0.0),
+                )
+            )
+        lines.append("")
 
     lines.append("## Action Stats")
     lines.append("")
@@ -1772,6 +2035,17 @@ def escape_md(text: str) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
+def recency_label(finding: Finding) -> str:
+    """Compact recency cell for the High ROI Backlog table."""
+    rec = finding.recency
+    if not rec:
+        return "-"
+    status = rec.get("status", "")
+    if rec.get("metric") == "calls":
+        return "`{0}` (recent_calls={1})".format(status, rec.get("recent_calls") or 0)
+    return "`{0}` (recent_err={1})".format(status, rec.get("recent_errors") or 0)
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze Monolith invocation JSONL logs.")
     parser.add_argument("--log-root", action="append", default=None, help="Log root or JSONL file. Repeatable.")
@@ -1790,16 +2064,34 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--min-severity", default="info", choices=tuple(SEVERITY_RANK.keys()))
     parser.add_argument("--include-heartbeats", action="store_true", help="Include heartbeat records in ROI rankings.")
     parser.add_argument("--include-synthetic-tests", action="store_true", help="Include synthetic test rows in missing-action findings.")
+    parser.add_argument(
+        "--recent-days",
+        type=int,
+        default=DEFAULT_RECENT_DAYS,
+        help="Recency window = last N present date folders (default {0}). Drives still_open and recency_score.".format(DEFAULT_RECENT_DAYS),
+    )
+    parser.add_argument(
+        "--fix-boundary",
+        default=None,
+        help="yyyyMMdd; dates on/after the boundary count as 'recent'. Overrides --recent-days.",
+    )
+    parser.add_argument(
+        "--rank-by-recency",
+        action="store_true",
+        help="Re-rank findings by recency-adjusted score (default off; legacy order is preserved).",
+    )
     args = parser.parse_args(argv)
     args.log_root = [Path(item) for item in (args.log_root or ["Logs"])]
     if args.out is None:
         args.out = DEFAULT_OUTPUT_ROOT / timestamp_for_path()
     if args.top < 1:
         parser.error("--top must be >= 1")
-    for attr in ("since", "until"):
+    if args.recent_days < 1:
+        parser.error("--recent-days must be >= 1")
+    for attr in ("since", "until", "fix_boundary"):
         value = getattr(args, attr)
         if value and not re.fullmatch(r"\d{8}", value):
-            parser.error("--{0} must use yyyyMMdd".format(attr))
+            parser.error("--{0} must use yyyyMMdd".format(attr.replace("_", "-")))
     if args.since and args.until and args.since > args.until:
         parser.error("--since must be <= --until")
     return args

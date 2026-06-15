@@ -639,6 +639,35 @@ void FMonolithSourceActions::RegisterAll()
 
 	Registry.SetActionAnnotations(TEXT("source"), TEXT("lint_header"),          /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Lint header"));
 	Registry.SetActionAnnotations(TEXT("source"), TEXT("generate_class_stub"),  /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Generate class stub"));
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("read_source"),
+		{ TEXT("show implementation"), TEXT("function body"), TEXT("class definition"), TEXT("how is this implemented"), TEXT("view source of symbol"), TEXT("struct members") },
+		{ TEXT("get_implementation"), TEXT("view_definition"), TEXT("show_code") },
+		{ TEXT("show me the implementation of UGameplayStatics::ApplyDamage"), TEXT("read the body of the FName constructor"), TEXT("what does AActor::Tick look like") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("find_references"),
+		{ TEXT("where used"), TEXT("usages"), TEXT("who uses this type"), TEXT("all references"), TEXT("reference sites"), TEXT("uses of symbol") },
+		{ TEXT("find_usages"), TEXT("references_to"), TEXT("xrefs"), TEXT("find_all_references") },
+		{ TEXT("where is UMyComponent used"), TEXT("find all references to GetWorld"), TEXT("list usages of FVector2D") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("find_callers"),
+		{ TEXT("who calls this"), TEXT("callers of a function"), TEXT("incoming calls"), TEXT("call sites"), TEXT("what invokes") },
+		{ TEXT("callers_of"), TEXT("who_calls"), TEXT("incoming_calls"), TEXT("call_hierarchy_up") },
+		{ TEXT("who calls BeginPlay"), TEXT("find callers of ApplyDamage"), TEXT("what functions invoke SpawnActor") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("search_source"),
+		{ TEXT("grep code"), TEXT("find in source"), TEXT("search engine code"), TEXT("text search cpp"), TEXT("search shaders"), TEXT("full text search") },
+		{ TEXT("grep"), TEXT("code_search"), TEXT("search_code"), TEXT("ripgrep") },
+		{ TEXT("search the engine source for FScopeLock"), TEXT("grep for TEXT in renderer code"), TEXT("find where the string 'OutOfMemory' appears in source") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("get_class_hierarchy"),
+		{ TEXT("inheritance tree"), TEXT("base classes"), TEXT("subclasses"), TEXT("parent class"), TEXT("derived classes"), TEXT("what does this inherit from") },
+		{ TEXT("class_tree"), TEXT("inheritance"), TEXT("superclasses"), TEXT("type_hierarchy") },
+		{ TEXT("show the class hierarchy of AActor"), TEXT("what are the subclasses of UObject"), TEXT("what does APawn inherit from") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source"), TEXT("read_file"),
+		{ TEXT("open file"), TEXT("read lines"), TEXT("view file contents"), TEXT("show file by path"), TEXT("read a range of lines") },
+		{ TEXT("cat"), TEXT("open"), TEXT("view_file"), TEXT("read_lines") },
+		{ TEXT("read TabManager.cpp lines 1-50"), TEXT("open Engine/Source/Runtime/Core/Public/Misc/Paths.h"), TEXT("show lines 100-150 of MyActor.cpp") });
 }
 
 // ============================================================================
@@ -1487,6 +1516,28 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	FString Symbol;
 	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
+		// Agents frequently call read_source (symbol-based) with a file path supplied under
+		// the read_file keys file_path/path and no symbol at all. The value-based reroute
+		// below only fires when a path is passed AS the symbol, so reroute here too instead
+		// of erroring — a routing/contract gap, not an aliasable parameter.
+		FString FilePath;
+		const bool bHaveFilePath =
+			(Params->TryGetStringField(TEXT("file_path"), FilePath) && !FilePath.IsEmpty()) ||
+			(Params->TryGetStringField(TEXT("path"), FilePath) && !FilePath.IsEmpty());
+		if (bHaveFilePath)
+		{
+			TSharedPtr<FJsonObject> FileParams = MakeShared<FJsonObject>();
+			FileParams->SetStringField(TEXT("file_path"), FilePath);
+			for (const TCHAR* Key : { TEXT("start_line"), TEXT("end_line"), TEXT("line_count"), TEXT("max_lines") })
+			{
+				TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+				if (Value.IsValid())
+				{
+					FileParams->SetField(Key, Value);
+				}
+			}
+			return HandleReadFile(FileParams);
+		}
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
 	}
 	if (LooksLikeSourceFilePath(Symbol))
@@ -1526,7 +1577,21 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 	}
 	if (Symbols.Num() == 0)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No symbol found matching '%s'."), *Symbol));
+		// Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2): a
+		// well-formed symbol that is absent from EngineSource.db is usually an
+		// index coverage gap, not a bad name. Return structured guidance toward
+		// search/reindex instead of a bare not-found so agents stop blindly
+		// retrying or falling back to editor.run_python.
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("error_class"), TEXT("coverage_miss"));
+		ErrorData->SetStringField(TEXT("symbol"), Symbol);
+		ErrorData->SetStringField(TEXT("index"), TEXT("EngineSource.db"));
+		return FMonolithActionResult::Error(FString::Printf(
+				TEXT("No symbol found matching '%s' in EngineSource.db. If the symbol exists in the tree this is likely an index coverage gap, not a bad name."),
+				*Symbol))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Confirm the name with source.search_source; if it should exist, refresh the index with source.trigger_project_reindex (live editor) and retry. Do not fall back to editor.run_python for source reads."))
+			.WithRelatedActions({ TEXT("source.search_source"), TEXT("source.trigger_project_reindex"), TEXT("source.health") });
 	}
 
 	// Filter out forward declarations when a real definition exists
@@ -2497,7 +2562,21 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 
 	if (ResolvedPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No file found matching '%s'."), *Path));
+		// Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2).
+		// Absolute on-disk paths are read directly above, so reaching here means a
+		// relative/engine-relative path resolved against EngineSource.db missed.
+		// If the file exists on disk this is an index coverage gap; steer agents to
+		// an absolute path or a reindex rather than an editor.run_python fallback.
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("error_class"), TEXT("coverage_miss"));
+		ErrorData->SetStringField(TEXT("path"), Path);
+		ErrorData->SetStringField(TEXT("index"), TEXT("EngineSource.db"));
+		return FMonolithActionResult::Error(FString::Printf(
+				TEXT("No file found matching '%s' in EngineSource.db. Absolute on-disk paths are read directly; a relative/engine-relative path that exists on disk but is missing here is likely an index coverage gap."),
+				*Path))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Pass an absolute path to read it directly, or refresh the index with source.trigger_project_reindex (live editor) and retry. Do not fall back to editor.run_python for source reads."))
+			.WithRelatedActions({ TEXT("source.search_source"), TEXT("source.trigger_project_reindex"), TEXT("source.health") });
 	}
 
 	if (EndLine <= 0)

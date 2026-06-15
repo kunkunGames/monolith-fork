@@ -493,6 +493,11 @@ void FMonolithLevelDesignEncounterActions::RegisterActions(FMonolithToolRegistry
 			.Optional(TEXT("profile"), TEXT("string"), TEXT("Hospice profile: motor_impaired, vision_impaired, cognitive_fatigue (empty = all)"), TEXT(""))
 			.Optional(TEXT("walk_speed_cms"), TEXT("number"), TEXT("Walk speed in cm/s for time estimation"), TEXT("300"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("leveldesign"), TEXT("design_encounter"),
+		{ TEXT("enemy placement"), TEXT("fight setup"), TEXT("spawn composition") },
+		{ TEXT("build_encounter") },
+		{ TEXT("design a full enemy encounter in this region") });
 }
 
 // ============================================================================

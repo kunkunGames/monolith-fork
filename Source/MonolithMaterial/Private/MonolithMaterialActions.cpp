@@ -757,6 +757,36 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Material asset path"))
 			.Build());
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("create_material"),
+		{ TEXT("new shader"), TEXT("author material"), TEXT("opaque masked translucent"), TEXT("shading model"), TEXT("PBR surface") },
+		{ TEXT("new_material"), TEXT("make_material"), TEXT("add_material") },
+		{ TEXT("create a new opaque material asset"), TEXT("make a translucent masked material") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("create_material_instance"),
+		{ TEXT("MIC"), TEXT("child material"), TEXT("derive from parent material"), TEXT("material instance constant"), TEXT("variant") },
+		{ TEXT("new_material_instance"), TEXT("make_instance"), TEXT("instance_material") },
+		{ TEXT("create a material instance from a parent material"), TEXT("make a color variant instance of this material") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("build_material_graph"),
+		{ TEXT("add nodes"), TEXT("author graph"), TEXT("node network"), TEXT("wire expressions"), TEXT("from json spec"), TEXT("single transaction") },
+		{ TEXT("build_graph"), TEXT("add_expressions"), TEXT("create_material_nodes"), TEXT("assemble_graph") },
+		{ TEXT("build the whole material node graph from a spec"), TEXT("add and wire several expression nodes at once") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("connect_expressions"),
+		{ TEXT("wire"), TEXT("link pins"), TEXT("plug output into input"), TEXT("hook up base color"), TEXT("join nodes") },
+		{ TEXT("connect_nodes"), TEXT("wire_pins"), TEXT("link_expressions"), TEXT("connect_pins") },
+		{ TEXT("wire a texture sample output into base color"), TEXT("connect one node output to another node input") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("set_instance_parameter"),
+		{ TEXT("override"), TEXT("tweak scalar"), TEXT("set color vector"), TEXT("swap texture"), TEXT("static switch"), TEXT("tint") },
+		{ TEXT("set_param"), TEXT("override_parameter"), TEXT("set_scalar_parameter"), TEXT("set_vector_parameter") },
+		{ TEXT("set a scalar override on a material instance"), TEXT("change the tint color parameter of this material instance") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("recompile_material"),
+		{ TEXT("rebuild shader"), TEXT("force compile"), TEXT("refresh material"), TEXT("recook shaders"), TEXT("instruction count") },
+		{ TEXT("compile_material"), TEXT("rebuild_material"), TEXT("refresh_shader") },
+		{ TEXT("force a recompile of this material"), TEXT("rebuild the shader and report instruction count") });
+
 }
 
 // ============================================================================

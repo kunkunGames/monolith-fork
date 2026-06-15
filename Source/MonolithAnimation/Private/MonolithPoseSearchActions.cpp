@@ -304,6 +304,12 @@ void FMonolithPoseSearchActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content package path under /Game"), TEXT("/Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum assets to return, clamped to 1..500"), TEXT("100"))
 			.Build());
+
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("create_pose_search_database"),
+		{ TEXT("motion matching database"), TEXT("pose search"), TEXT("PoseSearchDatabase"), TEXT("MM database"), TEXT("animation pose db") },
+		{ TEXT("new_pose_search_database"), TEXT("make_motion_matching_database"), TEXT("create_pose_db") },
+		{ TEXT("create a pose search database for motion matching"), TEXT("make a new MM database and assign a schema") });
 }
 
 // ---------------------------------------------------------------------------

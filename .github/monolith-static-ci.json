@@ -112,6 +112,17 @@
     "expected_offline_min_tools": 20,
     "timeout_seconds": 5
   },
+  "skill_drift": {
+    "enabled": true,
+    "script": "Scripts/check_skill_catalog_drift.ps1",
+    "mcp_url": "http://localhost:9316/mcp",
+    "dump_dir": "Skills/_catalog_dumps",
+    "timeout_seconds": 180
+  },
+  "offline_exe_freshness": {
+    "enabled": true,
+    "script": "Scripts/check_offline_exe_fresh.py"
+  },
   "workflow": {
     "hosted_static_workflow": ".github/workflows/ci.yml",
     "forbidden_tokens": [

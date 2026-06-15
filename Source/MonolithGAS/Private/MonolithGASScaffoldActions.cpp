@@ -96,6 +96,11 @@ void FMonolithGASScaffoldActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Optional(TEXT("level"), TEXT("integer"), TEXT("Ability level (default 1, stored alongside class — only used if ASC array is FGameplayAbilitySpec-shaped, otherwise ignored)"), TEXT("1"))
 			.Optional(TEXT("input_id"), TEXT("integer"), TEXT("Input ID (default -1, only used if ASC array is FGameplayAbilitySpec-shaped, otherwise ignored)"), TEXT("-1"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("bootstrap_gas_foundation"),
+		{ TEXT("set up GAS"), TEXT("day-one GAS"), TEXT("AbilitySystemGlobals"), TEXT("GAS modules"), TEXT("initialize ability system") },
+		{ TEXT("init GAS"), TEXT("setup gameplay ability system"), TEXT("scaffold GAS"), TEXT("bootstrap ability system") },
+		{ TEXT("set up the Gameplay Ability System in this project"), TEXT("do the day-one GAS configuration") });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

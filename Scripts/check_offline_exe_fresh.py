@@ -60,12 +60,20 @@ def compute_source_hash(paths):
 
 def read_exe_source_hash(exe_path):
     """Run `<exe> --version`, parse JSON, return its source_hash string (or None)."""
-    proc = subprocess.run(
-        [str(exe_path), "--version"],
-        capture_output=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    # Bound the call so a hung/corrupt exe fails fast instead of wedging CI. Convert
+    # the TimeoutExpired (not an OSError/ValueError) into ValueError so every caller
+    # — this module's main() and ci_static_checks' (ValueError, OSError) catch —
+    # degrades to a graceful advisory rather than crashing the run.
+    try:
+        proc = subprocess.run(
+            [str(exe_path), "--version"],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("exe --version timed out after 30s: {0!r}".format(exc))
     if proc.returncode != 0:
         raise ValueError(
             "exe --version exited {0}: {1!r}".format(

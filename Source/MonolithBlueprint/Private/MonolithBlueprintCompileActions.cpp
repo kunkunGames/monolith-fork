@@ -82,6 +82,16 @@ void FMonolithBlueprintCompileActions::RegisterActions(FMonolithToolRegistry& Re
 		FParamSchemaBuilder()
 			.OptionalAssetPathWithDefault(TEXT("path_prefix"), TEXT("Only save assets whose package path starts with this prefix (default: /Game). Pass empty string to save all dirty Blueprint/Widget packages regardless of path."), TEXT("/Game"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("create_blueprint"),
+		{ TEXT("new blueprint asset"), TEXT("make a BP"), TEXT("subclass an actor in blueprint"), TEXT("blueprint from parent class"), TEXT("author new actor BP") },
+		{ TEXT("new_blueprint"), TEXT("make_blueprint"), TEXT("add_blueprint"), TEXT("create_bp") },
+		{ TEXT("create a new Actor blueprint at /Game/BP_MyActor"), TEXT("make a Character subclass blueprint"), TEXT("author a blueprint interface asset") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("compile_blueprint"),
+		{ TEXT("build the blueprint"), TEXT("check blueprint for errors"), TEXT("recompile BP"), TEXT("why does my blueprint not compile"), TEXT("blueprint compile errors") },
+		{ TEXT("build_blueprint"), TEXT("recompile_blueprint"), TEXT("compile_bp") },
+		{ TEXT("compile BP_Player and show errors"), TEXT("recompile the blueprint after editing nodes"), TEXT("check if BP_Enemy has compile errors") });
 }
 
 // ============================================================

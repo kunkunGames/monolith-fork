@@ -83,6 +83,11 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("get_cdo_properties"),
+		{ TEXT("read default property values"), TEXT("class default object"), TEXT("data asset config values"), TEXT("gameplay effect duration and modifiers"), TEXT("inspect UPROPERTY defaults") },
+		{ TEXT("read_cdo"), TEXT("get_defaults"), TEXT("get_default_properties"), TEXT("dump_cdo") },
+		{ TEXT("read the CDO properties of DA_MyData"), TEXT("show the GameplayEffect duration and modifiers"), TEXT("inspect default property values on BP_Enemy") });
 }
 
 // --- Property serialization helpers ---

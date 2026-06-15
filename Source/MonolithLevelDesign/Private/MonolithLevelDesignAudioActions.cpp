@@ -335,6 +335,11 @@ void FMonolithLevelDesignAudioActions::RegisterActions(FMonolithToolRegistry& Re
 			.Optional(TEXT("template"), TEXT("string"), TEXT("Template to use: 'horror_default'"), TEXT("horror_default"))
 			.OptionalAssetPath(TEXT("save_path"), TEXT("Asset path for the DataTable (default from settings)"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("leveldesign"), TEXT("analyze_room_acoustics"),
+		{ TEXT("reverb"), TEXT("RT60"), TEXT("absorption"), TEXT("echo") },
+		{ TEXT("compute_rt60") },
+		{ TEXT("how reverberant is this room") });
 }
 
 // ============================================================================

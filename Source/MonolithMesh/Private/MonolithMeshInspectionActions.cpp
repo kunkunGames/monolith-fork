@@ -122,6 +122,11 @@ void FMonolithMeshInspectionActions::RegisterActions(FMonolithToolRegistry& Regi
 		FMonolithActionHandler::CreateStatic(&FMonolithMeshInspectionActions::GetMeshCatalogStats),
 		FParamSchemaBuilder().Build());
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("get_mesh_info"),
+		{ TEXT("triangle count"), TEXT("poly count"), TEXT("vertex count"), TEXT("nanite enabled"), TEXT("mesh stats"), TEXT("asset summary") },
+		{ TEXT("inspect_mesh"), TEXT("describe_mesh"), TEXT("mesh_details"), TEXT("get_static_mesh_info") },
+		{ TEXT("how many triangles does this mesh have"), TEXT("is this static mesh nanite enabled"), TEXT("summarize this skeletal mesh") });
+
 }
 
 int32 FMonolithMeshInspectionActions::ClampSearchMeshesBySizeLimit(int32 Limit)

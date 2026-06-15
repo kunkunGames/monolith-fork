@@ -770,6 +770,16 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("context_id"),  TEXT("string"), TEXT("Optional Property Access ContextId (FName). Leave empty for the default unbatched worker-thread context (matches the Game Animation Sample)."))
 			.Optional(TEXT("position"),    TEXT("array"),  TEXT("Node position as [x, y] (default: [0, 0])"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("add_node"),
+		{ TEXT("place a node in the graph"), TEXT("add branch node"), TEXT("call function node"), TEXT("get/set variable node"), TEXT("spawn actor node"), TEXT("insert k2 node") },
+		{ TEXT("create_node"), TEXT("new_node"), TEXT("insert_node"), TEXT("place_node"), TEXT("spawn_node") },
+		{ TEXT("add a Branch node to the event graph"), TEXT("add a CallFunction node for PrintString"), TEXT("add a VariableGet node for Health") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("connect_pins"),
+		{ TEXT("wire two nodes together"), TEXT("link exec pins"), TEXT("hook up node output to input"), TEXT("draw a wire in the graph"), TEXT("join pins") },
+		{ TEXT("wire_pins"), TEXT("link_pins"), TEXT("connect_nodes"), TEXT("make_link") },
+		{ TEXT("wire the Branch True exec to the PrintString node"), TEXT("connect the Health output pin to the SetHealth input"), TEXT("link BeginPlay exec to the Delay node") });
 }
 
 // ============================================================

@@ -758,6 +758,27 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Build());
 
 #endif // WITH_STATETREE
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_state_tree_from_spec"),
+		{ TEXT("declarative state machine"), TEXT("json to statetree"), TEXT("states tasks transitions"), TEXT("hierarchical state machine") },
+		{ TEXT("make_state_tree"), TEXT("author_statetree"), TEXT("create_statetree_from_json") },
+		{ TEXT("build a StateTree with idle, patrol and combat states from a spec") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_st_state"),
+		{ TEXT("statetree state"), TEXT("add child state"), TEXT("subtree state"), TEXT("selection behavior") },
+		{ TEXT("new_st_state"), TEXT("create_state"), TEXT("add_state") },
+		{ TEXT("add a combat state under the root of the state tree") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_st_transition"),
+		{ TEXT("state transition"), TEXT("go to state on event"), TEXT("transition trigger"), TEXT("on completed") },
+		{ TEXT("new_st_transition"), TEXT("link_states") },
+		{ TEXT("add a transition from patrol to chase when the target is seen") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("compile_state_tree"),
+		{ TEXT("build statetree"), TEXT("recompile after edits"), TEXT("finalize state tree"), TEXT("mandatory compile") },
+		{ TEXT("rebuild_state_tree"), TEXT("compile_st") },
+		{ TEXT("compile the state tree after editing its states and transitions") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_st_task"),
+		{ TEXT("statetree task"), TEXT("instanced struct task"), TEXT("run task in state"), TEXT("moveto task") },
+		{ TEXT("new_st_task"), TEXT("add_statetree_task") },
+		{ TEXT("add a move-to task to the chase state") });
 }
 
 // ============================================================

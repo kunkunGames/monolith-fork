@@ -1116,7 +1116,14 @@ public:
             rows = query(db, "SELECT s.* FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
                              "WHERE symbols_fts MATCH ? ORDER BY bm25(symbols_fts) LIMIT 5", {fts_q});
         }
-        if (rows.empty()) die("No symbol found matching '" + symbol + "'.");
+        // Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2): a
+        // well-formed symbol absent from EngineSource.db is usually an index
+        // coverage gap, not a bad name. Steer toward search/reindex, not a blind
+        // retry or an editor.run_python fallback.
+        if (rows.empty()) die("No symbol found matching '" + symbol + "' in EngineSource.db. "
+            "If it exists in the tree this is likely an index coverage gap, not a bad name; confirm with "
+            "'source search_source', refresh via 'source.trigger_project_reindex' (live editor), then retry. "
+            "Do not fall back to editor.run_python for source reads. [error_class=coverage_miss]");
 
         std::vector<std::string> parts;
         std::set<std::tuple<int, int, int>> seen;
@@ -1461,7 +1468,13 @@ public:
                 resolved = rows[0].get("path");
         }
 
-        if (resolved.empty()) die("No file found matching '" + file_path + "'.");
+        // Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2):
+        // absolute on-disk paths resolve above, so a relative path that exists on
+        // disk but misses here is an index coverage gap, not a bad path.
+        if (resolved.empty()) die("No file found matching '" + file_path + "' in EngineSource.db. "
+            "Absolute on-disk paths are read directly; a relative path that exists on disk but is missing here "
+            "is likely an index coverage gap. Pass an absolute path, or refresh via 'source.trigger_project_reindex' "
+            "(live editor), then retry. Do not fall back to editor.run_python for source reads. [error_class=coverage_miss]");
 
         if (end <= 0 && line_count > 0) end = start + line_count - 1;
         if (end <= 0) end = start + 199;
@@ -1918,10 +1931,14 @@ LIMIT ?
         const std::string graph_path = graph_db_path(args);
         const bool execute = args.opt_bool("execute", false);
         const bool force = args.opt_bool("force", false);
+        // Cooldown window for the graph.db export rebuild. Default 1800s (30 min):
+        // collapses a chained/bursty repair_crg_cache + build_crg_graph loop into
+        // at most one graph rebuild per window unless --force. 0 disables the gate.
+        const int cooldown_seconds = args.opt_int("cooldown_seconds", 1800);
         const json source_counts = source_graph_build_counts(db);
         json root = {
-            {"input", {{"execute", execute}, {"force", force}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
-            {"limits", {{"execute", execute}, {"force", force}}},
+            {"input", {{"execute", execute}, {"force", force}, {"cooldown_seconds", cooldown_seconds}, {"source_db", source_db_path}, {"graph_db", graph_path}}},
+            {"limits", {{"execute", execute}, {"force", force}, {"cooldown_seconds", cooldown_seconds}}},
             {"graph_db", graph_path},
             {"source_db", source_db_path},
             {"build_mode", "atomic_temp_replace"},
@@ -1995,10 +2012,44 @@ LIMIT ?
                 root["summary"] = "Saved/graph.db is already current for the EngineSource source signature";
                 root["skipped"] = true;
                 root["replaced"] = false;
+                root["skip_reason"] = "parity_fresh";
                 root["next_actions"] = json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"});
                 return root;
             }
             root["metadata_before"] = existing_metadata;
+
+            // Cooldown gate (CLAUDE.md §12; SPEC_MonolithToolCallReliabilityBacklog
+            // §5.1). graph.db is an export/search cache, NOT the source of truth for
+            // risk_score/review_context, so when an immediately preceding
+            // repair_crg_cache churns the EngineSource signature we must not rebuild
+            // it more than once per cooldown window unless --force. This caps the
+            // daily repair+build maintenance-loop wall-time without masking a real
+            // change: the first build after the window still rebuilds, and the
+            // existing signature check above still fast-skips an unchanged source.
+            if (!force && cooldown_seconds > 0) {
+                const std::string last_epoch_str =
+                    scalar_str(existing_graph, "SELECT value FROM metadata WHERE key = 'last_build_epoch';");
+                long long last_epoch = 0;
+                if (!last_epoch_str.empty()) {
+                    try { last_epoch = std::stoll(last_epoch_str); } catch (...) { last_epoch = 0; }
+                }
+                const long long now_epoch = static_cast<long long>(std::time(nullptr));
+                const long long age = now_epoch - last_epoch;
+                if (last_epoch > 0 && age >= 0 && age < static_cast<long long>(cooldown_seconds)) {
+                    root["after"] = root["before"];
+                    root["metadata"] = existing_metadata;
+                    root["status"] = "ok";
+                    root["skipped"] = true;
+                    root["replaced"] = false;
+                    root["skip_reason"] = "cooldown";
+                    root["seconds_since_last_build"] = age;
+                    root["summary"] = "Saved/graph.db rebuild skipped: last build was "
+                        + std::to_string(age) + "s ago, within the " + std::to_string(cooldown_seconds)
+                        + "s cooldown (EngineSource signature likely churned via repair_crg_cache). Pass --force to rebuild now.";
+                    root["next_actions"] = json::array({"source.search_crg_graph", "source.crg_graph_health", "source.review_context"});
+                    return root;
+                }
+            }
         } else {
             root["before"] = json::object();
             root["warnings"].push_back("graph database does not exist yet");
@@ -2032,6 +2083,16 @@ LIMIT ?
                     fail(step.first, error);
                     break;
                 }
+            }
+        }
+        if (ok) {
+            // Stamp the build time so the cooldown gate above can short-circuit
+            // rapid repeat rebuilds (SPEC_MonolithToolCallReliabilityBacklog §5.1).
+            const std::string now_epoch = std::to_string(static_cast<long long>(std::time(nullptr)));
+            if (!exec_sql_ok(graph,
+                    "INSERT OR REPLACE INTO metadata(key,value) VALUES('last_build_epoch'," + sql_quote(now_epoch) + ");",
+                    error)) {
+                fail("metadata last_build_epoch", error);
             }
         }
         if (ok && !ensure_crg_graph_indexes(graph, error)) fail("create indexes", error);

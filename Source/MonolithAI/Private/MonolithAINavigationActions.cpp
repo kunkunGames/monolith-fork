@@ -334,6 +334,31 @@ void FMonolithAINavigationActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_navigation"),
+		{ TEXT("generate navmesh"), TEXT("rebuild paths"), TEXT("bake navigation"), TEXT("recast build") },
+		{ TEXT("generate_navmesh"), TEXT("bake_navmesh"), TEXT("build_navmesh") },
+		{ TEXT("build the navmesh for the current level") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_nav_bounds_volume"),
+		{ TEXT("nav bounds"), TEXT("navmesh volume"), TEXT("navigable area box"), TEXT("where ai can walk") },
+		{ TEXT("spawn_nav_bounds"), TEXT("add_navmesh_volume") },
+		{ TEXT("add a nav mesh bounds volume covering the playable area") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_nav_link_proxy"),
+		{ TEXT("nav link"), TEXT("jump connection"), TEXT("ledge drop link"), TEXT("off-mesh connection") },
+		{ TEXT("add_nav_link"), TEXT("spawn_nav_link"), TEXT("create_off_mesh_link") },
+		{ TEXT("add a nav link proxy so AI can jump across the gap") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_nav_modifier_volume"),
+		{ TEXT("nav modifier"), TEXT("area cost override"), TEXT("avoid zone"), TEXT("null area"), TEXT("dangerous region") },
+		{ TEXT("spawn_nav_modifier"), TEXT("add_nav_area_override") },
+		{ TEXT("add a nav modifier volume to mark a high-cost avoid zone") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("find_path"),
+		{ TEXT("pathfinding"), TEXT("path between points"), TEXT("route cost"), TEXT("navmesh path query") },
+		{ TEXT("compute_path"), TEXT("query_path"), TEXT("get_path") },
+		{ TEXT("find a path between the door and the objective and report its cost") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("set_navmesh_config"),
+		{ TEXT("agent radius height"), TEXT("cell size tile size"), TEXT("navmesh generation params"), TEXT("multi resolution") },
+		{ TEXT("configure_navmesh"), TEXT("edit_navmesh_settings") },
+		{ TEXT("set the navmesh agent radius and cell size for finer pathing") });
+
 // ============================================================
 //  143. get_nav_system_config
 // ============================================================

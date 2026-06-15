@@ -147,6 +147,27 @@ void FMonolithAIPerceptionActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_perception_component"),
+		{ TEXT("AIPerceptionComponent"), TEXT("pawn sensing"), TEXT("give ai senses"), TEXT("detect player") },
+		{ TEXT("add_ai_perception"), TEXT("attach_perception"), TEXT("enable_senses") },
+		{ TEXT("add an AI perception component to the enemy controller") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("configure_sight_sense"),
+		{ TEXT("sight radius"), TEXT("vision cone"), TEXT("peripheral vision angle"), TEXT("line of sight detection"), TEXT("see player") },
+		{ TEXT("set_sight"), TEXT("configure_vision"), TEXT("setup_sight") },
+		{ TEXT("configure the AI sight sense with a 1500cm radius and 90 degree vision cone") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("configure_hearing_sense"),
+		{ TEXT("hearing range"), TEXT("noise detection"), TEXT("hear footsteps"), TEXT("sound stimulus") },
+		{ TEXT("set_hearing"), TEXT("configure_sound_sense") },
+		{ TEXT("configure the AI hearing sense to react to noise within 2000cm") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_stimuli_source_component"),
+		{ TEXT("register stimulus source"), TEXT("make actor perceivable"), TEXT("be seen by ai"), TEXT("emit stimulus") },
+		{ TEXT("add_stimuli_source"), TEXT("register_as_target") },
+		{ TEXT("make the player actor detectable by AI perception") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("validate_perception_setup"),
+		{ TEXT("check senses configured"), TEXT("lint perception"), TEXT("dominant sense"), TEXT("affiliation filter") },
+		{ TEXT("check_perception"), TEXT("verify_senses") },
+		{ TEXT("validate that the AI controller has senses and affiliation set up correctly") });
+
 // ============================================================
 //  Helpers
 // ============================================================

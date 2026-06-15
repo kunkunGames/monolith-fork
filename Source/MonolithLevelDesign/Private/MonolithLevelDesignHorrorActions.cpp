@@ -102,6 +102,11 @@ void FMonolithLevelDesignHorrorActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("region_max"), TEXT("array"), TEXT("Max corner [x, y, z] (default: whole navmesh)"), TEXT(""))
 			.Optional(TEXT("grid_size"), TEXT("number"), TEXT("Flood-fill grid spacing in cm"), TEXT("200"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("leveldesign"), TEXT("analyze_sightlines"),
+		{ TEXT("claustrophobia"), TEXT("line of sight"), TEXT("enclosed") },
+		{ TEXT("claustrophobia_score") },
+		{ TEXT("how claustrophobic is this spot") });
 }
 
 // ============================================================================

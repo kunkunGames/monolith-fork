@@ -16,6 +16,18 @@ const PROXY_VERSION = "1.1.1-node";
 const TIMEOUT_MS = 30000;
 const POLL_INTERVAL_MS = 5000;
 const POLL_START_DELAY_MS = 3000;
+// Transient-connection retry: the editor MCP endpoint at 9316 flickers (a request fails to
+// connect, the next succeeds) during busy/GC/build windows. Retry ONLY send-side connection
+// failures — the request never reached the server, so retrying cannot double-execute a
+// mutation. Read timeouts are deliberately NOT retried (the request may already be applied).
+const CONNECT_RETRIES = Math.max(0, parseInt(process.env.MONOLITH_CONNECT_RETRIES || "3", 10) || 0);
+const CONNECT_RETRY_BACKOFF_MS = 250;
+// Total wall-clock budget for retries (see the Python proxy note): bails after ~1 slow attempt
+// when the endpoint is fully down/blackholed, but allows several fast retries for real flicker.
+const CONNECT_RETRY_BUDGET_MS = Math.max(0, parseInt(process.env.MONOLITH_CONNECT_RETRY_BUDGET_MS || "1500", 10) || 0);
+const RETRYABLE_CONNECT_CODES = new Set([
+  "ECONNREFUSED", "ECONNRESET", "ECONNABORTED", "EHOSTUNREACH", "ENETUNREACH", "EPIPE",
+]);
 
 let monolithWasUp = null;
 let pendingRequests = 0;
@@ -559,12 +571,13 @@ function jsonrpcError(id, code, message) {
   });
 }
 
-function requestText(urlText, options, body) {
+function requestText(urlText, options, body, errOut) {
   return new Promise((resolve) => {
     let url;
     try {
       url = new URL(urlText);
     } catch (error) {
+      if (errOut) errOut.code = "EBADURL";
       log(`Bad URL ${urlText}: ${error.message}`);
       resolve(null);
       return;
@@ -589,6 +602,7 @@ function requestText(urlText, options, body) {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(chunks.join(""));
           } else {
+            if (errOut) errOut.code = "EHTTPSTATUS";
             log(`HTTP ${res.statusCode} from ${urlText}`);
             resolve(null);
           }
@@ -596,10 +610,16 @@ function requestText(urlText, options, body) {
       },
     );
 
+    let timedOut = false;
     req.on("timeout", () => {
+      timedOut = true;
       req.destroy(new Error("timeout"));
     });
     req.on("error", (error) => {
+      if (errOut) {
+        errOut.code = error.code;
+        errOut.timedOut = timedOut;
+      }
       log(`Monolith unreachable: ${error.message}`);
       resolve(null);
     });
@@ -608,19 +628,35 @@ function requestText(urlText, options, body) {
   });
 }
 
-async function postMonolith(body) {
-  return requestText(
-    MONOLITH_URL,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
+// retry is enabled only for tools/call (real action forwarding where a transient drop loses
+// work). tools/list and unknown-method forwards stay fast-fail because they have a cached/seed
+// fallback — retrying there would only delay the offline path.
+async function postMonolith(body, retry = false) {
+  const deadline = Date.now() + CONNECT_RETRY_BUDGET_MS;
+  for (let attempt = 0; ; attempt++) {
+    const errOut = {};
+    const resp = await requestText(
+      MONOLITH_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+        timeout: TIMEOUT_MS,
       },
-      timeout: TIMEOUT_MS,
-    },
-    body,
-  );
+      body,
+      errOut,
+    );
+    if (resp !== null) return resp;
+    const retryable = !errOut.timedOut && RETRYABLE_CONNECT_CODES.has(errOut.code);
+    if (retry && attempt < CONNECT_RETRIES && Date.now() < deadline && retryable) {
+      log(`Monolith transient connection failure (attempt ${attempt + 1}/${CONNECT_RETRIES}), retrying`);
+      await new Promise((r) => setTimeout(r, CONNECT_RETRY_BACKOFF_MS * (attempt + 1)));
+      continue;
+    }
+    return null;
+  }
 }
 
 async function checkMonolithUp() {
@@ -812,7 +848,7 @@ async function handleToolsCall(message) {
   const rewriteMs = Number(process.hrtime.bigint() - rewriteStart) / 1e6;
 
   const httpStart = process.hrtime.bigint();
-  const response = await postMonolith(JSON.stringify(forwardedMessage));
+  const response = await postMonolith(JSON.stringify(forwardedMessage), true);
   const httpRoundtripMs = Number(process.hrtime.bigint() - httpStart) / 1e6;
   const phaseInput = { parseMs, dedupMs, rewriteMs, httpRoundtripMs };
   if (response) {

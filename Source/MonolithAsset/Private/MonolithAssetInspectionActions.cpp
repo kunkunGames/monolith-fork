@@ -680,6 +680,11 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to validate"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Array cap used when evaluating large payload warnings"), TEXT("32"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("inspect_asset"),
+		{ TEXT("asset details"), TEXT("asset properties"), TEXT("read asset metadata"), TEXT("asset references"), TEXT("texture settings") },
+		{ TEXT("inspect asset"), TEXT("describe asset"), TEXT("show asset"), TEXT("asset info") },
+		{ TEXT("inspect /Game/Textures/T_Rock and show its compression settings"), TEXT("what references does this asset have") });
 }
 
 FMonolithActionResult FMonolithAssetInspectionActions::ListSupportedAssetEnrichers(const TSharedPtr<FJsonObject>& Params)

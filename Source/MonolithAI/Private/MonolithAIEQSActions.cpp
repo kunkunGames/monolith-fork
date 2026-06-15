@@ -762,6 +762,27 @@ void FMonolithAIEQSActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_eqs_query"),
+		{ TEXT("environment query"), TEXT("spatial query"), TEXT("find best location"), TEXT("scoring query asset") },
+		{ TEXT("new_eqs"), TEXT("make_environment_query"), TEXT("create_env_query") },
+		{ TEXT("create an EQS query to find the best cover position") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("build_eqs_query_from_spec"),
+		{ TEXT("declarative eqs"), TEXT("json to environment query"), TEXT("generators and tests"), TEXT("full query authoring") },
+		{ TEXT("author_eqs"), TEXT("make_eqs_from_json") },
+		{ TEXT("build an EQS query with a grid generator and distance + trace tests from a spec") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_eqs_generator"),
+		{ TEXT("grid generator"), TEXT("points around"), TEXT("actors of class generator"), TEXT("query option") },
+		{ TEXT("new_eqs_generator"), TEXT("add_query_generator") },
+		{ TEXT("add a grid generator option to the EQS query") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_eqs_test"),
+		{ TEXT("eqs scoring test"), TEXT("distance test"), TEXT("trace test"), TEXT("filter candidates") },
+		{ TEXT("new_eqs_test"), TEXT("add_query_test") },
+		{ TEXT("add a distance test to score EQS candidates by proximity to the player") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_eqs_from_template"),
+		{ TEXT("preset query"), TEXT("find cover"), TEXT("find flank"), TEXT("patrol point query"), TEXT("nearest item") },
+		{ TEXT("eqs_template"), TEXT("preset_eqs") },
+		{ TEXT("create an EQS query from the find_cover template") });
+
 // ============================================================
 //  71. create_eqs_query
 // ============================================================

@@ -967,6 +967,41 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	InitLiveCodingDelegate();
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("trigger_build"),
+		{ TEXT("compile"), TEXT("recompile"), TEXT("hot reload"), TEXT("build the code"), TEXT("rebuild module"), TEXT("apply C++ changes") },
+		{ TEXT("build"), TEXT("compile"), TEXT("live_compile"), TEXT("hot reload") },
+		{ TEXT("recompile my C++ changes"), TEXT("trigger a live coding build"), TEXT("hot reload the editor") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("get_build_errors"),
+		{ TEXT("why did the build fail"), TEXT("compile errors"), TEXT("linker errors"), TEXT("build warnings"), TEXT("what broke the compile"), TEXT("failed build output") },
+		{ TEXT("build errors"), TEXT("compile errors"), TEXT("list errors"), TEXT("show build failures") },
+		{ TEXT("show me why the build failed"), TEXT("get the compile errors from the last build"), TEXT("list linker errors since the last compile") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("search_logs"),
+		{ TEXT("grep the log"), TEXT("find in output log"), TEXT("filter log by category"), TEXT("search for a warning"), TEXT("look for a log message") },
+		{ TEXT("grep log"), TEXT("find in log"), TEXT("filter logs"), TEXT("search output log") },
+		{ TEXT("search the log for LogTemp warnings"), TEXT("find every error line in the output log"), TEXT("grep the log for a specific message") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("run_console_command"),
+		{ TEXT("exec command"), TEXT("console variable"), TEXT("set cvar at runtime"), TEXT("type into the console"), TEXT("stat fps"), TEXT("slomo") },
+		{ TEXT("exec"), TEXT("console command"), TEXT("cmd"), TEXT("set cvar") },
+		{ TEXT("run stat unit in the console"), TEXT("execute a console command in PIE"), TEXT("set a cvar with showflag") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("start_pie"),
+		{ TEXT("play in editor"), TEXT("press play"), TEXT("run the game"), TEXT("launch a play session"), TEXT("enter play mode") },
+		{ TEXT("play"), TEXT("play in editor"), TEXT("run game"), TEXT("begin play") },
+		{ TEXT("start a play-in-editor session"), TEXT("press play to test the level"), TEXT("run the game in the editor") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("stop_pie"),
+		{ TEXT("end play"), TEXT("exit play mode"), TEXT("stop the game"), TEXT("quit play session"), TEXT("leave PIE") },
+		{ TEXT("stop"), TEXT("end play"), TEXT("stop game"), TEXT("exit pie") },
+		{ TEXT("stop the play-in-editor session"), TEXT("end the running game"), TEXT("exit play mode") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("run_python"),
+		{ TEXT("execute python script"), TEXT("run a py file"), TEXT("editor scripting"), TEXT("automate the editor"), TEXT("evaluate a python expression") },
+		{ TEXT("python"), TEXT("exec python"), TEXT("run script"), TEXT("py") },
+		{ TEXT("run a python script in the editor"), TEXT("execute a python statement"), TEXT("evaluate a python expression and return the result") });
 }
 
 // --- Build actions ---

@@ -213,6 +213,10 @@ void FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry& Registr
 			.Required(TEXT("end"), TEXT("array"), TEXT("End position [x, y, z]"))
 			.Optional(TEXT("agent_radius"), TEXT("number"), TEXT("Navigation agent radius"), TEXT("42"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("query_raycast"), { TEXT("line trace"), TEXT("hit test") }, { TEXT("raycast") }, { TEXT("raycast down to find the floor") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("query_nearest"), { TEXT("closest actor"), TEXT("nearby actors") }, { TEXT("find nearby") }, { TEXT("find the nearest mesh actor") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("scene"), TEXT("query_navmesh"), { TEXT("path finding"), TEXT("walkable route") }, { TEXT("pathfind") }, { TEXT("path between spawn and exit") });
 }
 
 // ============================================================================

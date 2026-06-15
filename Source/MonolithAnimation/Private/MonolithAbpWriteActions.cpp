@@ -416,6 +416,15 @@ void FMonolithAbpWriteActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("position_x"), TEXT("number"), TEXT("Node X position (default: 200)"), TEXT("200"))
 			.Optional(TEXT("position_y"), TEXT("number"), TEXT("Node Y position (default: 0)"), TEXT("0"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("add_anim_graph_node"),
+		{ TEXT("anim graph node"), TEXT("sequence player node"), TEXT("two bone IK node"), TEXT("blend node"), TEXT("place node in animgraph") },
+		{ TEXT("create_anim_graph_node"), TEXT("spawn_animgraph_node"), TEXT("add_animgraph_node") },
+		{ TEXT("add a sequence player node to the anim graph"), TEXT("place a two bone IK node inside a state") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("animation"), TEXT("build_motion_matching_node"),
+		{ TEXT("motion matching"), TEXT("pose history"), TEXT("pose search database node"), TEXT("MM node"), TEXT("blend stack") },
+		{ TEXT("create_motion_matching"), TEXT("setup_motion_matching"), TEXT("add_motion_matching_node") },
+		{ TEXT("set up a motion matching node wired to a pose history"), TEXT("build motion matching in the anim graph with a database") });
 }
 
 // ---------------------------------------------------------------------------

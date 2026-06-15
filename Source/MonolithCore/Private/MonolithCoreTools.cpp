@@ -19,8 +19,37 @@
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Editor.h"
 
-// Known optional modules — namespaces that may not have registered actions
-// depending on settings or missing plugin dependencies.
+// Known optional modules — namespaces that can register ZERO actions and would
+// otherwise make monolith.discover{namespace} fall through to a bare -32602
+// "Unknown namespace" instead of a graceful Success{status,hint} (see the lookup
+// in HandleDiscover below).
+//
+// Audit 2026-06-15 (SPEC_MonolithToolCallReliabilityBacklog §5.3 follow-up).
+// A namespace returns 0 actions, and so needs graceful handling, in two cases:
+//
+//   1. WITH_*-plugin-gated: the whole module compiles out when an optional Fab/
+//      engine plugin is absent — a COMMON deployment scenario. These are
+//      gas (WITH_GBA), combograph (WITH_COMBOGRAPH), logicdriver
+//      (WITH_LOGICDRIVER). All three are listed below; this class is complete
+//      (the original logicdriver -32602 bug was here). When adding a new
+//      optional-PLUGIN namespace, add an entry here.
+//
+//   2. bEnable*-setting-gated: the module's StartupModule early-returns on a
+//      default-TRUE UMonolithSettings toggle before registering anything, so the
+//      namespace is empty only when a user explicitly disables it. This class is
+//      large and is intentionally NOT enumerated here (audio, ai, material,
+//      blueprint, sprite, imagegen, ui, asset, config/localization,
+//      mesh/scene/leveldesign/modelgen/level_instance/hlod,
+//      level_sequence/movie_render — gated by bEnableAudio/bEnableAI/… ). It is
+//      a lower-priority, user-initiated gap, deferred.
+//
+// Note: many namespaces register an always-on `get_status`/list action BEFORE
+// any gate (world_conditions, dataflow, gamefeatures, slate, water, chooser,
+// animation, niagara), so they always have >=1 action and never -32602 — do NOT
+// add those. The preferred remedy for a case-2 namespace is to give its module
+// an always-on `get_status` (the world_conditions pattern) rather than to list
+// it here, because the install-hint branch below is meaningless for an
+// engine-native, setting-only namespace.
 struct FKnownOptionalModule
 {
 	FString Namespace;
@@ -43,6 +72,12 @@ static const TArray<FKnownOptionalModule>& GetKnownOptionalModules()
 			TEXT("bEnableComboGraph"),
 			TEXT("combograph_query"),
 			TEXT("MonolithComboGraph module provides combo graph tooling (nodes, edges, transitions, effects). Requires ComboGraph plugin (Fab marketplace).")
+		},
+		{
+			TEXT("logicdriver"),
+			TEXT("bEnableLogicDriver"),
+			TEXT("logicdriver_query"),
+			TEXT("MonolithLogicDriver module provides Logic Driver state-machine tooling (state machines, states, transitions). Requires Logic Driver Pro plugin (Fab marketplace).")
 		}
 	};
 	return Modules;

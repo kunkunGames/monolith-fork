@@ -588,6 +588,31 @@ void FMonolithAIScaffoldActions::RegisterActions(FMonolithToolRegistry& Registry
 			.Build());
 }
 
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_complete_ai_character"),
+		{ TEXT("full ai stack"), TEXT("npc from scratch"), TEXT("character controller bt bb perception"), TEXT("wire everything together"), TEXT("one call npc") },
+		{ TEXT("setup_ai_character"), TEXT("build_npc"), TEXT("create_ai_pawn") },
+		{ TEXT("scaffold a complete AI character with controller, behavior tree, blackboard and perception") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_enemy_ai"),
+		{ TEXT("enemy npc"), TEXT("chase and attack"), TEXT("hostile ai"), TEXT("combat ai archetype") },
+		{ TEXT("create_enemy"), TEXT("setup_enemy_ai"), TEXT("make_enemy") },
+		{ TEXT("scaffold a basic enemy that chases and attacks the player") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("hello_world_ai"),
+		{ TEXT("ai onboarding"), TEXT("quickstart npc"), TEXT("patrol waypoints demo"), TEXT("sample ai"), TEXT("getting started") },
+		{ TEXT("ai_quickstart"), TEXT("demo_ai"), TEXT("sample_npc") },
+		{ TEXT("give me a working patrolling AI to get started") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_patrol_investigate_ai"),
+		{ TEXT("guard ai"), TEXT("patrol investigate search"), TEXT("hear and investigate"), TEXT("alert behavior") },
+		{ TEXT("create_guard_ai"), TEXT("setup_patrol_ai") },
+		{ TEXT("scaffold a guard that patrols, investigates noises and returns to post") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_companion_ai"),
+		{ TEXT("companion npc"), TEXT("follow the player"), TEXT("friendly ally ai"), TEXT("sidekick") },
+		{ TEXT("create_companion"), TEXT("setup_follower_ai"), TEXT("make_ally") },
+		{ TEXT("scaffold a companion AI that follows and fights alongside the player") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("scaffold_boss_ai"),
+		{ TEXT("boss npc"), TEXT("multi phase fight"), TEXT("health threshold phases"), TEXT("phase transition ai") },
+		{ TEXT("create_boss"), TEXT("setup_boss_ai"), TEXT("make_boss") },
+		{ TEXT("scaffold a multi-phase boss that changes behavior at health thresholds") });
+
 // ============================================================
 //  180b. hello_world_ai
 // ============================================================

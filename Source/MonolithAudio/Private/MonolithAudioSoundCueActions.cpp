@@ -789,6 +789,19 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundCue"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_sound_cue"),
+		{ TEXT("sound cue"), TEXT("SoundCue asset"), TEXT("new sound asset"), TEXT("playable sound"), TEXT("wrap wav in cue") },
+		{ TEXT("new_sound_cue"), TEXT("make_sound_cue"), TEXT("add_sound_cue") },
+		{ TEXT("create a sound cue for this wav file"), TEXT("make a playable SoundCue from a sound wave") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("build_sound_cue_from_spec"),
+		{ TEXT("author whole cue graph"), TEXT("nodes and connections at once"), TEXT("declarative sound cue"), TEXT("json sound graph"), TEXT("assemble cue in one call") },
+		{ TEXT("build_sound_cue"), TEXT("create_sound_cue_graph"), TEXT("compose_sound_cue") },
+		{ TEXT("build a complete sound cue graph from a spec"), TEXT("create a SoundCue with mixer and delay nodes in one shot") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("audio"), TEXT("create_random_sound_cue"),
+		{ TEXT("randomized variations"), TEXT("pick random clip"), TEXT("weighted random sound"), TEXT("footstep variation"), TEXT("non repeating sfx") },
+		{ TEXT("random_sound_cue"), TEXT("make_random_cue"), TEXT("shuffle_sound_cue") },
+		{ TEXT("make a sound cue that randomly picks between several footstep wavs"), TEXT("create a randomized impact sound from a list of clips") });
 }
 
 // ============================================================================

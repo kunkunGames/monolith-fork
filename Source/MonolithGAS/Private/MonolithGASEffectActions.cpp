@@ -936,6 +936,16 @@ void FMonolithGASEffectActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("attribute_state"), TEXT("object"), TEXT("Initial state: {base_value: float}"))
 			.Required(TEXT("effects"), TEXT("array"), TEXT("Array of {operation: Add|Multiply|..., magnitude: float}"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("create_gameplay_effect"),
+		{ TEXT("new GE"), TEXT("buff"), TEXT("debuff"), TEXT("damage effect"), TEXT("heal"), TEXT("DoT") },
+		{ TEXT("make GE"), TEXT("new effect"), TEXT("create GE"), TEXT("add gameplay effect") },
+		{ TEXT("create a bleed damage-over-time GameplayEffect"), TEXT("make a GE that heals over time") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("add_modifier"),
+		{ TEXT("change attribute"), TEXT("increase health"), TEXT("reduce damage"), TEXT("scale stat"), TEXT("attribute modifier") },
+		{ TEXT("add GE modifier"), TEXT("add attribute modifier"), TEXT("set modifier on effect") },
+		{ TEXT("make this effect subtract 10 from Health"), TEXT("add a modifier that multiplies MoveSpeed") });
 }
 
 // ============================================================

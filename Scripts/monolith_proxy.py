@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import sys
 import threading
 import time
@@ -37,6 +38,16 @@ PROXY_VERSION = "1.1.1"
 TIMEOUT = 30.0
 POLL_INTERVAL = 5.0
 POLL_START_DELAY = 3.0
+# Transient-connection retry: the editor MCP endpoint at 9316 flickers (a request fails to
+# connect, the next succeeds) during busy/GC/build windows. Retry ONLY send-side connection
+# failures — the request never reached the server, so retrying cannot double-execute a
+# mutation. Read timeouts are deliberately NOT retried (the request may already be applied).
+CONNECT_RETRIES = max(0, int(os.environ.get("MONOLITH_CONNECT_RETRIES", "3")))
+CONNECT_RETRY_BACKOFF = 0.25
+# Total wall-clock budget for retries. Real editor flicker refuses in ~ms, so several retries
+# fit easily; a fully-down/blackholed endpoint refuses slowly, so the budget bails after ~1
+# slow attempt instead of stacking timeouts (keeps the offline graceful-error path prompt).
+CONNECT_RETRY_BUDGET = float(os.environ.get("MONOLITH_CONNECT_RETRY_BUDGET", "1.5"))
 
 # Track Monolith availability for list_changed notifications
 _monolith_was_up = None
@@ -646,20 +657,62 @@ def _log_tools_call(
     return record_id
 
 
-def _post_monolith(body: str, timeout: float = TIMEOUT) -> str | None:
-    """POST JSON-RPC to Monolith. Returns response body or None on failure."""
-    try:
-        req = urllib.request.Request(
-            MONOLITH_URL,
-            data=body.encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8")
-    except (urllib.error.URLError, OSError, TimeoutError) as e:
-        _log(f"Monolith unreachable: {e}")
-        return None
+def _is_timeout_error(e: BaseException) -> bool:
+    """A read timeout means the request may already have been processed — never retry it."""
+    if isinstance(e, (TimeoutError, socket.timeout)):
+        return True
+    reason = getattr(e, "reason", None)
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    return "timed out" in str(reason if reason is not None else e).lower()
+
+
+def _is_retryable_connection_error(e: BaseException) -> bool:
+    """True only for send-side connection failures (request never reached the server)."""
+    if _is_timeout_error(e):
+        return False
+    if isinstance(e, ConnectionError):
+        return True
+    reason = getattr(e, "reason", None)
+    if isinstance(reason, ConnectionError):
+        return True
+    text = str(reason if reason is not None else e).lower()
+    return any(s in text for s in (
+        "refused", "actively refused", "reset", "aborted",
+        "cannot connect", "failed to establish", "connection error", "not connected",
+    ))
+
+
+def _post_monolith(body: str, timeout: float = TIMEOUT, retry: bool = False) -> str | None:
+    """POST JSON-RPC to Monolith. Returns response body or None on failure.
+
+    When ``retry`` is set, retries transient send-side connection failures (endpoint flicker)
+    with bounded backoff; read timeouts and valid JSON-RPC error responses are returned as-is.
+    Retry is enabled only for ``tools/call`` (real action forwarding where a transient drop
+    loses work). ``tools/list`` and unknown-method forwards stay fast-fail because they have a
+    cached/seed fallback — retrying there would only delay the offline path.
+    """
+    attempt = 0
+    deadline = time.monotonic() + CONNECT_RETRY_BUDGET
+    while True:
+        try:
+            req = urllib.request.Request(
+                MONOLITH_URL,
+                data=body.encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode("utf-8")
+        except (urllib.error.URLError, OSError, TimeoutError) as e:
+            if (retry and attempt < CONNECT_RETRIES and time.monotonic() < deadline
+                    and _is_retryable_connection_error(e)):
+                attempt += 1
+                _log(f"Monolith transient connection failure (attempt {attempt}/{CONNECT_RETRIES}), retrying: {e}")
+                time.sleep(CONNECT_RETRY_BACKOFF * attempt)
+                continue
+            _log(f"Monolith unreachable: {e}")
+            return None
 
 
 def _write(stdout, msg: str) -> None:
@@ -989,7 +1042,7 @@ def handle_tools_call(msg: dict) -> str:
     rewrite_ms = (time.perf_counter() - rewrite_start) * 1000.0
 
     http_start = time.perf_counter()
-    resp = _post_monolith(json.dumps(forwarded_msg))
+    resp = _post_monolith(json.dumps(forwarded_msg), retry=True)
     http_roundtrip_ms = (time.perf_counter() - http_start) * 1000.0
     log_msg_context = dict(msg)
     log_msg_context["_monolith_parse_ms"] = parse_ms

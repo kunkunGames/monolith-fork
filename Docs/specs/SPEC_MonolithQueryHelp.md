@@ -341,6 +341,7 @@ Verified on 2026-06-03:
 - `Tools\MonolithQuery\build.bat`
 - `Tools\MonolithProxy\build.bat`
 - `python Scripts\check_offline_exe_fresh.py` verifies the combined query source hash for `monolith_query.cpp` and `monolith_query_help.h`.
+  - Wired into `Scripts\ci_static_checks.py` as the config-gated `offline_exe_freshness` check (`.github/monolith-static-ci.json`) so a stale shipped `monolith_query.exe` is a **blocker** (6A binary-lag gate, `SPEC_MonolithToolCallReliabilityBacklog.md` §6A). The check reuses this script's hashed source list, and gracefully **advisory-skips** when the exe is absent (local/release artifact) or cannot be executed on the CI host (e.g. a Windows PE binary on a Linux runner); only a present, runnable, hash-mismatched exe blocks.
 - `Binaries\monolith_query.exe --catalog-self-check`
 - Query help matrix for top-level, namespace, and action help forms, including DB-missing help paths.
 - Parser parity for inline and space-separated numeric/boolean options.

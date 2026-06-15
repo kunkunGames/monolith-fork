@@ -655,6 +655,31 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Full Level Sequence asset path (e.g., \"/Game/Cinematics/LS_Intro.LS_Intro\")"))
 			.Optional(TEXT("include_layers"), TEXT("boolean"), TEXT("Include reflected layer rows with section and child-track summaries. Default: true."))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("list_bindings"),
+		{ TEXT("possessable"), TEXT("spawnable"), TEXT("custom binding"), TEXT("bound actor"), TEXT("object binding"), TEXT("MovieSceneSpawnableActorBinding") },
+		{ TEXT("get_bindings"), TEXT("list_objects"), TEXT("list_possessables"), TEXT("list_spawnables") },
+		{ TEXT("what actors are bound in this level sequence"), TEXT("list every possessable and spawnable in the cutscene"), TEXT("show the custom bindings for this sequence") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("list_directors"),
+		{ TEXT("director blueprint"), TEXT("sequence directors"), TEXT("cutscene logic"), TEXT("sequencer scripting"), TEXT("find sequences with directors") },
+		{ TEXT("list_director_blueprints"), TEXT("find_directors"), TEXT("list_sequence_directors") },
+		{ TEXT("which level sequences have a director blueprint"), TEXT("find all cinematics with director scripting"), TEXT("list sequencer directors across the project") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("get_director_info"),
+		{ TEXT("director summary"), TEXT("director blueprint overview"), TEXT("function counts"), TEXT("event binding counts"), TEXT("director variables") },
+		{ TEXT("describe_director"), TEXT("director_summary"), TEXT("inspect_director") },
+		{ TEXT("summarize the director blueprint for this level sequence"), TEXT("how many functions and variables does this sequence director have"), TEXT("show an overview of the cutscene director") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("list_event_bindings"),
+		{ TEXT("event track"), TEXT("event section"), TEXT("fires director function"), TEXT("trigger track"), TEXT("FMovieSceneEvent"), TEXT("event key") },
+		{ TEXT("list_events"), TEXT("list_event_tracks"), TEXT("get_event_bindings") },
+		{ TEXT("which event tracks fire director functions in this sequence"), TEXT("list the event keys that call cutscene logic"), TEXT("show sequencer event track bindings") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("find_director_function_callers"),
+		{ TEXT("reverse lookup"), TEXT("who calls this function"), TEXT("cross sequence search"), TEXT("event references"), TEXT("find callers"), TEXT("where is this fired") },
+		{ TEXT("find_callers"), TEXT("who_fires_function"), TEXT("find_event_references"), TEXT("find_function_usages") },
+		{ TEXT("which level sequences call this director function"), TEXT("find every event track that fires this function across the project"), TEXT("where is this cutscene function triggered") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("level_sequence"), TEXT("list_saved_replays"),
+		{ TEXT("demo recording"), TEXT("saved demos"), TEXT("replay files"), TEXT("gameplay recording"), TEXT("Saved Demos folder") },
+		{ TEXT("list_demos"), TEXT("list_recordings"), TEXT("get_replays") },
+		{ TEXT("list the saved replays on disk"), TEXT("what demo recordings are in the Saved folder"), TEXT("show recorded gameplay replay files") });
 }
 
 // ============================================================================

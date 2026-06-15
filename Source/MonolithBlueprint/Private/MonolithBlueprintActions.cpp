@@ -191,6 +191,10 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Required(TEXT("variable_name"),  TEXT("string"),  TEXT("Name of the member variable to find references to (e.g. 'Health', 'TargetActor')"))
 			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Also match the variable where it is scoped to a parent class, not just this Blueprint's own class (default: false)"))
 			.Build());
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("search_nodes"),
+		{ TEXT("find node in blueprint"), TEXT("locate node by title"), TEXT("where is this function called in the graph"), TEXT("grep blueprint graph"), TEXT("find function call node") },
+		{ TEXT("find_node"), TEXT("find_nodes"), TEXT("grep_graph"), TEXT("locate_node") },
+		{ TEXT("find the PrintString node in BP_Player"), TEXT("search the event graph for nodes calling SpawnActor"), TEXT("locate the Branch node by title") });
 }
 
 // --- Shared helper ---

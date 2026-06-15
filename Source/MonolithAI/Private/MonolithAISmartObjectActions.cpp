@@ -184,6 +184,23 @@ void FMonolithAISmartObjectActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 #endif // WITH_SMARTOBJECTS
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_smart_object_definition"),
+		{ TEXT("smart object"), TEXT("interactable definition"), TEXT("usable object"), TEXT("ai interaction point") },
+		{ TEXT("new_smart_object"), TEXT("make_smart_object"), TEXT("create_so") },
+		{ TEXT("create a smart object definition for a sittable chair") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("add_so_slot"),
+		{ TEXT("smart object slot"), TEXT("interaction slot"), TEXT("use point"), TEXT("entry slot") },
+		{ TEXT("add_smart_object_slot"), TEXT("new_so_slot") },
+		{ TEXT("add an interaction slot to the smart object definition") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("place_smart_object_actor"),
+		{ TEXT("spawn smart object"), TEXT("place interactable in level"), TEXT("instantiate usable object") },
+		{ TEXT("spawn_smart_object"), TEXT("add_smart_object_to_level") },
+		{ TEXT("place a smart object actor for the chair in the level") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ai"), TEXT("create_so_from_template"),
+		{ TEXT("smart object preset"), TEXT("hide spot"), TEXT("sit chair"), TEXT("workstation"), TEXT("door interaction"), TEXT("pickup item") },
+		{ TEXT("smart_object_template"), TEXT("preset_smart_object") },
+		{ TEXT("create a smart object definition from the hide_spot template") });
 }
 
 // ============================================================

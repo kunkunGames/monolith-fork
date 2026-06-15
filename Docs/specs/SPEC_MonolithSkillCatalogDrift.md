@@ -2,8 +2,8 @@
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md)
 **Owner module:** MonolithCore
-**Status:** Implemented and verified 2026-06-13
-**Scope:** `Scripts/check_skill_catalog_drift.ps1`; ties into `Scripts/validate_monolith_skills.ps1` and `python Scripts/ci_static_checks.py`
+**Status:** Implemented and verified 2026-06-13; wired into `ci_static_checks.py` as the `skill_drift` check 2026-06-14 (§7)
+**Scope:** `Scripts/check_skill_catalog_drift.ps1`, the `skill_drift` check in `Scripts/ci_static_checks.py` (catalog-source-adaptive), and the `skill_drift` block in `.github/monolith-static-ci.json`; complementary to `Scripts/validate_monolith_skills.ps1`
 **Created:** 2026-06-13
 
 ---
@@ -156,19 +156,39 @@ complementary and run as separate steps:
 | Requires a live MCP / catalog dump | no | yes (LIVE) or dump (Offline) |
 
 `python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json
---github check` is the project static-check entry point. Because the drift
-guard needs the live catalog (or a committed dump), it is a FOLLOW-ON CI step,
-not a static check: run `validate_monolith_skills.ps1` and the static checks
-first, then run `check_skill_catalog_drift.ps1` in a job that has the headless
-editor MCP up (`Scripts/recover_mcp.ps1`) or a fresh `-Offline -DumpDir` dump.
-Recommended adoption order:
+--github check` is the project static-check entry point, and the drift guard is
+now wired into it as the `skill_drift` check (`check_skill_catalog_drift` in
+`ci_static_checks.py`, config block `skill_drift`). Because the guard needs a
+catalog source, the check is **catalog-source-adaptive** so it never fails a
+headless run for lack of an editor:
+
+| Catalog source (in preference order) | Behavior |
+|---|---|
+| Committed dumps at `dump_dir` (`Skills/_catalog_dumps`, `*.json` present) | Runs `-Offline -DumpDir`; **hard drift (exit 2) → blocker** |
+| Else live editor reachable at `mcp_url` (TCP probe of `9316`) | Runs LIVE; **hard drift (exit 2) → blocker** |
+| Else (no dumps, editor down) | **Advisory skip** (non-blocking), with a message to run with the editor up or commit dumps |
+| Script exit 3 (catalog unavailable / usage) | Advisory skip — not a code defect |
+
+So the guard gates automatically wherever a catalog is available (an agent/dev
+running the static checks locally with the editor up, or any CI job with
+committed dumps), and degrades to a visible advisory in headless GitHub CI.
+
+**To make it a HARD gate in headless GitHub CI**, commit per-namespace
+`monolith_discover` dumps to `Skills/_catalog_dumps/<namespace>.json`, refreshed
+from a live editor whenever the catalog changes (follow-up: add a `-ExportDumps`
+mode to the guard, or a small `Scripts/dump_skill_namespace_catalog.ps1` that
+loops `monolith_discover` per namespace). Until dumps are committed, the headless
+run is advisory and the real gate is the local/live-editor run.
+
+`validate_monolith_skills.ps1` remains the separate structural step (frontmatter,
+links, body size); it does not compare catalog content. Adoption notes:
 
 1. The four flag-gated skills (§8) are already reconciled via
    `skill_drift_gated_actions.json`, so a default-build LIVE run is `RESULT=OK`
    (exit 0) with `gated=55`. Exit-2 gating is therefore usable immediately.
-2. Optionally soft-launch with `-ReportOnly` first; drop it so exit 2 gates the
-   pipeline once the job reliably has the MCP up (`Scripts/recover_mcp.ps1`) or
-   a committed `-Offline -DumpDir` dump.
+2. The `ci_static_checks` integration maps exit 0 → pass, exit 2 → blocker,
+   exit 3/other → advisory skip; it does not pass `-ReportOnly` so real drift
+   gates wherever a catalog is present.
 
 ## 8. Known Drift / Build-State Sensitivity
 

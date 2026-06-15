@@ -138,32 +138,62 @@ Workflow-level recovery — the map from a symptom to the fix. (Individual actio
 
 Monolith ships a set of Claude Code **skills** — task-scoped instruction files that load automatically when their trigger words appear in your conversation. They live in the plugin's `Skills/` directory and load through Claude Code **independently of the MCP action surface**: the skill teaches workflow, the MCP namespace executes it. If you are not running through Claude Code, read the skill markdown directly.
 
-| Namespace | Skill | Path |
-|-----------|-------|------|
-| blueprint | unreal-blueprints | `Skills/unreal-blueprints/SKILL.md` |
-| material | unreal-materials | `Skills/unreal-materials/SKILL.md` |
-| material (reference) | material-reference | `Skills/material-reference/SKILL.md` |
-| schema writes | monolith-schema | `Skills/monolith-schema/SKILL.md` |
-| animation | unreal-animation | `Skills/unreal-animation/SKILL.md` |
-| niagara | unreal-niagara | `Skills/unreal-niagara/SKILL.md` |
-| niagara (reference) | niagara-reference | `Skills/niagara-reference/SKILL.md` |
-| asset | unreal-asset | `Skills/unreal-asset/SKILL.md` |
-| mesh | unreal-mesh | `Skills/unreal-mesh/SKILL.md` |
-| editor (diagnostics) | unreal-debugging | `Skills/unreal-debugging/SKILL.md` |
-| editor (build) | unreal-build | `Skills/unreal-build/SKILL.md` |
-| source + config | unreal-cpp | `Skills/unreal-cpp/SKILL.md` |
-| reflection intelligence | unreal-reflection-intel | `Skills/unreal-reflection-intel/SKILL.md` |
-| project | unreal-project-search | `Skills/unreal-project-search/SKILL.md` |
-| gas | unreal-gas | `Skills/unreal-gas/SKILL.md` |
-| combograph | unreal-combograph | `Skills/unreal-combograph/SKILL.md` |
-| logicdriver | unreal-logicdriver | `Skills/unreal-logicdriver/SKILL.md` |
-| audio | unreal-audio | `Skills/unreal-audio/SKILL.md` |
-| ui | unreal-ui | `Skills/unreal-ui/SKILL.md` |
-| sprite | unreal-sprite | `Skills/unreal-sprite/SKILL.md` |
-| level_sequence | unreal-level-sequences | `Skills/unreal-level-sequences/SKILL.md` |
-| cross-domain (config/material/mesh) | unreal-performance | `Skills/unreal-performance/SKILL.md` |
+Routing/discovery and writes are themselves skills: start at **monolith-mcp** (find the right namespace/action, server health/recovery) and use **monolith-schema** for `describe`/`bulk_fill` write shapes.
 
-`unreal-performance` spans namespaces (config audit, material shader stats, mesh draw-call analysis) rather than mapping one-to-one. The skill set grows between releases — read the plugin's `Skills/` directory for the current roster rather than relying on a fixed count here.
+| Domain | Namespace(s) | Skill | Path |
+|--------|--------------|-------|------|
+| Discovery / server | `monolith` | monolith-mcp | `Skills/monolith-mcp/SKILL.md` |
+| Schema writes | `describe`, `bulk_fill` | monolith-schema | `Skills/monolith-schema/SKILL.md` |
+| Code / project | `source` | unreal-cpp | `Skills/unreal-cpp/SKILL.md` |
+| Code / project | `project` | unreal-project-search | `Skills/unreal-project-search/SKILL.md` |
+| Code / project | `bridge` (asset↔symbol) | unreal-bridge | `Skills/unreal-bridge/SKILL.md` |
+| Code / project | `cppreflect`/`network`/`decision`/`risk`/`reflect` | unreal-reflection-intel | `Skills/unreal-reflection-intel/SKILL.md` |
+| Build / debug | `editor` (build) | unreal-build | `Skills/unreal-build/SKILL.md` |
+| Build / debug | `editor` (log/crash forensics) | unreal-debugging | `Skills/unreal-debugging/SKILL.md` |
+| Build / debug | cross-domain perf (`config`/`material`/`niagara`) | unreal-performance | `Skills/unreal-performance/SKILL.md` |
+| Gameplay | `gas` | unreal-gas | `Skills/unreal-gas/SKILL.md` |
+| Gameplay | `ai` | unreal-ai | `Skills/unreal-ai/SKILL.md` |
+| Gameplay | `blueprint` | unreal-blueprints | `Skills/unreal-blueprints/SKILL.md` |
+| Gameplay | `logicdriver` | unreal-logicdriver | `Skills/unreal-logicdriver/SKILL.md` |
+| Gameplay | `combograph` | unreal-combograph | `Skills/unreal-combograph/SKILL.md` |
+| Gameplay | `input` | unreal-input | `Skills/unreal-input/SKILL.md` |
+| Gameplay | `world_conditions` | unreal-world-conditions | `Skills/unreal-world-conditions/SKILL.md` |
+| Gameplay | `gamefeatures` | unreal-gamefeatures | `Skills/unreal-gamefeatures/SKILL.md` |
+| Spatial / level | `scene` | unreal-scene | `Skills/unreal-scene/SKILL.md` |
+| Spatial / level | `leveldesign` | unreal-leveldesign | `Skills/unreal-leveldesign/SKILL.md` |
+| Spatial / level | `worldgen` | unreal-worldgen | `Skills/unreal-worldgen/SKILL.md` |
+| Spatial / level | `mesh` | unreal-mesh | `Skills/unreal-mesh/SKILL.md` |
+| Spatial / level | `level_instance` | unreal-level-instance | `Skills/unreal-level-instance/SKILL.md` |
+| Spatial / level | `hlod` | unreal-hlod | `Skills/unreal-hlod/SKILL.md` |
+| Spatial / level | `pcg` | unreal-pcg | `Skills/unreal-pcg/SKILL.md` |
+| Spatial / level | `water` | unreal-water | `Skills/unreal-water/SKILL.md` |
+| Content | `material` | unreal-materials | `Skills/unreal-materials/SKILL.md` |
+| Content | material (reference, read-only) | material-reference | `Skills/material-reference/SKILL.md` |
+| Content | `asset` | unreal-asset | `Skills/unreal-asset/SKILL.md` |
+| Content | `niagara` | unreal-niagara | `Skills/unreal-niagara/SKILL.md` |
+| Content | niagara (reference, read-only) | niagara-reference | `Skills/niagara-reference/SKILL.md` |
+| Content | `animation` | unreal-animation | `Skills/unreal-animation/SKILL.md` |
+| Content | `chooser` | unreal-chooser | `Skills/unreal-chooser/SKILL.md` |
+| Content | `metahuman` | unreal-metahuman | `Skills/unreal-metahuman/SKILL.md` |
+| Content | `audio` | unreal-audio | `Skills/unreal-audio/SKILL.md` |
+| Content | `ui` | unreal-ui | `Skills/unreal-ui/SKILL.md` |
+| Content | `slate` | unreal-slate | `Skills/unreal-slate/SKILL.md` |
+| Content | `paper2d` | unreal-paper2d | `Skills/unreal-paper2d/SKILL.md` |
+| Content | `sprite` | unreal-sprite | `Skills/unreal-sprite/SKILL.md` |
+| Content | `chaos_fracture` | unreal-chaos-fracture | `Skills/unreal-chaos-fracture/SKILL.md` |
+| Content | `cloth` | unreal-cloth | `Skills/unreal-cloth/SKILL.md` |
+| Content | `dataflow` | unreal-dataflow | `Skills/unreal-dataflow/SKILL.md` |
+| Content | `interchange` | unreal-interchange | `Skills/unreal-interchange/SKILL.md` |
+| Content | `modelgen` | unreal-modelgen | `Skills/unreal-modelgen/SKILL.md` |
+| Content | `imagegen` | unreal-imagegen | `Skills/unreal-imagegen/SKILL.md` |
+| Content | `ndisplay` | unreal-ndisplay | `Skills/unreal-ndisplay/SKILL.md` |
+| Sequencing | `level_sequence` | unreal-level-sequences | `Skills/unreal-level-sequences/SKILL.md` |
+| Project ops | `config` | unreal-config | `Skills/unreal-config/SKILL.md` |
+| Project ops | `source_control` | unreal-source-control | `Skills/unreal-source-control/SKILL.md` |
+| Project ops | `collection` | unreal-collection | `Skills/unreal-collection/SKILL.md` |
+| Project ops | `localization` | unreal-localization | `Skills/unreal-localization/SKILL.md` |
+
+Some skills span namespaces rather than mapping one-to-one: `unreal-cpp` also covers `config`, `unreal-performance` spans config/material/niagara, and `editor` is split across unreal-build (compile) and unreal-debugging (forensics). Optional-plugin namespaces (`gas`, `combograph`, `logicdriver`, `ai`, MetaSound audio) only appear in `monolith_discover()` when their plugin/gate is enabled. The skill set grows between releases — read the plugin's `Skills/` directory for the current roster rather than relying on this snapshot.
 
 ## gotchas
 

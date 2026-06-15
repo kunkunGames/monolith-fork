@@ -77,6 +77,11 @@ void FMonolithMeshValidationActions::RegisterActions(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path of the StaticMesh"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("mesh"), TEXT("validate_game_ready"),
+		{ TEXT("game readiness checklist"), TEXT("shippable mesh"), TEXT("missing collision"), TEXT("lightmap UV check"), TEXT("pivot and scale"), TEXT("asset QA") },
+		{ TEXT("check_mesh"), TEXT("audit_mesh"), TEXT("verify_mesh"), TEXT("mesh_health_check") },
+		{ TEXT("is this static mesh game ready"), TEXT("check this mesh for missing collision and LODs"), TEXT("run a QA pass on this asset") });
 }
 
 // ============================================================================

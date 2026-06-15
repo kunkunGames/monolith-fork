@@ -205,6 +205,16 @@ void FMonolithGASAttributeActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Required(TEXT("value"), TEXT("number"), TEXT("New attribute value"))
 			.Optional(TEXT("set_base"), TEXT("boolean"), TEXT("If true, sets BaseValue instead of CurrentValue (default: false)"))
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("create_attribute_set"),
+		{ TEXT("stats"), TEXT("health mana stamina"), TEXT("vitals"), TEXT("new AttributeSet"), TEXT("character attributes") },
+		{ TEXT("make attribute set"), TEXT("new AS"), TEXT("create stats class"), TEXT("add UAttributeSet") },
+		{ TEXT("create an AttributeSet with Health and Mana"), TEXT("make a vitals attribute set for the player") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("gas"), TEXT("add_attribute"),
+		{ TEXT("new stat"), TEXT("add health"), TEXT("add mana"), TEXT("FGameplayAttributeData"), TEXT("attribute field") },
+		{ TEXT("add attribute to set"), TEXT("new attribute"), TEXT("add stat") },
+		{ TEXT("add a MaxHealth attribute to the AttributeSet"), TEXT("add a replicated Stamina stat") });
 }
 
 // ============================================================

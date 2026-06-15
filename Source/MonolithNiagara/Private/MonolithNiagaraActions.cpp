@@ -3501,6 +3501,31 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.EnableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"), { TEXT("system_path") })
 			.Build());
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("create_system"),
+		{ TEXT("VFX"), TEXT("particle effect"), TEXT("FX asset"), TEXT("new effect"), TEXT("explosion fire smoke"), TEXT("empty system") },
+		{ TEXT("new_niagara_system"), TEXT("make_vfx"), TEXT("create_particle_system"), TEXT("create_fx") },
+		{ TEXT("create a new empty Niagara VFX system"), TEXT("make a particle effect asset for an explosion") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("create_system_from_spec"),
+		{ TEXT("whole effect at once"), TEXT("declarative VFX"), TEXT("author full system"), TEXT("emitters and renderers in one call"), TEXT("build effect from description") },
+		{ TEXT("build_system"), TEXT("author_full_effect"), TEXT("create_from_json"), TEXT("system_builder") },
+		{ TEXT("build a complete fire VFX system from a JSON spec in one call"), TEXT("author a whole particle effect with emitters and renderers at once") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("add_emitter"),
+		{ TEXT("attach emitter template"), TEXT("add particle stream"), TEXT("insert sub-effect"), TEXT("from template asset"), TEXT("spawn source") },
+		{ TEXT("attach_emitter"), TEXT("insert_emitter"), TEXT("add_particle_emitter"), TEXT("add_template_emitter") },
+		{ TEXT("add a sparks emitter from a template into my Niagara system"), TEXT("attach another particle stream to the effect") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("get_system_summary"),
+		{ TEXT("overview"), TEXT("inspect effect"), TEXT("what does this system do"), TEXT("emitter topology"), TEXT("event flow"), TEXT("understand VFX") },
+		{ TEXT("describe_system"), TEXT("system_info"), TEXT("inspect_system"), TEXT("explain_effect") },
+		{ TEXT("give me an overview of what this Niagara system does"), TEXT("inspect the emitter topology and event flow of this effect") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("list_systems"),
+		{ TEXT("find effects"), TEXT("browse VFX assets"), TEXT("enumerate particle systems"), TEXT("all Niagara assets"), TEXT("discover systems") },
+		{ TEXT("find_systems"), TEXT("search_systems"), TEXT("browse_niagara"), TEXT("list_vfx") },
+		{ TEXT("list all Niagara particle systems in the project"), TEXT("find existing VFX assets to reuse") });
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("niagara"), TEXT("validate_system"),
+		{ TEXT("sanity check"), TEXT("catch misconfigurations"), TEXT("pre-compile check"), TEXT("event chain issues"), TEXT("why is my effect broken"), TEXT("lint VFX") },
+		{ TEXT("check_system"), TEXT("verify_system"), TEXT("lint_system"), TEXT("diagnose_system") },
+		{ TEXT("check why my Niagara effect produces no particles before compiling"), TEXT("validate the event-chain and spawn-location setup of this system") });
 }
 
 // ============================================================================
