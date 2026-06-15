@@ -59,9 +59,7 @@
     "warn_if_none": true
   },
   "text_hygiene": {
-    "line_ending_allowlist": [
-      "PRD/SQLite/SQLite_Optimization_Enhancements.md"
-    ],
+    "line_ending_allowlist": [],
     "scan_extensions": [
       ".bat",
       ".c",
