@@ -40,7 +40,7 @@ Monolith includes the following third-party code directly in the source tree to 
 ### nlohmann/json
 - **Source:** `Tools/MonolithProxy/ThirdParty/nlohmann/json.hpp`
 - **License:** MIT License
-- **Copyright:** Copyright (c) 2013-2023 Niels Lohmann <https://nlohmann.me>
+- **Copyright:** Copyright (c) 2013-2023 Niels Lohmann <https://nlohmann.me> (Includes code by Niels Lohmann, Florian Loitsch, Evan Nemerson, Björn Hoehrmann, and The Abseil Authors)
 - **Purpose:** Used for JSON parsing and serialization in the C++ MCP Proxy executable.
 
 ### SQLite
