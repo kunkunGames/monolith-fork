@@ -97,6 +97,13 @@ public class MonolithWorldGen : ModuleRules
 			PrivateDependencyModuleNames.Add("GeometryFramework");
 			PrivateDependencyModuleNames.Add("GeometryCore");
 			PublicDefinitions.Add("WITH_GEOMETRYSCRIPT=1");
+
+			if (Target.Platform == UnrealTargetPlatform.Win64)
+			{
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryScriptingCore.dll");
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryFramework.dll");
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryCore.dll");
+			}
 		}
 		else
 		{

@@ -112,9 +112,12 @@ public class MonolithMesh : ModuleRules
 			// removing the CouldNotBeLoadedByOS / GetLastError=126 first-build/load race).
 			// Verified: PublicDelayLoadDLLs at ModuleRules.cs:1308 (UE 5.7). Confirm via
 			// dumpbin that these imports move to the Delay Import table.
-			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryScriptingCore.dll");
-			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryFramework.dll");
-			PublicDelayLoadDLLs.Add("UnrealEditor-GeometryCore.dll");
+			if (Target.Platform == UnrealTargetPlatform.Win64)
+			{
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryScriptingCore.dll");
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryFramework.dll");
+				PublicDelayLoadDLLs.Add("UnrealEditor-GeometryCore.dll");
+			}
 		}
 		else
 		{
