@@ -668,4 +668,37 @@ bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest
 
 	return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverMoveNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.MoveNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverMoveNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("move_node")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// position_x as string instead of number
+	TSharedPtr<FJsonObject> BadPosXParams = MakeShared<FJsonObject>();
+	BadPosXParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadPosXParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	BadPosXParams->SetStringField(TEXT("position_x"), TEXT("100"));
+	BadPosXParams->SetNumberField(TEXT("position_y"), 100);
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("move_node"), BadPosXParams);
+	TestTrue(TEXT("move_node rejects string position_x"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions position_x must be a number"), Result1.ErrorMessage.Contains(TEXT("position_x")) && Result1.ErrorMessage.Contains(TEXT("must be a number")));
+
+	// position_y as string instead of number
+	TSharedPtr<FJsonObject> BadPosYParams = MakeShared<FJsonObject>();
+	BadPosYParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadPosYParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	BadPosYParams->SetNumberField(TEXT("position_x"), 100);
+	BadPosYParams->SetStringField(TEXT("position_y"), TEXT("100"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("move_node"), BadPosYParams);
+	TestTrue(TEXT("move_node rejects string position_y"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions position_y must be a number"), Result2.ErrorMessage.Contains(TEXT("position_y")) && Result2.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
