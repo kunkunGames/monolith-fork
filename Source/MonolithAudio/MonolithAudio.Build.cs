@@ -1,20 +1,51 @@
 using UnrealBuildTool;
-using System.IO;
 
 public class MonolithAudio : ModuleRules
 {
-	private static bool HasPluginDir(string BaseDir, string PluginName)
+	// Returns true iff `PluginName` is ENABLED for this target (not merely present on disk).
+	// Mirrors UnrealBuildTool Plugins.IsPluginEnabledForTarget (UE 5.7
+	// Engine/Source/Programs/UnrealBuildTool/System/Plugins.cs:693). Fixes issue #71:
+	// engine plugins ship-but-default-off (EnabledByDefault:false), so disk presence != enablement.
+	// Design + API citations: Docs/plans/2026-06-15-issue71-plugin-enablement-gating.md.
+	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
+	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
 	{
-		if (!Directory.Exists(BaseDir))
+		if (Target.ProjectFile == null)
 		{
-			return false;
+			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
 		}
 
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
+
+		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		try
 		{
-			return true;
+			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
+			if (Project.Plugins != null)
+			{
+				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
+				{
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					{
+						return Ref.bEnabled
+							&& Ref.IsEnabledForPlatform(Target.Platform)
+							&& Ref.IsEnabledForTargetConfiguration(Target.Configuration)
+							&& Ref.IsEnabledForTarget(Target.Type);
+					}
+				}
+			}
+		}
+		catch (System.Exception)
+		{
+			return false;   // unreadable .uproject -> fail safe to OFF (never hard-link)
 		}
 
+		// 3. No .uproject entry -> falls to the .uplugin EnabledByDefault. ALL gated plugins here are
+		//    engine plugins with EnabledByDefault:false, so absence == disabled. Return false.
+		//    (If a future gated plugin were EnabledByDefault:true, this branch would need to read its
+		//    .uplugin; documented as a known limitation in the plan.)
 		return false;
 	}
 
@@ -42,43 +73,13 @@ public class MonolithAudio : ModuleRules
 		});
 
 		// --- Conditional: MetaSound support ---
-		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
-		bool bHasMetaSound = false;
+		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence.
+		// Metasound ships under Engine/Plugins/Runtime on every UE 5.7 install but is
+		// EnabledByDefault:false (and Optional:true in Monolith.uplugin); a source builder
+		// who hasn't enabled it would otherwise hard-link MetasoundEngine/Frontend/Editor → 126.
+		// Release builds: MONOLITH_RELEASE_BUILD=1 still forces this OFF.
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-
-		if (!bReleaseBuild)
-		{
-			// 1. Check project Plugins/ folder, including optional subfolders used by some vendor layouts.
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasMetaSound =
-						HasPluginDir(ProjectPluginsDir, "Metasound")
-						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Runtime"), "Metasound")
-						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Developer"), "Metasound")
-						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Experimental"), "Metasound")
-						|| HasPluginDir(Path.Combine(ProjectPluginsDir, "Marketplace"), "Metasound");
-				}
-			}
-
-			// 2. Check Engine Plugins/ folder
-			if (!bHasMetaSound)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-
-				// 3-location probe (engine Plugins/Runtime, Plugins/Marketplace, top-level Plugins fallback)
-				// Note: MetaSound is a built-in engine plugin (ships with UE 5.7) usually found in Runtime.
-				bHasMetaSound =
-					HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "Metasound")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Developer"), "Metasound")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "Metasound")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Marketplace"), "Metasound")
-					|| HasPluginDir(EnginePluginsDir, "Metasound");
-			}
-		}
+		bool bHasMetaSound = !bReleaseBuild && IsPluginEnabled(Target, "Metasound");
 
 		PublicDefinitions.Add("WITH_METASOUND=" + (bHasMetaSound ? "1" : "0"));
 

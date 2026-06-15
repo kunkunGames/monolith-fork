@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.20.0 (Beta)
+**Version:** 0.20.1 (Beta)
 
 ---
 
@@ -150,6 +150,15 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 |--------|-------------|
 | `apply_anim_modifier` | Apply an animation modifier class to a sequence |
 | `list_anim_modifiers` | List animation modifiers applied to a sequence |
+
+**Sync Markers (5 — Sequence Properties + Sync Markers group)**
+| Action | Description |
+|--------|-------------|
+| `get_sync_markers` | Read all authored sync markers from a sequence |
+| `add_sync_marker` | Add an authored sync marker (`marker_name`, `time`, `track_index`) |
+| `remove_sync_marker` | Remove sync markers by name (all with that name) or by index |
+| `rename_sync_marker` | Rename all sync markers with a given name to a new name |
+| `derive_foot_sync_markers` | **(2026-06-14)** Auto-derive left/right foot-plant sync markers from data already in the clip — no human eyeballing. Runs a 5-signal availability cascade (first signal that yields plants wins) and records which one fired via `source` + `confidence`: (1) **existing** authored markers (ground truth), (2) **footstep notifies** — foot side from the owning TRACK NAME (configurable case-insensitive `notify_track_patterns`; class-suffix then alternate-by-time fallbacks), (3) **contact_l/_r** float curves — mid-threshold rising edge + hysteresis re-arm + stride-period debounce (collapses heel-toe double-bumps), (4) **Phase** sawtooth curve — key extrema (+1=left, -1=right; `phase_invert` flips; 0..1-ramp heuristic fallback), (5) **footspeed** — component-space foot-bone speed minima, a native port of the engine `UFootstepAnimEventsModifier` FootBoneSpeed technique (single `GetAnimPoseAtTimeIntervals` eval, `GetBonePose` in World/component space, per-clip speed normalize, valley placement on the upward threshold crossing). Signal 5 is the universal fallback for clips with no markers/notifies/curves (poses/aim-offsets return empty + a `static pose, no plants` note). **Project-agnostic** — marker names (`left_marker_name`/`right_marker_name`, default `L_Foot`/`R_Foot`), `track_index`, foot bone names (`foot_bones`, else common-name auto-resolve `foot_l`/`ball_l`/`LeftFoot`/`L_Foot`), and `thresholds` (`contact_mid`/`contact_low`/`speed_threshold`/`sample_rate`/`debounce_fraction`/`ground_threshold`) are all overridable; no per-project modifier-config Blueprint is required. `method` (`auto`\|`existing`\|`notifies`\|`contact`\|`phase`\|`footspeed`) forces a single signal and errors cleanly if that signal is unavailable. `clear_existing` (default true) removes pre-existing same-named markers before writing for idempotency (skipped when `source=existing`). `dry_run` reports the derived `left`/`right` times without mutating. Output: `{asset_path, source, confidence, dry_run, left_marker_name, right_marker_name, track_index, cleared_existing, left:{count,times}, right:{count,times}, markers_written, foot_bones_used?, notes[]}`. |
 
 **Composites (3)**
 | Action | Description |

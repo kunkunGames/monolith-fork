@@ -24,7 +24,12 @@ param(
     # Allow releasing with a dirty working tree. DANGEROUS: WIP modifications to tracked
     # files end up in the zip because this script copies the working-tree content, not the
     # committed HEAD. Only use if you know exactly what dirty files you're shipping.
-    [switch]$AllowDirtyTree
+    [switch]$AllowDirtyTree,
+    # Allow releasing when the hard-link import smoke cannot run (dumpbin.exe not found).
+    # DANGEROUS: skips the only check that proves shipped DLLs do not hard-link optional
+    # plugins (issue #30 / #71 failure mode). Real releases NEVER set this -- it exists
+    # only so a dev machine without VS Build Tools can produce a non-shippable test zip.
+    [switch]$AllowUnverifiedImports
 )
 
 $ErrorActionPreference = "Stop"
@@ -502,16 +507,85 @@ Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -Foregr
 # provider plugins. Exact public dependency sentinels below catch accidental hard
 # DLL imports before the public zip ships; downstream providers should extend
 # this list in their own release wrappers.
+# Each entry is the EXACT module-name string a Build.cs adds under an optional gate.
+# The smoke matches "UnrealEditor-<entry>.dll" in a shipped DLL's import table, so a
+# casing/name mismatch here means a real leak slips past (issue #71: MassSpawner was
+# missing entirely; MetaSoundEngine/MetaSoundFrontend had wrong casing -- the engine
+# DLLs are UnrealEditor-MetasoundEngine.dll, lowercase 's'; ComboGraphRuntime and
+# LogicDriver named no real module DLL). The $OptionalModuleUnion drift assertion below
+# is the source of truth -- if it FAILs, add the missing name HERE (and keep it sorted
+# by source module for review sanity).
 $LeakSentinels = @(
-    "GeometryScriptingCore", "CommonUI", "CommonInput", "BlueprintAssist",
-    "MassEntity", "ZoneGraph",
-    "StateTreeModule", "SmartObjectsModule", "ComboGraphRuntime", "LogicDriver",
-    "MetaSoundEngine", "MetaSoundFrontend"
+    # MonolithMesh / MonolithWorldGen -- GeometryScripting (delay-loaded but still gated)
+    "GeometryScriptingCore", "GeometryFramework", "GeometryCore",
+    # MonolithUI -- CommonUI
+    "CommonUI", "CommonInput",
+    # MonolithBABridge -- BlueprintAssist
+    "BlueprintAssist",
+    # MonolithAI -- GameplayBehaviors / MassEntity / ZoneGraph / StateTree / SmartObjects
+    "GameplayBehaviorsModule", "MassEntity", "MassSpawner", "MassGameplayEditor", "ZoneGraph",
+    "StateTreeModule", "StateTreeEditorModule", "GameplayStateTreeModule", "PropertyBindingUtils",
+    "SmartObjectsModule", "SmartObjectsEditorModule",
+    # MonolithGAS -- GBA (Blueprint Attributes). NOTE: GameplayAbilities is deliberately NOT a
+    # sentinel -- it is a hard dep in Monolith.uplugin (Enabled, no Optional), so the engine
+    # auto-enables it and guarantees its DLL is present; MonolithGAS/MonolithIndex hard-link it
+    # safely (removed from sentinels in v0.14.7, see the rationale block above).
+    "BlueprintAttributes",
+    # MonolithIndex / MonolithAudio -- MetaSound (engine DLLs are 'Metasound', lowercase s)
+    "MetasoundEngine", "MetasoundFrontend", "MetasoundEditor",
+    # MonolithAnimation -- Chooser
+    "Chooser",
+    # MonolithComboGraph -- ComboGraph (was stale 'ComboGraphRuntime')
+    "ComboGraph", "ComboGraphEditor",
+    # MonolithLogicDriver -- Logic Driver Pro / SMSystem (was stale 'LogicDriver')
+    "SMSystem", "SMSystemEditor"
 )
 
-# Locate dumpbin.exe -- ships with Visual Studio Build Tools. Try common locations
-# before giving up. If not found, skip the smoke (warn, don't fail) so the script
-# remains usable on dev machines without VS BuildTools.
+# --- Drift assertion: $LeakSentinels must be a superset of every optional-gated module ---
+# Single source of truth so the next optional dep cannot silently slip past the smoke
+# (issue #71 root cause: MassSpawner was added to a Build.cs optional block but never to
+# the sentinel list, so the leak shipped). We use an explicit expected-union array rather
+# than parsing the .Build.cs files at release time: block-scoped PowerShell parsing of C#
+# is brittle (multi-line AddRange, nested if, comments), and a false-negative parse would
+# REINTRODUCE the exact silent-gap failure this guard exists to kill. The union below is
+# the auditor-verified list of module strings each Source/*/*.Build.cs adds inside an
+# optional/release-gated block (if (bHas...) / if (!bReleaseBuild...)). When you add a new
+# optional dep to ANY Build.cs, add its module string(s) HERE and to $LeakSentinels above.
+$OptionalModuleUnion = @(
+    "GeometryScriptingCore", "GeometryFramework", "GeometryCore",   # MonolithMesh / MonolithWorldGen
+    "CommonUI", "CommonInput",                                       # MonolithUI
+    "BlueprintAssist",                                               # MonolithBABridge
+    "GameplayBehaviorsModule", "MassEntity", "MassSpawner",          # MonolithAI
+    "MassGameplayEditor", "ZoneGraph",                              # MonolithAI
+    "StateTreeModule", "StateTreeEditorModule",                     # MonolithAI
+    "GameplayStateTreeModule", "PropertyBindingUtils",             # MonolithAI
+    "SmartObjectsModule", "SmartObjectsEditorModule",              # MonolithAI
+    # GameplayAbilities is optional-gated in MonolithAI but a HARD dep in Monolith.uplugin and
+    # hard-linked unconditionally (and safely) in MonolithGAS/MonolithIndex -- so it is NOT a
+    # sentinel and is excluded from this drift union (it is not an unsafe optional dep).
+    "BlueprintAttributes",                                          # MonolithGAS
+    "MetasoundEngine", "MetasoundFrontend", "MetasoundEditor",      # MonolithIndex / MonolithAudio
+    "Chooser",                                                      # MonolithAnimation
+    "ComboGraph", "ComboGraphEditor",                              # MonolithComboGraph
+    "SMSystem", "SMSystemEditor"                                    # MonolithLogicDriver
+)
+
+$MissingSentinels = $OptionalModuleUnion | Where-Object { $LeakSentinels -notcontains $_ }
+if ($MissingSentinels.Count -gt 0) {
+    Write-Host "`n  [FAIL] Sentinel drift: optional-gated module(s) missing from `$LeakSentinels:" -ForegroundColor Red
+    $MissingSentinels | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    Write-Host "`n  Every module added under an optional/release gate in a Source/*/*.Build.cs MUST" -ForegroundColor Red
+    Write-Host "  be in `$LeakSentinels, or a hard-link leak can ship unflagged (issue #71)." -ForegroundColor Red
+    Write-Host "  Add the missing name(s) to `$LeakSentinels above, then re-run." -ForegroundColor Red
+    exit 1
+}
+
+# Locate dumpbin.exe -- ships with Visual Studio Build Tools. Try common locations,
+# then a vswhere.exe lookup, before giving up. This smoke is MANDATORY: without it a
+# release can ship with ZERO import verification (issue #71 root cause #1 -- the old
+# code printed [SKIP] and continued, so a leak shipped). If dumpbin still can't be
+# found we HARD FAIL; the only bypass is -AllowUnverifiedImports (never set for a real
+# release -- it produces a NON-shippable test zip on a machine without VS Build Tools).
 $Dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 if (-not $Dumpbin) {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -531,8 +605,28 @@ if (-not $Dumpbin) {
     }
 }
 
+# Fallback: ask vswhere.exe (ships with every VS 2017+ installer) to locate dumpbin.exe
+# anywhere a VS instance is installed -- covers non-2022 / non-default-edition layouts.
 if (-not $Dumpbin) {
-    Write-Host "    [SKIP] dumpbin.exe not found -- install Visual Studio Build Tools to enable hard-link smoke." -ForegroundColor Yellow
+    $VSWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $VSWhere) {
+        $vswhereHit = & $VSWhere -latest -find "**\dumpbin.exe" 2>$null | Select-Object -First 1
+        if ($vswhereHit -and (Test-Path $vswhereHit)) { $Dumpbin = $vswhereHit }
+    }
+}
+
+if (-not $Dumpbin) {
+    if ($AllowUnverifiedImports) {
+        Write-Host "    [WARN] dumpbin.exe not found AND -AllowUnverifiedImports set." -ForegroundColor Yellow
+        Write-Host "    [WARN] Hard-link import smoke SKIPPED -- this zip is NOT shippable." -ForegroundColor Yellow
+        Write-Host "    [WARN] Imports are UNVERIFIED. Do NOT publish this build (issue #71 risk)." -ForegroundColor Yellow
+    } else {
+        Write-Host "`n  [FAIL] dumpbin.exe not found -- cannot run the mandatory hard-link import smoke." -ForegroundColor Red
+        Write-Host "  Install Visual Studio Build Tools (provides dumpbin.exe) and re-run." -ForegroundColor Red
+        Write-Host "  Shipping without this check is how issue #71 (MassSpawner/ZoneGraph hard-link) escaped." -ForegroundColor Red
+        Write-Host "  Bypass ONLY for a non-shippable local test zip: re-run with -AllowUnverifiedImports." -ForegroundColor Red
+        exit 1
+    }
 } else {
     # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
     # (not the dev binaries we may have overwritten before zipping).
@@ -570,6 +664,12 @@ if (-not $Dumpbin) {
         exit 1
     }
     Write-Host "    No sentinel imports found in $($MonolithDlls.Count) Monolith DLLs (clean)" -ForegroundColor Green
+
+    # Record the exact zip the smoke just inspected, pinned by hash, so the SHA256
+    # printed for the release notes can be asserted to come from THIS smoked artifact
+    # and not a post-smoke manual re-zip (issue #71 risk: SHA of an unverified rebuild).
+    $SmokedZipPath = $OutputZip
+    $SmokedZipHash = (Get-FileHash -Algorithm SHA256 -Path $OutputZip).Hash.ToLower()
 }
 
 # --- SHA256 hash for release notes (Issue #38) ---
@@ -578,6 +678,24 @@ if (-not $Dumpbin) {
 # release body. The parser anchors on this exact sentinel.
 if (Test-Path $OutputZip) {
     $Hash = (Get-FileHash -Algorithm SHA256 -Path $OutputZip).Hash.ToLower()
+
+    # Pin the published hash to the smoked bytes. The hard-link smoke above inspected
+    # the DLLs inside $OutputZip; if the zip was replaced/re-built after the smoke (e.g.
+    # a manual re-zip), this hash would describe UNVERIFIED bytes -- exactly the gap that
+    # let issue #71 ship. Assert the file the smoke checked is the file we are hashing.
+    # ($SmokedZipHash is unset only when the smoke was bypassed via -AllowUnverifiedImports,
+    # in which case we already warned loudly that the zip is not shippable.)
+    if ($SmokedZipHash) {
+        if ($Hash -ne $SmokedZipHash -or $OutputZip -ne $SmokedZipPath) {
+            Write-Host "`n  [FAIL] Zip changed after the hard-link smoke ran." -ForegroundColor Red
+            Write-Host "  Smoked: $SmokedZipPath ($SmokedZipHash)" -ForegroundColor Red
+            Write-Host "  Hashing now: $OutputZip ($Hash)" -ForegroundColor Red
+            Write-Host "  The release-notes SHA must describe the SMOKED bytes. Re-run the full" -ForegroundColor Red
+            Write-Host "  release so the smoke and the published hash see the same artifact." -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "    SHA256 pinned to the smoked zip (imports verified)" -ForegroundColor Green
+    }
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "SHA256: $Hash" -ForegroundColor Cyan

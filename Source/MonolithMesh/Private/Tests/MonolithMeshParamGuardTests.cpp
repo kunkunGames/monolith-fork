@@ -2,13 +2,16 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
-#include "MonolithMeshOperationActions.h"
 #include "MonolithMeshTechArtActions.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
-#include "MonolithMeshProceduralActions.h"
 #include "MonolithLevelInstanceActions.h"
+
+#if WITH_GEOMETRYSCRIPT
+#include "MonolithMeshOperationActions.h"
+#include "MonolithMeshProceduralActions.h"
+#endif
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -28,6 +31,7 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
     return true;
 }
 
+#if WITH_GEOMETRYSCRIPT
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshOperationMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.OperationRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString& Parameters)
@@ -48,6 +52,7 @@ bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString&
 
     return true;
 }
+#endif
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTechArtMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TechArtRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -75,6 +80,7 @@ bool FMonolithParamGuardMeshTechArtMalformedParamsTest::RunTest(const FString& P
     return true;
 }
 
+#if WITH_GEOMETRYSCRIPT
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshProceduralMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.ProceduralFinalizeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshProceduralMalformedParamsTest::RunTest(const FString& Parameters)
@@ -107,7 +113,9 @@ bool FMonolithParamGuardMeshProceduralMalformedParamsTest::RunTest(const FString
 
     return true;
 }
+#endif
 
+#if WITH_GEOMETRYSCRIPT
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshFragmentsMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.CreateFragmentsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshFragmentsMalformedParamsTest::RunTest(const FString& Parameters)
@@ -128,7 +136,9 @@ bool FMonolithParamGuardMeshFragmentsMalformedParamsTest::RunTest(const FString&
 
     return true;
 }
+#endif
 
+#if WITH_GEOMETRYSCRIPT
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshStructureMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.CreateStructureRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshStructureMalformedParamsTest::RunTest(const FString& Parameters)
@@ -149,6 +159,7 @@ bool FMonolithParamGuardMeshStructureMalformedParamsTest::RunTest(const FString&
 
     return true;
 }
+#endif
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLevelInstanceMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.LevelInstanceAliasesRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 

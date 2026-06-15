@@ -7,7 +7,7 @@ namespace
 {
 	const TCHAR* StructuredSuccessText = TEXT("OK; see structuredContent.");
 
-	TArray<TSharedPtr<FJsonValue>> StringArrayToJsonValues(const TArray<FString>& Strings)
+	TArray<TSharedPtr<FJsonValue>> ToolResultStringArrayToJsonValues(const TArray<FString>& Strings)
 	{
 		TArray<TSharedPtr<FJsonValue>> Values;
 		Values.Reserve(Strings.Num());
@@ -64,11 +64,11 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 
 		if (ActionResult.RelatedActions.Num() > 0)
 		{
-			Result->SetArrayField(TEXT("related_actions"), StringArrayToJsonValues(ActionResult.RelatedActions));
+			Result->SetArrayField(TEXT("related_actions"), ToolResultStringArrayToJsonValues(ActionResult.RelatedActions));
 		}
 		if (ActionResult.Hints.Num() > 0)
 		{
-			Result->SetArrayField(TEXT("hints"), StringArrayToJsonValues(ActionResult.Hints));
+			Result->SetArrayField(TEXT("hints"), ToolResultStringArrayToJsonValues(ActionResult.Hints));
 		}
 		if (ActionResult.ErrorData.IsValid())
 		{
@@ -124,11 +124,11 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildStructuredErrorContent(co
 
 	if (ActionResult.RelatedActions.Num() > 0)
 	{
-		Structured->SetArrayField(TEXT("related_actions"), StringArrayToJsonValues(ActionResult.RelatedActions));
+		Structured->SetArrayField(TEXT("related_actions"), ToolResultStringArrayToJsonValues(ActionResult.RelatedActions));
 	}
 	if (ActionResult.Hints.Num() > 0)
 	{
-		Structured->SetArrayField(TEXT("hints"), StringArrayToJsonValues(ActionResult.Hints));
+		Structured->SetArrayField(TEXT("hints"), ToolResultStringArrayToJsonValues(ActionResult.Hints));
 	}
 	if (ActionResult.ErrorData.IsValid())
 	{

@@ -28,6 +28,7 @@
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "AnimationBlueprintLibrary.h"
+#include "AnimPose.h" // derive_foot_sync_markers signal 5: component-space pose eval (UAnimPoseExtensions, FAnimPose, EAnimPoseSpaces)
 #include "Animation/AnimCurveTypes.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
 #include "Animation/AnimData/IAnimationDataController.h"
@@ -1133,6 +1134,22 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("old_name"), TEXT("string"), TEXT("Current marker name"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New marker name"))
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("derive_foot_sync_markers"),
+		TEXT("Auto-derive left/right foot-plant sync markers on an AnimSequence from data already in the clip, via a 5-signal availability cascade (first available wins): existing markers -> footstep notifies -> contact_l/_r curves -> Phase curve extrema -> component-space foot-bone speed minima (native port of the engine FootstepAnimEventsModifier FootBoneSpeed technique). Project-agnostic: all names/bones/thresholds are overridable. Honours dry_run."),
+		FMonolithActionHandler::CreateStatic(&HandleDeriveFootSyncMarkers),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
+			.Optional(TEXT("left_marker_name"), TEXT("string"), TEXT("Marker name written for left foot plants (default L_Foot)"), TEXT("L_Foot"))
+			.Optional(TEXT("right_marker_name"), TEXT("string"), TEXT("Marker name written for right foot plants (default R_Foot)"), TEXT("R_Foot"))
+			.Optional(TEXT("track_index"), TEXT("integer"), TEXT("Sync-marker track index (default 0)"), TEXT("0"))
+			.Optional(TEXT("method"), TEXT("string"), TEXT("auto|existing|notifies|contact|phase|footspeed (default auto). Non-auto forces a single signal and errors cleanly if that signal is unavailable."), TEXT("auto"))
+			.Optional(TEXT("foot_bones"), TEXT("object"), TEXT("{left, right} foot bone names for the footspeed signal. If omitted, common names are auto-resolved against the skeleton."))
+			.Optional(TEXT("thresholds"), TEXT("object"), TEXT("{contact_mid, contact_low, speed_threshold, sample_rate, debounce_fraction, ground_threshold} — all optional, per-signal defaults applied."))
+			.Optional(TEXT("notify_track_patterns"), TEXT("object"), TEXT("{left, right} case-insensitive substring patterns used to classify footstep-notify foot side by track name (defaults 'footstep left'/'footstep right')."))
+			.Optional(TEXT("phase_invert"), TEXT("boolean"), TEXT("Flip L/R polarity of the Phase signal (default false; +1=left)"), TEXT("false"))
+			.Optional(TEXT("clear_existing"), TEXT("boolean"), TEXT("Remove pre-existing markers named left/right_marker_name before writing, for idempotency (default true). Ignored when source=existing."), TEXT("true"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Compute and report derived times without mutating the asset (default false)"), TEXT("false"))
 			.Build());
 
 	// Wave 13 — Batch Ops + Montage Completion
@@ -12024,5 +12041,778 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodePinBinding(con
 		Root->SetArrayField(TEXT("path"), PathOut);
 	}
 	Root->SetBoolField(TEXT("recompiled"), bCompiled);
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// derive_foot_sync_markers — 5-signal foot-plant cascade
+// ---------------------------------------------------------------------------
+//
+// Auto-derives left/right foot-plant sync markers from data already in a clip.
+// A robustness/availability cascade picks the first signal that yields plants:
+//   1. existing  — markers already named left/right_marker_name (ground truth)
+//   2. notifies  — footstep notifies, foot side from TRACK NAME (pattern match)
+//   3. contact   — contact_l/_r float curves, rising-edge + hysteresis + debounce
+//   4. phase     — single Phase sawtooth curve, key extrema (+1=L, -1=R)
+//   5. footspeed — component-space foot-bone speed minima (native port of the
+//                  engine UFootstepAnimEventsModifier FootBoneSpeed technique)
+//
+// All five signals funnel into one output path so `source`/`confidence` are
+// consistent. Marker write reuses the proven HandleAddSyncMarker envelope
+// (push FAnimSyncMarker into AuthoredSyncMarkers + RefreshSyncMarkerDataFromAuthored).
+//
+// File-local helpers below are deliberately namespace-scoped (Monolith::FootSync)
+// to avoid file-local-symbol collisions under full-unity release builds.
+namespace Monolith { namespace FootSync {
+
+// Tunable thresholds + sample config, populated from the `thresholds` param.
+struct FFootSyncConfig
+{
+	float ContactMid       = 0.5f;  // rising-edge crossing threshold (contact curve)
+	float ContactLow       = 0.1f;  // hysteresis re-arm threshold (contact curve)
+	float SpeedThreshold   = 0.1f;  // normalized speed-valley threshold (footspeed)
+	float SampleRate       = 60.0f; // Hz, contact-curve resample + footspeed pose eval
+	float DebounceFraction = 0.5f;  // x estimated stride period; collapses heel-toe double-bump
+	float GroundThreshold  = 4.0f;  // cm above GroundLevel — footspeed air-phase tiebreaker
+};
+
+// Read a float curve from the data model by name (non-deprecated FName identifier).
+static const FFloatCurve* FindFloatCurveByName(const IAnimationDataModel* DataModel, const FName& CurveName)
+{
+	if (!DataModel || CurveName.IsNone())
+	{
+		return nullptr;
+	}
+	const FAnimationCurveIdentifier CurveId(CurveName, ERawCurveTrackTypes::RCT_Float);
+	return DataModel->FindFloatCurve(CurveId);
+}
+
+// Rising-edge plant detection on a contact curve, with hysteresis re-arm and a
+// stride-period debounce. Mirrors research §3a: take the FIRST (heel-strike)
+// edge, suppress further detections until the curve drops below ContactLow,
+// and additionally suppress for DebounceFraction x estimated stride period.
+static void DetectContactPlants(const FFloatCurve& Curve, float PlayLength,
+	const FFootSyncConfig& Cfg, TArray<float>& OutTimes)
+{
+	OutTimes.Reset();
+	if (PlayLength <= 0.0f || Cfg.SampleRate <= 0.0f)
+	{
+		return;
+	}
+
+	const float Step = 1.0f / Cfg.SampleRate;
+	const int32 NumSamples = FMath::Max(2, FMath::TruncToInt(PlayLength / Step) + 1);
+
+	// Pass 1: raw rising edges (mid-threshold upward crossing) with hysteresis.
+	TArray<float> RawEdges;
+	bool bArmed = true; // armed = allowed to detect a new rising edge
+	float PrevVal = Curve.Evaluate(0.0f);
+	for (int32 i = 1; i < NumSamples; ++i)
+	{
+		const float T = FMath::Min(static_cast<float>(i) * Step, PlayLength);
+		const float Val = Curve.Evaluate(T);
+
+		if (bArmed && PrevVal < Cfg.ContactMid && Val >= Cfg.ContactMid)
+		{
+			// Linear-interpolate the exact crossing time for sub-sample accuracy.
+			const float Denom = (Val - PrevVal);
+			const float Frac = FMath::IsNearlyZero(Denom) ? 0.0f : (Cfg.ContactMid - PrevVal) / Denom;
+			const float PrevT = FMath::Min(static_cast<float>(i - 1) * Step, PlayLength);
+			RawEdges.Add(PrevT + Frac * (T - PrevT));
+			bArmed = false; // re-arm only after dropping below ContactLow
+		}
+		else if (!bArmed && Val < Cfg.ContactLow)
+		{
+			bArmed = true;
+		}
+		PrevVal = Val;
+	}
+
+	if (RawEdges.Num() == 0)
+	{
+		return;
+	}
+
+	// Estimate stride period for the debounce window: mean inter-edge spacing,
+	// falling back to PlayLength / edge count when only one edge exists.
+	float StridePeriod;
+	if (RawEdges.Num() >= 2)
+	{
+		float Sum = 0.0f;
+		for (int32 i = 1; i < RawEdges.Num(); ++i)
+		{
+			Sum += (RawEdges[i] - RawEdges[i - 1]);
+		}
+		StridePeriod = Sum / static_cast<float>(RawEdges.Num() - 1);
+	}
+	else
+	{
+		StridePeriod = PlayLength / FMath::Max(1, RawEdges.Num());
+	}
+	const float Refractory = FMath::Max(0.0f, Cfg.DebounceFraction) * StridePeriod;
+
+	// Pass 2: refractory debounce collapses heel-toe double-bumps to one plant.
+	float LastAccepted = -FLT_MAX;
+	for (float Edge : RawEdges)
+	{
+		if (Edge - LastAccepted >= Refractory)
+		{
+			OutTimes.Add(Edge);
+			LastAccepted = Edge;
+		}
+	}
+}
+
+// Phase-curve plant extraction: read authored key extrema directly (keys sit on
+// extrema per research §3b). +1 keys -> left plants, -1 keys -> right (phase_invert swaps).
+// If the curve is a 0..1 ramp instead of a -1..+1 sawtooth, fall back to derivative
+// sign-change at period boundaries (lower confidence — flagged by caller).
+static void DetectPhasePlants(const FFloatCurve& Curve, bool bInvert,
+	TArray<float>& OutLeft, TArray<float>& OutRight, bool& bOutHeuristic)
+{
+	OutLeft.Reset();
+	OutRight.Reset();
+	bOutHeuristic = false;
+
+	const TArray<FRichCurveKey>& Keys = Curve.FloatCurve.GetConstRefOfKeys();
+	if (Keys.Num() < 2)
+	{
+		return;
+	}
+
+	// Range probe: a true -1..+1 sawtooth has min ~ -1 and max ~ +1.
+	float MinV = Keys[0].Value, MaxV = Keys[0].Value;
+	for (const FRichCurveKey& K : Keys)
+	{
+		MinV = FMath::Min(MinV, K.Value);
+		MaxV = FMath::Max(MaxV, K.Value);
+	}
+
+	const bool bBipolar = (MinV < -0.5f && MaxV > 0.5f);
+	if (bBipolar)
+	{
+		// Local extrema -> plants, INTERIOR keys only. The first/last authored keys
+		// are deliberately skipped: on a looping clip the trailing key sits on the
+		// loop-wrap (e.g. a +1 at t ~= PlayLength that is really the NEXT cycle's
+		// plant), and the leading key is the same plant's loop-boundary continuity
+		// key (often at a negative time). Treating a boundary key as its own
+		// neighbour would always qualify it as an extremum and double-count the
+		// wrap plant (the t=4.0265 bug). The genuine plant for each stride is the
+		// interior extremum; the loop-wrap copy is filtered by both this interior
+		// restriction and the caller's global [0, PlayLength) guard.
+		for (int32 i = 1; i < Keys.Num() - 1; ++i)
+		{
+			const float Prev = Keys[i - 1].Value;
+			const float Next = Keys[i + 1].Value;
+			const float Cur = Keys[i].Value;
+			const bool bLocalMax = (Cur >= Prev && Cur >= Next) && Cur > 0.5f;
+			const bool bLocalMin = (Cur <= Prev && Cur <= Next) && Cur < -0.5f;
+			if (bLocalMax)
+			{
+				(bInvert ? OutRight : OutLeft).Add(Keys[i].Time);
+			}
+			else if (bLocalMin)
+			{
+				(bInvert ? OutLeft : OutRight).Add(Keys[i].Time);
+			}
+		}
+	}
+	else
+	{
+		// 0..1 ramp convention: detect period boundaries via derivative sign change.
+		// Each downward discontinuity (ramp reset) is a stride boundary; alternate L/R.
+		bOutHeuristic = true;
+		bool bLeftTurn = !bInvert;
+		for (int32 i = 1; i < Keys.Num(); ++i)
+		{
+			if (Keys[i].Value < Keys[i - 1].Value - 0.25f) // ramp wrapped down
+			{
+				(bLeftTurn ? OutLeft : OutRight).Add(Keys[i].Time);
+				bLeftTurn = !bLeftTurn;
+			}
+		}
+	}
+}
+
+// Component-space foot-bone speed minima (signal 5). Native port of
+// UFootstepAnimEventsModifier::OnApply_Implementation FootBoneSpeed path
+// (FootstepAnimEventsModifier.cpp:24-195, ComputeBoneSpeed .cpp:316-325,
+// CanWePlaceEventAtSample .cpp:305-314). Evaluates the pose ONCE per sample via a
+// single GetAnimPoseAtTimeIntervals call over the full time array (review fix #2:
+// no per-call bone-container re-init from GetAnimPoseAtTime twice per sample).
+static void DetectFootSpeedPlants(const UAnimSequence* Seq, const FName& FootBone,
+	const FFootSyncConfig& Cfg, TArray<float>& OutTimes)
+{
+	OutTimes.Reset();
+	if (!Seq || FootBone.IsNone() || Cfg.SampleRate <= 0.0f)
+	{
+		return;
+	}
+
+	const float PlayLength = Seq->GetPlayLength();
+	if (PlayLength <= 0.0f)
+	{
+		return; // static pose / single frame -> no plants
+	}
+
+	const float Step = 1.0f / Cfg.SampleRate;
+	const int32 NumSamples = FMath::TruncToInt(PlayLength / Step);
+	if (NumSamples < 3)
+	{
+		return;
+	}
+
+	// Build the full time array, then evaluate ALL poses in one call.
+	// Each pose i is at time i*Step; speed at sample i uses pose i and pose i+1.
+	TArray<double> Times;
+	Times.Reserve(NumSamples + 1);
+	for (int32 i = 0; i <= NumSamples; ++i)
+	{
+		Times.Add(static_cast<double>(FMath::Clamp(static_cast<float>(i) * Step, 0.0f, PlayLength)));
+	}
+
+	// Match the engine modifier's eval options: Raw data, root motion incorporated
+	// so the foot's world trajectory includes locomotion. Field order mirrors the
+	// FAnimPoseEvaluationOptions definition (AnimPose.h): EvaluationType,
+	// bShouldRetarget, bExtractRootMotion, bIncorporateRootMotionIntoPose,
+	// OptionalSkeletalMesh, bRetrieveAdditiveAsFullPose, bEvaluateCurves.
+	FAnimPoseEvaluationOptions EvalOptions;
+	EvalOptions.EvaluationType = EAnimDataEvalType::Raw;
+	EvalOptions.bShouldRetarget = true;
+	EvalOptions.bExtractRootMotion = false;
+	EvalOptions.bIncorporateRootMotionIntoPose = true;
+	EvalOptions.OptionalSkeletalMesh = nullptr;
+	EvalOptions.bRetrieveAdditiveAsFullPose = true;
+	EvalOptions.bEvaluateCurves = false; // we only need bone transforms
+
+	TArray<FAnimPose> Poses;
+	UAnimPoseExtensions::GetAnimPoseAtTimeIntervals(Seq, Times, EvalOptions, Poses);
+	if (Poses.Num() < NumSamples + 1)
+	{
+		return; // eval failed or produced too few poses
+	}
+
+	// Pass 1: per-clip min/max foot speed + ground level.
+	TArray<float> Speeds;
+	Speeds.SetNumZeroed(NumSamples);
+	float MinSpeed = FLT_MAX, MaxSpeed = 0.0f, GroundLevel = FLT_MAX;
+	for (int32 i = 0; i < NumSamples; ++i)
+	{
+		const FTransform& Cur = UAnimPoseExtensions::GetBonePose(Poses[i], FootBone, EAnimPoseSpaces::World);
+		const FTransform& Next = UAnimPoseExtensions::GetBonePose(Poses[i + 1], FootBone, EAnimPoseSpaces::World);
+		const double Dist = (Next.GetLocation() - Cur.GetLocation()).Length();
+		const float Speed = static_cast<float>(Dist / Step);
+		Speeds[i] = Speed;
+		MinSpeed = FMath::Min(MinSpeed, Speed);
+		MaxSpeed = FMath::Max(MaxSpeed, Speed);
+		GroundLevel = FMath::Min(GroundLevel, static_cast<float>(Cur.GetLocation().Z));
+	}
+
+	const float SpeedRange = MaxSpeed - MinSpeed;
+	if (FMath::IsNearlyZero(SpeedRange))
+	{
+		return; // no motion variation -> static pose, no plants
+	}
+
+	// Pass 2: normalized-speed valley detection (engine FootBoneSpeed path).
+	// Track the time of the smallest below-threshold speed; place a plant on the
+	// UPWARD crossing back through threshold, back-dated to that valley time.
+	float PrevNorm = (Speeds[0] - MinSpeed) / SpeedRange;
+	float TimeAtMin = FLT_MAX;
+	float MinBelow = FLT_MAX;
+	for (int32 i = 1; i < NumSamples; ++i)
+	{
+		const float Norm = (Speeds[i] - MinSpeed) / SpeedRange;
+		const float SampleTime = FMath::Min(static_cast<float>(i) * Step, PlayLength);
+
+		if (Norm < Cfg.SpeedThreshold && i > 1)
+		{
+			if (Norm < MinBelow && FMath::Abs(MinBelow - Norm) >= 0.01f)
+			{
+				TimeAtMin = SampleTime;
+				MinBelow = Norm;
+			}
+		}
+
+		// Upward crossing back through threshold = end of stance -> emit valley.
+		const bool bUpwardCross = (PrevNorm < Cfg.SpeedThreshold && Norm >= Cfg.SpeedThreshold);
+		if (bUpwardCross && i > 1 && TimeAtMin < FLT_MAX)
+		{
+			// Ground-height tiebreaker (secondary cue): reject obvious air-phase
+			// valleys when the foot is far above the lowest observed Z. Height is
+			// fragile on slopes, so speed stays primary — accept regardless, but
+			// keep the probe for future tuning / diagnostics.
+			const int32 ValleyIdx = FMath::Clamp(FMath::RoundToInt(TimeAtMin / Step), 0, NumSamples - 1);
+			const FTransform& ValleyXf = UAnimPoseExtensions::GetBonePose(Poses[ValleyIdx], FootBone, EAnimPoseSpaces::World);
+			const float FootZ = static_cast<float>(ValleyXf.GetLocation().Z);
+			(void)FootZ; (void)GroundLevel; // tiebreaker reserved; speed is authoritative
+			OutTimes.Add(TimeAtMin);
+			TimeAtMin = FLT_MAX;
+			MinBelow = FLT_MAX;
+		}
+		PrevNorm = Norm;
+	}
+}
+
+// Auto-resolve a foot bone for one side against the skeleton's bone list.
+// Returns NAME_None if none of the candidates is present.
+static FName ResolveFootBone(const FReferenceSkeleton& RefSkel, const TArray<FName>& Candidates)
+{
+	for (const FName& Cand : Candidates)
+	{
+		if (RefSkel.FindBoneIndex(Cand) != INDEX_NONE)
+		{
+			return Cand;
+		}
+	}
+	return NAME_None;
+}
+
+}} // namespace Monolith::FootSync
+
+FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace Monolith::FootSync;
+
+	// --- Parse params ---
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+
+	FString LeftMarkerName = TEXT("L_Foot");
+	FString RightMarkerName = TEXT("R_Foot");
+	Params->TryGetStringField(TEXT("left_marker_name"), LeftMarkerName);
+	Params->TryGetStringField(TEXT("right_marker_name"), RightMarkerName);
+
+	int32 TrackIndex = 0;
+	{
+		double TmpTrack;
+		if (Params->TryGetNumberField(TEXT("track_index"), TmpTrack))
+		{
+			TrackIndex = static_cast<int32>(TmpTrack);
+		}
+	}
+
+	FString Method = TEXT("auto");
+	Params->TryGetStringField(TEXT("method"), Method);
+	Method = Method.ToLower();
+	if (Method != TEXT("auto") && Method != TEXT("existing") && Method != TEXT("notifies")
+		&& Method != TEXT("contact") && Method != TEXT("phase") && Method != TEXT("footspeed"))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid method '%s'. Expected one of: auto, existing, notifies, contact, phase, footspeed."), *Method));
+	}
+
+	bool bPhaseInvert = false;
+	Params->TryGetBoolField(TEXT("phase_invert"), bPhaseInvert);
+
+	bool bClearExisting = true;
+	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
+
+	bool bDryRun = false;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+
+	// Thresholds (per-signal defaults; each individually overridable).
+	FFootSyncConfig Cfg;
+	{
+		const TSharedPtr<FJsonObject>* ThreshObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("thresholds"), ThreshObj) && ThreshObj)
+		{
+			double V;
+			if ((*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V))       Cfg.ContactMid = static_cast<float>(V);
+			if ((*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V))       Cfg.ContactLow = static_cast<float>(V);
+			if ((*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V))   Cfg.SpeedThreshold = static_cast<float>(V);
+			if ((*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V))       Cfg.SampleRate = static_cast<float>(V);
+			if ((*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) Cfg.DebounceFraction = static_cast<float>(V);
+			if ((*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V))  Cfg.GroundThreshold = static_cast<float>(V);
+		}
+	}
+	if (Cfg.SampleRate <= 0.0f)
+	{
+		return FMonolithActionResult::Error(TEXT("thresholds.sample_rate must be > 0"));
+	}
+
+	// Notify track patterns (side discrimination for signal 2).
+	FString NotifyLeftPattern = TEXT("footstep left");
+	FString NotifyRightPattern = TEXT("footstep right");
+	{
+		const TSharedPtr<FJsonObject>* PatObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("notify_track_patterns"), PatObj) && PatObj)
+		{
+			(*PatObj)->TryGetStringField(TEXT("left"), NotifyLeftPattern);
+			(*PatObj)->TryGetStringField(TEXT("right"), NotifyRightPattern);
+		}
+	}
+
+	// Explicit foot bones (signal 5). Empty => auto-resolve later.
+	FString ExplicitLeftBone, ExplicitRightBone;
+	{
+		const TSharedPtr<FJsonObject>* BonesObj = nullptr;
+		if (Params->TryGetObjectField(TEXT("foot_bones"), BonesObj) && BonesObj)
+		{
+			(*BonesObj)->TryGetStringField(TEXT("left"), ExplicitLeftBone);
+			(*BonesObj)->TryGetStringField(TEXT("right"), ExplicitRightBone);
+		}
+	}
+
+	// --- Load asset ---
+	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
+	if (!Seq)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+	}
+
+	const FName LeftFName(*LeftMarkerName);
+	const FName RightFName(*RightMarkerName);
+
+	const float PlayLength = Seq->GetPlayLength();
+	const IAnimationDataModel* DataModel = Seq->GetDataModel();
+
+	// Result accumulators (filled by the winning signal).
+	TArray<float> LeftTimes;
+	TArray<float> RightTimes;
+	FString Source;
+	FString Confidence;
+	TArray<TSharedPtr<FJsonValue>> Notes;
+	FName UsedLeftBone = NAME_None;
+	FName UsedRightBone = NAME_None;
+
+	const bool bForce = (Method != TEXT("auto"));
+	auto WantSignal = [&](const TCHAR* Name) -> bool
+	{
+		return !bForce || Method == Name;
+	};
+
+	// ---- Signal 1: existing markers ----
+	if (WantSignal(TEXT("existing")) && LeftTimes.Num() == 0 && RightTimes.Num() == 0)
+	{
+		for (const FAnimSyncMarker& M : Seq->AuthoredSyncMarkers)
+		{
+			if (M.MarkerName == LeftFName)  LeftTimes.Add(M.Time);
+			if (M.MarkerName == RightFName) RightTimes.Add(M.Time);
+		}
+		if (LeftTimes.Num() > 0 || RightTimes.Num() > 0)
+		{
+			Source = TEXT("existing");
+			Confidence = TEXT("ground_truth");
+		}
+		else if (Method == TEXT("existing"))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("method=existing: no markers named '%s'/'%s' on %s"), *LeftMarkerName, *RightMarkerName, *AssetPath));
+		}
+	}
+
+	// ---- Signal 2: footstep notifies (foot from TRACK NAME) ----
+	if (Source.IsEmpty() && WantSignal(TEXT("notifies")))
+	{
+		const FString LeftPatLower = NotifyLeftPattern.ToLower();
+		const FString RightPatLower = NotifyRightPattern.ToLower();
+		TArray<float> NotifyLeft, NotifyRight;
+		TArray<TPair<float, FString>> UnclassifiedByTime; // for class-suffix / alternate fallback
+		bool bUsedClassSuffix = false;
+		bool bUsedAlternate = false;
+
+		for (const FAnimNotifyEvent& Event : Seq->Notifies)
+		{
+			FString TrackName;
+			if (Seq->AnimNotifyTracks.IsValidIndex(Event.TrackIndex))
+			{
+				TrackName = Seq->AnimNotifyTracks[Event.TrackIndex].TrackName.ToString();
+			}
+			const FString TrackLower = TrackName.ToLower();
+			const float EventTime = Event.GetTime();
+
+			if (!LeftPatLower.IsEmpty() && TrackLower.Contains(LeftPatLower))
+			{
+				NotifyLeft.Add(EventTime);
+			}
+			else if (!RightPatLower.IsEmpty() && TrackLower.Contains(RightPatLower))
+			{
+				NotifyRight.Add(EventTime);
+			}
+			else
+			{
+				// Fallback (a): class-name suffix token _L / _R.
+				const FString ClassName = Event.Notify ? Event.Notify->GetClass()->GetName() : FString();
+				const FString ClassLower = ClassName.ToLower();
+				if (ClassLower.EndsWith(TEXT("_l")) || ClassLower.EndsWith(TEXT("_l_c")))
+				{
+					NotifyLeft.Add(EventTime);
+					bUsedClassSuffix = true;
+				}
+				else if (ClassLower.EndsWith(TEXT("_r")) || ClassLower.EndsWith(TEXT("_r_c")))
+				{
+					NotifyRight.Add(EventTime);
+					bUsedClassSuffix = true;
+				}
+				else
+				{
+					UnclassifiedByTime.Add(TPair<float, FString>(EventTime, ClassName));
+				}
+			}
+		}
+
+		// Fallback (b): alternate L/R by ascending time for whatever stayed unclassified.
+		if (UnclassifiedByTime.Num() > 0 && (NotifyLeft.Num() + NotifyRight.Num()) == 0)
+		{
+			UnclassifiedByTime.Sort([](const TPair<float, FString>& A, const TPair<float, FString>& B)
+			{
+				return A.Key < B.Key;
+			});
+			bool bLeftTurn = true;
+			for (const TPair<float, FString>& P : UnclassifiedByTime)
+			{
+				(bLeftTurn ? NotifyLeft : NotifyRight).Add(P.Key);
+				bLeftTurn = !bLeftTurn;
+			}
+			bUsedAlternate = true;
+		}
+
+		if (NotifyLeft.Num() > 0 || NotifyRight.Num() > 0)
+		{
+			NotifyLeft.Sort();
+			NotifyRight.Sort();
+			LeftTimes = MoveTemp(NotifyLeft);
+			RightTimes = MoveTemp(NotifyRight);
+			Source = TEXT("notifies");
+			Confidence = bUsedAlternate ? TEXT("heuristic") : (bUsedClassSuffix ? TEXT("high") : TEXT("very_high"));
+			if (bUsedClassSuffix) Notes.Add(MakeShared<FJsonValueString>(TEXT("classified some notifies by class-name suffix")));
+			if (bUsedAlternate)   Notes.Add(MakeShared<FJsonValueString>(TEXT("fell back to alternate-by-time side classification")));
+		}
+		else if (Method == TEXT("notifies"))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("method=notifies: no footstep notifies matched patterns '%s'/'%s' on %s"),
+				*NotifyLeftPattern, *NotifyRightPattern, *AssetPath));
+		}
+	}
+
+	// ---- Signal 3: contact_l / contact_r float curves ----
+	if (Source.IsEmpty() && WantSignal(TEXT("contact")))
+	{
+		const FFloatCurve* ContactL = FindFloatCurveByName(DataModel, FName(TEXT("contact_l")));
+		const FFloatCurve* ContactR = FindFloatCurveByName(DataModel, FName(TEXT("contact_r")));
+		if (ContactL && ContactR)
+		{
+			TArray<float> CL, CR;
+			DetectContactPlants(*ContactL, PlayLength, Cfg, CL);
+			DetectContactPlants(*ContactR, PlayLength, Cfg, CR);
+			if (CL.Num() > 0 || CR.Num() > 0)
+			{
+				LeftTimes = MoveTemp(CL);
+				RightTimes = MoveTemp(CR);
+				Source = TEXT("contact");
+				Confidence = TEXT("high");
+			}
+		}
+		if (Source.IsEmpty() && Method == TEXT("contact"))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("method=contact: contact_l/contact_r curves not present (or no plants) on %s"), *AssetPath));
+		}
+	}
+
+	// ---- Signal 4: Phase curve ----
+	if (Source.IsEmpty() && WantSignal(TEXT("phase")))
+	{
+		const FFloatCurve* PhaseCurve = FindFloatCurveByName(DataModel, FName(TEXT("Phase")));
+		if (PhaseCurve)
+		{
+			TArray<float> PL, PR;
+			bool bHeuristic = false;
+			DetectPhasePlants(*PhaseCurve, bPhaseInvert, PL, PR, bHeuristic);
+			// Out-of-range loop-boundary keys (negative-time continuity key, loop-wrap
+			// key at/after PlayLength) are dropped by the global guard applied after the
+			// cascade resolves — no phase-specific filter needed here.
+			if (PL.Num() > 0 || PR.Num() > 0)
+			{
+				PL.Sort();
+				PR.Sort();
+				LeftTimes = MoveTemp(PL);
+				RightTimes = MoveTemp(PR);
+				Source = TEXT("phase");
+				Confidence = bHeuristic ? TEXT("heuristic") : TEXT("high");
+				if (bHeuristic) Notes.Add(MakeShared<FJsonValueString>(TEXT("Phase curve was a 0..1 ramp; used derivative-boundary heuristic")));
+			}
+		}
+		if (Source.IsEmpty() && Method == TEXT("phase"))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("method=phase: Phase curve not present (or no extrema) on %s"), *AssetPath));
+		}
+	}
+
+	// ---- Signal 5: component-space foot-bone speed minima ----
+	if (Source.IsEmpty() && WantSignal(TEXT("footspeed")))
+	{
+		USkeleton* Skeleton = Seq->GetSkeleton();
+		if (!Skeleton)
+		{
+			if (Method == TEXT("footspeed"))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("method=footspeed: no skeleton on %s"), *AssetPath));
+			}
+		}
+		else
+		{
+			const FReferenceSkeleton& RefSkel = Skeleton->GetReferenceSkeleton();
+
+			// Resolve foot bones: explicit override, else common-name auto-resolve.
+			if (!ExplicitLeftBone.IsEmpty())
+			{
+				UsedLeftBone = (RefSkel.FindBoneIndex(FName(*ExplicitLeftBone)) != INDEX_NONE) ? FName(*ExplicitLeftBone) : NAME_None;
+			}
+			else
+			{
+				UsedLeftBone = ResolveFootBone(RefSkel,
+					{ FName(TEXT("foot_l")), FName(TEXT("ball_l")), FName(TEXT("LeftFoot")), FName(TEXT("L_Foot")) });
+			}
+			if (!ExplicitRightBone.IsEmpty())
+			{
+				UsedRightBone = (RefSkel.FindBoneIndex(FName(*ExplicitRightBone)) != INDEX_NONE) ? FName(*ExplicitRightBone) : NAME_None;
+			}
+			else
+			{
+				UsedRightBone = ResolveFootBone(RefSkel,
+					{ FName(TEXT("foot_r")), FName(TEXT("ball_r")), FName(TEXT("RightFoot")), FName(TEXT("R_Foot")) });
+			}
+
+			if (UsedLeftBone.IsNone() && UsedRightBone.IsNone())
+			{
+				if (Method == TEXT("footspeed"))
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("method=footspeed: could not resolve any foot bone on %s (supply foot_bones)"), *AssetPath));
+				}
+			}
+			else
+			{
+				if (!UsedLeftBone.IsNone())  DetectFootSpeedPlants(Seq, UsedLeftBone, Cfg, LeftTimes);
+				if (!UsedRightBone.IsNone()) DetectFootSpeedPlants(Seq, UsedRightBone, Cfg, RightTimes);
+
+				// footspeed is the universal fallback: it claims the source even when it
+				// yields zero plants (e.g. a static pose), so auto does not error out.
+				Source = TEXT("footspeed");
+				Confidence = (LeftTimes.Num() > 0 || RightTimes.Num() > 0) ? TEXT("high") : TEXT("heuristic");
+				if (LeftTimes.Num() == 0 && RightTimes.Num() == 0)
+				{
+					Notes.Add(MakeShared<FJsonValueString>(TEXT("static pose, no plants")));
+				}
+			}
+		}
+	}
+
+	// ---- No signal fired (auto exhausted) ----
+	if (Source.IsEmpty())
+	{
+		// auto with nothing available — succeed empty with a note rather than error.
+		Source = TEXT("none");
+		Confidence = TEXT("none");
+		Notes.Add(MakeShared<FJsonValueString>(TEXT("no foot-plant signal available in this clip")));
+	}
+
+	// ---- Global out-of-range guard (applies to EVERY signal) ----
+	// A sync marker at/after PlayLength is invalid (it lands on the loop-wrap, e.g.
+	// the phase detector's spurious extremum at t ~= PlayLength on a looping clip),
+	// and a negative time is a loop-boundary continuity artefact. Drop both from
+	// both arrays AFTER detection so no signal can emit an out-of-range marker.
+	// Epsilon keeps a plant that sits exactly on the last frame from tripping the
+	// >= bound due to float rounding, while still excluding the wrap copy.
+	{
+		const float UpperBound = PlayLength - 1e-4f;
+		auto WithinRange = [UpperBound](float T) -> bool
+		{
+			return T >= 0.0f && T < UpperBound;
+		};
+		const int32 LeftBefore = LeftTimes.Num();
+		const int32 RightBefore = RightTimes.Num();
+		LeftTimes.RemoveAll([&](float T) { return !WithinRange(T); });
+		RightTimes.RemoveAll([&](float T) { return !WithinRange(T); });
+		const int32 DroppedOutOfRange = (LeftBefore - LeftTimes.Num()) + (RightBefore - RightTimes.Num());
+		if (DroppedOutOfRange > 0)
+		{
+			Notes.Add(MakeShared<FJsonValueString>(FString::Printf(
+				TEXT("dropped %d out-of-range marker(s) outside [0, %.4f)"), DroppedOutOfRange, PlayLength)));
+		}
+	}
+
+	// ---- Idempotency clear (skip when source==existing — those markers ARE the answer) ----
+	int32 ClearedExisting = 0;
+	const bool bShouldClear = bClearExisting && !bDryRun && Source != TEXT("existing");
+	const bool bWillWrite = !bDryRun && Source != TEXT("existing") && Source != TEXT("none")
+		&& (LeftTimes.Num() > 0 || RightTimes.Num() > 0);
+
+	if (bShouldClear || bWillWrite)
+	{
+		GEditor->BeginTransaction(FText::FromString(TEXT("Derive Foot Sync Markers")));
+		Seq->Modify();
+
+		if (bShouldClear)
+		{
+			TArray<FName> NamesToRemove;
+			NamesToRemove.Add(LeftFName);
+			if (RightFName != LeftFName) NamesToRemove.Add(RightFName);
+			const int32 CountBefore = Seq->AuthoredSyncMarkers.Num();
+			Seq->RemoveSyncMarkers(NamesToRemove);
+			ClearedExisting = CountBefore - Seq->AuthoredSyncMarkers.Num();
+		}
+
+		// ---- Write markers (review fix #1: AuthoredSyncMarkers + single refresh) ----
+		if (bWillWrite)
+		{
+			auto PushMarker = [&](const FName& Name, float Time)
+			{
+				FAnimSyncMarker NewMarker;
+				NewMarker.MarkerName = Name;
+				NewMarker.Time = Time;
+#if WITH_EDITORONLY_DATA
+				NewMarker.TrackIndex = TrackIndex;
+				NewMarker.Guid = FGuid::NewGuid();
+#endif
+				Seq->AuthoredSyncMarkers.Add(NewMarker);
+			};
+			for (float T : LeftTimes)  PushMarker(LeftFName, T);
+			for (float T : RightTimes) PushMarker(RightFName, T);
+		}
+
+		Seq->RefreshSyncMarkerDataFromAuthored();
+		GEditor->EndTransaction();
+		Seq->MarkPackageDirty();
+	}
+
+	const int32 MarkersWritten = bWillWrite ? (LeftTimes.Num() + RightTimes.Num()) : 0;
+
+	// ---- Build result JSON ----
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("source"), Source);
+	Root->SetStringField(TEXT("confidence"), Confidence);
+	Root->SetBoolField(TEXT("dry_run"), bDryRun);
+	Root->SetStringField(TEXT("left_marker_name"), LeftMarkerName);
+	Root->SetStringField(TEXT("right_marker_name"), RightMarkerName);
+	Root->SetNumberField(TEXT("track_index"), TrackIndex);
+	Root->SetNumberField(TEXT("cleared_existing"), ClearedExisting);
+
+	auto TimesToJson = [](const TArray<float>& Times) -> TSharedPtr<FJsonObject>
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetNumberField(TEXT("count"), Times.Num());
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		for (float T : Times) Arr.Add(MakeShared<FJsonValueNumber>(T));
+		Obj->SetArrayField(TEXT("times"), Arr);
+		return Obj;
+	};
+	Root->SetObjectField(TEXT("left"), TimesToJson(LeftTimes));
+	Root->SetObjectField(TEXT("right"), TimesToJson(RightTimes));
+	Root->SetNumberField(TEXT("markers_written"), MarkersWritten);
+
+	if (!UsedLeftBone.IsNone() || !UsedRightBone.IsNone())
+	{
+		TSharedPtr<FJsonObject> BonesUsed = MakeShared<FJsonObject>();
+		BonesUsed->SetStringField(TEXT("left"), UsedLeftBone.ToString());
+		BonesUsed->SetStringField(TEXT("right"), UsedRightBone.ToString());
+		Root->SetObjectField(TEXT("foot_bones_used"), BonesUsed);
+	}
+
+	Root->SetArrayField(TEXT("notes"), Notes);
 	return FMonolithActionResult::Success(Root);
 }

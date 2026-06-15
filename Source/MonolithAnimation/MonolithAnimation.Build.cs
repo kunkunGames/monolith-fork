@@ -1,8 +1,54 @@
 using UnrealBuildTool;
-using System.IO;
 
 public class MonolithAnimation : ModuleRules
 {
+	// Returns true iff `PluginName` is ENABLED for this target (not merely present on disk).
+	// Mirrors UnrealBuildTool Plugins.IsPluginEnabledForTarget (UE 5.7
+	// Engine/Source/Programs/UnrealBuildTool/System/Plugins.cs:693). Fixes issue #71:
+	// engine plugins ship-but-default-off (EnabledByDefault:false), so disk presence != enablement.
+	// Design + API citations: Docs/plans/2026-06-15-issue71-plugin-enablement-gating.md.
+	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
+	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
+	{
+		if (Target.ProjectFile == null)
+		{
+			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
+		}
+
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
+
+		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		try
+		{
+			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
+			if (Project.Plugins != null)
+			{
+				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
+				{
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					{
+						return Ref.bEnabled
+							&& Ref.IsEnabledForPlatform(Target.Platform)
+							&& Ref.IsEnabledForTargetConfiguration(Target.Configuration)
+							&& Ref.IsEnabledForTarget(Target.Type);
+					}
+				}
+			}
+		}
+		catch (System.Exception)
+		{
+			return false;   // unreadable .uproject -> fail safe to OFF (never hard-link)
+		}
+
+		// 3. No .uproject entry -> falls to the .uplugin EnabledByDefault. ALL gated plugins here are
+		//    engine plugins with EnabledByDefault:false, so absence == disabled. Return false.
+		//    (If a future gated plugin were EnabledByDefault:true, this branch would need to read its
+		//    .uplugin; documented as a known limitation in the plan.)
+		return false;
+	}
+
 	public MonolithAnimation(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -39,54 +85,16 @@ public class MonolithAnimation : ModuleRules
 		});
 
 		// --- Conditional: Chooser (UChooserTable authoring) ---
-		// The Chooser plugin ships with the engine but can be disabled per-project.
-		// Gate the dependency so a project without it still links MonolithAnimation
-		// (the chooser handlers fall back to a clean "not available" error).
+		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence.
+		// Chooser ships under Engine/Plugins/Chooser on every UE 5.7 install but is
+		// EnabledByDefault:false (Chooser.uplugin:13); a source builder who hasn't enabled it
+		// would otherwise hard-link the Chooser module → GetLastError=126 (same class as #71).
+		// The chooser handlers fall back to a clean "not available" error when WITH_CHOOSER=0.
 		//
-		// Release builds: MONOLITH_RELEASE_BUILD=1 forces this OFF so binary releases
+		// Release builds: MONOLITH_RELEASE_BUILD=1 still forces this OFF so binary releases
 		// never hard-link against a plugin the end user may have disabled.
-		bool bHasChooser = false;
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-
-		if (!bReleaseBuild)
-		{
-			// 1. Project Plugins/ folder (manual install or symlink)
-			string ProjectPluginsDir = Path.Combine(
-				Target.ProjectFile.Directory.FullName, "Plugins");
-			if (Directory.Exists(ProjectPluginsDir))
-			{
-				bHasChooser = Directory.Exists(
-					Path.Combine(ProjectPluginsDir, "Chooser"))
-					|| HasChooserVariantDir(ProjectPluginsDir);
-			}
-
-			// 2. Engine Plugins/Marketplace/ folder (Fab install)
-			if (!bHasChooser)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string MarketplaceDir = Path.Combine(
-					EngineDir, "Plugins", "Marketplace");
-				if (Directory.Exists(MarketplaceDir))
-				{
-					bHasChooser = Directory.Exists(
-						Path.Combine(MarketplaceDir, "Chooser"))
-						|| HasChooserVariantDir(MarketplaceDir);
-				}
-
-				// 3. Engine Plugins/ root (default UE install location)
-				if (!bHasChooser)
-				{
-					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasChooser = Directory.Exists(
-						Path.Combine(EnginePluginsDir, "Chooser"))
-						|| Directory.Exists(
-							Path.Combine(EnginePluginsDir, "Animation", "Chooser"))
-						|| Directory.Exists(
-							Path.Combine(EnginePluginsDir, "Experimental", "Chooser"))
-						|| HasChooserVariantDir(EnginePluginsDir);
-				}
-			}
-		}
+		bool bHasChooser = !bReleaseBuild && IsPluginEnabled(Target, "Chooser");
 
 		if (bHasChooser)
 		{
@@ -106,23 +114,4 @@ public class MonolithAnimation : ModuleRules
 		}
 	}
 
-	// A "Chooser_*" sibling (e.g. a suffixed Fab/marketplace install) only counts
-	// when the directory actually contains the Chooser plugin descriptor. Scratch
-	// folders like Plugins/Chooser_Backup must not force a Chooser module
-	// dependency that UBT cannot resolve.
-	private static bool HasChooserVariantDir(string ParentDir)
-	{
-		if (!Directory.Exists(ParentDir))
-		{
-			return false;
-		}
-		foreach (string Dir in Directory.GetDirectories(ParentDir, "Chooser_*", SearchOption.TopDirectoryOnly))
-		{
-			if (File.Exists(Path.Combine(Dir, "Chooser.uplugin")))
-			{
-				return true;
-			}
-		}
-		return false;
-	}
 }

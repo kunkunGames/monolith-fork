@@ -1,8 +1,54 @@
 using UnrealBuildTool;
-using System.IO;
 
 public class MonolithAI : ModuleRules
 {
+	// Returns true iff `PluginName` is ENABLED for this target (not merely present on disk).
+	// Mirrors UnrealBuildTool Plugins.IsPluginEnabledForTarget (UE 5.7
+	// Engine/Source/Programs/UnrealBuildTool/System/Plugins.cs:693). Fixes issue #71:
+	// engine plugins ship-but-default-off (EnabledByDefault:false), so disk presence != enablement.
+	// Design + API citations: Docs/plans/2026-06-15-issue71-plugin-enablement-gating.md.
+	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
+	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
+	{
+		if (Target.ProjectFile == null)
+		{
+			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
+		}
+
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
+
+		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		try
+		{
+			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
+			if (Project.Plugins != null)
+			{
+				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
+				{
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					{
+						return Ref.bEnabled
+							&& Ref.IsEnabledForPlatform(Target.Platform)
+							&& Ref.IsEnabledForTargetConfiguration(Target.Configuration)
+							&& Ref.IsEnabledForTarget(Target.Type);
+					}
+				}
+			}
+		}
+		catch (System.Exception)
+		{
+			return false;   // unreadable .uproject -> fail safe to OFF (never hard-link)
+		}
+
+		// 3. No .uproject entry -> falls to the .uplugin EnabledByDefault. ALL gated plugins here are
+		//    engine plugins with EnabledByDefault:false, so absence == disabled. Return false.
+		//    (If a future gated plugin were EnabledByDefault:true, this branch would need to read its
+		//    .uplugin; documented as a known limitation in the plan.)
+		return false;
+	}
+
 	public MonolithAI(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -31,15 +77,6 @@ public class MonolithAI : ModuleRules
 		// Origin: GitHub issue #30 (MonolithMesh.dll hard-linked GeometryScriptingCore).
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
 
-		// Hoist engine paths — shared across all conditional probes
-		string EngineDir = "";
-		string EnginePluginsDir = "";
-		if (!bReleaseBuild)
-		{
-			EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-		}
-
 		// --- Conditional: StateTree (engine plugin, EnabledByDefault=false) ---
 		// StateTree itself contains StateTreeModule + StateTreeEditorModule (UncookedOnly).
 		// GameplayStateTree is a SEPARATE engine plugin that depends on StateTree and
@@ -52,30 +89,14 @@ public class MonolithAI : ModuleRules
 		// (Historical: the StructUtils plugin was previously listed here but is
 		// deprecated since UE 5.5 — FInstancedStruct relocated into CoreUObject
 		// and resolves transparently via the existing CoreUObject Public dep above.)
-		bool bHasStateTree = false;
-		if (!bReleaseBuild)
-		{
-			// 1. Engine Plugins/Runtime/StateTree (canonical UE 5.7 layout — confirmed)
-			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "StateTree"))
-			{
-				bHasStateTree = true;
-			}
-			// 2. Engine Plugins/AI/StateTree (alternate layout / future relocation)
-			else if (HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "StateTree"))
-			{
-				bHasStateTree = true;
-			}
-			// 3. Project Plugins/StateTree (manual install)
-			else if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(
-					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasStateTree = HasPluginDir(ProjectPluginsDir, "StateTree");
-				}
-			}
-		}
+		//
+		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence.
+		// StateTree ships under Engine/Plugins/Runtime on every UE 5.7 install but is
+		// EnabledByDefault:false; disk presence would false-positive a hard-link on a
+		// source builder who hasn't enabled it. GameplayStateTree/PropertyBindingUtils are
+		// co-enabled with StateTree (StateTree.uplugin requires them), so checking StateTree
+		// alone is sufficient.
+		bool bHasStateTree = !bReleaseBuild && IsPluginEnabled(Target, "StateTree");
 
 		if (bHasStateTree)
 		{
@@ -95,30 +116,8 @@ public class MonolithAI : ModuleRules
 		// --- Conditional: SmartObjects (engine plugin, EnabledByDefault=false) ---
 		// SmartObjects plugin contains SmartObjectsModule + SmartObjectsEditorModule.
 		// Both gated together — editor module is always co-installed with runtime.
-		bool bHasSmartObjects = false;
-		if (!bReleaseBuild)
-		{
-			// 1. Engine Plugins/Runtime/SmartObjects (canonical UE 5.7 layout — confirmed)
-			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "SmartObjects"))
-			{
-				bHasSmartObjects = true;
-			}
-			// 2. Engine Plugins/AI/SmartObjects (alternate layout / future relocation)
-			else if (HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "SmartObjects"))
-			{
-				bHasSmartObjects = true;
-			}
-			// 3. Project Plugins/SmartObjects (manual install)
-			else if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(
-					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasSmartObjects = HasPluginDir(ProjectPluginsDir, "SmartObjects");
-				}
-			}
-		}
+		// Issue #71: gate on ENABLEMENT, not disk presence (ships-but-off on every install).
+		bool bHasSmartObjects = !bReleaseBuild && IsPluginEnabled(Target, "SmartObjects");
 
 		if (bHasSmartObjects)
 		{
@@ -135,34 +134,11 @@ public class MonolithAI : ModuleRules
 		}
 
 		// --- Conditional: GameplayAbilities (Phase I2: BT-to-GAS task) ---
-		// Engine plugin shipped with UE 5.7 by default. We probe the disk so a
-		// project that disables the plugin entirely still compiles MonolithAI.
-		// 3-location probe mirrors the canonical Build.cs pattern in
-		// MonolithGAS.Build.cs.
-		bool bHasGameplayAbilities = false;
-		if (!bReleaseBuild)
-		{
-			// 1. Engine Plugins/Runtime/GameplayAbilities (canonical UE 5.7 layout)
-			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "GameplayAbilities"))
-			{
-				bHasGameplayAbilities = true;
-			}
-			// 2. Engine Plugins/GameplayAbilities (older layout / project install)
-			else if (HasPluginDir(EnginePluginsDir, "GameplayAbilities"))
-			{
-				bHasGameplayAbilities = true;
-			}
-			// 3. Project Plugins/ (manual install)
-			else if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(
-					Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasGameplayAbilities = HasPluginDir(ProjectPluginsDir, "GameplayAbilities");
-				}
-			}
-		}
+		// Engine plugin (EnabledByDefault:false) but listed NON-optional in Monolith.uplugin,
+		// so it is force-enabled when the user enables Monolith. Issue #71: gate on ENABLEMENT
+		// rather than disk presence — correct for the normal case and also handles a user who
+		// explicitly disables GameplayAbilities in their .uproject.
+		bool bHasGameplayAbilities = !bReleaseBuild && IsPluginEnabled(Target, "GameplayAbilities");
 
 		if (bHasGameplayAbilities)
 		{
@@ -174,49 +150,32 @@ public class MonolithAI : ModuleRules
 			PublicDefinitions.Add("WITH_GAMEPLAYABILITIES=0");
 		}
 
-		// --- Conditional: MassEntity (Experimental) ---
-		bool bHasMassEntity = false;
-		if (!bReleaseBuild)
+		// --- Conditional: GameplayBehaviors (Experimental) ---
+		// Issue #71 PRIMARY FIX: Optional:true in Monolith.uplugin, so NOT transitively
+		// enabled when the user enables Monolith. Ships on disk on every install →
+		// disk presence false-positived a hard-link → GetLastError=126 for source builders
+		// who didn't enable it. Gate on ENABLEMENT read from the .uproject.
+		bool bHasGameplayBehaviors = !bReleaseBuild && IsPluginEnabled(Target, "GameplayBehaviors");
+
+		if (bHasGameplayBehaviors)
 		{
-			bool bHasMassEntityPlugin = false;
-			bool bHasMassGameplayPlugin = false;
-
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasMassEntityPlugin = HasPluginDir(ProjectPluginsDir, "MassEntity");
-				bHasMassGameplayPlugin = HasPluginDir(ProjectPluginsDir, "MassGameplay");
-			}
-
-			if (!bHasMassEntityPlugin || !bHasMassGameplayPlugin)
-			{
-				string[] MassSearchDirs = new string[]
-				{
-					EnginePluginsDir,
-					Path.Combine(EnginePluginsDir, "Runtime"),
-					Path.Combine(EnginePluginsDir, "Developer"),
-					Path.Combine(EnginePluginsDir, "Experimental"),
-					Path.Combine(EnginePluginsDir, "Marketplace"),
-					Path.Combine(EnginePluginsDir, "AI")
-				};
-				foreach (string Dir in MassSearchDirs)
-				{
-					if (!Directory.Exists(Dir))
-					{
-						continue;
-					}
-
-					bHasMassEntityPlugin = bHasMassEntityPlugin || HasPluginDir(Dir, "MassEntity");
-					bHasMassGameplayPlugin = bHasMassGameplayPlugin || HasPluginDir(Dir, "MassGameplay");
-					if (bHasMassEntityPlugin && bHasMassGameplayPlugin)
-					{
-						break;
-					}
-				}
-			}
-
-			bHasMassEntity = bHasMassEntityPlugin && bHasMassGameplayPlugin;
+			PrivateDependencyModuleNames.Add("GameplayBehaviorsModule");
+			PublicDefinitions.Add("WITH_GAMEPLAYBEHAVIORS=1");
 		}
+		else
+		{
+			PublicDefinitions.Add("WITH_GAMEPLAYBEHAVIORS=0");
+		}
+
+		// --- Conditional: Mass (Experimental) ---
+		// Issue #71 PRIMARY FIX. This block links MassEntity + MassSpawner + MassGameplayEditor.
+		// MassSpawner (MassGameplay.uplugin:36) and MassGameplayEditor (:68) are MassGameplay-plugin
+		// modules. The MassEntity *plugin* is DEPRECATED in 5.7 (empty Modules:[], DeprecatedEngineVersion:5.5)
+		// — the MassEntity *module* now lives in the engine, not the plugin. So we gate ONLY on the
+		// MassGameplay plugin's enablement (the name users put in .uproject), never on MassEntity.
+		// MassGameplay is Optional:true in Monolith.uplugin → NOT transitively enabled; disk presence
+		// false-positived a hard-link on MassSpawner/MassGameplayEditor → GetLastError=126.
+		bool bHasMassEntity = !bReleaseBuild && IsPluginEnabled(Target, "MassGameplay");
 
 		if (bHasMassEntity)
 		{
@@ -230,35 +189,10 @@ public class MonolithAI : ModuleRules
 		}
 
 		// --- Conditional: ZoneGraph (Experimental) ---
-		bool bHasZoneGraph = false;
-		if (!bReleaseBuild)
-		{
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasZoneGraph = HasPluginDir(ProjectPluginsDir, "ZoneGraph");
-			}
-
-			if (!bHasZoneGraph)
-			{
-				string[] ZoneSearchDirs = new string[]
-				{
-					EnginePluginsDir,
-					Path.Combine(EnginePluginsDir, "Runtime"),
-					Path.Combine(EnginePluginsDir, "Developer"),
-					Path.Combine(EnginePluginsDir, "Experimental"),
-					Path.Combine(EnginePluginsDir, "Marketplace")
-				};
-				foreach (string Dir in ZoneSearchDirs)
-				{
-					if (HasPluginDir(Dir, "ZoneGraph"))
-					{
-						bHasZoneGraph = true;
-						break;
-					}
-				}
-			}
-		}
+		// Issue #71 PRIMARY FIX: Optional:true in Monolith.uplugin, ships-but-off on every
+		// install → disk presence false-positived a hard-link on ZoneGraph → GetLastError=126.
+		// Gate on ENABLEMENT read from the .uproject.
+		bool bHasZoneGraph = !bReleaseBuild && IsPluginEnabled(Target, "ZoneGraph");
 
 		if (bHasZoneGraph)
 		{
@@ -271,27 +205,4 @@ public class MonolithAI : ModuleRules
 		}
 	}
 
-	private static bool HasPluginDir(string BaseDir, string PluginName)
-	{
-		if (!Directory.Exists(BaseDir))
-		{
-			return false;
-		}
-
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-		{
-			return true;
-		}
-
-		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
-		foreach (string Dir in Dirs)
-		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
 }
