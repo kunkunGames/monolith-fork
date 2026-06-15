@@ -56,12 +56,12 @@ public class MonolithAI : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Engine Plugins/Runtime/StateTree (canonical UE 5.7 layout — confirmed)
-			if (Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "StateTree")))
+			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "StateTree"))
 			{
 				bHasStateTree = true;
 			}
 			// 2. Engine Plugins/AI/StateTree (alternate layout / future relocation)
-			else if (Directory.Exists(Path.Combine(EnginePluginsDir, "AI", "StateTree")))
+			else if (HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "StateTree"))
 			{
 				bHasStateTree = true;
 			}
@@ -72,8 +72,7 @@ public class MonolithAI : ModuleRules
 					Target.ProjectFile.Directory.FullName, "Plugins");
 				if (Directory.Exists(ProjectPluginsDir))
 				{
-					bHasStateTree = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "StateTree"));
+					bHasStateTree = HasPluginDir(ProjectPluginsDir, "StateTree");
 				}
 			}
 		}
@@ -100,12 +99,12 @@ public class MonolithAI : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Engine Plugins/Runtime/SmartObjects (canonical UE 5.7 layout — confirmed)
-			if (Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "SmartObjects")))
+			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "SmartObjects"))
 			{
 				bHasSmartObjects = true;
 			}
 			// 2. Engine Plugins/AI/SmartObjects (alternate layout / future relocation)
-			else if (Directory.Exists(Path.Combine(EnginePluginsDir, "AI", "SmartObjects")))
+			else if (HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "SmartObjects"))
 			{
 				bHasSmartObjects = true;
 			}
@@ -116,8 +115,7 @@ public class MonolithAI : ModuleRules
 					Target.ProjectFile.Directory.FullName, "Plugins");
 				if (Directory.Exists(ProjectPluginsDir))
 				{
-					bHasSmartObjects = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "SmartObjects"));
+					bHasSmartObjects = HasPluginDir(ProjectPluginsDir, "SmartObjects");
 				}
 			}
 		}
@@ -145,12 +143,12 @@ public class MonolithAI : ModuleRules
 		if (!bReleaseBuild)
 		{
 			// 1. Engine Plugins/Runtime/GameplayAbilities (canonical UE 5.7 layout)
-			if (Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "GameplayAbilities")))
+			if (HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "GameplayAbilities"))
 			{
 				bHasGameplayAbilities = true;
 			}
 			// 2. Engine Plugins/GameplayAbilities (older layout / project install)
-			else if (Directory.Exists(Path.Combine(EnginePluginsDir, "GameplayAbilities")))
+			else if (HasPluginDir(EnginePluginsDir, "GameplayAbilities"))
 			{
 				bHasGameplayAbilities = true;
 			}
@@ -161,8 +159,7 @@ public class MonolithAI : ModuleRules
 					Target.ProjectFile.Directory.FullName, "Plugins");
 				if (Directory.Exists(ProjectPluginsDir))
 				{
-					bHasGameplayAbilities = Directory.Exists(
-						Path.Combine(ProjectPluginsDir, "GameplayAbilities"));
+					bHasGameplayAbilities = HasPluginDir(ProjectPluginsDir, "GameplayAbilities");
 				}
 			}
 		}
@@ -187,8 +184,8 @@ public class MonolithAI : ModuleRules
 			if (Target.ProjectFile != null)
 			{
 				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasMassEntityPlugin = HasProjectPluginDirectory(ProjectPluginsDir, "MassEntity");
-				bHasMassGameplayPlugin = HasProjectPluginDirectory(ProjectPluginsDir, "MassGameplay");
+				bHasMassEntityPlugin = HasPluginDir(ProjectPluginsDir, "MassEntity");
+				bHasMassGameplayPlugin = HasPluginDir(ProjectPluginsDir, "MassGameplay");
 			}
 
 			if (!bHasMassEntityPlugin || !bHasMassGameplayPlugin)
@@ -209,8 +206,8 @@ public class MonolithAI : ModuleRules
 						continue;
 					}
 
-					bHasMassEntityPlugin = bHasMassEntityPlugin || Directory.Exists(Path.Combine(Dir, "MassEntity"));
-					bHasMassGameplayPlugin = bHasMassGameplayPlugin || Directory.Exists(Path.Combine(Dir, "MassGameplay"));
+					bHasMassEntityPlugin = bHasMassEntityPlugin || HasPluginDir(Dir, "MassEntity");
+					bHasMassGameplayPlugin = bHasMassGameplayPlugin || HasPluginDir(Dir, "MassGameplay");
 					if (bHasMassEntityPlugin && bHasMassGameplayPlugin)
 					{
 						break;
@@ -239,7 +236,7 @@ public class MonolithAI : ModuleRules
 			if (Target.ProjectFile != null)
 			{
 				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasZoneGraph = HasProjectPluginDirectory(ProjectPluginsDir, "ZoneGraph");
+				bHasZoneGraph = HasPluginDir(ProjectPluginsDir, "ZoneGraph");
 			}
 
 			if (!bHasZoneGraph)
@@ -254,8 +251,7 @@ public class MonolithAI : ModuleRules
 				};
 				foreach (string Dir in ZoneSearchDirs)
 				{
-					if (Directory.Exists(Dir) &&
-						Directory.Exists(Path.Combine(Dir, "ZoneGraph")))
+					if (HasPluginDir(Dir, "ZoneGraph"))
 					{
 						bHasZoneGraph = true;
 						break;
@@ -275,69 +271,24 @@ public class MonolithAI : ModuleRules
 		}
 	}
 
-	private static bool HasProjectPluginDirectory(string ProjectPluginsDir, string PluginName)
+	private static bool HasPluginDir(string BaseDir, string PluginName)
 	{
-		if (!Directory.Exists(ProjectPluginsDir))
+		if (!Directory.Exists(BaseDir))
 		{
 			return false;
 		}
 
-		if (IsProjectPluginDirectory(Path.Combine(ProjectPluginsDir, PluginName), PluginName))
+		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
 		{
 			return true;
 		}
 
-		foreach (string CandidateDir in Directory.GetDirectories(ProjectPluginsDir, PluginName + "_*", SearchOption.TopDirectoryOnly))
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+		foreach (string Dir in Dirs)
 		{
-			if (IsProjectPluginDirectory(CandidateDir, PluginName))
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
 			{
 				return true;
-			}
-		}
-
-		foreach (string Dir in Directory.GetDirectories(ProjectPluginsDir))
-		{
-			if (IsProjectPluginDirectory(Path.Combine(Dir, PluginName), PluginName))
-			{
-				return true;
-			}
-
-			foreach (string CandidateDir in Directory.GetDirectories(Dir, PluginName + "_*", SearchOption.TopDirectoryOnly))
-			{
-				if (IsProjectPluginDirectory(CandidateDir, PluginName))
-				{
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	private static bool IsProjectPluginDirectory(string PluginDir, string ModuleName)
-	{
-		if (!Directory.Exists(PluginDir))
-		{
-			return false;
-		}
-
-		foreach (string DescriptorPath in Directory.GetFiles(PluginDir, "*.uplugin", SearchOption.TopDirectoryOnly))
-		{
-			try
-			{
-				string Descriptor = File.ReadAllText(DescriptorPath)
-					.Replace(" ", "")
-					.Replace("\t", "")
-					.Replace("\r", "")
-					.Replace("\n", "");
-
-				if (Descriptor.Contains("\"Modules\"") && Descriptor.Contains("\"Name\":\"" + ModuleName + "\""))
-				{
-					return true;
-				}
-			}
-			catch
-			{
 			}
 		}
 

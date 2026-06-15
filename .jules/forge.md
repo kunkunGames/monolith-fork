@@ -93,3 +93,9 @@ Avoid: Directly calling `Directory.GetDirectories` on dynamically constructed pl
 **Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
 **Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
+
+## 2026-06-16 - [Standardize optional plugin detection in AI module]
+**Build pattern:** Hardcoded directory checks like `Directory.Exists(Path.Combine(EnginePluginsDir, "Runtime", "StateTree"))` and ad-hoc project plugin functions were used to conditionally link optional modules like `StateTree`, `SmartObjects`, `GameplayAbilities`, `MassEntity`, and `ZoneGraph`.
+**Learning:** Hard-rolling path existence checks rather than using a standardized `HasPluginDir` wrapper bypasses verification of the actual `.uplugin` descriptor, increasing the risk of false positives from leftover empty folders.
+**Prevention:** Always use the standardized `HasPluginDir` helper which checks both directory existence and `.uplugin` existence, and properly accounts for `_*` variant suffix folders consistently across the whole repository.
+**Avoid:** Writing new manual `Directory.Exists()` or `Directory.GetDirectories()` plugin path checks instead of using `HasPluginDir`.
