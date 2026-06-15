@@ -274,24 +274,6 @@ void FMonolithSourceActions::RegisterAll()
 			.Required(TEXT("symbols"), TEXT("array"), TEXT("Array of symbol names to check"))
 			.Build());
 
-	// Survivor A (plan §3.A) — annotate the `source_query` namespace dispatcher
-	// as read-only + idempotent. The `trigger_reindex` / `trigger_project_reindex`
-	// actions are conservatively non-destructive (they kick a background sweep
-	// that yields identical results when re-run); every other source action is
-	// pure read. Annotating at the DISPATCHER level (not per-action) per plan
-	// §3.A — the dispatcher tool is what `tools/list` advertises.
-	FMonolithDispatcherAnnotations SourceAnnotations;
-	SourceAnnotations.bReadOnlyHint = true;
-	SourceAnnotations.bDestructiveHint = false;
-	SourceAnnotations.bIdempotentHint = true;
-	SourceAnnotations.Title = TEXT("Source-index query");
-	Registry.SetDispatcherAnnotations(TEXT("source"), SourceAnnotations);
-
-	// Phase 1 actions are pure reads — mark each read-only + idempotent + non-destructive.
-	Registry.SetActionAnnotations(TEXT("source"), TEXT("get_include_path"),  /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Get include path"));
-	Registry.SetActionAnnotations(TEXT("source"), TEXT("get_signature"),     /*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Get signature"));
-	Registry.SetActionAnnotations(TEXT("source"), TEXT("check_deprecations"),/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true, TEXT("Check deprecations"));
-
 	Registry.RegisterAction(TEXT("source"), TEXT("read_source"),
 		TEXT("Get the implementation source code for a class, function, or struct. If a source file path is supplied via path, delegates to source.read_file."),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleReadSource),
