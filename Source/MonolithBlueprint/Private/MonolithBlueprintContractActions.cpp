@@ -470,10 +470,11 @@ FMonolithActionResult FMonolithBlueprintContractActions::HandleCompareClassVaria
 {
 	using namespace MonolithBpContractInternal;
 
-	const FString LeftSide  = Params->GetStringField(TEXT("left"));
-	const FString RightSide = Params->GetStringField(TEXT("right"));
-	if (LeftSide.IsEmpty())  return FMonolithActionResult::Error(TEXT("Missing required parameter: left"));
-	if (RightSide.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: right"));
+	FString LeftSide;
+	if (!Params->TryGetStringField(TEXT("left"), LeftSide) || LeftSide.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: left"));
+
+	FString RightSide;
+	if (!Params->TryGetStringField(TEXT("right"), RightSide) || RightSide.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: right"));
 
 	bool bIncludeInherited = false;
 	Params->TryGetBoolField(TEXT("include_inherited"), bIncludeInherited);
@@ -560,7 +561,8 @@ FMonolithActionResult FMonolithBlueprintContractActions::HandlePromoteVariablesT
 		if (V.IsValid() && V->TryGetString(N) && !N.IsEmpty()) WantNames.Add(FName(*N));
 	}
 
-	FString Mode = Params->GetStringField(TEXT("mode"));
+	FString Mode;
+	Params->TryGetStringField(TEXT("mode"), Mode);
 	if (Mode.IsEmpty()) Mode = TEXT("verify");
 	if (Mode != TEXT("verify") && Mode != TEXT("remove_shadowed"))
 	{
