@@ -1325,7 +1325,8 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleAddEvaluateChooserN
 {
 	const FString AbpPath     = Params->GetStringField(TEXT("abp_path"));
 	const FString ChooserPath = Params->GetStringField(TEXT("chooser_path"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 	if (GraphName.IsEmpty()) GraphName = TEXT("AnimGraph");
 
 	double TempVal;
@@ -1417,7 +1418,8 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleWireChooserToMotion
 	const FString AbpPath        = Params->GetStringField(TEXT("abp_path"));
 	const FString ChooserNodeRef = Params->GetStringField(TEXT("chooser_node"));
 	const FString MMNodeRef      = Params->GetStringField(TEXT("mm_node"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 	if (GraphName.IsEmpty()) GraphName = TEXT("AnimGraph");
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
@@ -1515,9 +1517,11 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindChooserDatabase
 	const FString ChooserPath = Params->GetStringField(TEXT("chooser_path"));
 	const FString MMNodeRef   = Params->GetStringField(TEXT("mm_node"));
 	const FString DbVar       = Params->GetStringField(TEXT("selected_database_var"));
-	FString FuncName = Params->HasField(TEXT("function_name")) ? Params->GetStringField(TEXT("function_name")) : TEXT("SelectLocomotionDatabase");
+	FString FuncName = TEXT("SelectLocomotionDatabase");
+	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FuncName)) return FMonolithActionResult::Error(TEXT("Parameter 'function_name' must be a string"));
 	if (FuncName.IsEmpty()) FuncName = TEXT("SelectLocomotionDatabase");
-	FString AnimGraphName = Params->HasField(TEXT("anim_graph_name")) ? Params->GetStringField(TEXT("anim_graph_name")) : TEXT("AnimGraph");
+	FString AnimGraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("anim_graph_name")) && !Params->TryGetStringField(TEXT("anim_graph_name"), AnimGraphName)) return FMonolithActionResult::Error(TEXT("Parameter 'anim_graph_name' must be a string"));
 	if (AnimGraphName.IsEmpty()) AnimGraphName = TEXT("AnimGraph");
 
 	if (DbVar.IsEmpty()) return FMonolithActionResult::Error(TEXT("selected_database_var is required"));
