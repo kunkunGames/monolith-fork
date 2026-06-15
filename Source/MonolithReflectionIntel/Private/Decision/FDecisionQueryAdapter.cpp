@@ -578,7 +578,15 @@ FMonolithActionResult FDecisionQueryAdapter::HandleFindSupersessionChain(const T
 		return FMonolithActionResult::Error(TEXT("`depth` must be a number."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	const int32 ReqDepth = static_cast<int32>(DepthDouble);
-	const int32 MaxDepth = FMath::Clamp(ReqDepth, 1, 50);
+
+	constexpr int32 HARD_CAP = 50;
+	if (ReqDepth > HARD_CAP || ReqDepth < 1)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("`depth` (%d) exceeds the allowed bounds [1, %d]."), ReqDepth, HARD_CAP),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const int32 MaxDepth = ReqDepth;
 
 	FSQLitePreparedStatement Stmt;
 	if (!Stmt.Create(*DB, TEXT(
