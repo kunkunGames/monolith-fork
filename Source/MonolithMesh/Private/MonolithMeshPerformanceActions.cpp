@@ -358,28 +358,44 @@ FMonolithActionResult FMonolithMeshPerformanceActions::EstimatePlacementCost(con
 // 3. find_overdraw_hotspots
 // ============================================================================
 
+static bool ParseCameraParams(const TSharedPtr<FJsonObject>& Params, FVector& OutViewpoint, FVector& OutViewDirection, double& OutFOV, FString& OutError)
+{
+	if (!MonolithMeshUtils::ParseVector(Params, TEXT("viewpoint"), OutViewpoint))
+	{
+		OutError = TEXT("Missing or invalid required param: viewpoint (array of 3 numbers)");
+		return false;
+	}
+
+	OutViewDirection = FVector(1.0, 0.0, 0.0);
+	MonolithMeshUtils::ParseVector(Params, TEXT("view_direction"), OutViewDirection);
+	OutViewDirection.Normalize();
+	if (OutViewDirection.IsNearlyZero())
+	{
+		OutViewDirection = FVector(1.0, 0.0, 0.0);
+	}
+
+	OutFOV = 90.0;
+	if (Params->HasField(TEXT("fov")) && !Params->TryGetNumberField(TEXT("fov"), OutFOV))
+	{
+		OutError = TEXT("Parameter 'fov' must be a number");
+		return false;
+	}
+	OutFOV = FMath::Clamp(OutFOV, 10.0, 170.0);
+
+	return true;
+}
+
 FMonolithActionResult FMonolithMeshPerformanceActions::FindOverdrawHotspots(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Viewpoint;
-	if (!MonolithMeshUtils::ParseVector(Params, TEXT("viewpoint"), Viewpoint))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid required param: viewpoint (array of 3 numbers)"));
-	}
+	FVector ViewDirection;
+	double FOV;
+	FString ErrorMsg;
 
-	FVector ViewDirection(1.0, 0.0, 0.0); // Default: +X forward
-	MonolithMeshUtils::ParseVector(Params, TEXT("view_direction"), ViewDirection);
-	ViewDirection.Normalize();
-	if (ViewDirection.IsNearlyZero())
+	if (!ParseCameraParams(Params, Viewpoint, ViewDirection, FOV, ErrorMsg))
 	{
-		ViewDirection = FVector(1.0, 0.0, 0.0);
+		return FMonolithActionResult::Error(ErrorMsg);
 	}
-
-	double FOV = 90.0;
-	if (Params->HasField(TEXT("fov")) && !Params->TryGetNumberField(TEXT("fov"), FOV))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'fov' must be a number"));
-	}
-	FOV = FMath::Clamp(FOV, 10.0, 170.0);
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
@@ -823,25 +839,14 @@ FMonolithActionResult FMonolithMeshPerformanceActions::AnalyzeShadowCost(const T
 FMonolithActionResult FMonolithMeshPerformanceActions::GetTriangleBudget(const TSharedPtr<FJsonObject>& Params)
 {
 	FVector Viewpoint;
-	if (!MonolithMeshUtils::ParseVector(Params, TEXT("viewpoint"), Viewpoint))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid required param: viewpoint (array of 3 numbers)"));
-	}
+	FVector ViewDirection;
+	double FOV;
+	FString ErrorMsg;
 
-	FVector ViewDirection(1.0, 0.0, 0.0);
-	MonolithMeshUtils::ParseVector(Params, TEXT("view_direction"), ViewDirection);
-	ViewDirection.Normalize();
-	if (ViewDirection.IsNearlyZero())
+	if (!ParseCameraParams(Params, Viewpoint, ViewDirection, FOV, ErrorMsg))
 	{
-		ViewDirection = FVector(1.0, 0.0, 0.0);
+		return FMonolithActionResult::Error(ErrorMsg);
 	}
-
-	double FOV = 90.0;
-	if (Params->HasField(TEXT("fov")) && !Params->TryGetNumberField(TEXT("fov"), FOV))
-	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'fov' must be a number"));
-	}
-	FOV = FMath::Clamp(FOV, 10.0, 170.0);
 
 	double BudgetD = 500000.0;
 	if (Params->HasField(TEXT("budget")) && !Params->TryGetNumberField(TEXT("budget"), BudgetD))
