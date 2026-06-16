@@ -15,7 +15,7 @@ public class MonolithComboGraph : ModuleRules
 			return true;
 		}
 
-		string[] Dirs = Directory.GetDirectories(SearchDir, "ComboGraph_*", SearchOption.TopDirectoryOnly);
+		string[] Dirs = Directory.Exists(SearchDir) ? Directory.GetDirectories(SearchDir, "ComboGraph_*", SearchOption.TopDirectoryOnly) : new string[0];
 		foreach (string Dir in Dirs)
 		{
 			if (File.Exists(Path.Combine(Dir, "ComboGraph.uplugin")))

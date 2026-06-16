@@ -33,7 +33,7 @@ public class MonolithLogicDriver : ModuleRules
 			return true;
 		}
 
-		string[] Dirs = Directory.GetDirectories(BaseDir, DirName + "_*", SearchOption.TopDirectoryOnly);
+		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, DirName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
 		foreach (string Dir in Dirs)
 		{
 			if (HasPluginDescriptor(Dir, DescriptorNames))
