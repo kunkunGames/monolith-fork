@@ -63,9 +63,9 @@ Agents must keep PR descriptions focused and professional. Do not dump raw task 
 If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.
 
 ## 12. Index Freshness and CRG Cache
-Project and source indexing must keep their CRG projection/cache data in sync. Successful ProjectIndex and EngineSource indexing completion rebuilds the matching CRG projection/cache automatically; if `project.health` or `source.health` reports stale CRG parity, run the matching `repair_crg_cache` action with execute enabled.
+Project and source indexing must keep their CRG projection/cache data in sync. Successful ProjectIndex and EngineSource indexing completion rebuilds the matching CRG projection/cache automatically; if `project.health` or `source.health` reports stale CRG parity, run the matching `repair_crg_cache` action with execute enabled. Do not chain `repair_crg_cache` + `build_crg_graph` as a routine post-build pair: reindex completion already rebuilds the CRG cache, `repair_crg_cache` is health-gated repair only (it fast no-ops when parity is fresh, but the pair still cost ~9,000s/week in invocation logs), and `build_crg_graph` matters only when the `search_crg_graph` / `graph.db` export surface is actually used.
 
-After a successful C++ build, Live Coding, or hot reload, EngineSource.db should refresh through incremental project source indexing. If the post-build reload hook did not fire or the editor was unavailable, run `source.trigger_project_reindex` once the existing EngineSource.db bootstrap is present.
+After a successful C++ build, Live Coding, or hot reload, EngineSource.db should refresh through incremental project source indexing. If the post-build reload hook did not fire or the editor was unavailable, run `source.trigger_project_reindex` once the existing EngineSource.db bootstrap is present. `trigger_reindex` / `trigger_project_reindex` are live-editor actions: bring the MCP endpoint up first (`Scripts/recover_mcp.ps1`); offline `monolith_query.exe` cannot run them and answers with `live_only` guidance instead of reindexing.
 
 Offline `monolith_query.exe` calls in the default checkout resolve built-in DB paths from the executable location: `source` resolves `Saved/EngineSource.db`, `project` resolves `Saved/ProjectIndex.db`, `bridge` resolves both, and source CRG graph actions resolve `Saved/graph.db`. `--db`, `--source-db`, `--project-db`, and `--graph-db` remain override options for copied or non-standard databases.
 
@@ -74,6 +74,8 @@ For routine source lookup and code-review triage, prefer `source search_source`,
 Project search is content-inclusive by default. Live `project.search` and offline `Binaries\monolith_query.exe project search` search `fts_assets`, `fts_nodes`, `fts_variables`, `fts_parameters`, `fts_datatable_rows`, `fts_actors`, and `fts_asset_search_values` unless `include_content=false` / `--include-content=false` is specified. Search results include `match_source`, `match_table`, `match_field`, `match_object_path`, and `match_value`; use these provenance fields before treating a hit as an asset identity match.
 
 `project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
+
+`Scripts/check_index_freshness.ps1` runs the offline health -> repair -> re-verify chain for both DBs in one call: report mode prints each warning plus exact repair commands; `-Execute` runs only the warning-indicated `repair_crg_cache`/`repair_fts` repairs and refuses on-disk DB writes while the MCP endpoint is up unless `-AllowLiveEditor` is passed. Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
 
 ## 13. Offline Source/Bridge Usage
 
@@ -90,7 +92,7 @@ Binaries\monolith_query.exe bridge search_asset_symbols --asset-path=/Game/Maps/
 Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit=5
 ```
 
-`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. Use `source build_crg_graph --execute` only when that graph-node search/export surface is explicitly needed; the builder uses a graph rebuild lock, skips when source-signature metadata is current unless `--force` is passed, and replaces `graph.db` only after a validated temp DB build. Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline `monolith_query.exe source build_crg_graph --execute` remains synchronous. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
+`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. Use `source build_crg_graph --execute` only when that graph-node search/export surface is explicitly needed; the builder uses a graph rebuild lock, skips when source-signature metadata is current (`skip_reason=parity_fresh`) or when the last build is within the `--cooldown-seconds` window (default 1800s, `skip_reason=cooldown`) unless `--force` is passed, and replaces `graph.db` only after a validated temp DB build. The cooldown caps the daily `repair_crg_cache`+`build_crg_graph` maintenance loop because `graph.db` is an export/search cache; do not chain the pair (§12). Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline `monolith_query.exe source build_crg_graph --execute` remains synchronous. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
 
 ## 13a. Offline Project Search Usage
 
@@ -115,6 +117,8 @@ D:\P4\game\BatchFiles\RunHeadlessEditor.bat
 
 Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
+`Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
+
 ## 15. Tool Invocation Daily Logs
 
 The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithToolInvocationLogs.md`. When a checkout includes the implementation, the files are local diagnostics only and must not be treated as canonical tool output.
@@ -122,11 +126,11 @@ The daily invocation log contract is documented in `Docs/specs/SPEC_MonolithTool
 - Proxy calls append JSONL records to `Logs/yyyyMMdd/proxy.jsonl`.
 - Offline query calls append JSONL records to `Logs/yyyyMMdd/query.jsonl`.
 - Editor action dispatch appends JSONL records to `Logs/yyyyMMdd/action.jsonl` when `UMonolithSettings::bEnableDailyLog=true`; this checkout opts in through `Config\DefaultMonolith.ini`.
-- Current records use format v2 with `trace_id`, per-record `span_id`, compact `return_summary`, redaction metadata, and no empty optional fields. Proxy calls forward trace metadata to editor actions, and action-spawned `monolith_query.exe` calls inherit it.
+- Current records use format v3 (`record_id`, `trace_id`, per-record `span_id`, `routing_context`, `workflow`, `phase_timing`, compact `return_summary`, redaction metadata, no empty optional fields); append-only date folders can still contain older v1/v2 rows. Proxy calls forward trace metadata to editor actions, and action-spawned `monolith_query.exe` calls inherit it.
 - Proxy/query logging is enabled by default; unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it, and `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the process.
 - For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Logs/`.
-- Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.
-- Do not commit `Logs/*`; logs can contain project/source context even after redaction and truncation.
+- Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts. The offline reader is `python Analyzer/analyze_invocation_logs.py --log-root Logs --since <yyyyMMdd>` (contract: `Docs/specs/SPEC_MonolithInvocationLogAnalyzer.md`); it writes markdown/json/csv reports under `Saved/Monolith/LogAnalysis/` and never mutates `Logs/`.
+- Do not commit `Logs/*`; logs can contain project/source context even after redaction and truncation. Retention is manual: `Scripts/prune_invocation_logs.ps1` (dry-run by default; `-Execute` deletes date folders outside `-KeepDays`/`-MaxTotalMB`).
 
 ## 16. Execution Plan Requirements
 When creating execution plans, agents must adhere to the following rules to ensure tasks translate directly to safe, verifiable actions:

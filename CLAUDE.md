@@ -48,6 +48,12 @@ Agents performing routine refactoring, performance optimization (Bolt), or hygie
 ## 10. Minimum PR Value Threshold
 Passing static CI is not enough to make a scheduled PR worth merging; a PR must also be non-overlapping, current after rebase, and clearly more valuable than a no-op. Stop without PR if the only available change is a micro-edit against shared coordination docs, action-count docs, or release docs where multiple agents often race.
 
+## 10a. Forbid Style-Only Prompt Changes
+Agents must avoid creating PRs that only contain style, formatting, or trivial wording changes to prompt and coordination files like `AGENTS.md` and files in `.jules/`. If the intended modification does not fundamentally change an actionable rule or behavior, **stop without PR**.
+
+## 10b. PR Body Hygiene and Sensitive Information
+Agents must keep PR descriptions focused and professional. Do not dump raw task execution logs, internal agent reasoning traces, or sensitive project findings into PR bodies or commit messages. Only include the required structured fields (like WorkFingerprint and Duplicate check) and a concise summary of the change.
+
 ## 11. External CI Limits
 If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.
 
@@ -131,3 +137,9 @@ When creating execution plans, agents must adhere to the following rules to ensu
 Use `Templates\Onboarding\Onboarding.md` and `Scripts/onboard_monolith.ps1` for global Monolith MCP client setup, project instruction setup, and global skill-link installation. In-repo skills live at `Skills/<skill>/SKILL.md`; do not refresh global skills by copying files. Use `Scripts/install_monolith_skills.ps1` only for direct skill-link repair, and `Scripts/validate_monolith_skills.ps1` to validate repository and installed skill roots.
 
 When changing MCP setup, project instructions, or skill distribution, update `Templates\Onboarding\Onboarding.md` and `Docs/specs/SPEC_MonolithSkillsSymlinkDistribution.md` in the same change.
+
+## 18. Action Count Synchronization
+When updating action counts in documentation (e.g., `README.md`, `Docs/API_REFERENCE.md`, `Docs/SPEC_CORE.md`, module specs, and `Monolith.uplugin`), agents must update all counts together in a single PR to prevent fragmentation and drift. Agents whose primary task is not syncing action counts (such as docs-only agents) must avoid count churn unless it is their exact mission. Stop without PR if an active PR from an ActionCountKeeper, SkillDocSmith, or Sentinel spec already touches the same count-bearing files.
+
+## 19. Release Packaging and Exclusions
+When maintaining release packaging scripts (e.g., `Scripts/make_release.ps1`), explicitly exclude internal planning, spec, and documentation folders (such as `.jules/`, `CRG/`, `PRD/`, and `Docs/plans/`) from the release ZIP. Even if these folders are listed in `.gitignore`, `git ls-files` will package them if their contents are being tracked in git. Ensure local developer, workspace, and AI tooling directories are explicitly excluded from release archives to prevent data leakage and excessive release sizes.
