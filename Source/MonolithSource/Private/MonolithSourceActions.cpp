@@ -1703,6 +1703,7 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 	TArray<FString> Lines;
 	TArray<TSharedPtr<FJsonValue>> MatchedSymbols;
 	TArray<TSharedPtr<FJsonValue>> ReferenceItems;
+	MatchedSymbols.Reserve(Symbols.Num());
 	for (const auto& Sym : Symbols)
 	{
 		auto SymObj = MakeShared<FJsonObject>();
@@ -2882,6 +2883,8 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSignature(const TSharedPt
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> OverloadArr;
 	TArray<FString> TextLines;
+	OverloadArr.Reserve(Overloads.Num());
+	TextLines.Reserve(Overloads.Num());
 	for (const FOverload& O : Overloads)
 	{
 		auto Obj = MakeShared<FJsonObject>();
@@ -2960,6 +2963,8 @@ FMonolithActionResult FMonolithSourceActions::HandleCheckDeprecations(const TSha
 
 	TArray<TSharedPtr<FJsonValue>> Verdicts;
 	TArray<FString> TextLines;
+	Verdicts.Reserve(SymbolNames.Num());
+	TextLines.Reserve(SymbolNames.Num());
 	for (const FString& Name : SymbolNames)
 	{
 		auto Obj = MakeShared<FJsonObject>();
@@ -3049,6 +3054,8 @@ FMonolithActionResult FMonolithSourceActions::HandleVerifySymbols(const TSharedP
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Records;
 	TArray<FString> TextLines;
+	Records.Reserve(SymbolNames.Num());
+	TextLines.Reserve(SymbolNames.Num());
 
 	for (const FString& Symbol : SymbolNames)
 	{
@@ -3278,6 +3285,9 @@ FMonolithActionResult FMonolithSourceActions::HandleFindExampleUsage(const TShar
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Examples;
 	TArray<FString> TextParts;
+	const int32 SliceCount = SliceEnd - SliceStart;
+	Examples.Reserve(SliceCount);
+	TextParts.Reserve(SliceCount);
 	for (int32 i = SliceStart; i < SliceEnd; ++i)
 	{
 		const FUsage& U = Usages[i];
@@ -3668,6 +3678,8 @@ FMonolithActionResult FMonolithSourceActions::HandleLintHeader(const TSharedPtr<
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> FindingArr;
 	TArray<FString> TextLines;
+	FindingArr.Reserve(Findings.Num());
+	TextLines.Reserve(Findings.Num());
 	for (const FLintFinding& F : Findings)
 	{
 		auto Obj = MakeShared<FJsonObject>();
