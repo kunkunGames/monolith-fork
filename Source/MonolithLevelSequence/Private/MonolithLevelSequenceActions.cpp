@@ -1819,7 +1819,7 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListAnimMixerTracks(const T
 	for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
 	{
 		const FGuid BindingObjectGuid = Binding.GetObjectGuid();
-		const FString BindingGuid = BindingObjectGuid.ToString(EGuidFormats::DigitsWithHyphens);
+		const FString BindingGuid = BindingObjectGuid.ToString(EGuidFormats::Digits);
 		const FString BindingName = ResolveMovieSceneBindingName(MovieScene, BindingObjectGuid);
 		for (UMovieSceneTrack* Track : Binding.GetTracks())
 		{
