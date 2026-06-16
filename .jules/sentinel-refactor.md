@@ -103,3 +103,9 @@
 **Learning:** Hard crashes or warning spam occur when FJsonObject fails to find a field using `GetStringField`. Using `TryGetStringField` gracefully checks presence and is safer.
 **Reuse rule:** Future GAS action handlers should always prefer `TryGetStringField` with a fallback initialization rather than directly chaining `GetStringField()`.
 **Avoid:** Avoid using `GetStringField` unless field existence is fully guaranteed.
+
+## 2026-06-11 - Forbid numeric branch evasion
+**Coordination issue:** Sentinel Refactor generated multiple branches with large numeric suffixes (e.g., `-12272324932000930839`, `-7815177298675799415`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming it.
+**Avoid:** Generating branches with `-<number>` suffixes.
