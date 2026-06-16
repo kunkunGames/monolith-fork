@@ -950,6 +950,8 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\.vs\" xcopy /s /e /i /q /h \"%s\\.vs\" \"%s\\.vs\\\"\r\n")
 		TEXT("if exist \"%s\\.idea\" xcopy /s /e /i /q /h \"%s\\.idea\" \"%s\\.idea\\\"\r\n")
 		TEXT("if exist \"%s\\.clangd\" xcopy /s /e /i /q /h \"%s\\.clangd\" \"%s\\.clangd\\\"\r\n")
+		TEXT("if exist \"%s\\.cache\" xcopy /s /e /i /q /h \"%s\\.cache\" \"%s\\.cache\\\"\r\n")
+		TEXT("if exist \"%s\\.antigravitycli\" xcopy /s /e /i /q /h \"%s\\.antigravitycli\" \"%s\\.antigravitycli\\\"\r\n")
 
 		TEXT("if exist \"%s\\.code-review-graph\" xcopy /s /e /i /q /h \"%s\\.code-review-graph\" \"%s\\.code-review-graph\\\"\r\n")
 		TEXT("if exist \"%s\\Logs\" xcopy /s /e /i /q /h \"%s\\Logs\" \"%s\\Logs\\\"\r\n")
@@ -1000,6 +1002,8 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Preserve Saved/ from backup
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Cleanup
@@ -1035,6 +1039,8 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.vs\" ] && cp -r \"%s/.vs\" \"%s/.vs\"\n")
 		TEXT("[ -d \"%s/.idea\" ] && cp -r \"%s/.idea\" \"%s/.idea\"\n")
 		TEXT("[ -d \"%s/.clangd\" ] && cp -r \"%s/.clangd\" \"%s/.clangd\"\n")
+		TEXT("[ -d \"%s/.cache\" ] && cp -r \"%s/.cache\" \"%s/.cache\"\n")
+		TEXT("[ -d \"%s/.antigravitycli\" ] && cp -r \"%s/.antigravitycli\" \"%s/.antigravitycli\"\n")
 
 		TEXT("[ -d \"%s/.code-review-graph\" ] && cp -r \"%s/.code-review-graph\" \"%s/.code-review-graph\"\n")
 		TEXT("[ -d \"%s/Logs\" ] && cp -r \"%s/Logs\" \"%s/Logs\"\n")
@@ -1049,6 +1055,8 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
