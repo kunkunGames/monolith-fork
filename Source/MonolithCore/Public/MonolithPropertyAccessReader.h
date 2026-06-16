@@ -134,6 +134,7 @@ namespace MonolithPropertyAccessReader
 				const void* ArrayValuePtr = PathProp->ContainerPtrToValuePtr<void>(Node);
 				FScriptArrayHelper Helper(PathProp, ArrayValuePtr);
 				TArray<TSharedPtr<FJsonValue>> PathOut;
+				PathOut.Reserve(Helper.Num());
 				for (int32 i = 0; i < Helper.Num(); ++i)
 				{
 					PathOut.Add(MakeShared<FJsonValueString>(InnerStr->GetPropertyValue(Helper.GetRawPtr(i))));

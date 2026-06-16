@@ -222,6 +222,7 @@ namespace MonolithAnimNodeBindingReader
 			Entry->SetStringField(TEXT("pin"), PinBinding->PropertyName.ToString());
 
 			TArray<TSharedPtr<FJsonValue>> PathArr;
+			PathArr.Reserve(PinBinding->PropertyPath.Num());
 			for (const FString& Seg : PinBinding->PropertyPath)
 			{
 				PathArr.Add(MakeShared<FJsonValueString>(Seg));
@@ -248,6 +249,7 @@ namespace MonolithAnimNodeBindingReader
 
 		// Lean shape for get_nodes: just { pin, path }.
 		TArray<TSharedPtr<FJsonValue>> Compact;
+		Compact.Reserve(Full.Num());
 		for (const TSharedPtr<FJsonValue>& V : Full)
 		{
 			const TSharedPtr<FJsonObject>* FullObj;
