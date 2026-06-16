@@ -752,12 +752,16 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::ReviewContext(
 			{
 				continue;
 			}
-			const FString QualifiedName = Obj->GetStringField(TEXT("qualified_name"));
-			const FString Name = Obj->GetStringField(TEXT("name"));
-			const FString Kind = Obj->GetStringField(TEXT("kind"));
+			FString QualifiedName;
+			Obj->TryGetStringField(TEXT("qualified_name"), QualifiedName);
+			FString Name;
+			Obj->TryGetStringField(TEXT("name"), Name);
+			FString Kind;
+			Obj->TryGetStringField(TEXT("kind"), Kind);
 			const FString SymbolKey = FString::Printf(TEXT("%s|%s"),
 				*(QualifiedName.IsEmpty() ? Name : QualifiedName), *Kind);
-			const FString FilePath = Obj->GetStringField(TEXT("file"));
+			FString FilePath;
+			Obj->TryGetStringField(TEXT("file"), FilePath);
 			FString Status;
 			Obj->TryGetStringField(TEXT("path_status"), Status);
 			const bool bKnownPath = Status == TEXT("known") || (!FilePath.IsEmpty() && FilePath != TEXT("<unknown>"));

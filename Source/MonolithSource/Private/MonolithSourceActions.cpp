@@ -2636,10 +2636,10 @@ FMonolithActionResult FMonolithSourceActions::HandleGetIncludePath(const TShared
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
 	}
 
-	const FString Symbol = Params->GetStringField(TEXT("symbol"));
-	if (Symbol.IsEmpty())
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'symbol' is required."));
+		return FMonolithActionResult::Error(TEXT("'symbol' is required and must be a non-empty string."));
 	}
 
 	// For a Class::Method input resolve the include via the OWNING CLASS row — the
@@ -2785,12 +2785,22 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSignature(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
 	}
 
-	const FString Symbol = Params->GetStringField(TEXT("symbol"));
-	if (Symbol.IsEmpty())
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'symbol' is required."));
+		return FMonolithActionResult::Error(TEXT("'symbol' is required and must be a non-empty string."));
 	}
-	const int32 Limit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 10;
+
+	int32 Limit = 10;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitVal = 0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitVal))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number."));
+		}
+		Limit = static_cast<int32>(LimitVal);
+	}
 
 	// The method name for FTS / column matching is the trailing identifier.
 	FString MethodName = Symbol;
@@ -3151,16 +3161,42 @@ FMonolithActionResult FMonolithSourceActions::HandleFindExampleUsage(const TShar
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
 	}
 
-	const FString Symbol = Params->GetStringField(TEXT("symbol"));
-	if (Symbol.IsEmpty())
+	FString Symbol;
+	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'symbol' is required."));
+		return FMonolithActionResult::Error(TEXT("'symbol' is required and must be a non-empty string."));
 	}
-	FString Prefer = Params->HasField(TEXT("prefer")) ? Params->GetStringField(TEXT("prefer")) : TEXT("engine");
+
+	FString Prefer = TEXT("engine");
+	if (Params->HasField(TEXT("prefer")))
+	{
+		if (!Params->TryGetStringField(TEXT("prefer"), Prefer))
+		{
+			return FMonolithActionResult::Error(TEXT("'prefer' parameter must be a string."));
+		}
+	}
 	Prefer = Prefer.ToLower();
 	const bool bPreferProject = (Prefer == TEXT("project"));
-	const int32 RequestedLimit = Params->HasField(TEXT("limit")) ? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 10;
-	const FString CursorIn = Params->HasField(TEXT("cursor")) ? Params->GetStringField(TEXT("cursor")) : TEXT("");
+
+	int32 RequestedLimit = 10;
+	if (Params->HasField(TEXT("limit")))
+	{
+		double LimitVal = 0;
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitVal))
+		{
+			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number."));
+		}
+		RequestedLimit = static_cast<int32>(LimitVal);
+	}
+
+	FString CursorIn = TEXT("");
+	if (Params->HasField(TEXT("cursor")))
+	{
+		if (!Params->TryGetStringField(TEXT("cursor"), CursorIn))
+		{
+			return FMonolithActionResult::Error(TEXT("'cursor' parameter must be a string."));
+		}
+	}
 
 	const int32 Limit = FMath::Max(1, RequestedLimit);
 	constexpr int32 HARD_CAP_ROWS = 500;
@@ -3626,10 +3662,10 @@ TArray<FMonolithSourceActions::FLintFinding> FMonolithSourceActions::LintHeaderL
 
 FMonolithActionResult FMonolithSourceActions::HandleLintHeader(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString FilePath = Params->GetStringField(TEXT("file_path"));
-	if (FilePath.IsEmpty())
+	FString FilePath;
+	if (!Params->TryGetStringField(TEXT("file_path"), FilePath) || FilePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'file_path' is required."));
+		return FMonolithActionResult::Error(TEXT("'file_path' is required and must be a non-empty string."));
 	}
 
 	TArray<FString> Lines;
@@ -3794,12 +3830,20 @@ FMonolithActionResult FMonolithSourceActions::HandleGenerateClassStub(const TSha
 		return FMonolithActionResult::Error(TEXT("Engine source DB not available. Run source.trigger_reindex first."));
 	}
 
-	const FString ParentClass = Params->GetStringField(TEXT("parent"));
-	const FString ClassName = Params->GetStringField(TEXT("class_name"));
-	const FString Module = Params->GetStringField(TEXT("module"));
+	FString ParentClass;
+	FString ClassName;
+	FString Module;
+
+	if (!Params->TryGetStringField(TEXT("parent"), ParentClass) ||
+		!Params->TryGetStringField(TEXT("class_name"), ClassName) ||
+		!Params->TryGetStringField(TEXT("module"), Module))
+	{
+		return FMonolithActionResult::Error(TEXT("'parent', 'class_name', and 'module' are required and must be strings."));
+	}
+
 	if (ParentClass.IsEmpty() || ClassName.IsEmpty() || Module.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("'parent', 'class_name', and 'module' are all required."));
+		return FMonolithActionResult::Error(TEXT("'parent', 'class_name', and 'module' cannot be empty."));
 	}
 
 	// Resolve the parent's class row. UCLASS-derived parents ONLY (v1).
