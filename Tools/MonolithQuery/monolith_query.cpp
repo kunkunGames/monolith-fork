@@ -3417,6 +3417,961 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         }
         print_json(crg_diff_snapshots_json(db, "source", before, after, args.opt_int("limit", 100)));
     }
+
+    // ============================================================
+    // Phase 1-3 — LLM C++ authoring ergonomics. Byte-equivalent to the
+    // monolith_offline.py SourceErgo methods (parity-gated, plain-text output).
+    // ============================================================
+
+private:
+    // ASCII-only isalnum, matching Python str.isalnum() over the ASCII subset
+    // these paths exercise (identifier chars only).
+    static bool is_word_char(char c) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        return std::isalnum(uc) != 0 || c == '_';
+    }
+
+    // strip a trailing "::method" to the class name (mirror of the Python
+    // `symbol[:symbol.rfind("::")]` pattern).
+    static std::string strip_to_class(const std::string& symbol) {
+        auto scope = symbol.rfind("::");
+        return (scope != std::string::npos) ? symbol.substr(0, scope) : symbol;
+    }
+
+    // strip a leading "Class::" to the method name.
+    static std::string strip_to_method(const std::string& symbol) {
+        auto scope = symbol.rfind("::");
+        return (scope != std::string::npos) ? symbol.substr(scope + 2) : symbol;
+    }
+
+    struct IncludeInfo {
+        std::string include;
+        bool includable = true;
+        std::string warning;
+    };
+
+    // Mirror of SourceErgo.derive_include_path / FMonolithSourceActions::DeriveIncludePath.
+    static IncludeInfo derive_include_path(const std::string& indexed_path,
+                                           const std::string& module_name) {
+        std::string path = indexed_path;
+        std::replace(path.begin(), path.end(), '\\', '/');
+        for (const char* root : {"/Public/", "/Classes/", "/Internal/"}) {
+            auto idx = path.rfind(root);
+            if (idx != std::string::npos) {
+                IncludeInfo info;
+                info.include = path.substr(idx + std::strlen(root));
+                info.includable = true;
+                return info;
+            }
+        }
+        auto pidx = path.rfind("/Private/");
+        if (pidx != std::string::npos) {
+            IncludeInfo info;
+            info.include = path.substr(pidx + std::strlen("/Private/"));
+            info.includable = false;
+            info.warning = "Private header -- not includable outside "
+                + (module_name.empty() ? std::string("its module") : module_name)
+                + "; same-module include shown";
+            return info;
+        }
+        auto slash = path.rfind('/');
+        IncludeInfo info;
+        info.include = (slash == std::string::npos) ? path : path.substr(slash + 1);
+        info.includable = true;
+        return info;
+    }
+
+    // Mirror of SourceErgo.resolve_symbol_row. Returns the first matching row or
+    // an empty Rows when nothing resolves.
+    Rows resolve_symbol_row(const std::string& symbol) {
+        std::string lookup = strip_to_class(symbol);
+        auto rows = query(db,
+            "SELECT id, name, file_id FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC",
+            {lookup});
+        if (rows.empty()) {
+            std::string fts_q = escape_fts(lookup);
+            rows = query(db,
+                "SELECT s.id, s.name, s.file_id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                "WHERE symbols_fts MATCH ? LIMIT 5", {fts_q});
+        }
+        if (rows.empty()) return {};
+        return {rows[0]};
+    }
+
+    // Mirror of SourceErgo.compact_declaration / FMonolithSourceActions::CompactDeclaration.
+    static std::string compact_declaration(const std::vector<std::string>& lines, size_t start_idx) {
+        std::string accum;
+        int paren_depth = 0;
+        bool saw_open = false;
+        size_t limit = std::min(lines.size(), start_idx + 12);
+        for (size_t i = start_idx; i < limit; ++i) {
+            std::string line = lines[i];
+            // rstrip
+            while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
+                line.pop_back();
+            if (!line.empty() && line.back() == '\\') {
+                line.pop_back();
+                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
+                    line.pop_back();
+            }
+            bool done = false;
+            for (char ch : line) {
+                if (ch == '(') {
+                    paren_depth += 1;
+                    saw_open = true;
+                } else if (ch == ')') {
+                    paren_depth = std::max(0, paren_depth - 1);
+                } else if (paren_depth == 0 && saw_open && (ch == '{' || ch == ';')) {
+                    done = true;
+                    break;
+                } else {
+                    accum += ch;
+                    continue;
+                }
+                accum += ch;
+            }
+            if (done) break;
+            accum += ' ';
+        }
+        // collapse whitespace
+        std::string out;
+        bool prev_space = false;
+        for (char ch : accum) {
+            if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
+                if (!prev_space) out += ' ';
+                prev_space = true;
+            } else {
+                out += ch;
+                prev_space = false;
+            }
+        }
+        return trim_copy(out);
+    }
+
+    // Read a file fully, splitting into lines with trailing \n and \r stripped.
+    // Mirrors the Python `[ln.rstrip("\n").rstrip("\r") for ln in f.readlines()]`
+    // pattern used by the ergonomics scanners. Returns false on open failure.
+    static bool read_lines_strip_nl(const std::string& path, std::vector<std::string>& out) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) return false;
+        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        out.clear();
+        std::string line;
+        for (char ch : content) {
+            if (ch == '\n') {
+                while (!line.empty() && line.back() == '\r') line.pop_back();
+                out.push_back(line);
+                line.clear();
+            } else {
+                line += ch;
+            }
+        }
+        // trailing partial line (no terminating newline)
+        if (!line.empty()) {
+            while (!line.empty() && line.back() == '\r') line.pop_back();
+            out.push_back(line);
+        }
+        return true;
+    }
+
+public:
+    // item 1: get_include_path
+    void get_include_path(const Args& args) {
+        std::string symbol = args.positional.empty() ? args.opt("symbol") : args.positional[0];
+        Rows sym = resolve_symbol_row(symbol);
+        if (sym.empty()) {
+            std::cerr << "No symbol found matching '" << symbol << "'." << std::endl;
+            std::exit(1);
+        }
+
+        int file_id = sym[0].get_int("file_id");
+        std::string lookup = strip_to_class(symbol);
+        auto allrows = query(db,
+            "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+            {lookup});
+        std::string file_path = get_file_path(file_id);
+        for (auto& r : allrows) {
+            std::string p = r.get("path");
+            if (p.size() >= 2 && p.substr(p.size() - 2) == ".h") {
+                file_id = r.get_int("file_id");
+                file_path = p;
+                break;
+            }
+        }
+
+        auto mrows = query(db,
+            "SELECT m.name, m.build_cs_path FROM files f JOIN modules m ON m.id = f.module_id WHERE f.id = ?",
+            {std::to_string(file_id)});
+        std::string module_name = mrows.empty() ? "" : mrows[0].get("name");
+        std::string build_cs = mrows.empty() ? "" : mrows[0].get("build_cs_path");
+
+        IncludeInfo info = derive_include_path(file_path, module_name);
+
+        std::string build_cs_note;
+        if (!module_name.empty()) {
+            if (!build_cs.empty()) {
+                std::string norm = build_cs;
+                std::replace(norm.begin(), norm.end(), '\\', '/');
+                auto slash = norm.rfind('/');
+                std::string base = (slash == std::string::npos) ? norm : norm.substr(slash + 1);
+                build_cs_note = "Module '" + module_name + "' -- add to your Build.cs deps (" + base + ")";
+            } else {
+                build_cs_note = "Module '" + module_name + "' -- add to your Build.cs deps";
+            }
+        }
+
+        std::vector<std::string> out;
+        out.push_back("#include \"" + info.include + "\"");
+        if (!module_name.empty()) out.push_back("Module: " + module_name);
+        if (!build_cs_note.empty()) out.push_back(build_cs_note);
+        if (!info.warning.empty()) out.push_back("WARNING: " + info.warning);
+
+        for (size_t i = 0; i < out.size(); ++i) {
+            if (i > 0) std::cout << "\n";
+            std::cout << out[i];
+        }
+        std::cout << "\n";
+    }
+
+    // item 2: get_signature
+    void get_signature(const Args& args) {
+        std::string symbol = args.positional.empty() ? args.opt("symbol") : args.positional[0];
+        int limit = args.opt_int("limit", 10);
+        std::string method = strip_to_method(symbol);
+
+        // (sig, source, shortpath, line)
+        std::vector<std::tuple<std::string, std::string, std::string, int>> overloads;
+
+        auto fnrows = query(db,
+            "SELECT signature, file_id, line_start FROM symbols WHERE name = ? AND kind = 'function'",
+            {method});
+        for (auto& r : fnrows) {
+            if ((int)overloads.size() >= limit) break;
+            std::string sig = r.get("signature");
+            if (sig.empty()) continue;
+            if (sig.find('{') != std::string::npos || sig.find('\\') != std::string::npos) continue;
+            sig = trim_copy(sig);
+            overloads.emplace_back(sig, "column",
+                                   short_path(get_file_path(r.get_int("file_id"))),
+                                   r.get_int("line_start"));
+        }
+
+        if (overloads.empty()) {
+            std::string fts_q = escape_fts(symbol);
+            auto chunks = query(db,
+                "SELECT file_id, line_number, text FROM source_fts WHERE source_fts MATCH ? "
+                "ORDER BY bm25(source_fts) LIMIT 50", {fts_q});
+            std::set<std::string> seen;
+            std::string needle = method + "(";
+            for (auto& ch : chunks) {
+                if ((int)overloads.size() >= limit) break;
+                std::string fp = get_file_path(ch.get_int("file_id"));
+                std::vector<std::string> file_lines;
+                if (!read_lines_strip_nl(fp, file_lines)) continue;
+                int line_number = ch.get_int("line_number");
+                int win_start = std::max(0, line_number - 1);
+                int win_end = std::min((int)file_lines.size(), win_start + 10);
+                for (int i = win_start; i < win_end; ++i) {
+                    if ((int)overloads.size() >= limit) break;
+                    const std::string& line = file_lines[i];
+                    auto didx = line.find(needle);
+                    if (didx == std::string::npos) continue;
+                    if (didx > 0 && is_word_char(line[didx - 1])) continue;
+                    std::string sig = compact_declaration(file_lines, i);
+                    if (sig.empty() || sig.find(needle) == std::string::npos) continue;
+                    if (seen.count(sig)) continue;
+                    seen.insert(sig);
+                    overloads.emplace_back(sig, "declaration_read", short_path(fp), i + 1);
+                }
+            }
+        }
+
+        if (overloads.empty()) {
+            std::cerr << "No signature found for '" << symbol << "'." << std::endl;
+            std::exit(1);
+        }
+
+        for (size_t i = 0; i < overloads.size(); ++i) {
+            if (i > 0) std::cout << "\n";
+            std::cout << std::get<0>(overloads[i]) << "\n  // "
+                      << std::get<1>(overloads[i]) << " @ "
+                      << std::get<2>(overloads[i]) << ":" << std::get<3>(overloads[i]);
+        }
+        std::cout << "\n";
+    }
+
+    // item 3: check_deprecations
+    void check_deprecations(const Args& args) {
+        const std::vector<std::string>& symbols = args.positional;
+        auto cnt = query(db, "SELECT COUNT(*) as c FROM symbol_deprecations");
+        int total = cnt.empty() ? 0 : cnt[0].get_int("c");
+        if (total == 0) {
+            std::cout << "Deprecation index is empty (schema v2 landed but not yet populated). "
+                         "Run source.trigger_reindex to populate it." << "\n";
+            return;
+        }
+        std::vector<std::string> lines;
+        for (const auto& name : symbols) {
+            auto rows = query(db,
+                "SELECT version, message, kind FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1",
+                {name});
+            if (!rows.empty()) {
+                lines.push_back(name + ": DEPRECATED (" + rows[0].get("version") + ") ["
+                                + rows[0].get("kind") + "] " + rows[0].get("message"));
+            } else {
+                lines.push_back(name + ": not deprecated");
+            }
+        }
+        for (size_t i = 0; i < lines.size(); ++i) {
+            if (i > 0) std::cout << "\n";
+            std::cout << lines[i];
+        }
+        std::cout << "\n";
+    }
+
+private:
+    // Mirror of SourceErgo.symbol_exists.
+    bool symbol_exists(const std::string& symbol) {
+        std::string lookup = strip_to_class(symbol);
+        if (!query(db, "SELECT id FROM symbols WHERE name = ? LIMIT 1", {lookup}).empty())
+            return true;
+        std::string fts_q = escape_fts(lookup);
+        if (!query(db, "SELECT s.id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                       "WHERE symbols_fts MATCH ? LIMIT 1", {fts_q}).empty())
+            return true;
+        std::string method = strip_to_method(symbol);
+        std::string needle = method + "(";
+        std::string sfts = escape_fts(symbol);
+        auto chunks = query(db,
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT 25", {sfts});
+        for (auto& ch : chunks) {
+            std::vector<std::string> fl;
+            if (!read_lines_strip_nl(get_file_path(ch.get_int("file_id")), fl)) continue;
+            int ln = ch.get_int("line_number");
+            int ws = std::max(0, ln - 1);
+            int we = std::min((int)fl.size(), ws + 10);
+            for (int i = ws; i < we; ++i) {
+                auto di = fl[i].find(needle);
+                if (di == std::string::npos) continue;
+                if (di > 0 && is_word_char(fl[i][di - 1])) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Mirror of SourceErgo.first_signature. Returns (sig, source); sig empty when none.
+    std::pair<std::string, std::string> first_signature(const std::string& symbol) {
+        std::string method = strip_to_method(symbol);
+        auto fnrows = query(db,
+            "SELECT signature, file_id, line_start FROM symbols WHERE name = ? AND kind = 'function'",
+            {method});
+        for (auto& r : fnrows) {
+            std::string sig = r.get("signature");
+            if (sig.empty() || sig.find('{') != std::string::npos || sig.find('\\') != std::string::npos)
+                continue;
+            return {trim_copy(sig), "column"};
+        }
+        std::string fts_q = escape_fts(symbol);
+        auto chunks = query(db,
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT 50", {fts_q});
+        std::string needle = method + "(";
+        for (auto& ch : chunks) {
+            std::vector<std::string> fl;
+            if (!read_lines_strip_nl(get_file_path(ch.get_int("file_id")), fl)) continue;
+            int ln = ch.get_int("line_number");
+            int ws = std::max(0, ln - 1);
+            int we = std::min((int)fl.size(), ws + 10);
+            for (int i = ws; i < we; ++i) {
+                auto di = fl[i].find(needle);
+                if (di == std::string::npos) continue;
+                if (di > 0 && is_word_char(fl[i][di - 1])) continue;
+                std::string sig = compact_declaration(fl, i);
+                if (sig.empty() || sig.find(needle) == std::string::npos) continue;
+                return {sig, "declaration_read"};
+            }
+        }
+        return {"", ""};
+    }
+
+public:
+    // item 4: verify_symbols
+    void verify_symbols(const Args& args) {
+        const std::vector<std::string>& symbols = args.positional;
+        auto cntrows = query(db, "SELECT COUNT(*) as c FROM symbol_deprecations");
+        int cnt = cntrows.empty() ? 0 : cntrows[0].get_int("c");
+        bool dep_empty = (cnt == 0);
+
+        std::vector<std::string> lines;
+        for (const auto& symbol : symbols) {
+            if (!symbol_exists(symbol)) {
+                lines.push_back(symbol + ": NOT FOUND");
+                continue;
+            }
+            std::string line = symbol + ": exists";
+
+            Rows sym = resolve_symbol_row(symbol);
+            std::string include, module_name;
+            bool includable = true;
+            if (!sym.empty()) {
+                std::string lookup = strip_to_class(symbol);
+                auto allrows = query(db,
+                    "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+                    {lookup});
+                int file_id = sym[0].get_int("file_id");
+                std::string file_path = get_file_path(file_id);
+                for (auto& r : allrows) {
+                    std::string p = r.get("path");
+                    if (p.size() >= 2 && p.substr(p.size() - 2) == ".h") {
+                        file_id = r.get_int("file_id");
+                        file_path = p;
+                        break;
+                    }
+                }
+                auto mrows = query(db,
+                    "SELECT m.name FROM files f JOIN modules m ON m.id = f.module_id WHERE f.id = ?",
+                    {std::to_string(file_id)});
+                module_name = mrows.empty() ? "" : mrows[0].get("name");
+                IncludeInfo info = derive_include_path(file_path, module_name);
+                include = info.include;
+                includable = info.includable;
+            }
+            if (!include.empty()) {
+                line += " | #include \"" + include + "\"";
+                if (!includable) line += " (NOT includable)";
+            }
+
+            auto sig = first_signature(symbol);
+            if (!sig.first.empty()) line += " | " + sig.first;
+
+            if (!dep_empty) {
+                std::string method = strip_to_method(symbol);
+                auto drow = query(db,
+                    "SELECT version FROM symbol_deprecations WHERE symbol_name = ? LIMIT 1", {method});
+                if (!drow.empty()) line += " | DEPRECATED";
+            }
+            lines.push_back(line);
+        }
+        for (size_t i = 0; i < lines.size(); ++i) {
+            if (i > 0) std::cout << "\n";
+            std::cout << lines[i];
+        }
+        std::cout << "\n";
+    }
+
+    // item 5: find_example_usage
+    void find_example_usage(const Args& args) {
+        std::string symbol = args.positional.empty() ? args.opt("symbol") : args.positional[0];
+        std::string prefer = lower_copy(args.opt("prefer", "engine"));
+        bool prefer_project = (prefer == "project");
+        int limit = std::max(1, args.opt_int("limit", 10));
+        const int HARD_CAP = 500, FTS_FETCH = 400;
+
+        std::string method = strip_to_method(symbol);
+        std::string needle = method + "(";
+
+        // (shortpath, line, context, rank, sort_path)
+        std::vector<std::tuple<std::string, int, std::string, int, std::string>> usages;
+        std::set<std::string> seen;
+        std::string fts_q = escape_fts(symbol);
+        auto chunks = query(db,
+            "SELECT file_id, line_number FROM source_fts WHERE source_fts MATCH ? "
+            "ORDER BY bm25(source_fts) LIMIT ?", {fts_q, std::to_string(FTS_FETCH)});
+        for (auto& ch : chunks) {
+            int file_id = ch.get_int("file_id");
+            std::string fp = get_file_path(file_id);
+            std::vector<std::string> fl;
+            if (!read_lines_strip_nl(fp, fl)) continue;
+            int ln = ch.get_int("line_number");
+            int ws = std::max(0, ln - 1);
+            int we = std::min((int)fl.size(), ws + 10);
+            for (int i = ws; i < we; ++i) {
+                auto hi = fl[i].find(needle);
+                if (hi == std::string::npos) continue;
+                if (hi > 0 && is_word_char(fl[i][hi - 1])) continue;
+                std::string key = std::to_string(file_id) + "_" + std::to_string(i + 1);
+                if (seen.count(key)) continue;
+                seen.insert(key);
+                int cs = std::max(0, i - 3);
+                int ce = std::min((int)fl.size() - 1, i + 3);
+                std::string ctx;
+                for (int c = cs; c <= ce; ++c) {
+                    if (c > cs) ctx += "\n";
+                    char buf[16];
+                    std::snprintf(buf, sizeof(buf), "%5d", c + 1);
+                    ctx += std::string(buf) + " | " + fl[c];
+                }
+                std::string norm = fp;
+                std::replace(norm.begin(), norm.end(), '\\', '/');
+                bool is_engine = norm.find("Engine/Source/") != std::string::npos;
+                bool is_runtime = norm.find("/Source/Runtime/") != std::string::npos;
+                int rank = (is_engine && is_runtime) ? 0 : (is_engine ? 1 : 2);
+                usages.emplace_back(short_path(fp), i + 1, ctx, rank, fp);
+            }
+        }
+
+        auto rank_key = [&](const std::tuple<std::string, int, std::string, int, std::string>& u) -> int {
+            int r = std::get<3>(u);
+            if (!prefer_project) return r;
+            // {2: 0, 0: 1}.get(rank, 2)
+            if (r == 2) return 0;
+            if (r == 0) return 1;
+            return 2;
+        };
+
+        std::stable_sort(usages.begin(), usages.end(),
+            [&](const std::tuple<std::string, int, std::string, int, std::string>& a,
+                const std::tuple<std::string, int, std::string, int, std::string>& b) {
+                int ra = rank_key(a), rb = rank_key(b);
+                if (ra != rb) return ra < rb;
+                const std::string& spa = std::get<4>(a);
+                const std::string& spb = std::get<4>(b);
+                if (spa != spb) return spa < spb;
+                return std::get<1>(a) < std::get<1>(b);
+            });
+
+        int total = (int)usages.size();
+        if (total == 0) {
+            std::cout << "No call-site examples found for '" << symbol << "'." << "\n";
+            return;
+        }
+        int slice_end = std::min(std::min(limit, total), HARD_CAP);
+        // PARITY: emit ONLY the rendered snippets (no total_estimate / next_cursor).
+        for (int i = 0; i < slice_end; ++i) {
+            if (i > 0) std::cout << "\n\n";
+            std::cout << "--- " << std::get<0>(usages[i]) << ":" << std::get<1>(usages[i]) << " ---\n"
+                      << std::get<2>(usages[i]);
+        }
+        std::cout << "\n";
+    }
+
+private:
+    // Mirror of SourceErgo._derive_module_from_path.
+    static std::string derive_module_from_path(const std::string& file_path) {
+        std::string p = file_path;
+        std::replace(p.begin(), p.end(), '\\', '/');
+        auto src = p.rfind("/Source/");
+        if (src == std::string::npos) return "";
+        std::string after = p.substr(src + std::strlen("/Source/"));
+        auto slash = after.find('/');
+        return (slash == std::string::npos) ? "" : after.substr(0, slash);
+    }
+
+    // Mirror of SourceErgo._strip_block_comments. `in_block` threads the
+    // in-block-comment flag across lines.
+    static std::string strip_block_comments(const std::string& line, bool& in_block) {
+        std::string result;
+        std::string work = line;
+        while (true) {
+            if (in_block) {
+                auto end = work.find("*/");
+                if (end == std::string::npos) return result;
+                work = work.substr(end + 2);
+                in_block = false;
+            }
+            auto open_idx = work.find("/*");
+            if (open_idx == std::string::npos) {
+                result += work;
+                return result;
+            }
+            result += work.substr(0, open_idx);
+            work = work.substr(open_idx + 2);
+            in_block = true;
+        }
+    }
+
+    // Mirror of SourceErgo._strip_line_comment.
+    static std::string strip_line_comment(const std::string& line) {
+        auto lc = line.find("//");
+        return (lc == std::string::npos) ? line : line.substr(0, lc);
+    }
+
+    static std::string py_strip(const std::string& s) {
+        return trim_copy(s);
+    }
+
+    // Lower-cased basename without final extension, mirroring
+    // os.path.splitext(os.path.basename(path.replace("\\","/")))[0].
+    static std::string header_base_of(const std::string& file_path) {
+        std::string p = file_path;
+        std::replace(p.begin(), p.end(), '\\', '/');
+        auto slash = p.rfind('/');
+        std::string base = (slash == std::string::npos) ? p : p.substr(slash + 1);
+        auto dot = base.rfind('.');
+        if (dot != std::string::npos && dot != 0) base = base.substr(0, dot);
+        return base;
+    }
+
+    static bool starts_with(const std::string& s, const std::string& prefix) {
+        return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+    }
+
+    static bool ends_with(const std::string& s, const std::string& suffix) {
+        return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+    }
+
+    // Match the include regex: ^\s*#\s*include\s+["<]([^">]+)[">]. Returns the
+    // captured path, or empty when no match.
+    static std::string match_include(const std::string& code) {
+        size_t i = 0, n = code.size();
+        while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+        if (i >= n || code[i] != '#') return "";
+        ++i;
+        while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+        const std::string kw = "include";
+        if (code.compare(i, kw.size(), kw) != 0) return "";
+        i += kw.size();
+        // \s+ : require at least one whitespace
+        if (i >= n || !std::isspace(static_cast<unsigned char>(code[i]))) return "";
+        while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+        if (i >= n || (code[i] != '"' && code[i] != '<')) return "";
+        ++i;
+        std::string captured;
+        while (i < n && code[i] != '"' && code[i] != '>') {
+            captured += code[i];
+            ++i;
+        }
+        if (i >= n) return "";  // unterminated; regex would not match the closing class
+        if (captured.empty()) return "";  // [^">]+ requires at least one char
+        return captured;
+    }
+
+    // Match the declaration regex:
+    // ^\s*(?:class|struct)\s+(?:[A-Z][A-Z0-9_]*_API\s+)?([A-Za-z_][A-Za-z0-9_]*)
+    // Returns the captured type name, or empty when no match.
+    static std::string match_decl(const std::string& code) {
+        size_t i = 0, n = code.size();
+        while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+        const char* kws[] = {"class", "struct"};
+        size_t kwlen = 0;
+        bool matched_kw = false;
+        for (const char* kw : kws) {
+            size_t kl = std::strlen(kw);
+            if (code.compare(i, kl, kw) == 0) { kwlen = kl; matched_kw = true; break; }
+        }
+        if (!matched_kw) return "";
+        i += kwlen;
+        // \s+ : require at least one whitespace
+        if (i >= n || !std::isspace(static_cast<unsigned char>(code[i]))) return "";
+        while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+        // optional API macro: [A-Z][A-Z0-9_]*_API\s+
+        size_t save = i;
+        if (i < n && code[i] >= 'A' && code[i] <= 'Z') {
+            size_t j = i + 1;
+            while (j < n && ((code[j] >= 'A' && code[j] <= 'Z') ||
+                             (code[j] >= '0' && code[j] <= '9') || code[j] == '_')) ++j;
+            // token must end in "_API" and be followed by whitespace
+            std::string token = code.substr(i, j - i);
+            if (ends_with(token, "_API") && j < n &&
+                std::isspace(static_cast<unsigned char>(code[j]))) {
+                i = j;
+                while (i < n && std::isspace(static_cast<unsigned char>(code[i]))) ++i;
+            } else {
+                i = save;
+            }
+        }
+        // ([A-Za-z_][A-Za-z0-9_]*)
+        if (i >= n) return "";
+        char c0 = code[i];
+        if (!((c0 >= 'A' && c0 <= 'Z') || (c0 >= 'a' && c0 <= 'z') || c0 == '_')) return "";
+        std::string name;
+        name += c0;
+        ++i;
+        while (i < n && ((code[i] >= 'A' && code[i] <= 'Z') || (code[i] >= 'a' && code[i] <= 'z') ||
+                         (code[i] >= '0' && code[i] <= '9') || code[i] == '_')) {
+            name += code[i];
+            ++i;
+        }
+        return name;
+    }
+
+    // Match \b([A-Z][A-Z0-9_]*_API)\b anywhere in code (api_re.search).
+    static bool has_api_macro_token(const std::string& code) {
+        size_t n = code.size();
+        for (size_t i = 0; i < n; ++i) {
+            // \b before [A-Z]: previous char is not a word char
+            if (i > 0 && is_word_char(code[i - 1])) continue;
+            if (!(code[i] >= 'A' && code[i] <= 'Z')) continue;
+            size_t j = i + 1;
+            while (j < n && ((code[j] >= 'A' && code[j] <= 'Z') ||
+                             (code[j] >= '0' && code[j] <= '9') || code[j] == '_')) ++j;
+            std::string token = code.substr(i, j - i);
+            if (!ends_with(token, "_API")) continue;
+            // \b after: next char is not a word char
+            if (j < n && is_word_char(code[j])) continue;
+            return true;
+        }
+        return false;
+    }
+
+public:
+    // item 7: lint_header
+    void lint_header(const Args& args) {
+        std::string file_path = args.positional.empty() ? args.opt("file_path") : args.positional[0];
+        std::vector<std::string> lines;
+        if (!read_lines_strip_nl(file_path, lines)) {
+            std::cerr << "Could not read header file: " << file_path << std::endl;
+            std::exit(1);
+        }
+
+        std::string module = derive_module_from_path(file_path);
+        std::string api_macro;
+        if (!module.empty()) {
+            std::string up = module;
+            std::transform(up.begin(), up.end(), up.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+            api_macro = up + "_API";
+        }
+
+        bool has_gen_body = false;
+        bool any_reflected = false;
+        int gen_body_line = 0;
+        int last_inc_line = 0;
+        std::string last_inc_path;
+        int gen_h_line = 0;
+        std::string gen_h_path;
+        // (decl_line, name, has_api)
+        std::vector<std::tuple<int, std::string, bool>> reflected;
+        bool pending = false;
+
+        // (rule_id, line, message, severity)
+        std::vector<std::tuple<std::string, int, std::string, std::string>> findings;
+        bool in_block = false;
+        for (size_t idx = 0; idx < lines.size(); ++idx) {
+            int i = (int)idx;
+            std::string code = strip_line_comment(strip_block_comments(lines[idx], in_block));
+            std::string trimmed = py_strip(code);
+            if (trimmed.empty()) continue;
+            std::string inc = match_include(code);
+            if (!inc.empty()) {
+                last_inc_line = i + 1;
+                last_inc_path = inc;
+                if (ends_with(inc, ".generated.h")) {
+                    gen_h_line = i + 1;
+                    gen_h_path = inc;
+                }
+                continue;
+            }
+            if (trimmed.find("GENERATED_BODY") != std::string::npos ||
+                trimmed.find("GENERATED_UCLASS_BODY") != std::string::npos) {
+                has_gen_body = true;
+                if (gen_body_line == 0) gen_body_line = i + 1;
+            }
+            if (starts_with(trimmed, "UCLASS") || starts_with(trimmed, "USTRUCT") ||
+                starts_with(trimmed, "UENUM") || starts_with(trimmed, "UINTERFACE")) {
+                any_reflected = true;
+                if (starts_with(trimmed, "UCLASS")) pending = true;
+            }
+            if (pending) {
+                std::string dm = match_decl(code);
+                if (!dm.empty()) {
+                    bool has_api = has_api_macro_token(code);
+                    reflected.emplace_back(i + 1, dm, has_api);
+                    pending = false;
+                }
+            }
+            // Invalid-specifier rule SKIPPED offline (empty vocabulary).
+        }
+
+        // (a) missing GENERATED_BODY.
+        if (any_reflected && !has_gen_body) {
+            findings.emplace_back("missing_generated_body",
+                reflected.empty() ? 0 : std::get<0>(reflected[0]),
+                "Reflected type (UCLASS/USTRUCT) is missing a GENERATED_BODY() macro.",
+                "error");
+        }
+        // (b) generated.h not last.
+        if (gen_h_line != 0 && last_inc_line != 0 && gen_h_line != last_inc_line) {
+            findings.emplace_back("generated_h_not_last", gen_h_line,
+                "'*.generated.h' must be the LAST #include (an include at line "
+                + std::to_string(last_inc_line) + " follows it: \"" + last_inc_path + "\").",
+                "error");
+        } else if (any_reflected && has_gen_body && gen_h_line == 0) {
+            findings.emplace_back("missing_generated_h_include", gen_body_line,
+                "Reflected type uses GENERATED_BODY() but no '*.generated.h' include is present (must be last).",
+                "error");
+        }
+        // (d) missing <MODULE>_API.
+        std::string header_base = header_base_of(file_path);
+        for (auto& rf : reflected) {
+            int decl_line = std::get<0>(rf);
+            const std::string& name = std::get<1>(rf);
+            bool has_api = std::get<2>(rf);
+            if (!api_macro.empty() && !has_api) {
+                findings.emplace_back("missing_api_macro", decl_line,
+                    "UCLASS-declared type '" + name + "' is missing the '" + api_macro
+                    + "' export macro (class " + name + " ...).",
+                    "warning");
+            }
+        }
+        // (c) generated.h name mismatch.
+        if (gen_h_line != 0 && !header_base.empty() && ends_with(gen_h_path, ".generated.h")) {
+            std::string norm = gen_h_path;
+            std::replace(norm.begin(), norm.end(), '\\', '/');
+            auto slash = norm.rfind('/');
+            std::string gen_base = (slash == std::string::npos) ? norm : norm.substr(slash + 1);
+            gen_base = gen_base.substr(0, gen_base.size() - std::strlen(".generated.h"));
+            if (!gen_base.empty() && gen_base != header_base) {
+                findings.emplace_back("generated_h_name_mismatch", gen_h_line,
+                    "'" + gen_base + ".generated.h' does not match the header file name '"
+                    + header_base + ".h' -- the GENERATED_BODY pairing requires \""
+                    + header_base + ".generated.h\".",
+                    "error");
+            }
+        }
+        // (e) UPROPERTY/UFUNCTION in a non-reflected file.
+        if (!any_reflected) {
+            bool in_block2 = false;
+            for (size_t idx = 0; idx < lines.size(); ++idx) {
+                std::string trimmed = py_strip(strip_line_comment(strip_block_comments(lines[idx], in_block2)));
+                if (starts_with(trimmed, "UPROPERTY") || starts_with(trimmed, "UFUNCTION")) {
+                    findings.emplace_back("reflected_member_in_non_reflected_type", (int)idx + 1,
+                        "UPROPERTY/UFUNCTION found but the file declares no reflected type "
+                        "(UCLASS/USTRUCT) -- the macro will not be processed by UHT.",
+                        "error");
+                }
+            }
+        }
+
+        std::stable_sort(findings.begin(), findings.end(),
+            [](const std::tuple<std::string, int, std::string, std::string>& a,
+               const std::tuple<std::string, int, std::string, std::string>& b) {
+                if (std::get<1>(a) != std::get<1>(b)) return std::get<1>(a) < std::get<1>(b);
+                return std::get<0>(a) < std::get<0>(b);
+            });
+
+        if (findings.empty()) {
+            std::cout << "Clean -- no lint findings." << "\n";
+            return;
+        }
+        for (size_t i = 0; i < findings.size(); ++i) {
+            if (i > 0) std::cout << "\n";
+            std::cout << "[" << std::get<3>(findings[i]) << "] L" << std::get<1>(findings[i])
+                      << " (" << std::get<0>(findings[i]) << "): " << std::get<2>(findings[i]);
+        }
+        std::cout << "\n";
+    }
+
+    // item 9: generate_class_stub
+    void generate_class_stub(const Args& args) {
+        std::string parent = args.positional.size() > 0 ? args.positional[0] : args.opt("parent");
+        std::string class_name = args.positional.size() > 1 ? args.positional[1] : args.opt("class_name");
+        std::string module = args.positional.size() > 2 ? args.positional[2] : args.opt("module");
+        if (parent.empty() || class_name.empty() || module.empty()) {
+            std::cerr << "generate_class_stub requires parent, class_name, and module" << std::endl;
+            std::exit(1);
+        }
+
+        Rows sym = resolve_symbol_row(parent);
+        if (sym.empty()) {
+            std::cerr << "Parent class '" << parent << "' not found in the source index. "
+                         "Run source.trigger_reindex if it is a project type." << std::endl;
+            std::exit(1);
+        }
+
+        if (!(parent[0] == 'U' || parent[0] == 'A')) {
+            std::cerr << "Parent '" << parent << "' is not a UCLASS-derived type. generate_class_stub v1 "
+                         "supports UCLASS-derived parents only (no USTRUCT/UENUM/UINTERFACE)." << std::endl;
+            std::exit(1);
+        }
+
+        auto allrows = query(db,
+            "SELECT s.file_id, f.path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.name = ?",
+            {parent});
+        std::string parent_path = get_file_path(sym[0].get_int("file_id"));
+        for (auto& r : allrows) {
+            std::string p = r.get("path");
+            if (p.size() >= 2 && p.substr(p.size() - 2) == ".h") {
+                parent_path = p;
+                break;
+            }
+        }
+        std::string parent_module = derive_module_from_path(parent_path);
+        IncludeInfo parent_info = derive_include_path(parent_path, parent_module);
+        std::string parent_include = parent_info.include;
+
+        // Constructor convention.
+        auto ctors = query(db,
+            "SELECT signature FROM symbols WHERE name = ? AND kind = 'function'", {parent});
+        bool saw_any = false, saw_plain = false, saw_obj = false;
+        std::string ctor_open = parent + "(";
+        for (auto& r : ctors) {
+            std::string s = r.get("signature");
+            if (s.empty() || s.find(ctor_open) == std::string::npos) continue;
+            saw_any = true;
+            if (s.find("FObjectInitializer") != std::string::npos) saw_obj = true;
+            else saw_plain = true;
+        }
+        bool needs_obj_init = saw_any && saw_obj && !saw_plain;
+
+        std::string api_macro;
+        {
+            std::string up = module;
+            std::transform(up.begin(), up.end(), up.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+            api_macro = up + "_API";
+        }
+
+        std::string file_base;
+        if (class_name.size() >= 2 && (class_name[0] == 'U' || class_name[0] == 'A') &&
+            std::isupper(static_cast<unsigned char>(class_name[1]))) {
+            file_base = class_name.substr(1);
+        } else {
+            file_base = class_name;
+        }
+        std::string gen_inc = file_base + ".generated.h";
+
+        std::vector<std::string> h;
+        h.push_back("#pragma once");
+        h.push_back("");
+        h.push_back("#include \"CoreMinimal.h\"");
+        if (!parent_include.empty()) h.push_back("#include \"" + parent_include + "\"");
+        h.push_back("#include \"" + gen_inc + "\"");
+        h.push_back("");
+        h.push_back("UCLASS()");
+        h.push_back("class " + api_macro + " " + class_name + " : public " + parent);
+        h.push_back("{");
+        h.push_back("\tGENERATED_BODY()");
+        h.push_back("");
+        h.push_back("public:");
+        if (needs_obj_init) {
+            h.push_back("\t" + class_name + "(const FObjectInitializer& ObjectInitializer);");
+        } else {
+            h.push_back("\t" + class_name + "();");
+        }
+        h.push_back("};");
+        h.push_back("");
+        std::string header_text;
+        for (size_t i = 0; i < h.size(); ++i) {
+            if (i > 0) header_text += "\n";
+            header_text += h[i];
+        }
+
+        std::vector<std::string> c;
+        c.push_back("#include \"" + file_base + ".h\"");
+        c.push_back("");
+        if (needs_obj_init) {
+            c.push_back(class_name + "::" + class_name + "(const FObjectInitializer& ObjectInitializer)");
+            c.push_back("\t: Super(ObjectInitializer)");
+            c.push_back("{");
+            c.push_back("}");
+        } else {
+            c.push_back(class_name + "::" + class_name + "()");
+            c.push_back("{");
+            c.push_back("}");
+        }
+        c.push_back("");
+        std::string cpp_text;
+        for (size_t i = 0; i < c.size(); ++i) {
+            if (i > 0) cpp_text += "\n";
+            cpp_text += c[i];
+        }
+
+        std::cout << "// === " << file_base << ".h ===\n" << header_text
+                  << "\n// === " << file_base << ".cpp ===\n" << cpp_text << "\n";
+    }
 };
 
 // ============================================================
@@ -6457,6 +7412,13 @@ int main(int argc, char* argv[]) {
                 {"pre_merge_check",     [](SourceActions& s, const Args& a) { s.pre_merge_check(a); }},
                 {"snapshot",            [](SourceActions& s, const Args& a) { s.snapshot(a); }},
                 {"diff_snapshots",      [](SourceActions& s, const Args& a) { s.diff_snapshots(a); }},
+                {"get_include_path",    [](SourceActions& s, const Args& a) { s.get_include_path(a); }},
+                {"get_signature",       [](SourceActions& s, const Args& a) { s.get_signature(a); }},
+                {"check_deprecations",  [](SourceActions& s, const Args& a) { s.check_deprecations(a); }},
+                {"verify_symbols",      [](SourceActions& s, const Args& a) { s.verify_symbols(a); }},
+                {"find_example_usage",  [](SourceActions& s, const Args& a) { s.find_example_usage(a); }},
+                {"lint_header",         [](SourceActions& s, const Args& a) { s.lint_header(a); }},
+                {"generate_class_stub", [](SourceActions& s, const Args& a) { s.generate_class_stub(a); }},
             };
 
             auto it = actions.find(args.action);

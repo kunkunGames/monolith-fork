@@ -2436,8 +2436,17 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPins(const TSh
 	FPinConnectionResponse Response = Schema->CanCreateConnection(SrcPin, TgtPin);
 	if (Response.Response == CONNECT_RESPONSE_DISALLOW)
 	{
+		const FString SrcTypeStr = MonolithBlueprintInternal::ContainerPrefix(SrcPin->PinType)
+			+ MonolithBlueprintInternal::PinTypeToString(SrcPin->PinType);
+		const FString TgtTypeStr = MonolithBlueprintInternal::ContainerPrefix(TgtPin->PinType)
+			+ MonolithBlueprintInternal::PinTypeToString(TgtPin->PinType);
+		TSharedPtr<FJsonObject> Detail = MakeShared<FJsonObject>();
+		Detail->SetStringField(TEXT("source_pin_type"),    SrcTypeStr);
+		Detail->SetStringField(TEXT("target_pin_type"),    TgtTypeStr);
+		Detail->SetStringField(TEXT("connection_response"), TEXT("DISALLOW"));
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Cannot connect pins: %s"), *Response.Message.ToString()));
+			TEXT("Cannot connect pins: %s"), *Response.Message.ToString()))
+			.WithErrorData(Detail);
 	}
 
 	// Track whether UE will insert an auto-conversion node

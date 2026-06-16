@@ -250,7 +250,7 @@ P0 covers all namespaces currently executable by `monolith_query.exe`:
 
 | Namespace | P0 help coverage |
 |-----------|------------------|
-| `source` | All 27 dispatch entries, including alias note for `repair_crg_graph -> rebuild_crg_graph`. |
+| `source` | All 36 dispatch entries, including alias note for `repair_crg_graph -> rebuild_crg_graph` and the C++ authoring-ergonomics actions `get_include_path`, `get_signature`, `check_deprecations`, `verify_symbols`, `find_example_usage`, `lint_header`, and `generate_class_stub` (plain-text output, byte-parity-gated against `Scripts/monolith_offline.py`). |
 | `project` | All 17 dispatch entries. Do not include live-only `list_gameplay_tags` or `search_gameplay_tags` unless offline dispatch is added separately. |
 | `bridge` | `search_asset_symbols`. |
 | `monolith` | `guide`, including section names. |

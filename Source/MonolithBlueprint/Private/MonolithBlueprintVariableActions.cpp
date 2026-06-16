@@ -5,6 +5,7 @@
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "EdGraphSchema_K2.h"
 #include "Net/UnrealNetwork.h"
+#include "K2Node_Variable.h"
 
 // ============================================================
 //  Registration
@@ -455,6 +456,24 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRenameVariable(co
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Variable not found: %s"), *OldName));
 	}
 
+	// Count variable nodes referencing OldVarName before rename so the caller
+	// can verify the graph references were actually updated.
+	int32 NodesUpdated = 0;
+	{
+		TArray<UEdGraph*> AllGraphs;
+		BP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			TArray<UK2Node_Variable*> VarNodes;
+			Graph->GetNodesOfClass<UK2Node_Variable>(VarNodes);
+			for (UK2Node_Variable* VarNode : VarNodes)
+			{
+				if (VarNode->GetVarName() == OldVarName) ++NodesUpdated;
+			}
+		}
+	}
+
 	FBlueprintEditorUtils::RenameMemberVariable(BP, OldVarName, FName(*NewName));
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);
 
@@ -462,6 +481,7 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRenameVariable(co
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetStringField(TEXT("old_name"), OldName);
 	Root->SetStringField(TEXT("new_name"), NewName);
+	Root->SetNumberField(TEXT("nodes_updated"), NodesUpdated);
 	Root->SetBoolField(TEXT("success"), true);
 	return FMonolithActionResult::Success(Root);
 }
@@ -646,6 +666,26 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 	FEdGraphPinType PinType = MonolithBlueprintInternal::ParsePinTypeFromString(TypeStr);
 	FString DefaultValue;
 	Params->TryGetStringField(TEXT("default_value"), DefaultValue);
+
+	// Reject a duplicate local variable name within this function instead of silently
+	// creating a second entry. Mirrors the add_variable member-variable guard so repeated
+	// agent calls are idempotent-safe. Uses the same FunctionEntry scan as remove_local_variable.
+	{
+		TArray<UK2Node_FunctionEntry*> EntryNodes;
+		FuncGraph->GetNodesOfClass<UK2Node_FunctionEntry>(EntryNodes);
+		if (EntryNodes.Num() > 0)
+		{
+			const FName NewLocalName(*Name);
+			for (const FBPVariableDescription& LocalVar : EntryNodes[0]->LocalVariables)
+			{
+				if (LocalVar.VarName == NewLocalName)
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("A local variable named '%s' already exists in function '%s'"), *Name, *FunctionName));
+				}
+			}
+		}
+	}
 
 	FBlueprintEditorUtils::AddLocalVariable(BP, FuncGraph, FName(*Name), PinType, DefaultValue);
 	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(BP);

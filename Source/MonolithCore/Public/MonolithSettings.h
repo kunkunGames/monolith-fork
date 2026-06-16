@@ -462,6 +462,17 @@ public:
 		Meta=(EditCondition="bEnableMesh"))
 	FString SurfaceAcousticsTablePath = TEXT("/Game/Data/DT_SurfaceAcoustics");
 
+	// --- Tool Visibility ---
+
+	/** When true, tools/list emits per-namespace {ns}_query dispatcher tools in addition
+	 *  to the core monolith_* tools. Default false: expose only core routing tools;
+	 *  agents use monolith_query({namespace, action, params}) as the single dispatcher
+	 *  and consult skills or monolith_discover for the available action list. */
+	UPROPERTY(config, EditAnywhere, Category="Tool Visibility",
+		meta=(DisplayName="Expose Namespace Tools",
+			  ToolTip="Expose per-namespace _query dispatcher tools in tools/list. Default false: agents use monolith_query as the single dispatcher."))
+	bool bExposeNamespaceTools = false;
+
 	// --- Logging ---
 
 	/** Log verbosity for Monolith systems */

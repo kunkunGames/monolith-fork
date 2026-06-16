@@ -64,3 +64,11 @@ python Plugins\Monolith\Scripts\action_guidance_benchmark.py compare `
   --current Saved\Monolith\Benchmarks\ActionGuidance\current\summary.json `
   --output-dir Saved\Monolith\Benchmarks\ActionGuidance\comparison
 ```
+
+## Related Benchmarks
+
+| Benchmark | Script | Primary Score | What it tests |
+| --- | --- | --- | --- |
+| [SourceIndex](../SourceIndex/README.md) | Scripts/source_index_benchmark.py | source_index_score | C++ symbol index data quality and recall |
+| [SchemaCompleteness](../SchemaCompleteness/README.md) | Scripts/schema_completeness_benchmark.py | schema_completeness_score | Full 1766-action catalog schema quality |
+| [OfflineParity](../OfflineParity/README.md) | Scripts/offline_parity_benchmark.py | offline_parity_score | exe-vs-py offline parity trend tracking |

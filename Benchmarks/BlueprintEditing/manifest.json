@@ -1,0 +1,70 @@
+{
+  "benchmark": "BlueprintEditing",
+  "description": "Measures blueprint editing capability: type discovery, graph/variable reads, edit action schemas, edit execution, graceful error handling, workflow completeness",
+  "primary_score": "blueprint_editing_score",
+  "expected_namespace": "blueprint",
+  "generated_at": "2026-06-16T18:57:01.278351+00:00",
+  "task_count": 191,
+  "category_counts": {
+    "duplicate_reject": 6,
+    "edit_execute": 70,
+    "edit_schema": 38,
+    "error_path": 8,
+    "graph_read": 21,
+    "read_schema": 15,
+    "type_discovery": 14,
+    "variable_read": 14,
+    "workflow_completeness": 5
+  },
+  "edit_schema_domains": {
+    "node": 7,
+    "function": 8,
+    "variable": 7,
+    "class": 4,
+    "component": 5,
+    "compilation": 2,
+    "state": 2,
+    "event": 3
+  },
+  "blueprint_types_tested": [
+    "Actor",
+    "Character",
+    "Widget",
+    "AnimInstance",
+    "GameplayAbility",
+    "ActorComponent",
+    "Interface"
+  ],
+  "workflows_tested": [
+    "create_function",
+    "add_variable",
+    "add_component",
+    "implement_interface",
+    "event_dispatcher_setup"
+  ],
+  "score_formula": "0.22*edit_execute_rate + 0.18*edit_schema_rate + 0.14*graph_read_rate + 0.14*variable_read_rate + 0.10*error_path_rate + 0.08*duplicate_reject_rate + 0.07*read_schema_rate + 0.04*type_discovery_rate + 0.03*workflow_completeness_rate",
+  "edit_execute_tasks_per_type": 10,
+  "fixture_paths": {
+    "Actor": "/Game/Benchmarks/BPB_TestActor",
+    "Character": "/Game/Benchmarks/BPB_TestCharacter",
+    "Widget": "/Game/Benchmarks/WBP_TestWidget",
+    "AnimInstance": "/Game/Benchmarks/ABP_TestAnim",
+    "GameplayAbility": "/Game/Benchmarks/GA_TestAbility",
+    "ActorComponent": "/Game/Benchmarks/BC_TestComponent",
+    "Interface": "/Game/Benchmarks/BPI_TestInterface"
+  },
+  "setup_fixtures_command": "python Scripts/blueprint_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
+  "score_dimensions": [
+    "edit_execute_rate",
+    "edit_schema_rate",
+    "graph_read_rate",
+    "variable_read_rate",
+    "error_path_rate",
+    "duplicate_reject_rate",
+    "read_schema_rate",
+    "type_discovery_rate",
+    "workflow_completeness_rate"
+  ],
+  "catalog_version_verified": "v0.20.2-blueprint-138-actions",
+  "task_file": "Benchmarks/BlueprintEditing/tasks.jsonl"
+}

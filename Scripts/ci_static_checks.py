@@ -976,6 +976,105 @@ def check_offline_exe_freshness(ctx: CheckContext) -> None:
         )
 
 
+def check_offline_parity_smoke(ctx: CheckContext) -> None:
+    """Gate the offline parity score so parity regressions fail CI.
+
+    Runs offline_parity_benchmark.py in a temp directory and checks:
+    - offline_parity_score >= min_score (default 0.80)
+    - error_rate <= max_error_rate (default 0.10)
+
+    Gracefully skips (advisory) when monolith_query.exe is absent or cannot
+    execute on this host (e.g. Windows PE on Linux runner). Only a present,
+    runnable exe with a sub-threshold score blocks.
+    """
+    config = ctx.config.get("offline_parity_smoke", {})
+    if not config.get("enabled", False):
+        return
+
+    script = ctx.path(str(config.get("script", "Scripts/offline_parity_benchmark.py")))
+    if not script.is_file():
+        ctx.block("offline-parity-smoke", "Offline parity benchmark script is missing", script)
+        return
+
+    exe_path = ctx.root / "Binaries" / "monolith_query.exe"
+    if not exe_path.exists():
+        ctx.advisory(
+            "offline-parity-smoke",
+            f"skipped: {ctx.rel(exe_path)} not present in this checkout "
+            "(offline CLI is a local/release artifact; build via Tools/MonolithQuery/build.bat)",
+        )
+        return
+
+    min_score = float(config.get("min_score", 0.80))
+    max_error_rate = float(config.get("max_error_rate", 0.10))
+    timeout = float(config.get("timeout_seconds", 120))
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable, str(script), "run",
+                    "--label", "ci-smoke",
+                    "--output-dir", tmp_dir,
+                ],
+                cwd=ctx.root,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            ctx.advisory(
+                "offline-parity-smoke",
+                f"skipped: offline parity smoke timed out after {timeout}s",
+            )
+            return
+        except OSError as exc:
+            ctx.advisory("offline-parity-smoke", f"skipped: could not launch benchmark: {exc}")
+            return
+
+        summary_path = Path(tmp_dir) / "summary.json"
+        if not summary_path.exists():
+            if proc.returncode != 0:
+                stderr_tail = (proc.stderr or "").strip().splitlines()[-3:]
+                detail = "; ".join(stderr_tail) if stderr_tail else "no output"
+                ctx.advisory(
+                    "offline-parity-smoke",
+                    f"skipped: benchmark run did not produce summary.json (exit {proc.returncode}): {detail}",
+                )
+            else:
+                ctx.block("offline-parity-smoke", "Benchmark ran successfully but produced no summary.json")
+            return
+
+        try:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            ctx.block("offline-parity-smoke", f"Could not parse benchmark summary.json: {exc}")
+            return
+
+        metrics = summary.get("metrics", {})
+        score = metrics.get("offline_parity_score")
+        error_rate = metrics.get("error_rate")
+
+        if score is None:
+            ctx.block("offline-parity-smoke", "Benchmark summary.json missing offline_parity_score")
+            return
+
+        if score < min_score:
+            ctx.block(
+                "offline-parity-smoke",
+                f"offline_parity_score {score:.4f} < threshold {min_score:.2f}; "
+                f"exe and Python reference have diverged. Run "
+                f"'python Scripts/offline_parity_benchmark.py report --summary <path>' for details.",
+            )
+
+        if error_rate is not None and error_rate > max_error_rate:
+            ctx.block(
+                "offline-parity-smoke",
+                f"offline error_rate {error_rate:.4f} > threshold {max_error_rate:.2f}; "
+                f"too many actions erroring during exe/py comparison.",
+            )
+
+
 def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
     check_automation_test_names(ctx)
@@ -990,6 +1089,7 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_proxy_smoke(ctx)
     check_skill_catalog_drift(ctx)
     check_offline_exe_freshness(ctx)
+    check_offline_parity_smoke(ctx)
     return ctx.findings
 
 

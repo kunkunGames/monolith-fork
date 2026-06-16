@@ -687,6 +687,21 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 
 	// Each namespace becomes a tool
 	TArray<FString> Namespaces = Registry.GetNamespaces();
+
+	// Namespace tool visibility: when bExposeNamespaceTools is false (default), suppress
+	// all per-namespace {ns}_query dispatcher tools. Agents use the proxy-level
+	// monolith_query({namespace, action, params}) dispatcher instead and consult
+	// skills or monolith_discover for the available action list.
+	// The "monolith" namespace is always kept — it provides the core routing tools.
+	const UMonolithSettings* MonolithSettings = GetDefault<UMonolithSettings>();
+	if (!MonolithSettings || !MonolithSettings->bExposeNamespaceTools)
+	{
+		Namespaces = Namespaces.FilterByPredicate([](const FString& NS)
+		{
+			return NS == TEXT("monolith");
+		});
+	}
+
 	TArray<FMonolithActionInfo> CoreActions = Registry.GetActions(TEXT("monolith"));
 	ToolsArray.Reserve(Namespaces.Num() + CoreActions.Num());
 	for (const FString& Namespace : Namespaces)
@@ -727,8 +742,10 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 					};
 					for (const auto& SchemaEntry : ActionInfo.ParamSchema->Values)
 					{
-						// Root-level non-object values (e.g. _validate_types:bool)
-						// are internal flags, not parameters — skip them.
+						// Root-level internal markers (keys prefixed with '_', e.g.
+						// _validate_types) are not parameters — skip them regardless
+						// of whether the JSON value is a bool or an object.
+						if (SchemaEntry.Key.StartsWith(TEXT("_"))) continue;
 						const TSharedPtr<FJsonObject> ParamObj = SchemaEntry.Value->AsObject();
 						if (!ParamObj.IsValid()) continue;
 

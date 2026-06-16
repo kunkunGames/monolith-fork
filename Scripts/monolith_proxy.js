@@ -57,25 +57,9 @@ const SENSITIVE_KEY_FRAGMENTS = [
 const DEFAULT_MAX_LOG_FIELD_BYTES = 256 * 1024;
 const REPEAT_LOG_WINDOW_MS = 15000;
 
-const CORE_QUERY_TOOLS = [
-  "blueprint_query",
-  "material_query",
-  "animation_query",
-  "niagara_query",
-  "editor_query",
-  "config_query",
-  "project_query",
-  "source_query",
-  "ui_query",
-  "mesh_query",
-  "gas_query",
-  "combograph_query",
-  "ai_query",
-  "logicdriver_query",
-  "audio_query",
-  "level_sequence_query",
-  "movie_render_query",
-];
+// Per-namespace *_query seed tools are no longer used — agents dispatch via
+// the single monolith_query tool. Kept empty for structural compatibility.
+const CORE_QUERY_TOOLS = [];
 
 function log(message) {
   process.stderr.write(`[monolith-proxy] ${message}\n`);
@@ -725,6 +709,46 @@ function queryToolSchema() {
   };
 }
 
+function injectMonolithQuery(responseStr) {
+  try {
+    const payload = JSON.parse(responseStr);
+    const tools = payload && payload.result && Array.isArray(payload.result.tools)
+      ? payload.result.tools
+      : null;
+    if (!tools) return responseStr;
+    if (tools.some((t) => t.name === "monolith_query")) return responseStr;
+    tools.push(makeTool("monolith_query",
+      "Execute any Monolith action. Use monolith_find(query) to locate the right action, " +
+      "monolith_discover(namespace) to inspect its schema, then call monolith_query with " +
+      "the resolved namespace, action, and params.",
+      {
+        type: "object",
+        properties: {
+          namespace: {
+            type: "string",
+            description: "Target namespace, e.g. 'blueprint', 'source', 'gas'. " +
+              "Call monolith_discover() with no args to list all available namespaces.",
+          },
+          action: {
+            type: "string",
+            description: "Action to execute. Call monolith_discover(namespace) for the " +
+              "full action list and monolith_discover(namespace, action, mode='schema') " +
+              "for exact parameter schemas.",
+          },
+          params: {
+            type: "object",
+            description: "Parameters for the action.",
+          },
+        },
+        required: ["namespace", "action"],
+      }));
+    return JSON.stringify(payload);
+  } catch (e) {
+    log(`injectMonolithQuery parse error: ${e}`);
+    return responseStr;
+  }
+}
+
 function seedTools() {
   const tools = CORE_QUERY_TOOLS.map((name) => {
     const domain = name.endsWith("_query") ? name.slice(0, -6) : name;
@@ -746,20 +770,31 @@ function seedTools() {
     type: "object",
     properties: {},
   }));
-  tools.push(makeTool("monolith_update", "Check for or install Monolith updates from GitHub Releases.", {
-    type: "object",
-    properties: {
-      action: {
-        type: "string",
-        description: "'check' to compare versions, 'install' to download and stage update",
-        default: "check",
+  tools.push(makeTool("monolith_query",
+    "Execute any Monolith action. Use monolith_find(query) to locate the right action, " +
+    "monolith_discover(namespace) to inspect its schema, then call monolith_query with " +
+    "the resolved namespace, action, and params.",
+    {
+      type: "object",
+      properties: {
+        namespace: {
+          type: "string",
+          description: "Target namespace, e.g. 'blueprint', 'source', 'gas'. " +
+            "Call monolith_discover() with no args to list all available namespaces.",
+        },
+        action: {
+          type: "string",
+          description: "Action to execute. Call monolith_discover(namespace) for the " +
+            "full action list and monolith_discover(namespace, action, mode='schema') " +
+            "for exact parameter schemas.",
+        },
+        params: {
+          type: "object",
+          description: "Parameters for the action.",
+        },
       },
-    },
-  }));
-  tools.push(makeTool("monolith_reindex", "Re-index the Monolith project database.", {
-    type: "object",
-    properties: {},
-  }));
+      required: ["namespace", "action"],
+    }));
   return tools;
 }
 
@@ -795,13 +830,20 @@ function handleInitialize(message) {
     capabilities: { tools: { listChanged: true } },
     serverInfo: { name: PROXY_NAME, version: PROXY_VERSION },
     instructions:
-      "Monolith MCP proxy for Unreal Engine. Tools are forwarded to the Unreal Editor. " +
-      "Before calling a domain action, check its schema instead of guessing: " +
-      "monolith_discover() lists namespaces, monolith_discover('<namespace>') lists a " +
-      "namespace's actions, and describe_query('action_schema', ...) returns an action's " +
-      "exact parameter schema. monolith_guide(section='recipes') gives cross-namespace " +
-      "workflows, decision matrices, and gotchas. " +
-      "If tools return errors about the editor not running, wait and retry.",
+      "Monolith MCP proxy for Unreal Engine. Tools forward to the Unreal Editor.\n" +
+      "\n" +
+      "ROUTING:\n" +
+      "  monolith_find(query)                            — find the right action\n" +
+      "  monolith_discover()                             — list all namespaces\n" +
+      "  monolith_discover(namespace)                    — list actions in a namespace\n" +
+      "  monolith_discover(namespace, action, 'schema')  — fetch exact param schema\n" +
+      "  monolith_query({namespace, action, params})     — execute any action\n" +
+      "\n" +
+      "SKILL LOADING: domain skills live in Skills/<namespace>/SKILL.md and document\n" +
+      "available actions and params for that namespace.\n" +
+      "\n" +
+      "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n" +
+      "Offline: Binaries/monolith_query.exe covers source/project/bridge reads.",
   });
 }
 
@@ -819,7 +861,7 @@ async function handleToolsList(message) {
   const response = await postMonolith(JSON.stringify(message));
   if (response) {
     writeToolsCache(response);
-    return response;
+    return injectMonolithQuery(response);
   }
   return fallbackToolsList(message);
 }
@@ -841,10 +883,39 @@ async function handleToolsCall(message) {
   const rewriteStart = process.hrtime.bigint();
   const traceId = makeLogId("trace", `${startTime}:${process.pid}:main:${signature}`);
   const spanId = makeLogId("span", `${traceId}:proxy:${message.id}:${startTime}`);
+
+  // monolith_query unified dispatcher: rewrite to the appropriate editor tool.
+  // Domain namespaces use {ns}_query({action, params}) envelope.
+  // The "monolith" namespace exposes tools directly as monolith_{action}, not via a query envelope.
+  let msgToForward = message;
+  if (toolName === "monolith_query") {
+    const qNs = (typeof args.namespace === "string" ? args.namespace : "").trim();
+    const qAction = (typeof args.action === "string" ? args.action : "").trim();
+    if (qNs && qAction) {
+      let forwardName, forwardArgs;
+      if (qNs === "monolith") {
+        // monolith_* tools are individual named tools — pass params directly as their arguments.
+        forwardName = `monolith_${qAction}`;
+        forwardArgs = args.params || {};
+      } else {
+        // All other namespaces use the {ns}_query(action, params) envelope.
+        forwardName = `${qNs}_query`;
+        forwardArgs = { action: qAction, params: args.params || {} };
+      }
+      msgToForward = Object.assign({}, message, {
+        params: Object.assign({}, message.params, {
+          name: forwardName,
+          arguments: forwardArgs,
+        }),
+      });
+      log(`monolith_query → ${forwardName}`);
+    }
+  }
+
   const [namespace, action] = toolNamespaceAction(toolName, args);
   const [intent, confidence] = inferIntent(namespace, action, "unknown");
   const routingContext = buildRoutingContext(toolName, args, signature, repeated, "unknown", namespace, action, intent, confidence);
-  const forwardedMessage = withTrace(message, traceId, spanId, routingContext, "stateless");
+  const forwardedMessage = withTrace(msgToForward, traceId, spanId, routingContext, "stateless");
   const rewriteMs = Number(process.hrtime.bigint() - rewriteStart) / 1e6;
 
   const httpStart = process.hrtime.bigint();
@@ -857,6 +928,7 @@ async function handleToolsCall(message) {
       Object.prototype.hasOwnProperty.call(responseObj, "error") ||
       (responseObj.result && responseObj.result.isError)
     ));
+
     const recordId = logToolsCall(message, startTime, startHr, response, repeated, signature, traceId, spanId, phaseInput);
     rememberToolOutcome(toolName, args, traceId, recordId, signature, now, failed);
     return response;

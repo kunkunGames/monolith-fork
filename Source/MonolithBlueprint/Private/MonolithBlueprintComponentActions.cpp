@@ -157,6 +157,14 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 		}
 	}
 
+	// Reject a duplicate component name instead of silently creating a suffixed copy
+	// (BenchMeshComp -> BenchMeshComp1). Mirrors the add_variable / rename_component
+	// guard idiom so repeated agent calls are idempotent-safe rather than accumulating.
+	if (FindSCSNodeByName(BP->SimpleConstructionScript, FName(*Name)))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A component named '%s' already exists"), *Name));
+	}
+
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, FName(*Name));
 	if (!NewNode)
 	{

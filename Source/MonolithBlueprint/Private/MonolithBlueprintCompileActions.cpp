@@ -172,6 +172,29 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCompileBlueprint(c
 
 	bool bSuccess = (BP->Status == BS_UpToDate || BP->Status == BS_UpToDateWithWarnings);
 
+	// Per-node compiler message walk — nodes carry bHasCompilerMessage independently
+	// of Results.Messages. This field makes error locations actionable without text-matching.
+	TArray<TSharedPtr<FJsonValue>> NodeMsgsArr;
+	{
+		TArray<UEdGraph*> AllGraphs;
+		BP->GetAllGraphs(AllGraphs);
+		for (UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+			for (UEdGraphNode* Node : Graph->Nodes)
+			{
+				if (!Node || !Node->bHasCompilerMessage) continue;
+				TSharedPtr<FJsonObject> NMsg = MakeShared<FJsonObject>();
+				NMsg->SetStringField(TEXT("node_id"),  Node->GetName());
+				NMsg->SetStringField(TEXT("title"),    Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
+				NMsg->SetStringField(TEXT("message"),  Node->ErrorMsg);
+				NMsg->SetStringField(TEXT("severity"), Node->ErrorType == EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
+				NMsg->SetStringField(TEXT("graph"),    Graph->GetName());
+				NodeMsgsArr.Add(MakeShared<FJsonValueObject>(NMsg));
+			}
+		}
+	}
+
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetBoolField(TEXT("success"), bSuccess);
@@ -180,6 +203,7 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCompileBlueprint(c
 	Root->SetArrayField(TEXT("warnings"), WarnArr);
 	Root->SetNumberField(TEXT("error_count"), ErrorArr.Num());
 	Root->SetNumberField(TEXT("warning_count"), WarnArr.Num());
+	Root->SetArrayField(TEXT("node_compiler_messages"), NodeMsgsArr);
 	return FMonolithActionResult::Success(Root);
 }
 

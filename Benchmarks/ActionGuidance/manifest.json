@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-06-15T15:14:54.223679+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 161,
+  "task_count": 408,
   "min_tasks_requested": 120,
   "catalog_namespace_count": 51,
   "catalog_action_count": 1766,
@@ -212,10 +212,10 @@
     }
   ],
   "category_counts": {
-    "discovery_planning": 51,
-    "invalid_param_type": 34,
-    "missing_required_param": 25,
-    "unknown_action_recovery": 51
+    "discovery_planning": 161,
+    "invalid_param_type": 64,
+    "missing_required_param": 60,
+    "unknown_action_recovery": 123
   },
   "task_file": "Plugins/Monolith/Benchmarks/ActionGuidance/tasks.jsonl",
   "scoring": {

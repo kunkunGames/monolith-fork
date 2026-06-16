@@ -54,7 +54,7 @@
 | `rename_variable` | `asset_path`, `old_name`, `new_name` | Rename a variable |
 | `set_variable_type` | `asset_path`, `variable_name`, `variable_type` | Change a variable's type |
 | `set_variable_defaults` | `asset_path`, `variable_name`, `default_value` | Set a variable's default value |
-| `add_local_variable` | `asset_path`, `function_name`, `variable_name`, `variable_type` | Add a local variable inside a function graph |
+| `add_local_variable` | `asset_path`, `function_name`, `variable_name`, `variable_type` | Add a local variable inside a function graph. Rejects a duplicate name within the same function with a structured `isError` (consistent with `add_variable`) instead of silently adding a second entry. |
 | `remove_local_variable` | `asset_path`, `function_name`, `variable_name` | Remove a local variable from a function graph |
 
 **Variable Contract Reconciliation (2) — `MonolithBlueprintContractActions.cpp`**
@@ -69,7 +69,7 @@ Reconcile the member-variable surface of one class against another by name + typ
 **Component CRUD (6)**
 | Action | Params | Description |
 |--------|--------|-------------|
-| `add_component` | `asset_path`, `component_class`, `component_name` | Add a component to the Blueprint |
+| `add_component` | `asset_path`, `component_class`, `component_name` | Add a component to the Blueprint. Rejects a duplicate `component_name` with a structured `isError` (consistent with `add_variable`/`rename_component`) instead of silently creating a suffixed copy (e.g. `Mesh` → `Mesh1`). |
 | `remove_component` | `asset_path`, `component_name` | Remove a component by name |
 | `rename_component` | `asset_path`, `old_name`, `new_name` | Rename a component |
 | `reparent_component` | `asset_path`, `component_name`, `new_parent` | Change a component's parent in the hierarchy |

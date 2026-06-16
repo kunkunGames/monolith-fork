@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-06-16T00:00:00+00:00",
+  "description": "Static seed manifest for the SchemaCompleteness benchmark. Expected namespace and action counts reflect the catalog as of the generated_at date. Re-run the scan subcommand to get live counts.",
+  "expected_namespace_count": 51,
+  "expected_action_count": 1766,
+  "scoring": {
+    "primary_metric": "schema_completeness_score",
+    "formula": "0.30*param_types_declared_rate + 0.25*required_params_marked_rate + 0.20*planning_signals_present_rate + 0.15*skill_routing_present_rate + 0.10*output_contract_declared_rate",
+    "dimensions": [
+      {
+        "name": "param_types_declared",
+        "weight": 0.3,
+        "description": "All parameters have a type field, or action has no parameters"
+      },
+      {
+        "name": "required_params_marked",
+        "weight": 0.25,
+        "description": "At least one parameter is required:true, or action has no parameters"
+      },
+      {
+        "name": "planning_signals_present",
+        "weight": 0.2,
+        "description": "planning_signals key exists and is a non-empty list"
+      },
+      {
+        "name": "skill_routing_present",
+        "weight": 0.15,
+        "description": "skill key exists and is a non-empty string"
+      },
+      {
+        "name": "output_contract_declared",
+        "weight": 0.1,
+        "description": "output_contract_status is explicitly declared or not_declared"
+      }
+    ]
+  },
+  "probe_set_task_count": 285,
+  "probe_set_file": "Plugins/Monolith/Benchmarks/SchemaCompleteness/probe_set.jsonl",
+  "benchmark_script": "Scripts/schema_completeness_benchmark.py",
+  "related_benchmark": "Benchmarks/ActionGuidance",
+  "notes": "Full scan issues one monolith_discover call per action. Use --max-actions 100 for CI smoke tests. Probe mode loads probe_set.jsonl and checks expected_dimensions pass rates for targeted namespace.action pairs."
+}

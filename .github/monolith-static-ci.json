@@ -121,6 +121,13 @@
     "enabled": true,
     "script": "Scripts/check_offline_exe_fresh.py"
   },
+  "offline_parity_smoke": {
+    "enabled": true,
+    "script": "Scripts/offline_parity_benchmark.py",
+    "min_score": 0.80,
+    "max_error_rate": 0.10,
+    "timeout_seconds": 120
+  },
   "workflow": {
     "hosted_static_workflow": ".github/workflows/ci.yml",
     "forbidden_tokens": [

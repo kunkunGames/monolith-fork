@@ -3,9 +3,9 @@
 verify_offline_parity.py -- HARD-GATE parity guard for the two offline Monolith RI tools.
 
 Byte/deep-diffs the C++ exe (Binaries/monolith_query.exe) against the Python
-reference (Scripts/monolith_offline.py) across 27 actions: 20 Reflection-
+reference (Scripts/monolith_offline.py) across 137 actions: 99 Reflection-
 Intelligence (RI) actions spanning 4 namespaces (cppreflect, network, decision,
-risk; JSON deep-diff) PLUS 7 source-ergonomics actions (get_include_path,
+risk; JSON deep-diff) PLUS 38 source-ergonomics actions (get_include_path,
 get_signature, check_deprecations, verify_symbols, find_example_usage,
 lint_header, generate_class_stub; plain-text STRICT byte-compare).
 
@@ -19,7 +19,7 @@ Usage (run from the Monolith plugin root):
     python Scripts/verify_offline_parity.py --ignore-cursor-bytes
     python Scripts/verify_offline_parity.py --live          # FUTURE stub, see below
 
-Exit code 0 IFF all 23 actions match in the active mode AND --version
+Exit code 0 IFF all 137 actions match in the active mode AND --version
 parity-rev matches. Non-zero otherwise.
 
 stdlib-only. Do not add third-party deps.
@@ -258,7 +258,7 @@ def discover_chain_inputs():
 
 def build_actions(chain):
     """
-    The 20 RI actions with deterministic representative args.
+    The 137 parity actions with deterministic representative args.
     Each entry: (label, namespace, action, [args] or None).
     None means the current corpus lacks a deterministic required input; the
     action is reported as SKIP rather than a parity failure.
@@ -268,7 +268,8 @@ def build_actions(chain):
     rpath = chain["risk_path"]
 
     actions = [
-        # ---- cppreflect (6) ----
+        # ---- cppreflect (46) ----
+        # chain-derived entries (6)
         ("cppreflect.get_uclass", "cppreflect", "get_uclass", [cls]),
         ("cppreflect.list_uproperties", "cppreflect", "list_uproperties", [cls]),
         ("cppreflect.list_ufunctions", "cppreflect", "list_ufunctions", [cls]),
@@ -277,15 +278,75 @@ def build_actions(chain):
         ("cppreflect.find_class_specifier", "cppreflect", "find_class_specifier",
          ["Blueprintable"]),
         ("cppreflect.list_class_specifiers", "cppreflect", "list_class_specifiers", []),
+        # fixed engine class entries (20)
+        ("cppreflect.get_uclass/ACharacter", "cppreflect", "get_uclass", ["ACharacter"]),
+        ("cppreflect.get_uclass/APlayerController", "cppreflect", "get_uclass", ["APlayerController"]),
+        ("cppreflect.get_uclass/AGameModeBase", "cppreflect", "get_uclass", ["AGameModeBase"]),
+        ("cppreflect.get_uclass/AGameStateBase", "cppreflect", "get_uclass", ["AGameStateBase"]),
+        ("cppreflect.get_uclass/APlayerState", "cppreflect", "get_uclass", ["APlayerState"]),
+        ("cppreflect.get_uclass/UActorComponent", "cppreflect", "get_uclass", ["UActorComponent"]),
+        ("cppreflect.list_uproperties/ACharacter", "cppreflect", "list_uproperties", ["ACharacter"]),
+        ("cppreflect.list_uproperties/AGameModeBase", "cppreflect", "list_uproperties", ["AGameModeBase"]),
+        ("cppreflect.list_uproperties/AGameStateBase", "cppreflect", "list_uproperties", ["AGameStateBase"]),
+        ("cppreflect.list_ufunctions/ACharacter", "cppreflect", "list_ufunctions", ["ACharacter"]),
+        ("cppreflect.list_ufunctions/APlayerController", "cppreflect", "list_ufunctions", ["APlayerController"]),
+        ("cppreflect.list_ufunctions/AGameModeBase", "cppreflect", "list_ufunctions", ["AGameModeBase"]),
+        ("cppreflect.find_interface_impls/IGameplayTaskOwnerInterface", "cppreflect", "find_interface_impls", ["IGameplayTaskOwnerInterface"]),
+        ("cppreflect.find_interface_impls/IAbilitySystemInterface", "cppreflect", "find_interface_impls", ["IAbilitySystemInterface"]),
+        ("cppreflect.find_class_specifier/BlueprintType", "cppreflect", "find_class_specifier", ["BlueprintType"]),
+        ("cppreflect.find_class_specifier/NotBlueprintable", "cppreflect", "find_class_specifier", ["NotBlueprintable"]),
+        ("cppreflect.find_class_specifier/Abstract", "cppreflect", "find_class_specifier", ["Abstract"]),
+        ("cppreflect.find_class_specifier/MinimalAPI", "cppreflect", "find_class_specifier", ["MinimalAPI"]),
+        ("cppreflect.find_class_specifier/Config", "cppreflect", "find_class_specifier", ["Config"]),
+        ("cppreflect.list_class_specifiers(b)", "cppreflect", "list_class_specifiers", []),
+        # gameplay-critical engine/GAS/input/UI/anim/movement classes (20) --
+        # the highest-value new reflection coverage, mirrored into the hard gate
+        # from offline_parity_benchmark.py so exe<->py parity is CI-enforced.
+        ("cppreflect.get_uclass/UGameplayAbility", "cppreflect", "get_uclass", ["UGameplayAbility"]),
+        ("cppreflect.get_uclass/UAbilitySystemComponent", "cppreflect", "get_uclass", ["UAbilitySystemComponent"]),
+        ("cppreflect.get_uclass/UAttributeSet", "cppreflect", "get_uclass", ["UAttributeSet"]),
+        ("cppreflect.get_uclass/UGameplayEffect", "cppreflect", "get_uclass", ["UGameplayEffect"]),
+        ("cppreflect.get_uclass/UEnhancedInputComponent", "cppreflect", "get_uclass", ["UEnhancedInputComponent"]),
+        ("cppreflect.get_uclass/UInputAction", "cppreflect", "get_uclass", ["UInputAction"]),
+        ("cppreflect.get_uclass/UInputMappingContext", "cppreflect", "get_uclass", ["UInputMappingContext"]),
+        ("cppreflect.get_uclass/UUserWidget", "cppreflect", "get_uclass", ["UUserWidget"]),
+        ("cppreflect.get_uclass/UAnimMontage", "cppreflect", "get_uclass", ["UAnimMontage"]),
+        ("cppreflect.get_uclass/UAnimInstance", "cppreflect", "get_uclass", ["UAnimInstance"]),
+        ("cppreflect.get_uclass/UCharacterMovementComponent", "cppreflect", "get_uclass", ["UCharacterMovementComponent"]),
+        ("cppreflect.get_uclass/APawn", "cppreflect", "get_uclass", ["APawn"]),
+        ("cppreflect.get_uclass/AController", "cppreflect", "get_uclass", ["AController"]),
+        ("cppreflect.get_uclass/AAIController", "cppreflect", "get_uclass", ["AAIController"]),
+        ("cppreflect.get_uclass/USkeletalMeshComponent", "cppreflect", "get_uclass", ["USkeletalMeshComponent"]),
+        ("cppreflect.get_uclass/UStaticMeshComponent", "cppreflect", "get_uclass", ["UStaticMeshComponent"]),
+        ("cppreflect.get_uclass/UWorld", "cppreflect", "get_uclass", ["UWorld"]),
+        ("cppreflect.get_uclass/UGameInstance", "cppreflect", "get_uclass", ["UGameInstance"]),
+        ("cppreflect.find_interface_impls/IGameplayTagAssetInterface", "cppreflect", "find_interface_impls", ["IGameplayTagAssetInterface"]),
+        ("cppreflect.find_class_specifier/EditInlineNew", "cppreflect", "find_class_specifier", ["EditInlineNew"]),
 
-        # ---- network (4) ----
+        # ---- network (16) ----
+        # original entries (4)
         ("network.list_replicated_classes", "network", "list_replicated_classes",
          ["--limit", "5"]),
         ("network.list_rpc_functions", "network", "list_rpc_functions", ["--limit", "5"]),
         ("network.list_onrep_handlers", "network", "list_onrep_handlers", ["--limit", "5"]),
         ("network.audit_unbalanced_onreps", "network", "audit_unbalanced_onreps", []),
+        # limit variants (12)
+        ("network.list_replicated_classes/limit1", "network", "list_replicated_classes", ["--limit", "1"]),
+        ("network.list_replicated_classes/limit10", "network", "list_replicated_classes", ["--limit", "10"]),
+        ("network.list_replicated_classes/limit20", "network", "list_replicated_classes", ["--limit", "20"]),
+        ("network.list_replicated_classes/limit50", "network", "list_replicated_classes", ["--limit", "50"]),
+        ("network.list_rpc_functions/limit1", "network", "list_rpc_functions", ["--limit", "1"]),
+        ("network.list_rpc_functions/limit10", "network", "list_rpc_functions", ["--limit", "10"]),
+        ("network.list_rpc_functions/limit20", "network", "list_rpc_functions", ["--limit", "20"]),
+        ("network.list_onrep_handlers/limit1", "network", "list_onrep_handlers", ["--limit", "1"]),
+        ("network.list_onrep_handlers/limit10", "network", "list_onrep_handlers", ["--limit", "10"]),
+        ("network.list_onrep_handlers/limit20", "network", "list_onrep_handlers", ["--limit", "20"]),
+        # determinism verification (repeat calls)
+        ("network.audit_unbalanced_onreps/det1", "network", "audit_unbalanced_onreps", []),
+        ("network.audit_unbalanced_onreps/det2", "network", "audit_unbalanced_onreps", []),
 
-        # ---- decision (5) ----
+        # ---- decision (15) ----
+        # original entries (5)
         ("decision.list_decisions", "decision", "list_decisions", ["--limit", "5"]),
         ("decision.get_decision", "decision", "get_decision", [did] if did else None),
         ("decision.list_stale", "decision", "list_stale", ["3650", "--limit", "5"]),
@@ -293,15 +354,49 @@ def build_actions(chain):
          [did] if did else None),
         ("decision.find_referent_decisions", "decision", "find_referent_decisions",
          [did] if did else None),
+        # limit variants (4)
+        ("decision.list_decisions/limit1", "decision", "list_decisions", ["--limit", "1"]),
+        ("decision.list_decisions/limit10", "decision", "list_decisions", ["--limit", "10"]),
+        ("decision.list_decisions/limit20", "decision", "list_decisions", ["--limit", "20"]),
+        ("decision.list_decisions/limit50", "decision", "list_decisions", ["--limit", "50"]),
+        # staleness threshold variants (6)
+        ("decision.list_stale/30d", "decision", "list_stale", ["30", "--limit", "5"]),
+        ("decision.list_stale/90d", "decision", "list_stale", ["90", "--limit", "5"]),
+        ("decision.list_stale/180d", "decision", "list_stale", ["180", "--limit", "5"]),
+        ("decision.list_stale/365d", "decision", "list_stale", ["365", "--limit", "5"]),
+        ("decision.list_stale/730d", "decision", "list_stale", ["730", "--limit", "5"]),
+        ("decision.list_stale/1825d", "decision", "list_stale", ["1825", "--limit", "5"]),
 
-        # ---- risk (5) ----
+        # ---- risk (22) ----
+        # original entries (5)
         ("risk.get_hotspot_score", "risk", "get_hotspot_score", [rpath]),
         ("risk.get_cochange_pairs", "risk", "get_cochange_pairs", [rpath]),
         ("risk.get_file_churn", "risk", "get_file_churn", [rpath]),
         ("risk.get_release_window_hotspots", "risk", "get_release_window_hotspots", []),
         ("risk.list_conditional_gates", "risk", "list_conditional_gates", []),
+        # get_hotspot_score for additional files (7)
+        ("risk.get_hotspot_score/action_guidance_benchmark", "risk", "get_hotspot_score", ["Scripts/action_guidance_benchmark.py"]),
+        ("risk.get_hotspot_score/source_index_benchmark", "risk", "get_hotspot_score", ["Scripts/source_index_benchmark.py"]),
+        ("risk.get_hotspot_score/schema_completeness_benchmark", "risk", "get_hotspot_score", ["Scripts/schema_completeness_benchmark.py"]),
+        ("risk.get_hotspot_score/offline_parity_benchmark", "risk", "get_hotspot_score", ["Scripts/offline_parity_benchmark.py"]),
+        ("risk.get_hotspot_score/ci_static_checks", "risk", "get_hotspot_score", ["Scripts/ci_static_checks.py"]),
+        ("risk.get_hotspot_score/monolith_proxy", "risk", "get_hotspot_score", ["Scripts/monolith_proxy.py"]),
+        ("risk.get_hotspot_score/verify_offline_parity", "risk", "get_hotspot_score", ["Scripts/verify_offline_parity.py"]),
+        # get_cochange_pairs for additional files (5)
+        ("risk.get_cochange_pairs/monolith_offline", "risk", "get_cochange_pairs", ["Scripts/monolith_offline.py"]),
+        ("risk.get_cochange_pairs/ci_static_checks", "risk", "get_cochange_pairs", ["Scripts/ci_static_checks.py"]),
+        ("risk.get_cochange_pairs/monolith_proxy", "risk", "get_cochange_pairs", ["Scripts/monolith_proxy.py"]),
+        ("risk.get_cochange_pairs/index_project", "risk", "get_cochange_pairs", ["Scripts/index_project.py"]),
+        ("risk.get_cochange_pairs/tag_path_params", "risk", "get_cochange_pairs", ["Scripts/tag_path_params.py"]),
+        # get_file_churn for additional files (5)
+        ("risk.get_file_churn/lint_agent_tools", "risk", "get_file_churn", ["Scripts/lint_agent_tools.py"]),
+        ("risk.get_file_churn/check_offline_exe_fresh", "risk", "get_file_churn", ["Scripts/check_offline_exe_fresh.py"]),
+        ("risk.get_file_churn/check_index_freshness", "risk", "get_file_churn", ["Scripts/check_index_freshness.ps1"]),
+        ("risk.get_file_churn/recover_mcp", "risk", "get_file_churn", ["Scripts/recover_mcp.ps1"]),
+        ("risk.get_file_churn/docs_spec", "risk", "get_file_churn", ["Docs/SPEC.md"]),
 
-        # ---- source ergonomics (3) -- plain-text output, STRICT byte-compare ----
+        # ---- source ergonomics (36) -- plain-text output, STRICT byte-compare ----
+        # original entries (7)
         # Deterministic fixed inputs (no chaining):
         #   AActor                          -> stable engine class header
         #   UGameplayStatics::ApplyDamage   -> stable class-body method (declaration_read)
@@ -312,8 +407,6 @@ def build_actions(chain):
          ["UGameplayStatics::ApplyDamage"], "text"),
         ("source.check_deprecations", "source", "check_deprecations",
          ["PreparePathfinding", "AActor"], "text"),
-
-        # ---- source ergonomics Phase 2 (items 4-5) -- plain-text, STRICT byte-compare ----
         # Fixed deterministic inputs:
         #   verify_symbols      -> a stable class-body method (exists:true via class
         #                          row + source_fts), a stable class, and a guaranteed-
@@ -324,8 +417,6 @@ def build_actions(chain):
          ["UGameplayStatics::ApplyDamage", "AActor", "UThisDoesNotExistAnywhereXYZ"], "text"),
         ("source.find_example_usage", "source", "find_example_usage",
          ["UGameplayStatics::ApplyDamage", "--limit", "5"], "text"),
-
-        # ---- source ergonomics Phase 3 (items 7, 9) -- plain-text, STRICT byte-compare ----
         # Fixed deterministic inputs:
         #   lint_header         -> a COMMITTED fixture so exe + py see byte-identical
         #                          input. The fixture carries a `.h.fixture` extension
@@ -347,6 +438,43 @@ def build_actions(chain):
          ["Source/MonolithSource/Private/Tests/Fixtures/CppErgoCorpus/Source/CppErgoTestMod/LintOrphanUproperty.h.fixture"], "text"),
         ("source.generate_class_stub", "source", "generate_class_stub",
          ["AActor", "AMyParityActor", "MonolithSource"], "text"),
+        # get_include_path for engine classes (10)
+        ("source.get_include_path/ACharacter", "source", "get_include_path", ["ACharacter"], "text"),
+        ("source.get_include_path/APlayerController", "source", "get_include_path", ["APlayerController"], "text"),
+        ("source.get_include_path/AGameModeBase", "source", "get_include_path", ["AGameModeBase"], "text"),
+        ("source.get_include_path/AGameStateBase", "source", "get_include_path", ["AGameStateBase"], "text"),
+        ("source.get_include_path/APlayerState", "source", "get_include_path", ["APlayerState"], "text"),
+        ("source.get_include_path/UActorComponent", "source", "get_include_path", ["UActorComponent"], "text"),
+        ("source.get_include_path/USceneComponent", "source", "get_include_path", ["USceneComponent"], "text"),
+        ("source.get_include_path/UStaticMeshComponent", "source", "get_include_path", ["UStaticMeshComponent"], "text"),
+        ("source.get_include_path/USkeletalMeshComponent", "source", "get_include_path", ["USkeletalMeshComponent"], "text"),
+        ("source.get_include_path/UPrimitiveComponent", "source", "get_include_path", ["UPrimitiveComponent"], "text"),
+        # get_signature for common engine methods (8)
+        ("source.get_signature/AActor_BeginPlay", "source", "get_signature", ["AActor::BeginPlay"], "text"),
+        ("source.get_signature/AActor_EndPlay", "source", "get_signature", ["AActor::EndPlay"], "text"),
+        ("source.get_signature/AActor_Tick", "source", "get_signature", ["AActor::Tick"], "text"),
+        ("source.get_signature/ACharacter_Jump", "source", "get_signature", ["ACharacter::Jump"], "text"),
+        ("source.get_signature/ACharacter_Crouch", "source", "get_signature", ["ACharacter::Crouch"], "text"),
+        ("source.get_signature/APlayerController_Possess", "source", "get_signature", ["APlayerController::Possess"], "text"),
+        ("source.get_signature/UActorComponent_BeginPlay", "source", "get_signature", ["UActorComponent::BeginPlay"], "text"),
+        ("source.get_signature/UActorComponent_TickComponent", "source", "get_signature", ["UActorComponent::TickComponent"], "text"),
+        # check_deprecations for symbol pairs (3)
+        ("source.check_deprecations/ACharacter_UActorComponent", "source", "check_deprecations", ["AActor", "ACharacter"], "text"),
+        ("source.check_deprecations/UObject_UActorComponent", "source", "check_deprecations", ["UObject", "UActorComponent"], "text"),
+        ("source.check_deprecations/AGameModeBase_AGameStateBase", "source", "check_deprecations", ["AGameModeBase", "AGameStateBase"], "text"),
+        # verify_symbols for symbol sets (5)
+        ("source.verify_symbols/AActor_ACharacter_UObject", "source", "verify_symbols", ["AActor", "ACharacter", "UObject"], "text"),
+        ("source.verify_symbols/ApplyDamage_BeginPlay", "source", "verify_symbols", ["UGameplayStatics::ApplyDamage", "AActor::BeginPlay"], "text"),
+        ("source.verify_symbols/APC_APS_AGSB", "source", "verify_symbols", ["APlayerController", "APlayerState", "AGameStateBase"], "text"),
+        ("source.verify_symbols/SMC_SKMC", "source", "verify_symbols", ["UStaticMeshComponent", "USkeletalMeshComponent"], "text"),
+        ("source.verify_symbols/GMB_GI_World", "source", "verify_symbols", ["AGameModeBase", "UGameInstance", "UWorld"], "text"),
+        # find_example_usage with different methods and limits (3)
+        ("source.find_example_usage/BeginPlay_limit3", "source", "find_example_usage", ["AActor::BeginPlay", "--limit", "3"], "text"),
+        ("source.find_example_usage/Jump_limit5", "source", "find_example_usage", ["ACharacter::Jump", "--limit", "5"], "text"),
+        ("source.find_example_usage/ApplyDamage_limit3", "source", "find_example_usage", ["UGameplayStatics::ApplyDamage", "--limit", "3"], "text"),
+        # generate_class_stub for different parent/class combos (2)
+        ("source.generate_class_stub/UObject_MyTestObject", "source", "generate_class_stub", ["UObject", "AMyTestObject", "TestModule"], "text"),
+        ("source.generate_class_stub/UActorComponent_MyTestComp", "source", "generate_class_stub", ["UActorComponent", "UMyTestComp", "TestModule"], "text"),
     ]
     return actions
 
@@ -512,11 +640,17 @@ def main():
 
     actions = build_actions(chain)
     results = []
-    for label, ns, action, aargs in actions:
+    for action_entry in actions:
+        if len(action_entry) == 5:
+            label, ns, action, aargs, compare = action_entry
+        else:
+            label, ns, action, aargs = action_entry
+            compare = "json"
+
         if aargs is None:
             results.append(skipped_action(label, "current DB corpus has no decision_id input"))
         else:
-            results.append(run_action(label, ns, action, aargs, args.ignore_cursor_bytes))
+            results.append(run_action(label, ns, action, aargs, args.ignore_cursor_bytes, compare))
 
     n_match = sum(1 for r in results if r["status"] == "MATCH")
     n_diff = sum(1 for r in results if r["status"] == "DIFF")
