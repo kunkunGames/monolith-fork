@@ -371,6 +371,7 @@ FMonolithActionResult FMonolithChooserActions::HandleInspectChooser(const TShare
 	{
 		TArray<TSharedPtr<FJsonValue>> ContextArr;
 		const TConstArrayView<FInstancedStruct> ContextView = Table->GetContextData();
+		ContextArr.Reserve(ContextView.Num());
 		for (int32 i = 0; i < ContextView.Num(); ++i)
 		{
 			const FInstancedStruct& Entry = ContextView[i];
