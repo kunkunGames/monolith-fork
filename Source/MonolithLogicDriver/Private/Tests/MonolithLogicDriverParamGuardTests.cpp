@@ -621,6 +621,32 @@ bool FMonolithParamGuardLogicDriverSetEndStateRejectsMalformedParamsTest::RunTes
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetTransitionConditionRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetTransitionConditionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetTransitionConditionRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_transition_condition")))
+	{
+		FMonolithLogicDriverNodeActions::RegisterActions(Registry);
+	}
+
+	// params.duration as bool instead of number
+	TSharedPtr<FJsonObject> BadDurationParams = MakeShared<FJsonObject>();
+	BadDurationParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadDurationParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	BadDurationParams->SetStringField(TEXT("condition_type"), TEXT("time_delay"));
+
+	TSharedPtr<FJsonObject> CondParams = MakeShared<FJsonObject>();
+	CondParams->SetBoolField(TEXT("duration"), true);
+	BadDurationParams->SetObjectField(TEXT("params"), CondParams);
+
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_transition_condition"), BadDurationParams);
+	TestTrue(TEXT("set_transition_condition rejects bool duration in params"), !Result.bSuccess);
+	TestTrue(TEXT("error mentions duration must be a number"), Result.ErrorMessage.Contains(TEXT("duration")) && Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AddStateMachineNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
