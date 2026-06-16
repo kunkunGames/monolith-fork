@@ -396,6 +396,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshMaterials(const TSh
 	const FStaticMeshLODResources& LOD0 = RenderData->LODResources[0];
 
 	TArray<TSharedPtr<FJsonValue>> SlotsArray;
+	SlotsArray.Reserve(Materials.Num());
 	for (int32 i = 0; i < Materials.Num(); i++)
 	{
 		auto Slot = MakeShared<FJsonObject>();
@@ -456,6 +457,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshLods(const TSharedP
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> LodsArray;
+	LodsArray.Reserve(RenderData->LODResources.Num());
 	for (int32 i = 0; i < RenderData->LODResources.Num(); i++)
 	{
 		const FStaticMeshLODResources& LOD = RenderData->LODResources[i];
@@ -778,6 +780,7 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPt
 	int32 EndCh = (TargetChannel >= 0) ? TargetChannel + 1 : NumTexCoords;
 	EndCh = FMath::Min(EndCh, NumTexCoords);
 
+	ChannelsArray.Reserve(EndCh - StartCh);
 	for (int32 Ch = StartCh; Ch < EndCh; Ch++)
 	{
 		auto ChObj = MakeShared<FJsonObject>();
