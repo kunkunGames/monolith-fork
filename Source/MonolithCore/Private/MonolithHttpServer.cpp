@@ -707,17 +707,52 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 				CoreTool->SetStringField(TEXT("name"), ToolName);
 				CoreTool->SetStringField(TEXT("description"), ActionInfo.Description);
 
-				// Input schema
+				// Input schema — build a JSON-Schema-compliant inputSchema.
+				// ActionInfo.ParamSchema is a flat map where each entry carries
+				// Monolith-internal fields (required:bool, aliases, kind) that must
+				// not be forwarded to MCP clients.  Copy only standard JSON Schema
+				// keywords and promote required:bool entries to the top-level
+				// "required" array so clients can validate tool calls correctly.
 				TSharedPtr<FJsonObject> InputSchema = MakeShared<FJsonObject>();
 				InputSchema->SetStringField(TEXT("type"), TEXT("object"));
+
+				TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
+				TArray<TSharedPtr<FJsonValue>> RequiredArray;
+
 				if (ActionInfo.ParamSchema.IsValid())
 				{
-					InputSchema->SetObjectField(TEXT("properties"), ActionInfo.ParamSchema);
+					static const TCHAR* const kForwardFields[] = {
+						TEXT("type"), TEXT("description"), TEXT("default"),
+						TEXT("enum"), TEXT("minimum"), TEXT("maximum"),
+					};
+					for (const auto& SchemaEntry : ActionInfo.ParamSchema->Values)
+					{
+						// Root-level non-object values (e.g. _validate_types:bool)
+						// are internal flags, not parameters — skip them.
+						const TSharedPtr<FJsonObject> ParamObj = SchemaEntry.Value->AsObject();
+						if (!ParamObj.IsValid()) continue;
+
+						TSharedPtr<FJsonObject> CleanProp = MakeShared<FJsonObject>();
+						for (const TCHAR* Field : kForwardFields)
+						{
+							TSharedPtr<FJsonValue> Val = ParamObj->TryGetField(FString(Field));
+							if (Val.IsValid())
+							{
+								CleanProp->SetField(FString(Field), Val);
+							}
+						}
+						Properties->SetObjectField(SchemaEntry.Key, CleanProp);
+
+						bool bParamRequired = false;
+						if (ParamObj->TryGetBoolField(TEXT("required"), bParamRequired) && bParamRequired)
+						{
+							RequiredArray.Add(MakeShared<FJsonValueString>(SchemaEntry.Key));
+						}
+					}
 				}
-				else
-				{
-					InputSchema->SetObjectField(TEXT("properties"), MakeShared<FJsonObject>());
-				}
+
+				InputSchema->SetObjectField(TEXT("properties"), Properties);
+				InputSchema->SetArrayField(TEXT("required"), RequiredArray);
 				CoreTool->SetObjectField(TEXT("inputSchema"), InputSchema);
 
 				// Survivor A (plan §3.A) — MCP-spec tool annotations. Only emit
