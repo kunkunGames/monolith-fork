@@ -51,6 +51,23 @@ namespace
 		return true;
 	}
 
+	bool TryGetPoolAndHandleName(UMonolithMeshHandlePool* InPool, const TSharedPtr<FJsonObject>& Params, FString& OutHandleName, FMonolithActionResult& OutError)
+	{
+		if (!InPool)
+		{
+			OutError = FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
+			return false;
+		}
+
+		if (!Params->TryGetStringField(TEXT("handle"), OutHandleName) || OutHandleName.IsEmpty())
+		{
+			OutError = FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+			return false;
+		}
+
+		return true;
+	}
+
 	UDynamicMesh* GetWorkingMeshForOperation(
 		UMonolithMeshHandlePool* Pool,
 		const TSharedPtr<FJsonObject>& Params,
@@ -318,15 +335,11 @@ FMonolithActionResult FMonolithMeshOperationActions::CreateHandle(const TSharedP
 
 FMonolithActionResult FMonolithMeshOperationActions::ReleaseHandle(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	if (!Pool->ReleaseHandle(HandleName))
@@ -508,15 +521,11 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshBoolean(const TSharedPt
 
 FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	FString Error;
@@ -578,15 +587,11 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedP
 
 FMonolithActionResult FMonolithMeshOperationActions::MeshRemesh(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	double TargetEdgeLength;
@@ -623,15 +628,11 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshRemesh(const TSharedPtr
 
 FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	FString Method = TEXT("convex_decomp");
@@ -714,15 +715,11 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 
 FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	double TempLodCount = 0.0;
@@ -799,15 +796,11 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 
 FMonolithActionResult FMonolithMeshOperationActions::FillHoles(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	FString Error;
@@ -836,15 +829,11 @@ FMonolithActionResult FMonolithMeshOperationActions::FillHoles(const TSharedPtr<
 
 FMonolithActionResult FMonolithMeshOperationActions::ComputeUvs(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	FString Method = TEXT("auto_unwrap");
@@ -908,15 +897,11 @@ FMonolithActionResult FMonolithMeshOperationActions::ComputeUvs(const TSharedPtr
 
 FMonolithActionResult FMonolithMeshOperationActions::MirrorMesh(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Pool)
-	{
-		return FMonolithActionResult::Error(TEXT("Enable the GeometryScripting plugin in your .uproject to use mesh operations."));
-	}
-
 	FString HandleName;
-	if (!Params->TryGetStringField(TEXT("handle"), HandleName) || HandleName.IsEmpty())
+	FMonolithActionResult ErrorResult;
+	if (!TryGetPoolAndHandleName(Pool, Params, HandleName, ErrorResult))
 	{
-		return FMonolithActionResult::Error(TEXT("\'handle\' is required and must be a string"));
+		return ErrorResult;
 	}
 
 	FString Axis;
