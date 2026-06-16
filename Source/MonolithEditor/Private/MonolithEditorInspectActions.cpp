@@ -35,6 +35,7 @@
 
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
+#include "MonolithAssetUtils.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -191,7 +192,7 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSh
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *AssetPath);
+	UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(AssetPath);
 	if (!Material)
 	{
 		return FMonolithActionResult::Error(
@@ -367,7 +368,7 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectTextureChannels(const
 	bool bEmitSplits = false;
 	Params->TryGetBoolField(TEXT("emit_splits"), bEmitSplits);
 
-	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *AssetPath);
+	UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(AssetPath);
 	if (!Texture)
 	{
 		return FMonolithActionResult::Error(
