@@ -48,6 +48,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [cppreflect](#cppreflect) | 6 | **New v0.17.0.** Reflection Intelligence — UE 5.7 UHT reflection-edge queries (UCLASS / UPROPERTY / UFUNCTION / UINTERFACE + cpp↔asset edges + specifier discovery) |
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
+| [bridge](#bridge) | 5 | Read-only RX-6 bridge integration |
 | [reflect](#reflect) | 1 | **New [Unreleased].** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
 | **Curated in-tree subtotal** | **v0.17.x public surface** | Static public/in-tree reference from the curated body below; fully loaded local projects may report additional sibling/private plugin actions. |
 | [Sibling plugins](#sibling-plugins) | varies | Separate plugins, separate distribution |
@@ -2176,6 +2177,55 @@ Both invoke the same SQLite indexes the live MCP uses.
 | MonolithMesh town gen | `bEnableProceduralTownGen` (Editor Preferences, default `false`) | 195 (core mesh only) |
 
 ---
+
+
+## bridge
+
+Read-only RX-6 bridge integration. **5 actions**.
+
+### `bridge.get_index_status`
+
+Report local project/source index readiness for Monolith bridge searches.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `include_stats` | bool | optional | Include project index stats when available. Default: `false` |
+
+### `bridge.start_indexing`
+
+Start local project asset and/or source indexing for bridge search.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scope` | string | optional | Index scope: assets, source, or all. Default: `all` |
+| `full` | bool | optional | Use full reindex instead of incremental/project-only indexing. Default: `false` |
+
+### `bridge.search_items`
+
+Search local indexed assets and source entries for mention-style prompt context.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Lexical query for assets, symbols, or source lines |
+| `limit` | integer | optional | Maximum combined results. Default: `24` |
+
+### `bridge.build_attachment`
+
+Materialize a bridge.search_items result into a bounded prompt attachment.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `item_id` | string | **required** | Bridge item id returned by bridge.search_items |
+| `context_lines` | integer | optional | Source lines before/after source hits. Default: `12` |
+
+### `bridge.search_asset_symbols`
+
+Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | optional | Project asset package path seed |
+| `symbol` | string | optional | Source symbol seed |
 
 ## Cross-References
 
