@@ -512,9 +512,14 @@ Trigger a Live Coding compile. Aliased — they're the same handler.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `since` | number | optional | Only errors from the last N seconds |
-| `category` | string | optional | Filter to a specific log category |
-| `compile_only` | bool | optional | Filter to compile categories only. Default: `false` |
+| `since_marker` | string | optional | Report only errors AFTER the latest log line containing this token. Reports marker_found |
+| `since_iso` | string | optional | Absolute ISO-8601 cutoff (e.g. 2026-06-06T12:00:00Z) |
+| `since_seconds` | number | optional | Relative window: only errors from the last N seconds |
+| `since` | number | optional | Legacy alias for since_seconds (last N seconds) |
+| `clear_baseline` | bool | optional | Stamp a fresh baseline (now) and return nothing before it. Returns immediately. Default: `false` |
+| `category` | string | optional | Narrow the QUERY to a specific log category |
+| `compile_only` | bool | optional | Narrow the QUERY to compile categories only. Default: `false` |
+| `exclude_categories` | array | optional | Categories bucketed under other_errors and kept OUT of the headline error_count. Default: `[LogPython, LogMonolith]` |
 
 ### `editor.get_build_status`
 
