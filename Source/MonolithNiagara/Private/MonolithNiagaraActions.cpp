@@ -3663,10 +3663,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEmitter(const TSharedPtr
 {
 	FString SystemPath = NA_GetAssetPath(Params);
 	// Accept common alias names for the emitter asset path
-	FString EmitterAssetPath = Params->GetStringField(TEXT("emitter_asset"));
-	if (EmitterAssetPath.IsEmpty()) EmitterAssetPath = Params->GetStringField(TEXT("emitter_path"));
-	if (EmitterAssetPath.IsEmpty()) EmitterAssetPath = Params->GetStringField(TEXT("template"));
-	if (EmitterAssetPath.IsEmpty()) EmitterAssetPath = Params->GetStringField(TEXT("template_path"));
+	FString EmitterAssetPath;
+	if (Params->HasField(TEXT("emitter_asset")) && !Params->TryGetStringField(TEXT("emitter_asset"), EmitterAssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter_asset' must be a string"));
+	if (EmitterAssetPath.IsEmpty()) { if (Params->HasField(TEXT("emitter_path")) && !Params->TryGetStringField(TEXT("emitter_path"), EmitterAssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter_path' must be a string")); }
+	if (EmitterAssetPath.IsEmpty()) { if (Params->HasField(TEXT("template")) && !Params->TryGetStringField(TEXT("template"), EmitterAssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'template' must be a string")); }
+	if (EmitterAssetPath.IsEmpty()) { if (Params->HasField(TEXT("template_path")) && !Params->TryGetStringField(TEXT("template_path"), EmitterAssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'template_path' must be a string")); }
 	if (EmitterAssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param 'emitter_asset': provide a NiagaraEmitter asset path"));
 	FString EmitterName = FString();
@@ -3791,7 +3792,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddEmitter(const TSharedPtr
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEmitter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -3812,8 +3814,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEmitter(const TShared
 FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateEmitter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString SourceHandleId = Params->GetStringField(TEXT("source_emitter"));
-	if (SourceHandleId.IsEmpty()) SourceHandleId = Params->GetStringField(TEXT("emitter"));
+	FString SourceHandleId;
+	if (Params->HasField(TEXT("source_emitter")) && !Params->TryGetStringField(TEXT("source_emitter"), SourceHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'source_emitter' must be a string"));
+	if (SourceHandleId.IsEmpty()) { if (Params->HasField(TEXT("emitter")) && !Params->TryGetStringField(TEXT("emitter"), SourceHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string")); }
 
 	FString NewName;
 	if (Params->HasField(TEXT("new_name")))
@@ -3848,7 +3851,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateEmitter(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterEnabled(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
 	bool bEnabled = true;
 	if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
 	{
