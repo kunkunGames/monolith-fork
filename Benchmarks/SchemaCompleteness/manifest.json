@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-16T00:00:00+00:00",
+  "generated_at": "2026-06-17T13:19:20.944335+00:00",
   "description": "Static seed manifest for the SchemaCompleteness benchmark. Expected namespace and action counts reflect the catalog as of the generated_at date. Re-run the scan subcommand to get live counts.",
   "expected_namespace_count": 51,
   "expected_action_count": 1766,
@@ -34,7 +34,7 @@
       }
     ]
   },
-  "probe_set_task_count": 285,
+  "probe_set_task_count": 385,
   "probe_set_file": "Plugins/Monolith/Benchmarks/SchemaCompleteness/probe_set.jsonl",
   "benchmark_script": "Scripts/schema_completeness_benchmark.py",
   "related_benchmark": "Benchmarks/ActionGuidance",

@@ -18,6 +18,10 @@ machine-readable evidence an agent needs to recover or plan.
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
 | `Plugins/Monolith/Scripts/action_guidance_benchmark.py` | Generator, runner, and comparison tool. |
 
+Checked-in corpus size: **508 tasks**. The live catalog generator appends a
+fixed 100-task Unreal practical supplement after catalog-derived tasks so the
+domain cases survive regeneration.
+
 ## Task Categories
 
 | Category | Request type | Scored evidence |

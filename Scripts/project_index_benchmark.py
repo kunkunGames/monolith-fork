@@ -27,10 +27,11 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
-DEFAULT_TASKS = pathlib.Path("Plugins/Monolith/Benchmarks/ProjectIndex/tasks.jsonl")
-DEFAULT_MANIFEST = pathlib.Path("Plugins/Monolith/Benchmarks/ProjectIndex/manifest.json")
+DEFAULT_TASKS = pathlib.Path("Benchmarks/ProjectIndex/tasks.jsonl")
+DEFAULT_MANIFEST = pathlib.Path("Benchmarks/ProjectIndex/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/ProjectIndex")
 
 # Required fields for project search result rows (from CLAUDE.md project search contract)
@@ -83,6 +84,306 @@ GAMEPLAY_TAG_SEARCH_QUERIES = [
     "Combat", "Status", "Ability", "Item", "UI", "Player",
     "Enemy", "Character", "Skill", "Effect",
 ]
+
+_PRESERVED_ASSET_SEARCH_QUERIES_20260617 = [
+    "BP_",
+    "WBP_",
+    "DT_",
+    "DA_",
+    "GA_",
+    "GE_",
+    "Player",
+    "Enemy",
+    "Boss",
+    "Character",
+    "Monster",
+    "Skill",
+    "Ability",
+    "Attack",
+    "Move",
+    "Item",
+    "Weapon",
+    "Inventory",
+    "Map",
+    "Level",
+    "Stage",
+    "World",
+    "Scene",
+    "UI",
+    "HUD",
+    "Menu",
+    "Slot",
+    "Icon",
+    "Sound",
+    "Music",
+    "SFX",
+    "Effect",
+    "Material",
+    "Texture",
+    "Mesh",
+    "Animation",
+    "Data",
+    "Config",
+    "Table",
+    "Asset",
+    "WBP_HUD",
+    "DT_Ability",
+    "BP_Enemy",
+    "GA_Skill",
+    "GE_Damage",
+    "WBP_Menu",
+    "DT_Item",
+    "BP_Boss",
+    "WBP_Slot",
+    "DA_Character",
+]
+
+_PRESERVED_GAMEPLAY_TAG_PREFIXES_20260617 = [
+    "Ability",
+    "Ability.Skill",
+    "State",
+    "State.Buff",
+    "State.Debuff",
+    "Damage",
+    "Damage.Type",
+    "Cue",
+    "Cue.Hit",
+    "Combat",
+    "Combat.Melee",
+    "Player",
+    "Enemy",
+]
+
+_PRESERVED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617 = [
+    "Stun",
+    "Burn",
+    "Poison",
+    "Shield",
+    "Heal",
+    "Cooldown",
+    "Cast",
+    "Dash",
+    "Block",
+    "Crit",
+    "Aura",
+    "Slow",
+]
+
+_PRESERVED_SCHEMA_ACTIONS_20260617 = [
+    "impact_radius",
+    "risk_score",
+    "review_hotspots",
+    "review_context",
+    "detect_changes",
+    "find_unused",
+    "pre_merge_check",
+    "snapshot",
+    "diff_snapshots",
+    "build_crg_graph",
+    "repair_crg_cache",
+    "list_assets",
+    "get_asset_by_path",
+    "get_dependencies",
+    "search_assets",
+]
+
+_PRESERVED_HEALTH_VARIANTS_20260617 = [
+    {"action": "health"},
+    {"action": "health", "include_counts": True},
+    {"action": "health", "include_counts": False},
+    {"action": "health", "detail": "full"},
+    {"action": "health", "detail": "minimal"},
+    {"action": "health", "mode": "summary"},
+    {"action": "health", "detail": "full", "include_counts": True},
+    {"action": "health", "include_counts": True, "mode": "summary"},
+    {"action": "health", "detail": "minimal", "include_counts": False},
+    {"action": "health", "verbose": True},
+]
+
+_ADDED_ASSET_SEARCH_QUERIES_20260617 = [
+    "GameplayCue",
+    "GameplayEffect",
+    "GameplayAbility",
+    "AbilitySet",
+    "AttributeSet",
+    "InputAction",
+    "InputMappingContext",
+    "NiagaraSystem",
+    "NiagaraEmitter",
+    "MaterialInstance",
+    "MaterialFunction",
+    "TextureAtlas",
+    "SpriteSheet",
+    "PaperZD",
+    "Flipbook",
+    "AnimMontage",
+    "BlendSpace",
+    "LevelSequence",
+    "CameraShake",
+    "MetaSound",
+    "SoundCue",
+    "Submix",
+    "CommonButton",
+    "ViewModel",
+    "WidgetBlueprint",
+    "SaveGame",
+    "DataAsset",
+    "PrimaryDataAsset",
+    "WorldData",
+    "StageLayout",
+    "Spawner",
+    "SpawnTable",
+    "Encounter",
+    "BehaviorTree",
+    "EQS",
+    "BlackboardData",
+    "StateTree",
+    "SmartObject",
+    "PCG",
+    "HLOD",
+    "WorldPartition",
+    "LandscapeLayer",
+    "WaterBody",
+    "Input",
+    "Localization",
+    "StringTable",
+    "CurveTable",
+    "DataRegistry",
+    "GameplayTagTable",
+    "DamageType",
+    "Projectile",
+    "HitReact",
+    "Cooldown",
+    "Targeting",
+    "Buff",
+    "Debuff",
+    "Loot",
+    "QuestObjective",
+    "Dialogue",
+    "InteractPrompt",
+    "ComboGraph",
+    "Chooser",
+    "LevelInstance",
+    "PackedLevelActor",
+    "GeometryCollection",
+    "Dataflow",
+    "ClothAsset",
+    "MetaHuman",
+    "MovieRender",
+    "RenderQueue",
+]
+
+_ADDED_GAMEPLAY_TAG_PREFIXES_20260617 = [
+    "Ability.Cooldown",
+    "Ability.Targeting",
+    "Combat.Ranged",
+    "Combat.HitReact",
+    "Damage.Element",
+    "State.CrowdControl",
+    "UI.HUD",
+    "UI.Menu",
+    "Input.Gameplay",
+    "Quest.Objective",
+    "Cue.Gameplay",
+    "Item.Weapon",
+    "Status.Invulnerable",
+]
+
+_ADDED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617 = [
+    "GameplayCue",
+    "Cooldown",
+    "HitReact",
+    "Invulnerable",
+    "RootMotion",
+    "Target",
+    "Projectile",
+    "Loot",
+    "Interact",
+    "Objective",
+    "Elemental",
+    "Combo",
+]
+
+_ADDED_HEALTH_VARIANTS_20260617 = [
+    {"action": "health", "detail": "asset_registry"},
+    {"action": "health", "detail": "asset_registry", "include_counts": True},
+    {"action": "health", "detail": "gameplay_tags"},
+    {"action": "health", "mode": "smoke", "include_counts": False},
+    {"action": "health", "verbose": False},
+]
+
+
+def append_project_search_tasks(tasks: List[Dict[str, Any]], next_id: Any, queries: List[str]) -> None:
+    for query in queries:
+        tasks.append({
+            "id": next_id(),
+            "category": "asset_search",
+            "namespace": "project",
+            "action": "search",
+            "tool": "project_query",
+            "arguments": {"action": "search", "query": query},
+            "expected": {"valid_response": True, "min_results": 0},
+            "safety": "read_only",
+        })
+
+
+def append_project_gameplay_tag_tasks(
+    tasks: List[Dict[str, Any]],
+    next_id: Any,
+    *,
+    prefixes: List[str],
+    queries: List[str],
+) -> None:
+    for prefix in prefixes:
+        tasks.append({
+            "id": next_id(),
+            "category": "gameplay_tag_lookup",
+            "namespace": "project",
+            "action": "list_gameplay_tags",
+            "tool": "project_query",
+            "arguments": {"action": "list_gameplay_tags", "prefix": prefix},
+            "expected": {"valid_response": True},
+            "safety": "read_only",
+        })
+    for query in queries:
+        tasks.append({
+            "id": next_id(),
+            "category": "gameplay_tag_lookup",
+            "namespace": "project",
+            "action": "search_gameplay_tags",
+            "tool": "project_query",
+            "arguments": {"action": "search_gameplay_tags", "query": query},
+            "expected": {"valid_response": True},
+            "safety": "read_only",
+        })
+
+
+def append_project_schema_tasks(tasks: List[Dict[str, Any]], next_id: Any, actions: List[str]) -> None:
+    for action in actions:
+        tasks.append({
+            "id": next_id(),
+            "category": "schema_field_presence",
+            "namespace": "project",
+            "action": action,
+            "tool": "monolith_discover",
+            "arguments": {"action": action, "mode": "schema", "namespace": "project"},
+            "expected": {"requires_planning_signals": True, "requires_skill": True},
+            "safety": "read_only_discovery",
+        })
+
+
+def append_project_health_tasks(tasks: List[Dict[str, Any]], next_id: Any, variants: List[Dict[str, Any]]) -> None:
+    for args in variants:
+        tasks.append({
+            "id": next_id(),
+            "category": "health_check",
+            "namespace": "project",
+            "action": "health",
+            "tool": "project_query",
+            "arguments": dict(args),
+            "expected": {"fields": ["status"]},
+            "safety": "read_only",
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +879,25 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only_discovery",
         })
 
+    append_project_search_tasks(tasks, next_id, _PRESERVED_ASSET_SEARCH_QUERIES_20260617)
+    append_project_gameplay_tag_tasks(
+        tasks,
+        next_id,
+        prefixes=_PRESERVED_GAMEPLAY_TAG_PREFIXES_20260617,
+        queries=_PRESERVED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617,
+    )
+    append_project_schema_tasks(tasks, next_id, _PRESERVED_SCHEMA_ACTIONS_20260617)
+    append_project_health_tasks(tasks, next_id, _PRESERVED_HEALTH_VARIANTS_20260617)
+
+    append_project_search_tasks(tasks, next_id, _ADDED_ASSET_SEARCH_QUERIES_20260617)
+    append_project_gameplay_tag_tasks(
+        tasks,
+        next_id,
+        prefixes=_ADDED_GAMEPLAY_TAG_PREFIXES_20260617,
+        queries=_ADDED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617,
+    )
+    append_project_health_tasks(tasks, next_id, _ADDED_HEALTH_VARIANTS_20260617)
+
     # Re-assign IDs to be monotonic after any additions.
     for index, task in enumerate(tasks, 1):
         task["id"] = f"PIB-{index:03d}"
@@ -587,6 +907,8 @@ def build_static_tasks() -> List[Dict[str, Any]]:
 
 def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
     """Generate task fixtures and write to tasks_path. Write manifest to manifest_path."""
+    tasks_path = resolve_plugin_path(tasks_path)
+    manifest_path = resolve_plugin_path(manifest_path)
     tasks = build_static_tasks()
 
     write_jsonl(tasks_path, tasks)
@@ -606,7 +928,7 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
             "schema_adherence_rate",
             "stale_rate",
         ],
-        "task_file": str(tasks_path).replace("\\", "/"),
+        "task_file": display_path(tasks_path),
     }
     write_json(manifest_path, manifest)
     return manifest
@@ -623,10 +945,12 @@ def run_benchmark(
     label: str,
     timeout_s: float,
 ) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
     tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
     status = result_data(status_response)
+    benchmark_inputs = build_benchmark_inputs("ProjectIndex", tasks_path=tasks_path, mcp_status=status)
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
@@ -647,9 +971,11 @@ def run_benchmark(
             partial = aggregate(label, status, tasks[:index], rows)
             partial["completed_task_count"] = index
             partial["total_task_count"] = len(tasks)
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     summary = aggregate(label, status, tasks, rows)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
     return summary

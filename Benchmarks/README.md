@@ -13,6 +13,15 @@
 
 All primary scores are in [0.0, 1.0]. Higher is better for all primary scores.
 
+## Input Fingerprints
+
+Benchmark `summary.json` and `partial_summary.json` files include two top-level fields:
+
+- `benchmark_inputs`: task/probe file sha256 and line counts, manifest signature, available local DB file signatures, and compact MCP/catalog metadata.
+- `input_fingerprint`: a stable sha256 digest of `benchmark_inputs` for stale-baseline detection.
+
+Runner defaults are resolved relative to the Monolith plugin root, so `Benchmarks\...\tasks.jsonl` means `Plugins\Monolith\Benchmarks\...\tasks.jsonl` regardless of the current working directory. Hosted static CI validates that configured task/probe JSONL non-empty line counts match each benchmark manifest count and that runner default paths resolve to the configured files without needing a live MCP server.
+
 ## Running All Benchmarks
 
 Run each benchmark in sequence from the Monolith plugin root. All scripts require a live MCP endpoint at `http://localhost:9316/mcp` except OfflineParity which can run offline.

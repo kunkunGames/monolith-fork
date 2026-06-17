@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-06-17T00:00:00+00:00",
+  "generated_at": "2026-06-17T13:18:15.595184+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 219,
-  "min_tasks_requested": 219,
+  "task_count": 319,
+  "min_tasks_requested": 319,
   "golden_symbols": [
     "AActor",
     "UObject",
@@ -42,18 +42,17 @@
     "verify_symbols",
     "find_example_usage",
     "find_overrides",
-    "review_hotspots",
-    "health"
+    "review_hotspots"
   ],
   "category_counts": {
-    "ergonomics_text": 30,
+    "ergonomics_text": 40,
     "health_check": 9,
-    "impact_radius_lookup": 18,
-    "review_context_lookup": 18,
+    "impact_radius_lookup": 33,
+    "review_context_lookup": 33,
     "schema_field_presence": 12,
-    "symbol_lookup": 132
+    "symbol_lookup": 192
   },
-  "task_file": "Plugins/Monolith/Benchmarks/SourceIndex/tasks.jsonl",
+  "task_file": "Benchmarks/SourceIndex/tasks.jsonl",
   "scoring": {
     "source_index_score": "0.35 * symbol_hit_rate + 0.25 * field_completeness_rate + 0.20 * schema_adherence_rate + 0.10 * (1 - stale_rate) + 0.10 * ergonomics_success_rate",
     "symbol_hit_rate": "fraction of symbol_lookup + review_context_lookup + impact_radius_lookup tasks with direct_success",

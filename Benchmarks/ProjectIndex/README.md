@@ -19,6 +19,8 @@ graph, and plan asset or gameplay changes.
 | `RESULTS.md` | Latest checked-in benchmark result summary. |
 | `Plugins/Monolith/Scripts/project_index_benchmark.py` | Generator, runner, and comparison tool. |
 
+Checked-in corpus size: **300 tasks**.
+
 ## Task Categories
 
 | Category | Request type | Scored evidence |
@@ -47,12 +49,13 @@ All tasks are read-only and safe to run against any live Monolith MCP endpoint.
 
 ```powershell
 python Plugins\Monolith\Scripts\project_index_benchmark.py generate `
-  --tasks Plugins\Monolith\Benchmarks\ProjectIndex\tasks.jsonl `
-  --manifest Plugins\Monolith\Benchmarks\ProjectIndex\manifest.json
+  --tasks Benchmarks\ProjectIndex\tasks.jsonl `
+  --manifest Benchmarks\ProjectIndex\manifest.json
 ```
 
-The generator produces 100 static tasks: 50 asset_search, 20 gameplay_tag_lookup,
-5 health_check, and 25 schema_field_presence.
+The generator produces 300 static tasks: 170 `asset_search`, 70
+`gameplay_tag_lookup`, 19 `health_check`, 1 `stats_check`, and 40
+`schema_field_presence`.
 
 ## Run
 

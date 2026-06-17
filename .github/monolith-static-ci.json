@@ -117,6 +117,70 @@
     "dump_dir": "Skills/_catalog_dumps",
     "timeout_seconds": 180
   },
+  "benchmark_definitions": {
+    "enabled": true,
+    "definitions": [
+      {
+        "name": "ActionGuidance",
+        "script": "Scripts/action_guidance_benchmark.py",
+        "manifest": "Benchmarks/ActionGuidance/manifest.json",
+        "tasks": "Benchmarks/ActionGuidance/tasks.jsonl",
+        "manifest_count_field": "task_count",
+        "manifest_path_field": "task_file",
+        "default_path_attrs": {
+          "DEFAULT_TASKS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
+      },
+      {
+        "name": "SourceIndex",
+        "script": "Scripts/source_index_benchmark.py",
+        "manifest": "Benchmarks/SourceIndex/manifest.json",
+        "tasks": "Benchmarks/SourceIndex/tasks.jsonl",
+        "manifest_count_field": "task_count",
+        "manifest_path_field": "task_file",
+        "default_path_attrs": {
+          "DEFAULT_TASKS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
+      },
+      {
+        "name": "ProjectIndex",
+        "script": "Scripts/project_index_benchmark.py",
+        "manifest": "Benchmarks/ProjectIndex/manifest.json",
+        "tasks": "Benchmarks/ProjectIndex/tasks.jsonl",
+        "manifest_count_field": "task_count",
+        "manifest_path_field": "task_file",
+        "default_path_attrs": {
+          "DEFAULT_TASKS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
+      },
+      {
+        "name": "BlueprintEditing",
+        "script": "Scripts/blueprint_editing_benchmark.py",
+        "manifest": "Benchmarks/BlueprintEditing/manifest.json",
+        "tasks": "Benchmarks/BlueprintEditing/tasks.jsonl",
+        "manifest_count_field": "task_count",
+        "manifest_path_field": "task_file",
+        "default_path_attrs": {
+          "DEFAULT_TASKS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
+      },
+      {
+        "name": "SchemaCompleteness",
+        "script": "Scripts/schema_completeness_benchmark.py",
+        "manifest": "Benchmarks/SchemaCompleteness/manifest.json",
+        "probe_set": "Benchmarks/SchemaCompleteness/probe_set.jsonl",
+        "manifest_count_field": "probe_set_task_count",
+        "manifest_path_field": "probe_set_file",
+        "default_path_attrs": {
+          "DEFAULT_PROBE_SET": "probe_set"
+        }
+      }
+    ]
+  },
   "offline_exe_freshness": {
     "enabled": true,
     "script": "Scripts/check_offline_exe_fresh.py"

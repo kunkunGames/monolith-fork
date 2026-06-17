@@ -32,9 +32,10 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, resolve_plugin_path
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
-DEFAULT_PROBE_SET = "Plugins/Monolith/Benchmarks/SchemaCompleteness/probe_set.jsonl"
+DEFAULT_PROBE_SET = "Benchmarks/SchemaCompleteness/probe_set.jsonl"
 PARTIAL_FLUSH_EVERY = 25
 
 # Score weights (must sum to 1.0)
@@ -43,6 +44,142 @@ W_REQUIRED_PARAMS = 0.25
 W_PLANNING_SIGNALS = 0.20
 W_SKILL_ROUTING = 0.15
 W_OUTPUT_CONTRACT = 0.10
+
+STATIC_PROBE_EXPECTED_DIMENSIONS = [
+    "param_types_declared",
+    "required_params_marked",
+    "planning_signals_present",
+    "skill_routing_present",
+    "output_contract_declared",
+]
+
+STATIC_PROBE_SUPPLEMENTS_20260617 = [
+    ("animation", "get_state_machines", "high"),
+    ("animation", "get_state_info", "high"),
+    ("animation", "get_transitions", "high"),
+    ("animation", "get_blend_nodes", "medium"),
+    ("animation", "derive_foot_sync_markers", "medium"),
+    ("animation", "get_skeleton_info", "medium"),
+    ("animation", "get_sequence_info", "medium"),
+    ("animation", "get_montage_info", "high"),
+    ("animation", "get_ikrig_info", "medium"),
+    ("animation", "get_curve_keys", "medium"),
+    ("blueprint", "list_graphs", "critical"),
+    ("blueprint", "get_graph_data", "critical"),
+    ("blueprint", "get_graph_summary", "high"),
+    ("blueprint", "get_variables", "high"),
+    ("blueprint", "get_components", "high"),
+    ("blueprint", "get_blueprint_info", "high"),
+    ("blueprint", "validate_blueprint", "high"),
+    ("blueprint", "get_data_table_rows", "medium"),
+    ("blueprint", "get_function_signature", "medium"),
+    ("blueprint", "search_nodes", "high"),
+    ("material", "get_all_expressions", "critical"),
+    ("material", "get_expression_details", "high"),
+    ("material", "get_full_connection_graph", "high"),
+    ("material", "validate_material", "high"),
+    ("material", "get_material_parameters", "high"),
+    ("material", "get_instance_parameters", "medium"),
+    ("material", "get_compilation_stats", "medium"),
+    ("material", "check_tiling_quality", "medium"),
+    ("material", "get_expression_connections", "medium"),
+    ("niagara", "get_ordered_modules", "critical"),
+    ("niagara", "get_module_inputs", "high"),
+    ("niagara", "get_module_graph", "high"),
+    ("niagara", "get_custom_hlsl_text", "medium"),
+    ("niagara", "get_all_parameters", "high"),
+    ("niagara", "get_system_summary", "high"),
+    ("niagara", "validate_system", "high"),
+    ("niagara", "list_renderers", "medium"),
+    ("niagara", "get_emitter_summary", "medium"),
+    ("scene", "get_world_context", "critical"),
+    ("scene", "list_layers", "medium"),
+    ("scene", "list_streaming_levels", "high"),
+    ("scene", "get_level_metadata", "medium"),
+    ("scene", "get_scene_statistics", "medium"),
+    ("scene", "get_actor_properties", "high"),
+    ("scene", "query_raycast", "high"),
+    ("scene", "get_light_coverage", "medium"),
+    ("scene", "get_actors_in_volume", "high"),
+    ("gas", "get_ability_info", "critical"),
+    ("gas", "get_ability_set", "high"),
+    ("gas", "list_gameplay_effects", "high"),
+    ("gas", "validate_ability", "high"),
+    ("gas", "get_attribute_set", "high"),
+    ("gas", "find_abilities_by_tag", "high"),
+    ("gas", "get_gameplay_effect", "high"),
+    ("ui", "get_widget_tree", "critical"),
+    ("ui", "list_widget_types", "medium"),
+    ("ui", "list_animations", "medium"),
+    ("ui", "list_widget_events", "medium"),
+    ("ui", "get_widget_bindings", "high"),
+    ("ui", "get_animation_details", "medium"),
+    ("ui", "list_widget_properties", "high"),
+    ("ai", "get_behavior_tree", "high"),
+    ("ai", "list_blackboards", "medium"),
+    ("ai", "get_eqs_query", "medium"),
+    ("ai", "get_navmesh_stats", "medium"),
+    ("ai", "get_bb_key_details", "medium"),
+    ("audio", "get_attenuation_settings", "medium"),
+    ("audio", "list_audio_assets", "medium"),
+    ("audio", "search_audio_assets", "medium"),
+    ("audio", "validate_sound_cue", "high"),
+    ("audio", "get_sound_cue_graph", "high"),
+    ("mesh", "get_mesh_bounds", "medium"),
+    ("mesh", "get_mesh_lods", "medium"),
+    ("mesh", "analyze_mesh_quality", "high"),
+    ("mesh", "validate_game_ready", "high"),
+    ("mesh", "get_triangle_budget", "medium"),
+    ("asset", "validate_naming_conventions", "medium"),
+    ("asset", "inspect_asset", "high"),
+    ("asset", "inspect_assets_batch", "medium"),
+    ("config", "get_section", "high"),
+    ("config", "get_cvar", "medium"),
+    ("leveldesign", "find_hiding_spots", "medium"),
+    ("leveldesign", "list_levels", "medium"),
+    ("leveldesign", "get_level_info", "medium"),
+    ("leveldesign", "analyze_room_acoustics", "medium"),
+    ("leveldesign", "analyze_sightlines", "medium"),
+    ("chooser", "inspect_chooser", "medium"),
+    ("chooser", "validate_chooser", "medium"),
+    ("chooser", "list_chooser_tables", "medium"),
+    ("paper2d", "get_status", "medium"),
+    ("paper2d", "list_assets", "medium"),
+    ("paper2d", "get_asset", "medium"),
+    ("collection", "get_collection_assets", "medium"),
+    ("collection", "get_collection", "medium"),
+    ("editor", "get_build_errors", "medium"),
+    ("editor", "search_build_output", "medium"),
+    ("level_sequence", "get_replay_status", "medium"),
+    ("level_sequence", "get_director_info", "medium"),
+    ("source", "sync_database", "medium"),
+    ("localization", "list_cultures", "medium"),
+]
+
+
+def static_probe_row(namespace: str, action: str, priority: str) -> Dict[str, Any]:
+    return {
+        "namespace": namespace,
+        "action": action,
+        "priority": priority,
+        "expected_dimensions": list(STATIC_PROBE_EXPECTED_DIMENSIONS),
+        "rationale": f"Practical Unreal agent workflow schema contract for {namespace}.{action}",
+    }
+
+
+def apply_static_probe_supplements(probes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen = {
+        (str(probe.get("namespace", "")), str(probe.get("action", "")))
+        for probe in probes
+    }
+    out = list(probes)
+    for namespace, action, priority in STATIC_PROBE_SUPPLEMENTS_20260617:
+        key = (namespace, action)
+        if key in seen:
+            continue
+        out.append(static_probe_row(namespace, action, priority))
+        seen.add(key)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -473,6 +610,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         total = len(all_pairs)
     else:
         print(f"[schema_completeness] discovered {total} actions across {len(namespaces)} namespaces", flush=True)
+    benchmark_inputs = build_benchmark_inputs("SchemaCompleteness", catalog={"namespaces": namespaces})
 
     # Step 2: scan each action
     per_action_path = output_dir / "per_action.jsonl"
@@ -516,11 +654,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
             partial = aggregate_metrics(label, rows, total, ns_breakdown)
             partial["completed_action_count"] = index
             partial["total_action_count"] = total
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     # Step 3: write final output files
     ns_breakdown = build_namespace_breakdown(rows)
     summary = aggregate_metrics(label, rows, total, ns_breakdown)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "namespace_breakdown.json", ns_breakdown)
 
@@ -577,7 +717,7 @@ def load_probe_set(probe_set_path: pathlib.Path) -> List[Dict[str, Any]]:
                 )
                 continue
             probes.append(entry)
-    return probes
+    return apply_static_probe_supplements(probes)
 
 
 def _probe_pass_rates(
@@ -604,7 +744,7 @@ def _probe_pass_rates(
 
 
 def cmd_probe(args: argparse.Namespace) -> int:
-    probe_set_path: pathlib.Path = args.probe_set
+    probe_set_path: pathlib.Path = resolve_plugin_path(args.probe_set)
     url: str = args.mcp_url
     output_dir: pathlib.Path = args.output_dir
     label: str = args.label
@@ -628,6 +768,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
 
     total = len(probes)
     print(f"[schema_completeness] loaded {total} probes from {probe_set_path}", flush=True)
+    benchmark_inputs = build_benchmark_inputs("SchemaCompleteness", probe_set_path=probe_set_path)
 
     # Output file paths
     per_action_path = output_dir / "per_action.jsonl"
@@ -718,6 +859,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
                 "high_probe_pass_rate": hpr,
                 "failed_probe_count": failed_probe_count,
             }
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     # Write final output files
@@ -740,6 +882,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
         "passed_dimension_checks": passed_checks,
         "total_dimension_checks": total_checks,
     }
+    attach_benchmark_inputs(summary, benchmark_inputs)
 
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "namespace_breakdown.json", ns_breakdown)

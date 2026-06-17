@@ -17,6 +17,20 @@ score so regressions can be detected by magnitude before they become hard
 failures: a score drop shows *where* parity is degrading even while individual
 actions might still pass.
 
+Current coverage:
+
+- `verify_offline_parity.py`: 137 hard-gate actions. CI still requires zero
+  diffs, zero real errors, and matching `parity_spec_rev`.
+- `offline_parity_benchmark.py`: 317 scored actions: 96 `cppreflect`, 46
+  `network`, 50 `decision`, 62 `risk`, and 63 `source` cases. The benchmark
+  includes 100 benchmark-only cases beyond the prior 217-action table, plus
+  5 expected-error negative source cases that are tracked separately from real
+  tool failures.
+
+For CI thresholding, keep the hard-gate as the binary pass/fail check. Use the
+benchmark as a trend gate: healthy runs should stay at or above `0.95`, with
+`real_error_count == 0` and `expected_error_problem_count == 0`.
+
 ## Files
 
 | File | Purpose |
@@ -55,7 +69,7 @@ python Plugins\Monolith\Scripts\offline_parity_benchmark.py run `
 
 Each run writes:
 - `summary.json` -- aggregate metrics including `offline_parity_score`
-- `per_action.jsonl` -- one line per action with label, status, diff_count, warning_count, error
+- `per_action.jsonl` -- one line per action with label, status, diff_count, warning_count, error, expected_error, error_kind, exe_exit_code, py_exit_code
 - `partial_summary.json` -- updated every 5 actions for progress visibility
 
 ## Compare
@@ -81,9 +95,8 @@ Prints a human-readable summary of a single run to stdout.
 ## Missing exe handling
 
 If `Binaries/monolith_query.exe` does not exist, all actions are reported as
-SKIP with a `tool not found: exe` reason. No actions are comparable, so
-`match_rate`, `diff_rate`, and `error_rate` are all 0.0. The score formula
-evaluates to `0.20 * (1-0) + 0.20 * (1-0) = 0.40` (the diff and error penalty
-terms are absent but the match contribution is also absent). This allows the
-benchmark to run in environments where only the Python reference tool is
-present, while making the missing exe visibly absent from the score trend.
+SKIP with a `tool not found: exe` reason. No actions are comparable, so the
+primary `offline_parity_score` is forced to `0.0` instead of awarding partial
+credit from absent diff/error rates. This allows the benchmark to run in
+environments where only the Python reference tool is present, while making the
+missing exe visibly absent from the score trend.

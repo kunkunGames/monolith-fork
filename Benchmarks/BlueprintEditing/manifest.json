@@ -1,28 +1,28 @@
 {
   "benchmark": "BlueprintEditing",
-  "description": "Measures blueprint editing capability: type discovery, graph/variable reads, edit action schemas, edit execution, graceful error handling, workflow completeness",
+  "description": "Measures blueprint editing capability: type discovery, graph/variable reads, edit action schemas, read-back-verified edit execution, executed end-to-end workflows, graceful input-specific error handling, duplicate-name rejection, and explicit fixture lifecycle preflight",
   "primary_score": "blueprint_editing_score",
   "expected_namespace": "blueprint",
-  "generated_at": "2026-06-16T18:57:01.278351+00:00",
-  "task_count": 191,
+  "generated_at": "2026-06-17T13:17:50.534443+00:00",
+  "task_count": 295,
   "category_counts": {
-    "duplicate_reject": 6,
-    "edit_execute": 70,
-    "edit_schema": 38,
-    "error_path": 8,
-    "graph_read": 21,
-    "read_schema": 15,
-    "type_discovery": 14,
-    "variable_read": 14,
-    "workflow_completeness": 5
+    "duplicate_reject": 11,
+    "edit_execute": 104,
+    "edit_schema": 46,
+    "error_path": 16,
+    "graph_read": 35,
+    "read_schema": 23,
+    "type_discovery": 21,
+    "variable_read": 28,
+    "workflow_execute": 11
   },
   "edit_schema_domains": {
-    "node": 7,
+    "node": 9,
     "function": 8,
     "variable": 7,
-    "class": 4,
-    "component": 5,
-    "compilation": 2,
+    "class": 8,
+    "component": 6,
+    "compilation": 3,
     "state": 2,
     "event": 3
   },
@@ -36,14 +36,41 @@
     "Interface"
   ],
   "workflows_tested": [
-    "create_function",
-    "add_variable",
-    "add_component",
+    "build_function",
     "implement_interface",
-    "event_dispatcher_setup"
+    "component_assembly",
+    "widget_style_refresh",
+    "widget_comment_layout",
+    "anim_threadsafe_graph",
+    "gas_activate_override",
+    "actorcomponent_toggle_contract",
+    "interface_signature_contract",
+    "actor_component_property_assembly",
+    "duplicate_function_graph"
   ],
-  "score_formula": "0.22*edit_execute_rate + 0.18*edit_schema_rate + 0.14*graph_read_rate + 0.14*variable_read_rate + 0.10*error_path_rate + 0.08*duplicate_reject_rate + 0.07*read_schema_rate + 0.04*type_discovery_rate + 0.03*workflow_completeness_rate",
-  "edit_execute_tasks_per_type": 10,
+  "score_formula": "0.26*edit_execute_rate + 0.14*edit_schema_rate + 0.12*graph_read_rate + 0.12*variable_read_rate + 0.1*error_path_rate + 0.1*workflow_execute_rate + 0.08*duplicate_reject_rate + 0.05*read_schema_rate + 0.03*type_discovery_rate",
+  "weights": {
+    "edit_execute": 0.26,
+    "edit_schema": 0.14,
+    "graph_read": 0.12,
+    "variable_read": 0.12,
+    "error_path": 0.1,
+    "workflow_execute": 0.1,
+    "duplicate_reject": 0.08,
+    "read_schema": 0.05,
+    "type_discovery": 0.03
+  },
+  "base_edit_execute_tasks_per_type": 10,
+  "additional_edit_execute_tasks": 28,
+  "edit_execute_tasks_per_type": {
+    "Actor": 14,
+    "ActorComponent": 16,
+    "AnimInstance": 16,
+    "Character": 11,
+    "GameplayAbility": 16,
+    "Interface": 15,
+    "Widget": 16
+  },
   "fixture_paths": {
     "Actor": "/Game/Benchmarks/BPB_TestActor",
     "Character": "/Game/Benchmarks/BPB_TestCharacter",
@@ -53,6 +80,7 @@
     "ActorComponent": "/Game/Benchmarks/BC_TestComponent",
     "Interface": "/Game/Benchmarks/BPI_TestInterface"
   },
+  "preflight_command": "python Scripts/blueprint_editing_benchmark.py preflight --mcp-url http://localhost:9316/mcp",
   "setup_fixtures_command": "python Scripts/blueprint_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
   "score_dimensions": [
     "edit_execute_rate",
@@ -60,10 +88,10 @@
     "graph_read_rate",
     "variable_read_rate",
     "error_path_rate",
+    "workflow_execute_rate",
     "duplicate_reject_rate",
     "read_schema_rate",
-    "type_discovery_rate",
-    "workflow_completeness_rate"
+    "type_discovery_rate"
   ],
   "catalog_version_verified": "v0.20.2-blueprint-138-actions",
   "task_file": "Benchmarks/BlueprintEditing/tasks.jsonl"

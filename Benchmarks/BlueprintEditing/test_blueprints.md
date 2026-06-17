@@ -1,15 +1,16 @@
 # BlueprintEditing Benchmark — Test Blueprint Fixtures
 
-This document specifies the 7 fixture Blueprints that must exist under `/Game/Benchmarks/` for the BlueprintEditing benchmark to produce rich, representative scores. Without these fixtures, read and edit tasks fall back to discovering empty or non-existent assets, which reduces score variance and makes capability gaps harder to distinguish.
+This document specifies the 7 fixture Blueprints that must exist under `/Game/Benchmarks/` for the 295-task BlueprintEditing benchmark to produce rich, representative scores. Without these fixtures, read and edit tasks fail preflight as fixture missing/contract failures instead of being confused with live MCP transport errors.
 
 The asset paths here match `tasks.jsonl` exactly — do not rename them.
 
 ## Why Fixtures Matter
 
 - **Graph reads** score higher signal when the graph contains real nodes and pin connections.
-- **Variable reads** require at least one variable per Blueprint to distinguish "empty list" from "action not working".
-- **Edit execute tasks** (`edit_execute` category) call real mutations against these fixtures; they are the highest-weighted category (0.25) and require the fixtures to compile cleanly.
-- **Workflow tasks** chain multiple steps; a fixture that already compiles cleanly isolates agent errors from asset errors.
+- **Variable reads** require at least one variable per Blueprint to distinguish "empty list" from "action not working". Fixture variable types are created from `FIXTURE_VAR_TYPES` in the runner, which matches the types in this doc exactly (`ActorTag` = FName/`name`, `DisplayText` = FText/`text`, `CharacterName` = FString/`string`, `ComponentID` = int32/`int`).
+- **Function reads** require setup-created function stubs from `FIXTURE_FUNCTIONS_BY_TYPE` for all 7 fixture types. `preflight` reports `fixture_contract_missing` if these stubs are absent.
+- **Edit execute tasks** (`edit_execute` category) call real mutations against these fixtures and **read the mutation back**; they are the highest-weighted category (0.26) and require the fixtures to compile cleanly (`error_count == 0`).
+- **Workflow tasks** (`workflow_execute`) are executed end-to-end (build→wire→compile-clean→read-back); a fixture that already compiles cleanly isolates agent errors from asset errors.
 
 ---
 
@@ -231,7 +232,7 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BC_TestComp
 
 **Variables to create:**
 
-_(Interfaces do not carry member variables; this fixture intentionally has none to validate empty-variable-list handling in `variable_read` tasks. The second `variable_read` slot for Interface calls `list_functions` instead.)_
+_(Interfaces do not carry member variables; this fixture intentionally has none to validate empty-variable-list handling in `variable_read` tasks. Interface read tasks call both `get_functions` and `get_interface_functions`, and assert at least one declared interface stub (`GetDisplayName_Bench` / `OnInteract_Bench`) appears — so an empty `{}` cannot pass. `setup_fixtures` creates these two stubs.)_
 
 **Functions to create (interface stubs):**
 
@@ -253,13 +254,20 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPI_TestInt
 
 ## Fixture Verification
 
-After creating all 7 fixtures, run the benchmark in read-only mode to verify server handling:
+Use preflight before scoring. It distinguishes `transport_error` from fixture missing/contract
+failures, then `run` repeats readiness preflight by default:
 
 ```powershell
+python Scripts\blueprint_editing_benchmark.py preflight `
+  --mcp-url http://localhost:9316/mcp
+
+python Scripts\blueprint_editing_benchmark.py setup_fixtures `
+  --mcp-url http://localhost:9316/mcp
+
 python Scripts\blueprint_editing_benchmark.py run `
   --tasks Benchmarks\BlueprintEditing\tasks.jsonl `
   --label fixture-verify `
   --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\fixture-verify
 ```
 
-Expected: `graph_read_rate` and `variable_read_rate` ≥ 0.9 (fixtures exist and server handles requests), `edit_execute_rate` ≥ 0.8 (fixture assets are writable and the server can process edit calls).
+Expected: `preflight.ok=true`, `graph_read_rate` and `variable_read_rate` ≥ 0.9 (fixtures exist and server handles requests), `edit_execute_rate` ≥ 0.8 (fixture assets are writable and the server can process edit calls).

@@ -37,11 +37,11 @@ project_index_score = 0.40 * search_hit_rate
 
 | Category | Count | Tool | Description |
 | --- | ---: | --- | --- |
-| `asset_search` | 50 | `project_query` | Search for 50 common UE asset/gameplay terms |
-| `gameplay_tag_lookup` | 20 | `project_query` | List and search gameplay tags with various params |
-| `health_check` | 4 | `project_query` | `project.health` status checks (the authoritative health endpoint) |
+| `asset_search` | 170 | `project_query` | Search for common UE asset/gameplay terms plus GAS, Niagara, UMG, animation, audio, world, and import-oriented terms |
+| `gameplay_tag_lookup` | 70 | `project_query` | List and search gameplay tags with combat, ability, UI, input, quest, cue, and status params |
+| `health_check` | 19 | `project_query` | `project.health` status checks (the authoritative health endpoint) |
 | `stats_check` | 1 | `project_query` | `project.get_stats` success/indexing/stats contract check |
-| `schema_field_presence` | 25 | `monolith_discover` | Schema discovery for 25 project namespace actions |
+| `schema_field_presence` | 40 | `monolith_discover` | Schema discovery for project namespace actions |
 
 ## Required Result Fields
 

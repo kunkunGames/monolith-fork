@@ -12,17 +12,22 @@ graphs, and plan C++ changes.
 
 | File | Purpose |
 | --- | --- |
-| `tasks.jsonl` | Static seed fixture set covering all three task categories. |
+| `tasks.jsonl` | Static seed fixture set covering all six task categories. |
 | `manifest.json` | Catalog metadata, golden symbols, and score formula. |
 | `METRICS.md` | Metric definitions, score formula, and interpretation. |
 | `RESULTS.md` | Latest checked-in benchmark result summary. |
 | `Plugins/Monolith/Scripts/source_index_benchmark.py` | Generator, runner, and comparison tool. |
+
+Checked-in corpus size: **319 tasks**.
 
 ## Task Categories
 
 | Category | Request type | Scored evidence |
 | --- | --- | --- |
 | `symbol_lookup` | `source_query` with `action=search_source`, `find_callers`, `find_callees`, or `risk_score` against a golden symbol | At least 1 result returned; each result checked for `name`, `kind`, `file_path`/`location` fields. |
+| `review_context_lookup` | `source_query` with `action=review_context` against engine and gameplay symbols | Review context returns a valid risk seed/top-risk symbol row or a truthful empty response. |
+| `impact_radius_lookup` | `source_query` with `action=impact_radius` against gameplay, UI, VFX, and asset symbols | Impact radius returns valid seed/impacted symbol rows or a truthful empty response. |
+| `ergonomics_text` | Plain-text source helpers such as `get_include_path`, `get_signature`, `verify_symbols`, and `find_example_usage` | Non-empty, non-error text that an agent can use directly. |
 | `health_check` | `source_query` with `action=health` | Response contains `status` plus `symbol_count` or `total_symbols`, and no stale/error flag. |
 | `schema_field_presence` | `monolith_discover` with `namespace=source`, `mode=schema` | Schema has `planning_signals`, `skill`, and both `output_contract_status`/`next_actions_status` declared. |
 
@@ -33,14 +38,15 @@ All tasks are read-only and safe to run against any live Monolith MCP endpoint.
 ```powershell
 python Plugins\Monolith\Scripts\source_index_benchmark.py generate `
   --mcp-url http://localhost:9316/mcp `
-  --min-tasks 30 `
-  --tasks Plugins\Monolith\Benchmarks\SourceIndex\tasks.jsonl `
-  --manifest Plugins\Monolith\Benchmarks\SourceIndex\manifest.json
+  --min-tasks 319 `
+  --tasks Benchmarks\SourceIndex\tasks.jsonl `
+  --manifest Benchmarks\SourceIndex\manifest.json
 ```
 
-The generator starts from the static golden-symbol set (6 symbols x 4 actions
-= 24 symbol_lookup tasks, 2 health_check tasks, 4 schema tasks = 30 tasks) and
-tops up from the live catalog if `--min-tasks` exceeds 30.
+The generator starts from deterministic source-index fixtures and includes the
+checked-in practical Unreal extension: 192 `symbol_lookup`, 33
+`review_context_lookup`, 33 `impact_radius_lookup`, 40 `ergonomics_text`, 9
+`health_check`, and 12 `schema_field_presence` tasks.
 
 ## Run
 

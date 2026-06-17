@@ -2,8 +2,10 @@
 
 ## 2026-06-16 Legacy vs Current
 
-The same 161-task benchmark set was run against a legacy MCP build restored
-from CL 735 `#have` sources and then against the current MCP build.
+This historical run used the then-current 161-task benchmark set against a
+legacy MCP build restored from CL 735 `#have` sources and then against the
+current MCP build. The checked-in reusable task corpus has since expanded to
+508 tasks.
 
 | Metric | Legacy `#have` | Current | Delta | Better |
 | --- | ---: | ---: | ---: | --- |

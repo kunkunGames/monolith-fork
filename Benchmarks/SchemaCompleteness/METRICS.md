@@ -51,7 +51,7 @@ Weights reflect the relative importance of each dimension for agent reliability:
 
 | Property | ActionGuidance | SchemaCompleteness |
 | --- | --- | --- |
-| Scope | 161 sampled tasks | All actions in catalog (1766) |
+| Scope | 508 sampled tasks | All actions in catalog (1766), plus 385 targeted probes |
 | Namespaces | All 51 (1 representative action each) | All 51 (every action) |
 | Measures | Agent task success, recovery, param correction | Schema structural quality |
 | Primary metric | `effectiveness_score` | `schema_completeness_score` |

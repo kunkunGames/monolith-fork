@@ -20,6 +20,11 @@ Score formula:
 Note: match_rate + diff_rate + error_rate = 1.0 for non-skipped actions.
 So the formula simplifies to:
     offline_parity_score = 0.70 * match_rate + 0.20 * (1 - error_rate) + 0.10 * version_parity_score
+If comparable_actions == 0, offline_parity_score is forced to 0.0.
+
+Expected-error negative cases keep status=MATCH when both tools fail as
+expected, and are exposed through expected_error/error_kind diagnostics instead
+of being mixed with real tool failures.
 
 Subcommands:
     run     -- executes the offline parity check and produces scored summary.json
@@ -44,6 +49,8 @@ import pathlib
 import subprocess
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs
 
 # ------------------------------------------------------------------ paths
 
@@ -150,6 +157,30 @@ TIME_TOLERANCE_SEC = 5
 
 # Actions whose next_cursor qh is derived from a wall-clock value.
 TIME_DERIVED_CURSOR_ACTIONS = {"risk.get_release_window_hotspots"}
+
+EXPECTED_ACTION_COUNT = 317
+BENCHMARK_EXTENSION_ACTION_COUNT = 100
+
+
+def _clip_text(text: str, limit: int = 400) -> str:
+    stripped = (text or "").strip()
+    return stripped if len(stripped) <= limit else stripped[: limit - 3] + "..."
+
+
+def _process_diagnostics(returncode: int, stdout: str, stderr: str) -> Dict[str, Any]:
+    return {
+        "exit_code": returncode,
+        "stdout": _clip_text(stdout),
+        "stderr": _clip_text(stderr),
+    }
+
+
+def is_time_derived_cursor_action(label: str, args: List[str]) -> bool:
+    if label in TIME_DERIVED_CURSOR_ACTIONS:
+        return True
+    if not label.startswith("risk.get_release_window_hotspots"):
+        return False
+    return "--since_unix" not in args
 
 
 def deep_diff(
@@ -300,10 +331,12 @@ def discover_chain_inputs(
 
 def build_actions(chain: Dict[str, Any]) -> List[tuple]:
     """
-    The 217 parity actions with deterministic representative args.
+    The 317 parity actions with deterministic representative args.
     Each entry: (label, namespace, action, args_or_None) or
                 (label, namespace, action, args_or_None, compare_mode)
+                (label, namespace, action, args_or_None, compare_mode, metadata)
     where compare_mode defaults to "json"; "text" uses strict byte-compare.
+    metadata currently supports expected_error=True for negative source cases.
     None args means the action is reported as SKIP rather than a parity failure.
     """
     cls = chain["uclass"]
@@ -576,11 +609,148 @@ def build_actions(chain: Dict[str, Any]) -> List[tuple]:
         ("risk.get_file_churn/Monolith", "risk", "get_file_churn", ["Monolith.uplugin"]),
         ("risk.get_file_churn/tag_path_params", "risk", "get_file_churn", ["Scripts/tag_path_params.py"]),
     ]
+
+    benchmark_extension = [
+        # ---- cppreflect (30 benchmark-only) -- gameplay, UI, data, networking classes ----
+        ("cppreflect.get_uclass/AGameSession", "cppreflect", "get_uclass", ["AGameSession"]),
+        ("cppreflect.get_uclass/AGameNetworkManager", "cppreflect", "get_uclass", ["AGameNetworkManager"]),
+        ("cppreflect.get_uclass/APlayerCameraManager", "cppreflect", "get_uclass", ["APlayerCameraManager"]),
+        ("cppreflect.get_uclass/UPlayer", "cppreflect", "get_uclass", ["UPlayer"]),
+        ("cppreflect.get_uclass/ULocalPlayer", "cppreflect", "get_uclass", ["ULocalPlayer"]),
+        ("cppreflect.get_uclass/UNetDriver", "cppreflect", "get_uclass", ["UNetDriver"]),
+        ("cppreflect.get_uclass/UGameUserSettings", "cppreflect", "get_uclass", ["UGameUserSettings"]),
+        ("cppreflect.get_uclass/UCanvas", "cppreflect", "get_uclass", ["UCanvas"]),
+        ("cppreflect.get_uclass/UDamageType", "cppreflect", "get_uclass", ["UDamageType"]),
+        ("cppreflect.get_uclass/UGameplayStatics", "cppreflect", "get_uclass", ["UGameplayStatics"]),
+        ("cppreflect.get_uclass/UBlueprintFunctionLibrary", "cppreflect", "get_uclass", ["UBlueprintFunctionLibrary"]),
+        ("cppreflect.get_uclass/UDataAsset", "cppreflect", "get_uclass", ["UDataAsset"]),
+        ("cppreflect.get_uclass/UPrimaryDataAsset", "cppreflect", "get_uclass", ["UPrimaryDataAsset"]),
+        ("cppreflect.get_uclass/UCurveFloat", "cppreflect", "get_uclass", ["UCurveFloat"]),
+        ("cppreflect.get_uclass/UDataTable", "cppreflect", "get_uclass", ["UDataTable"]),
+        ("cppreflect.list_uproperties/APlayerController", "cppreflect", "list_uproperties", ["APlayerController"]),
+        ("cppreflect.list_uproperties/APlayerState", "cppreflect", "list_uproperties", ["APlayerState"]),
+        ("cppreflect.list_uproperties/UPrimitiveComponent", "cppreflect", "list_uproperties", ["UPrimitiveComponent"]),
+        ("cppreflect.list_uproperties/USkeletalMeshComponent", "cppreflect", "list_uproperties", ["USkeletalMeshComponent"]),
+        ("cppreflect.list_uproperties/UStaticMeshComponent", "cppreflect", "list_uproperties", ["UStaticMeshComponent"]),
+        ("cppreflect.list_uproperties/UUserWidget", "cppreflect", "list_uproperties", ["UUserWidget"]),
+        ("cppreflect.list_ufunctions/UGameInstance", "cppreflect", "list_ufunctions", ["UGameInstance"]),
+        ("cppreflect.list_ufunctions/AController", "cppreflect", "list_ufunctions", ["AController"]),
+        ("cppreflect.list_ufunctions/AAIController", "cppreflect", "list_ufunctions", ["AAIController"]),
+        ("cppreflect.list_ufunctions/UUserWidget", "cppreflect", "list_ufunctions", ["UUserWidget"]),
+        ("cppreflect.find_interface_impls/INavAgentInterface", "cppreflect", "find_interface_impls", ["INavAgentInterface"]),
+        ("cppreflect.find_interface_impls/IInterface_AssetUserData", "cppreflect", "find_interface_impls", ["IInterface_AssetUserData"]),
+        ("cppreflect.find_class_specifier/BlueprintSpawnableComponent", "cppreflect", "find_class_specifier", ["BlueprintSpawnableComponent"]),
+        ("cppreflect.find_class_specifier/BlueprintAuthorityOnly", "cppreflect", "find_class_specifier", ["BlueprintAuthorityOnly"]),
+        ("cppreflect.find_class_specifier/Within", "cppreflect", "find_class_specifier", ["Within"]),
+
+        # ---- network (10 benchmark-only) -- filtered RPC/OnRep and pagination checks ----
+        ("network.list_rpc_functions/class_APlayerController", "network", "list_rpc_functions", ["--class_name", "APlayerController", "--limit", "10"]),
+        ("network.list_rpc_functions/class_ACharacter", "network", "list_rpc_functions", ["--class_name", "ACharacter", "--limit", "10"]),
+        ("network.list_rpc_functions/rpc_Server", "network", "list_rpc_functions", ["--rpc_kind", "Server", "--limit", "10"]),
+        ("network.list_rpc_functions/rpc_Client", "network", "list_rpc_functions", ["--rpc_kind", "Client", "--limit", "10"]),
+        ("network.list_rpc_functions/rpc_Multicast", "network", "list_rpc_functions", ["--rpc_kind", "Multicast", "--limit", "10"]),
+        ("network.list_onrep_handlers/class_APlayerState", "network", "list_onrep_handlers", ["--class_name", "APlayerState", "--limit", "10"]),
+        ("network.list_onrep_handlers/class_AGameStateBase", "network", "list_onrep_handlers", ["--class_name", "AGameStateBase", "--limit", "10"]),
+        ("network.audit_unbalanced_onreps/limit1", "network", "audit_unbalanced_onreps", ["--limit", "1"]),
+        ("network.audit_unbalanced_onreps/limit10", "network", "audit_unbalanced_onreps", ["--limit", "10"]),
+        ("network.list_replicated_classes/limit75", "network", "list_replicated_classes", ["--limit", "75"]),
+
+        # ---- decision (15 benchmark-only) -- agent decision-record filters and chain depths ----
+        ("decision.list_decisions/path_docs", "decision", "list_decisions", ["--path_filter", "Docs", "--limit", "10"]),
+        ("decision.list_decisions/path_source", "decision", "list_decisions", ["--path_filter", "Source", "--limit", "10"]),
+        ("decision.list_decisions/status_accepted", "decision", "list_decisions", ["--status", "accepted", "--limit", "10"]),
+        ("decision.list_decisions/status_superseded", "decision", "list_decisions", ["--status", "superseded", "--limit", "10"]),
+        ("decision.list_decisions/min_confidence_0_5", "decision", "list_decisions", ["--min_confidence", "0.5", "--limit", "10"]),
+        ("decision.list_decisions/min_confidence_0_8", "decision", "list_decisions", ["--min_confidence", "0.8", "--limit", "10"]),
+        ("decision.list_decisions/min_confidence_0_95", "decision", "list_decisions", ["--min_confidence", "0.95", "--limit", "10"]),
+        ("decision.list_decisions/path_scripts_min_confidence_0_5", "decision", "list_decisions", ["--path_filter", "Scripts", "--min_confidence", "0.5", "--limit", "10"]),
+        ("decision.list_stale/365d_docs", "decision", "list_stale", ["365", "--path_filter", "Docs", "--limit", "10"]),
+        ("decision.list_stale/3650d_scripts", "decision", "list_stale", ["3650", "--path_filter", "Scripts", "--limit", "10"]),
+        ("decision.list_stale/0d", "decision", "list_stale", ["0", "--limit", "10"]),
+        ("decision.list_stale/9999d_limit10", "decision", "list_stale", ["9999", "--limit", "10"]),
+        ("decision.find_supersession_chain/depth1", "decision", "find_supersession_chain", [did, "--depth", "1"] if did else None),
+        ("decision.find_supersession_chain/depth3", "decision", "find_supersession_chain", [did, "--depth", "3"] if did else None),
+        ("decision.get_decision/repeat", "decision", "get_decision", [did] if did else None),
+
+        # ---- risk (20 benchmark-only) -- benchmark/script/doc hotspots and report filters ----
+        ("risk.get_cochange_pairs/offline_parity_benchmark", "risk", "get_cochange_pairs", ["Scripts/offline_parity_benchmark.py"]),
+        ("risk.get_cochange_pairs/verify_offline_parity", "risk", "get_cochange_pairs", ["Scripts/verify_offline_parity.py"]),
+        ("risk.get_cochange_pairs/benchmark_readme", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/README.md"]),
+        ("risk.get_cochange_pairs/benchmark_metrics", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/METRICS.md"]),
+        ("risk.get_cochange_pairs/benchmark_results", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/RESULTS.md"]),
+        ("risk.get_cochange_pairs/SPEC_CORE", "risk", "get_cochange_pairs", ["Docs/SPEC_CORE.md"]),
+        ("risk.get_cochange_pairs/API_REFERENCE", "risk", "get_cochange_pairs", ["Docs/API_REFERENCE.md"]),
+        ("risk.get_cochange_pairs/TODO", "risk", "get_cochange_pairs", ["Docs/TODO.md"]),
+        ("risk.get_cochange_pairs/README", "risk", "get_cochange_pairs", ["README.md"]),
+        ("risk.get_cochange_pairs/Monolith", "risk", "get_cochange_pairs", ["Monolith.uplugin"]),
+        ("risk.list_conditional_gates/WITH_EDITOR", "risk", "list_conditional_gates", ["--macro_filter", "WITH_EDITOR", "--limit", "10"]),
+        ("risk.list_conditional_gates/WITH_EDITORONLY_DATA", "risk", "list_conditional_gates", ["--macro_filter", "WITH_EDITORONLY_DATA", "--limit", "10"]),
+        ("risk.list_conditional_gates/UE_BUILD_SHIPPING", "risk", "list_conditional_gates", ["--macro_filter", "UE_BUILD_SHIPPING", "--limit", "10"]),
+        ("risk.list_conditional_gates/path_monolith_source", "risk", "list_conditional_gates", ["--path_filter", "Source/MonolithSource%", "--limit", "10"]),
+        ("risk.list_conditional_gates/path_reflection_intel", "risk", "list_conditional_gates", ["--path_filter", "Source/MonolithReflectionIntel%", "--limit", "10"]),
+        ("risk.get_release_window_hotspots/limit1", "risk", "get_release_window_hotspots", ["--limit", "1"]),
+        ("risk.get_release_window_hotspots/limit10", "risk", "get_release_window_hotspots", ["--limit", "10"]),
+        ("risk.get_release_window_hotspots/since0_limit5", "risk", "get_release_window_hotspots", ["--since_unix", "0", "--limit", "5"]),
+        ("risk.get_release_window_hotspots/since1700000000_limit5", "risk", "get_release_window_hotspots", ["--since_unix", "1700000000", "--limit", "5"]),
+        ("risk.get_release_window_hotspots/since1600000000_limit20", "risk", "get_release_window_hotspots", ["--since_unix", "1600000000", "--limit", "20"]),
+
+        # ---- source ergonomics (25 benchmark-only) -- API lookup and expected-error parity ----
+        ("source.get_include_path/UGameInstance", "source", "get_include_path", ["UGameInstance"], "text"),
+        ("source.get_include_path/UWorld", "source", "get_include_path", ["UWorld"], "text"),
+        ("source.get_include_path/UUserWidget", "source", "get_include_path", ["UUserWidget"], "text"),
+        ("source.get_include_path/UGameplayStatics", "source", "get_include_path", ["UGameplayStatics"], "text"),
+        ("source.get_include_path/UDataTable", "source", "get_include_path", ["UDataTable"], "text"),
+        ("source.get_signature/UGameplayStatics_OpenLevel", "source", "get_signature", ["UGameplayStatics::OpenLevel"], "text"),
+        ("source.get_signature/UGameplayStatics_SpawnEmitter", "source", "get_signature", ["UGameplayStatics::SpawnEmitterAtLocation"], "text"),
+        ("source.get_signature/UActorComponent_Activate", "source", "get_signature", ["UActorComponent::Activate"], "text"),
+        ("source.get_signature/APlayerController_ClientTravel", "source", "get_signature", ["APlayerController::ClientTravel"], "text"),
+        ("source.get_signature/AController_SetPawn", "source", "get_signature", ["AController::SetPawn"], "text"),
+        ("source.check_deprecations/AController_APawn", "source", "check_deprecations", ["AController", "APawn"], "text"),
+        ("source.check_deprecations/UWorld_UGameInstance", "source", "check_deprecations", ["UWorld", "UGameInstance"], "text"),
+        ("source.check_deprecations/UDataTable_UDataAsset", "source", "check_deprecations", ["UDataTable", "UDataAsset"], "text"),
+        ("source.verify_symbols/Input_UI", "source", "verify_symbols", ["UInputAction", "UInputMappingContext", "UUserWidget"], "text"),
+        ("source.verify_symbols/GameFrameworkTravel", "source", "verify_symbols", ["APlayerController::ClientTravel", "AController::SetPawn", "UGameInstance"], "text"),
+        ("source.verify_symbols/GAS", "source", "verify_symbols", ["UAbilitySystemComponent", "UGameplayAbility", "UGameplayEffect"], "text"),
+        ("source.verify_symbols/DataAssets", "source", "verify_symbols", ["UDataAsset", "UPrimaryDataAsset", "UDataTable"], "text"),
+        ("source.find_example_usage/OpenLevel_limit3", "source", "find_example_usage", ["UGameplayStatics::OpenLevel", "--limit", "3"], "text"),
+        ("source.find_example_usage/ClientTravel_limit3", "source", "find_example_usage", ["APlayerController::ClientTravel", "--limit", "3"], "text"),
+        ("source.find_example_usage/SpawnEmitter_limit2", "source", "find_example_usage", ["UGameplayStatics::SpawnEmitterAtLocation", "--limit", "2"], "text"),
+        ("source.get_signature/missing_symbol(expected-error)", "source", "get_signature", ["UThisDoesNotExistAnywhereXYZ::Nope"], "text", {"expected_error": True}),
+        ("source.get_include_path/missing_symbol(expected-error)", "source", "get_include_path", ["UThisDoesNotExistAnywhereXYZ"], "text", {"expected_error": True}),
+        ("source.generate_class_stub/missing_parent(expected-error)", "source", "generate_class_stub", ["UThisDoesNotExistAnywhereXYZ", "AMyBadActor", "TestModule"], "text", {"expected_error": True}),
+        ("source.lint_header/missing_file(expected-error)", "source", "lint_header", ["Source/DoesNotExist/Missing.h"], "text", {"expected_error": True}),
+        ("source.read_file/missing_file(expected-error)", "source", "read_file", ["Source/DoesNotExist/Missing.h"], "text", {"expected_error": True}),
+    ]
+    if len(benchmark_extension) != BENCHMARK_EXTENSION_ACTION_COUNT:
+        raise AssertionError(
+            f"benchmark extension must contain {BENCHMARK_EXTENSION_ACTION_COUNT} actions; "
+            f"got {len(benchmark_extension)}"
+        )
+    actions.extend(benchmark_extension)
+    if len(actions) != EXPECTED_ACTION_COUNT:
+        raise AssertionError(f"offline parity action table must contain {EXPECTED_ACTION_COUNT} actions; got {len(actions)}")
     return actions
 
 
 # ------------------------------------------------------------------ per-action runner
-# (inlined from verify_offline_parity.py)
+# (inlined from verify_offline_parity.py, with benchmark diagnostics)
+
+
+def unpack_action_entry(action_entry: tuple) -> Tuple[str, str, str, Optional[List[str]], str, Dict[str, Any]]:
+    if len(action_entry) == 4:
+        lbl, ns, action, aargs = action_entry
+        return lbl, ns, action, aargs, "json", {}
+    if len(action_entry) == 5:
+        lbl, ns, action, aargs, extra = action_entry
+        if isinstance(extra, dict):
+            return lbl, ns, action, aargs, str(extra.get("compare", "json")), dict(extra)
+        return lbl, ns, action, aargs, str(extra), {}
+    if len(action_entry) == 6:
+        lbl, ns, action, aargs, compare, metadata = action_entry
+        if not isinstance(metadata, dict):
+            raise TypeError(f"action metadata must be a dict for {lbl}")
+        return lbl, ns, action, aargs, str(compare), dict(metadata)
+    raise ValueError(f"unsupported action entry shape: {action_entry!r}")
 
 
 def run_action(
@@ -593,6 +763,7 @@ def run_action(
     py_path: pathlib.Path,
     mono_root: pathlib.Path,
     compare: str = "json",
+    expected_error: bool = False,
 ) -> Dict[str, Any]:
     """
     Returns a result dict:
@@ -600,6 +771,7 @@ def run_action(
       diffs:  list of (path, exe_val, py_val)
       warnings: list of (path, exe_val, py_val)
       error:  str | None
+      error_kind: none | expected | expected_missing | expected_mismatch | real
     """
     res: Dict[str, Any] = {
         "label": label,
@@ -608,10 +780,42 @@ def run_action(
         "diffs": [],
         "warnings": [],
         "error": None,
+        "expected_error": expected_error,
+        "error_kind": "none",
+        "exe_exit_code": None,
+        "py_exit_code": None,
+        "error_sources": {},
     }
 
     erc, eout, eerr = run_exe(ns, action, args, exe_path, mono_root)
     prc, pout, perr = run_py(ns, action, args, py_path, mono_root)
+    res["exe_exit_code"] = erc
+    res["py_exit_code"] = prc
+
+    if expected_error:
+        res["error_sources"] = {
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": _process_diagnostics(prc, pout, perr),
+        }
+        exe_failed = erc != 0
+        py_failed = prc != 0
+        if exe_failed and py_failed:
+            res["status"] = "MATCH"
+            res["error_kind"] = "expected"
+            if erc != prc:
+                res["warnings"] = [("expected_error.exit_code", erc, prc)]
+            return res
+        if exe_failed != py_failed:
+            res["status"] = "DIFF"
+            res["error_kind"] = "expected_mismatch"
+            res["error"] = "expected error mismatch: only one tool exited non-zero"
+            res["diffs"] = [("expected_error.nonzero", exe_failed, py_failed)]
+            return res
+        res["status"] = "DIFF"
+        res["error_kind"] = "expected_missing"
+        res["error"] = "expected error was not observed; both tools exited 0"
+        res["diffs"] = [("expected_error.nonzero", "both tools should exit non-zero", "both tools exited 0")]
+        return res
 
     err_parts = []
     if erc != 0:
@@ -621,6 +825,11 @@ def run_action(
 
     if err_parts:
         res["status"] = "ERROR"
+        res["error_kind"] = "real"
+        res["error_sources"] = {
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": _process_diagnostics(prc, pout, perr),
+        }
         res["error"] = " | ".join(err_parts)
         return res
 
@@ -646,10 +855,15 @@ def run_action(
 
     if err_parts:
         res["status"] = "ERROR"
+        res["error_kind"] = "real"
+        res["error_sources"] = {
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": _process_diagnostics(prc, pout, perr),
+        }
         res["error"] = " | ".join(err_parts)
         return res
 
-    eff_ignore_cursor = ignore_cursor_bytes or (label in TIME_DERIVED_CURSOR_ACTIONS)
+    eff_ignore_cursor = ignore_cursor_bytes or is_time_derived_cursor_action(label, args)
     diffs, warnings = deep_diff(edata, pdata, ignore_cursor_bytes=eff_ignore_cursor)
     res["diffs"] = diffs
     res["warnings"] = warnings
@@ -665,6 +879,11 @@ def skipped_action(label: str, reason: str) -> Dict[str, Any]:
         "diffs": [],
         "warnings": [],
         "error": reason,
+        "expected_error": False,
+        "error_kind": "skip",
+        "exe_exit_code": None,
+        "py_exit_code": None,
+        "error_sources": {},
     }
 
 
@@ -701,17 +920,24 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     from collections import defaultdict
 
-    groups: Dict[str, List[str]] = defaultdict(list)
+    groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for r in results:
         ns = r["label"].split(".")[0]
-        groups[ns].append(r["status"])
+        groups[ns].append(r)
 
     breakdown: Dict[str, Any] = {}
-    for ns, statuses in sorted(groups.items()):
+    for ns, rows in sorted(groups.items()):
+        statuses = [r["status"] for r in rows]
         n_match = statuses.count("MATCH")
         n_diff = statuses.count("DIFF")
         n_err = statuses.count("ERROR")
         n_skip = statuses.count("SKIP")
+        n_expected = sum(1 for r in rows if r.get("error_kind") == "expected")
+        n_expected_problem = sum(
+            1 for r in rows
+            if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+        )
+        n_real_error = sum(1 for r in rows if r.get("error_kind") == "real")
         action_count = len(statuses) - n_skip
         breakdown[ns] = {
             "match": n_match,
@@ -719,8 +945,32 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "error": n_err,
             "skip": n_skip,
             "action_count": action_count,
+            "expected_error": n_expected,
+            "expected_error_problem": n_expected_problem,
+            "real_error": n_real_error,
         }
     return breakdown
+
+
+def build_error_diagnostics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+    expected_matches = [r["label"] for r in results if r.get("error_kind") == "expected"]
+    expected_problems = [
+        r["label"] for r in results
+        if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+    ]
+    real_errors = [r["label"] for r in results if r.get("error_kind") == "real"]
+    return {
+        "expected_error": {
+            "match_count": len(expected_matches),
+            "problem_count": len(expected_problems),
+            "labels": expected_matches,
+            "problem_labels": expected_problems,
+        },
+        "real_error": {
+            "count": len(real_errors),
+            "labels": real_errors,
+        },
+    }
 
 
 def compute_metrics(
@@ -747,19 +997,30 @@ def compute_metrics(
     n_err = sum(1 for r in results if r["status"] == "ERROR")
     n_skip = sum(1 for r in results if r["status"] == "SKIP")
     comparable = total - n_skip
+    n_expected_error = sum(1 for r in results if r.get("error_kind") == "expected")
+    n_expected_error_problem = sum(
+        1 for r in results
+        if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+    )
+    n_real_error = sum(1 for r in results if r.get("error_kind") == "real")
 
     match_rate = n_match / comparable if comparable > 0 else 0.0
     diff_rate = n_diff / comparable if comparable > 0 else 0.0
     error_rate = n_err / comparable if comparable > 0 else 0.0
     skip_rate = n_skip / total if total > 0 else 0.0
+    expected_error_rate = n_expected_error / comparable if comparable > 0 else 0.0
+    real_error_rate = n_real_error / comparable if comparable > 0 else 0.0
     version_parity_score = 1.0 if version_parity_ok else 0.0
 
-    offline_parity_score = (
-        0.50 * match_rate
-        + 0.20 * (1.0 - diff_rate)
-        + 0.20 * (1.0 - error_rate)
-        + 0.10 * version_parity_score
-    )
+    if comparable == 0:
+        offline_parity_score = 0.0
+    else:
+        offline_parity_score = (
+            0.50 * match_rate
+            + 0.20 * (1.0 - diff_rate)
+            + 0.20 * (1.0 - error_rate)
+            + 0.10 * version_parity_score
+        )
 
     diff_action_results = [r for r in results if r["status"] == "DIFF"]
     diff_counts = [len(r["diffs"]) for r in diff_action_results]
@@ -771,10 +1032,15 @@ def compute_metrics(
         "diff_rate": round(diff_rate, 6),
         "error_rate": round(error_rate, 6),
         "skip_rate": round(skip_rate, 6),
+        "expected_error_rate": round(expected_error_rate, 6),
+        "real_error_rate": round(real_error_rate, 6),
         "version_parity_score": round(version_parity_score, 6),
         "total_actions": total,
         "comparable_actions": comparable,
         "action_count": comparable,
+        "expected_error_count": n_expected_error,
+        "expected_error_problem_count": n_expected_error_problem,
+        "real_error_count": n_real_error,
         "mean_diffs_per_diff_action": round(mean_diffs, 6),
         "category_breakdown": _build_category_breakdown(results),
     }
@@ -812,6 +1078,7 @@ def build_summary(
             "total": len(results),
         },
         "metrics": metrics,
+        "diagnostics": build_error_diagnostics(results),
     }
 
 
@@ -823,6 +1090,10 @@ def build_per_action_row(r: Dict[str, Any]) -> Dict[str, Any]:
         "diff_count": len(r.get("diffs", [])),
         "warning_count": len(r.get("warnings", [])),
         "error": r.get("error"),
+        "expected_error": bool(r.get("expected_error")),
+        "error_kind": r.get("error_kind", "none"),
+        "exe_exit_code": r.get("exe_exit_code"),
+        "py_exit_code": r.get("py_exit_code"),
     }
 
 
@@ -867,6 +1138,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         chain = discover_chain_inputs(exe_path, MONO_ROOT)
     else:
         chain = {"uclass": None, "decision_id": None, "risk_path": "Docs/SPEC_CORE.md"}
+    benchmark_inputs = build_benchmark_inputs(
+        "OfflineParity",
+        extra_files={"offline_exe": exe_path, "offline_python": py_path},
+        plugin_root=MONO_ROOT,
+    )
     print(
         f"Chain inputs: uclass={chain.get('uclass')!r} "
         f"decision_id={chain.get('decision_id')!r} "
@@ -882,12 +1158,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     PARTIAL_INTERVAL = 5
 
     for index, action_entry in enumerate(actions, 1):
-        # Unpack variable-length tuple (last element may be compare mode)
-        if len(action_entry) == 5:
-            lbl, ns, action, aargs, compare = action_entry
-        else:
-            lbl, ns, action, aargs = action_entry
-            compare = "json"
+        lbl, ns, action, aargs, compare, metadata = unpack_action_entry(action_entry)
 
         if exe_missing or py_missing:
             r = skipped_action(lbl, "tool not found: " + ("exe" if exe_missing else "py"))
@@ -897,6 +1168,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             r = run_action(
                 lbl, ns, action, aargs, ignore_cursor_bytes,
                 exe_path, py_path, MONO_ROOT, compare,
+                expected_error=bool(metadata.get("expected_error")),
             )
 
         results.append(r)
@@ -919,9 +1191,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             )
             partial["completed_action_count"] = index
             partial["total_action_count"] = len(actions)
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     summary = build_summary(label, results, ver_ok, exe_rev, py_rev, chain, ignore_cursor_bytes)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
 
     m = summary["metrics"]
@@ -983,9 +1257,14 @@ def _write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) -
         "diff_rate",
         "error_rate",
         "skip_rate",
+        "expected_error_rate",
+        "real_error_rate",
         "version_parity_score",
         "total_actions",
         "comparable_actions",
+        "expected_error_count",
+        "expected_error_problem_count",
+        "real_error_count",
         "mean_diffs_per_diff_action",
     ]
 
@@ -1008,7 +1287,8 @@ def _write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) -
     lines += [
         "",
         "Higher is better for `offline_parity_score`, `match_rate`, `version_parity_score`.",
-        "Lower is better for `diff_rate`, `error_rate`, `skip_rate`, `mean_diffs_per_diff_action`.",
+        "Lower is better for `diff_rate`, `error_rate`, `real_error_rate`, `skip_rate`, `mean_diffs_per_diff_action`.",
+        "`expected_error_*` fields track negative-case parity and are additive diagnostics.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
@@ -1025,6 +1305,9 @@ def cmd_report(args: argparse.Namespace) -> int:
     m = summary.get("metrics", {})
     c = summary.get("counts", {})
     v = summary.get("version", {})
+    d = summary.get("diagnostics", {})
+    expected_diag = d.get("expected_error", {})
+    real_diag = d.get("real_error", {})
 
     print(f"Offline Parity Benchmark Report")
     print(f"  label      : {label}")
@@ -1038,14 +1321,24 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"  {'diff_rate':<30} {m.get('diff_rate', '?')}")
     print(f"  {'error_rate':<30} {m.get('error_rate', '?')}")
     print(f"  {'skip_rate':<30} {m.get('skip_rate', '?')}")
+    print(f"  {'expected_error_rate':<30} {m.get('expected_error_rate', '?')}")
+    print(f"  {'real_error_rate':<30} {m.get('real_error_rate', '?')}")
     print(f"  {'version_parity_score':<30} {m.get('version_parity_score', '?')}")
     print(f"  {'total_actions':<30} {m.get('total_actions', '?')}")
     print(f"  {'comparable_actions':<30} {m.get('comparable_actions', '?')}")
+    print(f"  {'expected_error_count':<30} {m.get('expected_error_count', '?')}")
+    print(f"  {'expected_error_problem_count':<30} {m.get('expected_error_problem_count', '?')}")
+    print(f"  {'real_error_count':<30} {m.get('real_error_count', '?')}")
     print(f"  {'mean_diffs_per_diff_action':<30} {m.get('mean_diffs_per_diff_action', '?')}")
     print()
     print(
         f"  Counts: {c.get('match', 0)} MATCH | {c.get('diff', 0)} DIFF "
         f"| {c.get('error', 0)} ERROR | {c.get('skip', 0)} SKIP"
+    )
+    print(
+        f"  Error diagnostics: expected={expected_diag.get('match_count', 0)} "
+        f"expected_problem={expected_diag.get('problem_count', 0)} "
+        f"real={real_diag.get('count', 0)}"
     )
     return 0
 

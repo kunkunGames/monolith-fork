@@ -473,6 +473,22 @@ public:
 			  ToolTip="Expose per-namespace _query dispatcher tools in tools/list. Default false: agents use monolith_query as the single dispatcher."))
 	bool bExposeNamespaceTools = false;
 
+	/** When false, tools/list advertises ONLY the core routing/discovery monolith_* tools
+	 *  (find, discover, status) and suppresses every other monolith action — both the
+	 *  management/control-plane tools (tool profiles, execution guard, onboarding,
+	 *  readiness, notifications, MCP session, action audit) and the lower-traffic
+	 *  routing extras (guide, update, reindex). Combined with the monolith_query
+	 *  dispatcher (advertised when bExposeNamespaceTools is false), this yields a minimal
+	 *  4-tool surface: monolith_find, monolith_discover, monolith_status, monolith_query.
+	 *  The suppressed actions stay registered and executable — reachable by name via
+	 *  tools/call or monolith_query({namespace:"monolith", action:"..."}); only their
+	 *  tools/list advertisement is hidden. Default true preserves the full control-plane
+	 *  surface. Takes effect on next editor restart. */
+	UPROPERTY(config, EditAnywhere, Category="Tool Visibility",
+		meta=(DisplayName="Expose Management Tools",
+			  ToolTip="When false, only core routing monolith_* tools are advertised in tools/list; management/control-plane tools are hidden (still callable by name / via monolith_query). Default true."))
+	bool bExposeManagementTools = true;
+
 	// --- Logging ---
 
 	/** Log verbosity for Monolith systems */

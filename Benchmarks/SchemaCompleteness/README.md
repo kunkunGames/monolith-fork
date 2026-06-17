@@ -1,9 +1,10 @@
 # Monolith Schema Completeness Benchmark
 
 Tests full catalog coverage of schema quality across all 51 namespaces and
-1766 actions.  Unlike the ActionGuidance benchmark (which samples 161 tasks),
+1766 actions. Unlike the ActionGuidance benchmark (which samples 508 tasks),
 SchemaCompleteness calls `monolith_discover` once per action and scores five
-quality dimensions for every action in the live catalog.
+quality dimensions for every action in the live catalog. The checked-in
+targeted probe set contains **385 probes**.
 
 ## Files
 
@@ -13,6 +14,7 @@ quality dimensions for every action in the live catalog.
 | `METRICS.md` | Metric definitions and score formula |
 | `RESULTS.md` | Baseline and historical scan results |
 | `manifest.json` | Static seed manifest with expected namespace/action counts and scoring formula |
+| `probe_set.jsonl` | 385 targeted schema probes for practical Unreal agent workflows |
 
 ## Quality Dimensions
 

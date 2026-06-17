@@ -6,6 +6,9 @@
 #include "EdGraphSchema_K2.h"
 #include "Net/UnrealNetwork.h"
 #include "K2Node_Variable.h"
+// add_local_variable / remove_local_variable scan UK2Node_FunctionEntry::LocalVariables;
+// include the header explicitly so the TU compiles standalone under non-unity builds.
+#include "K2Node_FunctionEntry.h"
 
 // ============================================================
 //  Registration

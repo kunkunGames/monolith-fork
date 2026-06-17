@@ -31,10 +31,11 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
-DEFAULT_TASKS = pathlib.Path("Plugins/Monolith/Benchmarks/SourceIndex/tasks.jsonl")
-DEFAULT_MANIFEST = pathlib.Path("Plugins/Monolith/Benchmarks/SourceIndex/manifest.json")
+DEFAULT_TASKS = pathlib.Path("Benchmarks/SourceIndex/tasks.jsonl")
+DEFAULT_MANIFEST = pathlib.Path("Benchmarks/SourceIndex/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/SourceIndex")
 
 EXTENDED_SYMBOLS = [
@@ -592,6 +593,333 @@ _ERGONOMICS_EXAMPLE_USAGE = [
     ("AActor::BeginPlay", 3),
 ]
 
+_PRESERVED_PRACTICAL_CALLER_METHODS_20260617 = [
+    "AActor::BeginPlay",
+    "AActor::Tick",
+    "AActor::EndPlay",
+    "AActor::GetLifetimeReplicatedProps",
+    "UActorComponent::BeginPlay",
+    "UActorComponent::TickComponent",
+    "UActorComponent::EndPlay",
+    "UGameplayAbility::ActivateAbility",
+    "UGameplayAbility::CanActivateAbility",
+    "UGameplayAbility::EndAbility",
+    "UGameplayAbility::CommitAbility",
+    "UAbilitySystemComponent::GiveAbility",
+    "UAbilitySystemComponent::TryActivateAbility",
+    "UAbilitySystemComponent::ApplyGameplayEffectToSelf",
+    "UAttributeSet::PreAttributeChange",
+    "UAttributeSet::PostGameplayEffectExecute",
+    "UUserWidget::NativeConstruct",
+    "UUserWidget::NativeTick",
+    "UUserWidget::NativeOnInitialized",
+    "UAnimInstance::NativeUpdateAnimation",
+    "UAnimInstance::NativeInitializeAnimation",
+    "UCharacterMovementComponent::CalcVelocity",
+    "UCharacterMovementComponent::PhysWalking",
+    "APlayerController::SetupInputComponent",
+    "APlayerController::PlayerTick",
+    "AController::Possess",
+    "APawn::SetupPlayerInputComponent",
+    "APawn::PossessedBy",
+    "ACharacter::Landed",
+    "ACharacter::Jump",
+]
+
+_PRESERVED_PRACTICAL_CALLEE_METHODS_20260617 = [
+    "AActor::BeginPlay",
+    "AActor::Tick",
+    "AActor::EndPlay",
+    "AActor::GetLifetimeReplicatedProps",
+    "UActorComponent::BeginPlay",
+    "UActorComponent::TickComponent",
+    "UActorComponent::EndPlay",
+    "UGameplayAbility::ActivateAbility",
+    "UGameplayAbility::CanActivateAbility",
+    "UGameplayAbility::EndAbility",
+    "UGameplayAbility::CommitAbility",
+    "UAbilitySystemComponent::GiveAbility",
+    "UAbilitySystemComponent::TryActivateAbility",
+    "UAbilitySystemComponent::ApplyGameplayEffectToSelf",
+    "UAttributeSet::PreAttributeChange",
+    "UAttributeSet::PostGameplayEffectExecute",
+    "UUserWidget::NativeConstruct",
+    "UUserWidget::NativeTick",
+    "UUserWidget::NativeOnInitialized",
+    "UAnimInstance::NativeUpdateAnimation",
+]
+
+_PRESERVED_PRACTICAL_RISK_SYMBOLS_20260617 = [
+    "UGameplayAbility",
+    "UAbilitySystemComponent",
+    "UAttributeSet",
+    "UGameplayEffect",
+    "FGameplayTag",
+    "FGameplayTagContainer",
+    "FGameplayEffectSpec",
+    "UEnhancedInputComponent",
+    "UInputAction",
+    "UInputMappingContext",
+    "UEnhancedPlayerInput",
+    "UAnimMontage",
+    "UBlendSpace",
+    "UAnimBlueprintGeneratedClass",
+    "UAnimSequence",
+]
+
+_PRESERVED_PRACTICAL_REVIEW_SYMBOLS_20260617 = [
+    "UGameplayAbility",
+    "UAbilitySystemComponent",
+    "UAttributeSet",
+    "UGameplayEffect",
+    "UCharacterMovementComponent",
+    "UUserWidget",
+    "UEnhancedInputComponent",
+    "UAnimInstance",
+    "APlayerController",
+    "UActorComponent",
+]
+
+_PRESERVED_PRACTICAL_IMPACT_SYMBOLS_20260617 = [
+    "FGameplayTag",
+    "UAbilitySystemComponent",
+    "UGameplayEffect",
+    "FHitResult",
+    "FVector",
+    "FTransform",
+    "USkeletalMeshComponent",
+    "UDataTable",
+    "UActorComponent",
+    "UPrimaryDataAsset",
+]
+
+_PRESERVED_PRACTICAL_INCLUDE_SYMBOLS_20260617 = [
+    "UGameplayAbility",
+    "UEnhancedInputComponent",
+    "UUserWidget",
+    "UAnimMontage",
+    "UCharacterMovementComponent",
+]
+
+_PRESERVED_PRACTICAL_SIGNATURE_METHODS_20260617 = [
+    "UGameplayAbility::ActivateAbility",
+    "UAbilitySystemComponent::GiveAbility",
+    "UUserWidget::NativeConstruct",
+    "UAnimInstance::NativeUpdateAnimation",
+    "UCharacterMovementComponent::CalcVelocity",
+]
+
+_PRESERVED_PRACTICAL_HEALTH_VARIANTS_20260617 = [
+    {"action": "health"},
+    {"action": "health"},
+    {"action": "health"},
+    {"action": "health"},
+    {"action": "health"},
+]
+
+_ADDED_PRACTICAL_CALLER_METHODS_20260617 = [
+    "UNiagaraComponent::Activate",
+    "UNiagaraSystem::GetExposedParameters",
+    "UMaterialInstanceDynamic::SetScalarParameterValue",
+    "UMaterialInstanceDynamic::SetVectorParameterValue",
+    "UUserWidget::NativeDestruct",
+    "UWidgetBlueprintLibrary::Create",
+    "UAudioComponent::Play",
+    "UAudioComponent::Stop",
+    "USoundBase::GetDuration",
+    "UEnhancedInputLocalPlayerSubsystem::AddMappingContext",
+    "UInputComponent::BindAction",
+    "UGameplayStatics::OpenLevel",
+    "UGameplayStatics::SpawnEmitterAtLocation",
+    "UGameplayStatics::PlaySoundAtLocation",
+    "ULevelStreamingDynamic::LoadLevelInstance",
+    "UDataTable::FindRow",
+    "UPrimaryDataAsset::GetPrimaryAssetId",
+    "UAssetManager::GetPrimaryAssetObject",
+    "USkeletalMeshComponent::PlayAnimation",
+    "UPrimitiveComponent::SetCollisionProfileName",
+]
+
+_ADDED_PRACTICAL_CALLEE_METHODS_20260617 = list(_ADDED_PRACTICAL_CALLER_METHODS_20260617)
+
+_ADDED_PRACTICAL_RISK_SYMBOLS_20260617 = [
+    "UNiagaraSystem",
+    "UNiagaraComponent",
+    "UMaterialInterface",
+    "UMaterialInstanceDynamic",
+    "UTexture2D",
+    "UUserWidget",
+    "UWidgetAnimation",
+    "UAudioComponent",
+    "USoundCue",
+    "UInputAction",
+    "UInputMappingContext",
+    "UEnhancedInputLocalPlayerSubsystem",
+    "ULevelSequence",
+    "UMovieSceneSequence",
+    "UDataTable",
+    "UPrimaryDataAsset",
+    "UAssetManager",
+    "UWorldSubsystem",
+    "UGameInstanceSubsystem",
+    "FSoftObjectPath",
+]
+
+_ADDED_PRACTICAL_REVIEW_SYMBOLS_20260617 = [
+    "UNiagaraSystem",
+    "UNiagaraComponent",
+    "UMaterialInstanceDynamic",
+    "UUserWidget",
+    "UAudioComponent",
+    "UInputMappingContext",
+    "UEnhancedInputLocalPlayerSubsystem",
+    "ULevelSequence",
+    "UDataTable",
+    "UPrimaryDataAsset",
+    "UAssetManager",
+    "UWorldSubsystem",
+    "USceneComponent",
+    "UPrimitiveComponent",
+    "USkeletalMeshComponent",
+]
+
+_ADDED_PRACTICAL_IMPACT_SYMBOLS_20260617 = [
+    "UNiagaraComponent",
+    "UNiagaraSystem",
+    "UMaterialInterface",
+    "UTexture2D",
+    "UWidgetAnimation",
+    "UAudioComponent",
+    "USoundCue",
+    "UInputAction",
+    "UInputMappingContext",
+    "ULevelSequence",
+    "UMovieSceneSequence",
+    "UDataTable",
+    "UPrimaryDataAsset",
+    "UAssetManager",
+    "FSoftObjectPath",
+]
+
+_ADDED_PRACTICAL_INCLUDE_SYMBOLS_20260617 = [
+    "UNiagaraComponent",
+    "UMaterialInstanceDynamic",
+    "UWidgetBlueprintLibrary",
+    "UEnhancedInputLocalPlayerSubsystem",
+    "ULevelSequence",
+]
+
+_ADDED_PRACTICAL_SIGNATURE_METHODS_20260617 = [
+    "UNiagaraComponent::Activate",
+    "UMaterialInstanceDynamic::SetScalarParameterValue",
+    "UWidgetBlueprintLibrary::Create",
+    "UEnhancedInputLocalPlayerSubsystem::AddMappingContext",
+    "UGameplayStatics::OpenLevel",
+]
+
+
+def append_source_domain_extension(
+    tasks: List[Dict[str, Any]],
+    next_id: Any,
+    *,
+    caller_methods: List[str],
+    callee_methods: List[str],
+    risk_symbols: List[str],
+    review_symbols: List[str],
+    impact_symbols: List[str],
+    include_symbols: List[str],
+    signature_methods: List[str],
+    health_variants: List[Dict[str, Any]],
+) -> None:
+    for symbol in caller_methods:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "find_callers",
+            "tool": "source_query",
+            "arguments": {"action": "find_callers", "symbol": symbol},
+            "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in callee_methods:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "find_callees",
+            "tool": "source_query",
+            "arguments": {"action": "find_callees", "symbol": symbol},
+            "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in risk_symbols:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "risk_score",
+            "tool": "source_query",
+            "arguments": {"action": "risk_score", "symbol": symbol},
+            "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in review_symbols:
+        tasks.append({
+            "id": next_id(),
+            "category": "review_context_lookup",
+            "namespace": "source",
+            "action": "review_context",
+            "tool": "source_query",
+            "arguments": {"action": "review_context", "symbol": symbol},
+            "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in impact_symbols:
+        tasks.append({
+            "id": next_id(),
+            "category": "impact_radius_lookup",
+            "namespace": "source",
+            "action": "impact_radius",
+            "tool": "source_query",
+            "arguments": {"action": "impact_radius", "symbol": symbol},
+            "expected": {"min_results": 0, "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in include_symbols:
+        tasks.append({
+            "id": next_id(),
+            "category": "ergonomics_text",
+            "namespace": "source",
+            "action": "get_include_path",
+            "tool": "source_query",
+            "arguments": {"action": "get_include_path", "symbol": symbol},
+            "expected": {"non_empty_response": True},
+            "safety": "read_only",
+        })
+    for method in signature_methods:
+        tasks.append({
+            "id": next_id(),
+            "category": "ergonomics_text",
+            "namespace": "source",
+            "action": "get_signature",
+            "tool": "source_query",
+            "arguments": {"action": "get_signature", "symbol": method},
+            "expected": {"non_empty_response": True},
+            "safety": "read_only",
+        })
+    for args in health_variants:
+        tasks.append({
+            "id": next_id(),
+            "category": "health_check",
+            "namespace": "source",
+            "action": "health",
+            "tool": "source_query",
+            "arguments": dict(args),
+            "expected": {"fields": ["status", "row_counts"]},
+            "safety": "read_only",
+        })
+
 
 def build_static_tasks() -> List[Dict[str, Any]]:
     """Build a deterministic task list from extended symbols and schema actions."""
@@ -804,11 +1132,38 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only_discovery",
         })
 
+    append_source_domain_extension(
+        tasks,
+        next_id,
+        caller_methods=_PRESERVED_PRACTICAL_CALLER_METHODS_20260617,
+        callee_methods=_PRESERVED_PRACTICAL_CALLEE_METHODS_20260617,
+        risk_symbols=_PRESERVED_PRACTICAL_RISK_SYMBOLS_20260617,
+        review_symbols=_PRESERVED_PRACTICAL_REVIEW_SYMBOLS_20260617,
+        impact_symbols=_PRESERVED_PRACTICAL_IMPACT_SYMBOLS_20260617,
+        include_symbols=_PRESERVED_PRACTICAL_INCLUDE_SYMBOLS_20260617,
+        signature_methods=_PRESERVED_PRACTICAL_SIGNATURE_METHODS_20260617,
+        health_variants=_PRESERVED_PRACTICAL_HEALTH_VARIANTS_20260617,
+    )
+    append_source_domain_extension(
+        tasks,
+        next_id,
+        caller_methods=_ADDED_PRACTICAL_CALLER_METHODS_20260617,
+        callee_methods=_ADDED_PRACTICAL_CALLEE_METHODS_20260617,
+        risk_symbols=_ADDED_PRACTICAL_RISK_SYMBOLS_20260617,
+        review_symbols=_ADDED_PRACTICAL_REVIEW_SYMBOLS_20260617,
+        impact_symbols=_ADDED_PRACTICAL_IMPACT_SYMBOLS_20260617,
+        include_symbols=_ADDED_PRACTICAL_INCLUDE_SYMBOLS_20260617,
+        signature_methods=_ADDED_PRACTICAL_SIGNATURE_METHODS_20260617,
+        health_variants=[],
+    )
+
     return tasks
 
 
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
     """Generate task fixtures from golden symbols plus live discover for additional coverage."""
+    tasks_path = resolve_plugin_path(tasks_path)
+    manifest_path = resolve_plugin_path(manifest_path)
     tasks = build_static_tasks()
 
     # Top up from live catalog if needed.
@@ -858,7 +1213,7 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         "golden_symbols": GOLDEN_SYMBOLS,
         "schema_actions": SCHEMA_ACTIONS,
         "category_counts": count_by(tasks, "category"),
-        "task_file": str(tasks_path).replace("\\", "/"),
+        "task_file": display_path(tasks_path),
         "scoring": {
             "source_index_score": (
                 "0.35 * symbol_hit_rate"
@@ -890,10 +1245,12 @@ def run_benchmark(
     label: str,
     timeout_s: float,
 ) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
     tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
     status = result_data(status_response)
+    benchmark_inputs = build_benchmark_inputs("SourceIndex", tasks_path=tasks_path, mcp_status=status)
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
@@ -914,9 +1271,11 @@ def run_benchmark(
             partial = aggregate(label, status, tasks[:index], rows)
             partial["completed_task_count"] = index
             partial["total_task_count"] = len(tasks)
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     summary = aggregate(label, status, tasks, rows)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
     return summary
@@ -993,7 +1352,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     gen.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     gen.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     gen.add_argument("--manifest", type=pathlib.Path, default=DEFAULT_MANIFEST)
-    gen.add_argument("--min-tasks", type=int, default=30)
+    gen.add_argument("--min-tasks", type=int, default=319)
 
     run_cmd = sub.add_parser("run", help="Run tasks against a live MCP endpoint and score results")
     run_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)

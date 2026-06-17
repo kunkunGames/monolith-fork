@@ -907,8 +907,163 @@ def _load_sibling_module(script: Path, alias: str) -> Any | None:
     if spec is None or spec.loader is None:
         return None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    script_dir = str(script.parent)
+    inserted = False
+    if script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+        inserted = True
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if inserted:
+            try:
+                sys.path.remove(script_dir)
+            except ValueError:
+                pass
+
+
+def _plugin_relative_path(value: str | Path) -> Path:
+    text = str(value).replace("\\", "/")
+    parts = [part for part in Path(text).as_posix().split("/") if part not in ("", ".")]
+    if len(parts) >= 2 and parts[0].lower() == "plugins" and parts[1].lower() == "monolith":
+        parts = parts[2:]
+    return Path(*parts) if parts else Path(".")
+
+
+def _resolve_plugin_path(ctx: CheckContext, value: str | Path) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path.resolve()
+    return (ctx.root / _plugin_relative_path(value)).resolve()
+
+
+def _same_resolved_path(left: Path, right: Path) -> bool:
+    return os.path.normcase(str(left.resolve())) == os.path.normcase(str(right.resolve()))
+
+
+def _read_json_dict(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _non_empty_line_count(path: Path) -> int:
+    count = 0
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line.strip():
+                count += 1
+    return count
+
+
+def check_benchmark_definitions(ctx: CheckContext) -> None:
+    """Validate benchmark fixture manifests without needing a live MCP server."""
+    config = ctx.config.get("benchmark_definitions", {})
+    if not config.get("enabled", False):
+        return
+
+    definitions = config.get("definitions", [])
+    if not isinstance(definitions, list):
+        ctx.block("benchmark-definitions", "benchmark_definitions.definitions must be a list", ctx.config_path)
+        return
+
+    for raw_entry in definitions:
+        if not isinstance(raw_entry, dict):
+            ctx.block("benchmark-definitions", "Benchmark definition entry must be an object", ctx.config_path)
+            continue
+
+        name = str(raw_entry.get("name") or "<unnamed>")
+        script_cfg = raw_entry.get("script")
+        manifest_cfg = raw_entry.get("manifest")
+        data_key = "tasks" if raw_entry.get("tasks") is not None else "probe_set"
+        data_cfg = raw_entry.get(data_key)
+        count_field = str(raw_entry.get("manifest_count_field") or ("task_count" if data_key == "tasks" else "probe_set_task_count"))
+
+        if not script_cfg or not manifest_cfg or not data_cfg:
+            ctx.block("benchmark-definitions", f"{name}: script, manifest, and {data_key} are required", ctx.config_path)
+            continue
+
+        script = _resolve_plugin_path(ctx, str(script_cfg))
+        manifest_path = _resolve_plugin_path(ctx, str(manifest_cfg))
+        data_path = _resolve_plugin_path(ctx, str(data_cfg))
+
+        if not script.is_file():
+            ctx.block("benchmark-definitions", f"{name}: script is missing", script)
+            continue
+        if not manifest_path.is_file():
+            ctx.block("benchmark-definitions", f"{name}: manifest is missing", manifest_path)
+            continue
+        if not data_path.is_file():
+            ctx.block("benchmark-definitions", f"{name}: {data_key} file is missing", data_path)
+            continue
+
+        manifest = _read_json_dict(manifest_path)
+        if manifest is None:
+            ctx.block("benchmark-definitions", f"{name}: manifest is not a JSON object", manifest_path)
+            continue
+
+        expected_count = manifest.get(count_field)
+        if not isinstance(expected_count, int):
+            ctx.block("benchmark-definitions", f"{name}: manifest missing integer {count_field}", manifest_path)
+        else:
+            actual_count = _non_empty_line_count(data_path)
+            if actual_count != expected_count:
+                ctx.block(
+                    "benchmark-definitions",
+                    f"{name}: {ctx.rel(data_path)} has {actual_count} non-empty lines but "
+                    f"{ctx.rel(manifest_path)} {count_field} is {expected_count}",
+                    data_path,
+                )
+
+        manifest_path_field = raw_entry.get("manifest_path_field")
+        if isinstance(manifest_path_field, str) and manifest.get(manifest_path_field):
+            manifest_data_path = _resolve_plugin_path(ctx, str(manifest[manifest_path_field]))
+            if not _same_resolved_path(manifest_data_path, data_path):
+                ctx.block(
+                    "benchmark-definitions",
+                    f"{name}: manifest {manifest_path_field} points to {ctx.rel(manifest_data_path)}, "
+                    f"expected {ctx.rel(data_path)}",
+                    manifest_path,
+                )
+
+        default_path_attrs = raw_entry.get("default_path_attrs", {})
+        if not isinstance(default_path_attrs, dict) or not default_path_attrs:
+            continue
+
+        try:
+            module = _load_sibling_module(script, f"monolith_benchmark_definition_{re.sub(r'[^A-Za-z0-9_]', '_', name)}")
+        except Exception as exc:  # noqa: BLE001 - import failures are actionable static drift.
+            ctx.block("benchmark-definitions", f"{name}: could not import script defaults: {exc}", script)
+            continue
+        if module is None:
+            ctx.block("benchmark-definitions", f"{name}: could not import script defaults", script)
+            continue
+
+        for attr, expected_key in sorted(default_path_attrs.items()):
+            if not hasattr(module, attr):
+                ctx.block("benchmark-definitions", f"{name}: script missing {attr}", script)
+                continue
+            expected_cfg = raw_entry.get(str(expected_key))
+            if expected_cfg is None:
+                ctx.block("benchmark-definitions", f"{name}: default attr {attr} maps to unknown config key {expected_key}", ctx.config_path)
+                continue
+            actual_path = _resolve_plugin_path(ctx, getattr(module, attr))
+            expected_path = _resolve_plugin_path(ctx, str(expected_cfg))
+            if not _same_resolved_path(actual_path, expected_path):
+                ctx.block(
+                    "benchmark-definitions",
+                    f"{name}: {attr} resolves to {ctx.rel(actual_path)}, expected {ctx.rel(expected_path)}",
+                    script,
+                )
+            elif not actual_path.exists():
+                ctx.block(
+                    "benchmark-definitions",
+                    f"{name}: {attr} resolves to missing path {ctx.rel(actual_path)}",
+                    script,
+                )
 
 
 def check_offline_exe_freshness(ctx: CheckContext) -> None:
@@ -1088,6 +1243,7 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_workflow_scope(ctx)
     check_proxy_smoke(ctx)
     check_skill_catalog_drift(ctx)
+    check_benchmark_definitions(ctx)
     check_offline_exe_freshness(ctx)
     check_offline_parity_smoke(ctx)
     return ctx.findings
@@ -1135,6 +1291,8 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     (root / ".github/workflows").mkdir(parents=True)
     (root / "Source/Foo/Private").mkdir(parents=True)
     (root / ".claude/agents").mkdir(parents=True)
+    (root / "Benchmarks/Foo").mkdir(parents=True)
+    (root / "Scripts").mkdir(parents=True)
     (root / ".github/workflows/ci.yml").write_text("name: CI\n", encoding="utf-8")
     config = {
         "plugin_descriptor": "auto",
@@ -1165,6 +1323,23 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
         "secrets": {
             "high_confidence_regexes": [r"AKIA[0-9A-Z]{16}"],
             "broad_advisory_regexes": [],
+        },
+        "benchmark_definitions": {
+            "enabled": True,
+            "definitions": [
+                {
+                    "name": "FooBench",
+                    "script": "Scripts/foo_benchmark.py",
+                    "manifest": "Benchmarks/Foo/manifest.json",
+                    "tasks": "Benchmarks/Foo/tasks.jsonl",
+                    "manifest_count_field": "task_count",
+                    "manifest_path_field": "task_file",
+                    "default_path_attrs": {
+                        "DEFAULT_TASKS": "tasks",
+                        "DEFAULT_MANIFEST": "manifest",
+                    },
+                },
+            ],
         },
     }
     config_path = root / ".github/monolith-static-ci.json"
@@ -1202,6 +1377,20 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     )
     (root / ".claude/agents/good_bracket.md").write_text(
         "---\ntools: [mcp__monolith__bracket, mcp__monolith__comment] # bracket + inline comment\n---\nUses mcp__monolith__bracket.\n",
+        encoding="utf-8",
+    )
+    (root / "Benchmarks/Foo/tasks.jsonl").write_text(
+        "{\"id\":\"one\"}\n\n{\"id\":\"two\"}\n",
+        encoding="utf-8",
+    )
+    (root / "Benchmarks/Foo/manifest.json").write_text(
+        json.dumps({"task_count": 2, "task_file": "Benchmarks/Foo/tasks.jsonl"}),
+        encoding="utf-8",
+    )
+    (root / "Scripts/foo_benchmark.py").write_text(
+        "import pathlib\n"
+        "DEFAULT_TASKS = pathlib.Path('Benchmarks/Foo/tasks.jsonl')\n"
+        "DEFAULT_MANIFEST = pathlib.Path('Benchmarks/Foo/manifest.json')\n",
         encoding="utf-8",
     )
     return config, config_path
@@ -1338,6 +1527,24 @@ def run_selftest() -> int:
             "forbidden hosted workflow token",
             "workflow",
             lambda root: (root / ".github/workflows/ci.yml").write_text("run: RunUBT\n", encoding="utf-8"),
+        ),
+        (
+            "benchmark task count drift",
+            "benchmark-definitions",
+            lambda root: (root / "Benchmarks/Foo/manifest.json").write_text(
+                json.dumps({"task_count": 99, "task_file": "Benchmarks/Foo/tasks.jsonl"}),
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "benchmark default path drift",
+            "benchmark-definitions",
+            lambda root: (root / "Scripts/foo_benchmark.py").write_text(
+                "import pathlib\n"
+                "DEFAULT_TASKS = pathlib.Path('Benchmarks/Other/tasks.jsonl')\n"
+                "DEFAULT_MANIFEST = pathlib.Path('Benchmarks/Foo/manifest.json')\n",
+                encoding="utf-8",
+            ),
         ),
     ]
 

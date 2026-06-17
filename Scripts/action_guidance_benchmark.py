@@ -23,10 +23,11 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
-DEFAULT_TASKS = pathlib.Path("Plugins/Monolith/Benchmarks/ActionGuidance/tasks.jsonl")
-DEFAULT_MANIFEST = pathlib.Path("Plugins/Monolith/Benchmarks/ActionGuidance/manifest.json")
+DEFAULT_TASKS = pathlib.Path("Benchmarks/ActionGuidance/tasks.jsonl")
+DEFAULT_MANIFEST = pathlib.Path("Benchmarks/ActionGuidance/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/ActionGuidance")
 
 READ_ONLY_POLICY_IDS = {"", "read_only"}
@@ -284,7 +285,193 @@ def representative_actions(actions: List[str], count: int = 3) -> List[str]:
     return merged
 
 
+_STATIC_DISCOVERY_TASKS_20260617 = [
+    ("gas", "list_abilities"),
+    ("gas", "get_ability"),
+    ("gas", "list_gameplay_effects"),
+    ("gas", "get_gameplay_effect"),
+    ("gas", "find_abilities_by_tag"),
+    ("niagara", "list_systems"),
+    ("niagara", "get_system_info"),
+    ("niagara", "validate_system"),
+    ("material", "get_material_info"),
+    ("material", "list_material_instances"),
+    ("material", "validate_material"),
+    ("ui", "list_widgets"),
+    ("ui", "get_widget_hierarchy"),
+    ("ui", "get_viewmodel_bindings"),
+    ("blueprint", "list_graphs"),
+    ("blueprint", "get_blueprint_info"),
+    ("blueprint", "validate_blueprint"),
+    ("animation", "list_montages"),
+    ("animation", "get_anim_graph"),
+    ("animation", "get_montage_info"),
+    ("audio", "list_sound_cues"),
+    ("audio", "search_audio_assets"),
+    ("asset", "inspect_asset"),
+    ("scene", "list_actors"),
+    ("source", "review_context"),
+]
+
+_STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
+    ("gas", "get_gameplay_effect", "get_gameplay_efefct"),
+    ("gas", "find_abilities_by_tag", "find_abilities_by_tga"),
+    ("niagara", "get_module_inputs", "get_module_inptus"),
+    ("niagara", "list_renderers", "list_rendererz"),
+    ("material", "get_expression_details", "get_expression_detials"),
+    ("material", "check_tiling_quality", "check_tiling_quailty"),
+    ("ui", "get_viewmodel_bindings", "get_viewmodel_bnidings"),
+    ("ui", "configure_common_button", "configure_common_buton"),
+    ("blueprint", "get_function_signature", "get_function_signatre"),
+    ("blueprint", "search_nodes", "search_nodse"),
+    ("animation", "get_state_machine", "get_state_machnie"),
+    ("animation", "get_montage_sections", "get_montage_sectiosn"),
+    ("audio", "get_sound_cue", "get_sound_ceu"),
+    ("audio", "validate_sound_cue", "validate_sound_ceu"),
+    ("asset", "inspect_assets_batch", "inspect_assets_bacth"),
+    ("scene", "get_actor_properties", "get_actor_propreties"),
+    ("scene", "query_raycast", "query_raycats"),
+    ("config", "get_config_value", "get_config_vlaue"),
+    ("input", "get_input_mapping_context", "get_input_mapping_conetxt"),
+    ("localization", "get_localized_string", "get_localized_strnig"),
+    ("source", "review_context", "review_conetxt"),
+    ("cppreflect", "get_uclass", "get_uclas"),
+    ("risk", "get_hotspot_score", "get_hotpsot_score"),
+    ("project", "get_asset_details", "get_asset_detials"),
+    ("mesh", "get_mesh_info", "get_mesh_ifno"),
+]
+
+_STATIC_MISSING_PARAM_TASKS_20260617 = [
+    ("gas", "get_ability", "ability_path"),
+    ("gas", "get_gameplay_effect", "asset_path"),
+    ("gas", "find_abilities_by_tag", "tag"),
+    ("niagara", "get_ordered_modules", "asset_path"),
+    ("niagara", "get_module_inputs", "asset_path"),
+    ("material", "get_all_expressions", "asset_path"),
+    ("material", "get_expression_details", "asset_path"),
+    ("ui", "get_widget_hierarchy", "asset_path"),
+    ("ui", "get_animation_details", "asset_path"),
+    ("blueprint", "list_graphs", "asset_path"),
+    ("blueprint", "get_graph_data", "asset_path"),
+    ("animation", "get_state_machines", "asset_path"),
+    ("animation", "get_state_info", "asset_path"),
+    ("audio", "get_sound_cue", "asset_path"),
+    ("audio", "search_audio_assets", "query"),
+    ("asset", "inspect_asset", "asset_path"),
+    ("scene", "get_actor_info", "actor"),
+    ("scene", "get_actor_properties", "actor"),
+    ("config", "get_config_value", "key"),
+    ("localization", "get_localized_string", "table"),
+    ("source", "search_source", "query"),
+    ("source", "review_context", "symbol"),
+    ("mesh", "get_mesh_info", "mesh_path"),
+    ("project", "search", "query"),
+    ("collection", "get_collection", "name"),
+]
+
+_STATIC_INVALID_PARAM_TASKS_20260617 = [
+    ("gas", "get_ability", {"ability_path": 12345}, "ability_path"),
+    ("gas", "find_abilities_by_tag", {"tag": 12345}, "tag"),
+    ("niagara", "get_ordered_modules", {"asset_path": 12345, "emitter": "BenchmarkValue"}, "asset_path"),
+    (
+        "niagara",
+        "get_module_inputs",
+        {"asset_path": 12345, "emitter": "BenchmarkValue", "module_node": "BenchmarkValue"},
+        "asset_path",
+    ),
+    ("material", "get_all_expressions", {"asset_path": 12345}, "asset_path"),
+    (
+        "material",
+        "get_expression_details",
+        {"asset_path": 12345, "expression_name": "BenchmarkValue"},
+        "asset_path",
+    ),
+    ("ui", "get_widget_tree", {"asset_path": 12345}, "asset_path"),
+    ("ui", "list_widget_properties", {"asset_path": 12345}, "asset_path"),
+    ("blueprint", "list_graphs", {"asset_path": 12345}, "asset_path"),
+    ("blueprint", "get_graph_data", {"asset_path": 12345}, "asset_path"),
+    ("animation", "get_state_machines", {"asset_path": 12345}, "asset_path"),
+    (
+        "animation",
+        "get_state_info",
+        {"asset_path": 12345, "machine_name": "BenchmarkValue", "state_name": "BenchmarkValue"},
+        "asset_path",
+    ),
+    ("audio", "get_sound_cue", {"asset_path": 12345}, "asset_path"),
+    ("audio", "search_audio_assets", {"query": 12345}, "query"),
+    ("asset", "inspect_asset", {"asset_path": 12345}, "asset_path"),
+    ("asset", "inspect_assets_batch", {"asset_paths": "not_an_array"}, "asset_paths"),
+    ("scene", "list_layers", {"include_actors": "not_a_bool"}, "include_actors"),
+    ("scene", "list_streaming_levels", {"limit": "not_a_number"}, "limit"),
+    ("config", "search_config", {"query": 12345}, "query"),
+    ("config", "get_config_value", {"key": 12345}, "key"),
+    ("localization", "get_localized_string", {"table": 12345, "key": "BenchmarkValue"}, "table"),
+    ("input", "get_input_mapping_context", {"asset_path": 12345}, "asset_path"),
+    ("source", "search_source", {"query": 12345}, "query"),
+    ("mesh", "get_mesh_info", {"mesh_path": 12345}, "mesh_path"),
+    ("project", "get_asset_details", {"asset_path": 12345, "include_content": "not_a_bool"}, "asset_path"),
+]
+
+
+def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
+    def next_id() -> str:
+        return f"AGB-{len(tasks) + 1:03d}"
+
+    for namespace, action in _STATIC_DISCOVERY_TASKS_20260617:
+        tasks.append({
+            "id": next_id(),
+            "category": "discovery_planning",
+            "namespace": namespace,
+            "action": action,
+            "tool": "monolith_discover",
+            "arguments": {"namespace": namespace, "action": action, "mode": "schema"},
+            "expected": {"action_id": f"{namespace}.{action}", "requires_planning_signals": True},
+            "safety": "read_only_discovery",
+        })
+
+    for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260617:
+        tool, args = action_tool(namespace, typo, {})
+        tasks.append({
+            "id": next_id(),
+            "category": "unknown_action_recovery",
+            "namespace": namespace,
+            "action": typo,
+            "tool": tool,
+            "arguments": args,
+            "expected": {"candidate_action": f"{namespace}.{candidate_action}", "failure_cause": "unknown_action"},
+            "safety": "lookup_failure_before_handler",
+        })
+
+    for namespace, action, missing_param in _STATIC_MISSING_PARAM_TASKS_20260617:
+        tool, args = action_tool(namespace, action, {})
+        tasks.append({
+            "id": next_id(),
+            "category": "missing_required_param",
+            "namespace": namespace,
+            "action": action,
+            "tool": tool,
+            "arguments": args,
+            "expected": {"missing_param": missing_param, "failure_cause": "missing_required_param"},
+            "safety": "schema_failure_before_handler",
+        })
+
+    for namespace, action, params, invalid_param in _STATIC_INVALID_PARAM_TASKS_20260617:
+        tool, args = action_tool(namespace, action, dict(params))
+        tasks.append({
+            "id": next_id(),
+            "category": "invalid_param_type",
+            "namespace": namespace,
+            "action": action,
+            "tool": tool,
+            "arguments": args,
+            "expected": {"invalid_param": invalid_param, "failure_cause": "invalid_param"},
+            "safety": "schema_failure_before_handler",
+        })
+
+
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
+    manifest_path = resolve_plugin_path(manifest_path)
     summary_response = mcp_call(url, "monolith_discover", {})
     summary = text_json(summary_response)
     if not summary or "namespaces" not in summary:
@@ -406,6 +593,8 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
             if len(tasks) >= min_tasks:
                 break
 
+    append_static_unreal_practical_tasks(tasks)
+
     write_jsonl(tasks_path, tasks)
     manifest = {
         "generated_at": utc_now(),
@@ -416,7 +605,7 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         "catalog_action_count": sum(row["action_count"] for row in namespace_rows),
         "namespace_coverage": namespace_rows,
         "category_counts": count_by(tasks, "category"),
-        "task_file": str(tasks_path).replace("\\", "/"),
+        "task_file": display_path(tasks_path),
         "scoring": {
             "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",
             "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)",
@@ -667,10 +856,12 @@ def run_benchmark(
     max_recovery_calls: int,
     timeout_s: float,
 ) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
     tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
     status = result_data(status_response)
+    benchmark_inputs = build_benchmark_inputs("ActionGuidance", tasks_path=tasks_path, mcp_status=status)
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
@@ -686,9 +877,11 @@ def run_benchmark(
             partial = aggregate(label, status, tasks[:index], rows, max_recovery_calls)
             partial["completed_task_count"] = index
             partial["total_task_count"] = len(tasks)
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
             print(f"[{index}/{len(tasks)}] {row['task_id']} success={row['task_success']} direct={row['direct_success']}", flush=True)
     summary = aggregate(label, status, tasks, rows, max_recovery_calls)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
     return summary

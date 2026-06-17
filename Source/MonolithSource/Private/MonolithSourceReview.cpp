@@ -51,7 +51,7 @@ namespace
 		return TEXT("low");
 	}
 
-	bool AllowsSensitivityPrefix(const FString& Token)
+	bool ReviewAllowsSensitivityPrefix(const FString& Token)
 	{
 		return Token == TEXT("save")
 			|| Token == TEXT("serialize")
@@ -88,16 +88,16 @@ namespace
 			|| Token == TEXT("network");
 	}
 
-	bool MatchesSensitivityToken(const FString& CandidateToken, const FString& SensitiveToken)
+	bool ReviewMatchesSensitivityToken(const FString& CandidateToken, const FString& SensitiveToken)
 	{
 		if (CandidateToken == SensitiveToken)
 		{
 			return true;
 		}
-		return AllowsSensitivityPrefix(SensitiveToken) && CandidateToken.StartsWith(SensitiveToken);
+		return ReviewAllowsSensitivityPrefix(SensitiveToken) && CandidateToken.StartsWith(SensitiveToken);
 	}
 
-	void AddSensitivityCandidateToken(TArray<FString>& Tokens, TSet<FString>& Seen, FString Token)
+	void ReviewAddSensitivityCandidateToken(TArray<FString>& Tokens, TSet<FString>& Seen, FString Token)
 	{
 		Token.ToLowerInline();
 		if (Token.IsEmpty() || Seen.Contains(Token))
@@ -108,13 +108,13 @@ namespace
 		Tokens.Add(MoveTemp(Token));
 	}
 
-	TArray<FString> BuildSensitivityCandidateTokens(const FString& Text)
+	TArray<FString> ReviewBuildSensitivityCandidateTokens(const FString& Text)
 	{
 		TArray<FString> Tokens;
 		TSet<FString> Seen;
 		for (const FString& Token : FMonolithFuzzyMatch::Tokenize(Text))
 		{
-			AddSensitivityCandidateToken(Tokens, Seen, Token);
+			ReviewAddSensitivityCandidateToken(Tokens, Seen, Token);
 		}
 
 		FString Current;
@@ -124,7 +124,7 @@ namespace
 			const TCHAR Ch = Text[Index];
 			if (!FChar::IsAlnum(Ch))
 			{
-				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				ReviewAddSensitivityCandidateToken(Tokens, Seen, Current);
 				Current.Empty();
 				Previous = TEXT('\0');
 				continue;
@@ -133,19 +133,19 @@ namespace
 				&& FChar::IsUpper(Ch)
 				&& (FChar::IsLower(Previous) || FChar::IsDigit(Previous)))
 			{
-				AddSensitivityCandidateToken(Tokens, Seen, Current);
+				ReviewAddSensitivityCandidateToken(Tokens, Seen, Current);
 				Current.Empty();
 			}
 			Current.AppendChar(Ch);
 			Previous = Ch;
 		}
-		AddSensitivityCandidateToken(Tokens, Seen, Current);
+		ReviewAddSensitivityCandidateToken(Tokens, Seen, Current);
 		return Tokens;
 	}
 
 	bool ReviewContainsAnyToken(const FString& Text, std::initializer_list<const TCHAR*> Tokens, FString* OutMatchedToken = nullptr)
 	{
-		const TArray<FString> CandidateTokens = BuildSensitivityCandidateTokens(Text);
+		const TArray<FString> CandidateTokens = ReviewBuildSensitivityCandidateTokens(Text);
 		for (const FString& CandidateToken : CandidateTokens)
 		{
 			if (CandidateToken.IsEmpty())
@@ -155,7 +155,7 @@ namespace
 			for (const TCHAR* Token : Tokens)
 			{
 				const FString SensitiveToken(Token);
-				if (MatchesSensitivityToken(CandidateToken, SensitiveToken))
+				if (ReviewMatchesSensitivityToken(CandidateToken, SensitiveToken))
 				{
 					if (OutMatchedToken)
 					{

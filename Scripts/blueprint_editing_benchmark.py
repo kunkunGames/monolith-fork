@@ -6,28 +6,29 @@ Measures the MCP server's capability to support blueprint editing workflows
 across 7 Blueprint types: Actor, Character, Widget, AnimInstance, GameplayAbility,
 ActorComponent, and Interface.
 
-Eight task categories (124 tasks total):
-  type_discovery        - project.search for BP type prefixes and class names
-  graph_read            - blueprint.list_graphs / get_graph_data / get_graph_summary
-  variable_read         - blueprint.get_variables with options
-  read_schema           - monolith_discover schema for 15 read actions (lenient)
-  edit_schema           - monolith_discover schema for 38 edit actions (strict: isError fails)
-  workflow_completeness - verify workflow steps present in catalog actions[].action
-  edit_execute          - call real edit actions against fixture assets (strict: requires success)
-  error_path            - send invalid inputs and verify structured isError response
+Nine task categories:
+  type_discovery   - project.search for benchmark-fixture names (portable; not GO-content)
+  graph_read       - blueprint.list_graphs / get_graph_data / get_graph_summary
+  variable_read    - blueprint.get_variables with options
+  read_schema      - monolith_discover schema for 23 read actions (lenient)
+  edit_schema      - monolith_discover schema for 46 edit actions (strict: isError fails)
+  workflow_execute - run real multi-step workflows end-to-end and READ BACK the result
+  edit_execute     - call real edit actions against fixtures AND read back the mutation
+  error_path       - send invalid inputs and verify an INPUT-SPECIFIC structured isError
+  duplicate_reject - second identical add_* call must be refused (no silent suffix/no-op)
 
-Scoring formula (weights sum to 1.0):
-  blueprint_editing_score =
-    0.25 * edit_execute_rate
-    + 0.20 * edit_schema_rate
-    + 0.15 * graph_read_rate
-    + 0.15 * variable_read_rate
-    + 0.10 * error_path_rate
-    + 0.07 * read_schema_rate
-    + 0.05 * type_discovery_rate
-    + 0.03 * workflow_completeness_rate
+v5 (2026-06-17): edit_execute is now read-back verified (the mutation must be observable
+via a follow-up read) and node-wiring is executed for real (add_node IDs are threaded into
+connect_pins); compile steps assert a clean compile (error_count == 0) from the payload, not
+just a non-error envelope; workflow_completeness (existence-only catalog check) was replaced
+by workflow_execute (executed build->wire->compile-clean->read-back chains). These changes
+make the score state-dependent: a non-editing stub can no longer pass edit_execute. The
+weights live in the single ``WEIGHTS`` dict below and are the sole source of truth consumed by
+aggregate(), the manifest score_formula, the comparison renderer, and this docstring.
 
-Action names verified against live blueprint namespace catalog (138 actions, v0.20.2).
+Action names verified against live blueprint namespace catalog (138 actions, v0.20.2);
+the v5 fixture-lifecycle patch expands the generated suite from 195 to 295 tasks and
+adds endpoint/fixture preflight so transport failures do not look like fixture misses.
 """
 
 from __future__ import annotations
@@ -43,11 +44,42 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
 DEFAULT_TASKS = pathlib.Path("Benchmarks/BlueprintEditing/tasks.jsonl")
 DEFAULT_MANIFEST = pathlib.Path("Benchmarks/BlueprintEditing/manifest.json")
 DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/BlueprintEditing")
+
+# Single source of truth for the composite score. aggregate(), the manifest score_formula,
+# write_comparison_markdown(), and the module docstring all derive from this dict, so a weight
+# can never drift between the code, the docs, and the comparison report again. Must sum to 1.0.
+# v5 (2026-06-17): edit_execute is now read-back verified, so it absorbs weight back from the
+# schema-only signals; workflow_execute (executed chains) replaces the existence-only
+# workflow_completeness (0.03) at 0.10.
+WEIGHTS: Dict[str, float] = {
+    "edit_execute": 0.26,
+    "edit_schema": 0.14,
+    "graph_read": 0.12,
+    "variable_read": 0.12,
+    "error_path": 0.10,
+    "workflow_execute": 0.10,
+    "duplicate_reject": 0.08,
+    "read_schema": 0.05,
+    "type_discovery": 0.03,
+}
+assert abs(sum(WEIGHTS.values()) - 1.0) < 1e-9, "BlueprintEditing WEIGHTS must sum to 1.0"
+
+# Dimension rate keys in canonical (scored) order — drives the metrics dict and the
+# comparison-report row order so a scored dimension can never be silently omitted.
+SCORE_DIMENSIONS: List[str] = [f"{name}_rate" for name in WEIGHTS]
+
+
+def score_formula_string() -> str:
+    """Render the human-readable score formula from WEIGHTS (used in the manifest)."""
+    return " + ".join(f"{w:g}*{name}_rate" for name, w in WEIGHTS.items())
+
 
 # Interface has no EventGraph; default_graph=None causes get_graph_data to be called
 # without a graph_name argument (server returns the first available graph or isError).
@@ -75,26 +107,38 @@ BP_TYPES = [
 ]
 
 # (query, bp_type, domain, require_results)
-# require_results=True: task fails if response has 0 results (prefix searches that almost always match).
-# require_results=False: any non-error response passes (text searches that may find 0 in some projects).
+# require_results=True: task fails if response has 0 results.
+# require_results=False: any non-error response passes (broad text searches that may find 0).
+#
+# The require_results=True queries target the benchmark's OWN fixtures (guaranteed to exist
+# after setup_fixtures), NOT incidental project content. This keeps type_discovery portable:
+# a capable server scores 1.0 in any project, not only in GO where "BP_"/"AI Controller"
+# assets happen to exist. The require_results=False queries keep broad-recall coverage.
 TYPE_SEARCH_QUERIES: List[Tuple[str, str, str, bool]] = [
-    ("BP_", "Actor", "gameplay", True),
-    ("WBP_", "Widget", "ui", True),
-    ("ABP_", "AnimInstance", "animation", True),
-    ("GA_", "GameplayAbility", "ability", True),
-    ("BPI_", "Interface", "interface", False),        # project may have 0 BPI_ assets
-    ("Actor Blueprint", "Actor", "gameplay", True),
-    ("Character Blueprint", "Character", "gameplay", True),
-    ("UserWidget Blueprint", "Widget", "ui", False),  # description text; may not match
+    ("BPB_TestActor", "Actor", "gameplay", True),
+    ("BPB_TestCharacter", "Character", "gameplay", True),
+    ("WBP_TestWidget", "Widget", "ui", True),
+    ("ABP_TestAnim", "AnimInstance", "animation", True),
+    ("GA_TestAbility", "GameplayAbility", "ability", True),
+    ("BC_TestComponent", "ActorComponent", "component", True),
+    ("BPI_TestInterface", "Interface", "interface", True),
+    ("Benchmarks", "Actor", "gameplay", True),         # the fixture folder; always >=1 fixture
+    ("Actor Blueprint", "Actor", "gameplay", False),   # broad text recall; project-dependent
+    ("Character Blueprint", "Character", "gameplay", False),
+    ("UserWidget Blueprint", "Widget", "ui", False),
     ("AnimInstance Blueprint", "AnimInstance", "animation", False),
     ("GameplayAbility Blueprint", "GameplayAbility", "ability", False),
-    ("ActorComponent Blueprint", "ActorComponent", "component", False),
-    ("Blueprint Pawn", "Pawn", "gameplay", False),
-    ("AI Controller Blueprint", "AIController", "ai", True),
     ("Blueprint Interface", "Interface", "interface", False),
+    ("/Game/Benchmarks/BPB_TestActor", "Actor", "gameplay", True),
+    ("/Game/Benchmarks/BPB_TestCharacter", "Character", "gameplay", True),
+    ("/Game/Benchmarks/WBP_TestWidget", "Widget", "ui", True),
+    ("/Game/Benchmarks/ABP_TestAnim", "AnimInstance", "animation", True),
+    ("/Game/Benchmarks/GA_TestAbility", "GameplayAbility", "ability", True),
+    ("/Game/Benchmarks/BC_TestComponent", "ActorComponent", "component", True),
+    ("/Game/Benchmarks/BPI_TestInterface", "Interface", "interface", True),
 ]
 
-# All 15 names verified against live blueprint namespace catalog (monolith_discover mode=actions).
+# All 23 names verified against live blueprint namespace catalog (monolith_discover mode=actions).
 BLUEPRINT_READ_ACTIONS: List[str] = [
     "list_graphs",
     "get_graph_data",
@@ -111,9 +155,17 @@ BLUEPRINT_READ_ACTIONS: List[str] = [
     "get_interfaces",
     "get_event_dispatchers",
     "get_parent_class",
+    "search_nodes",
+    "get_component_details",
+    "get_construction_script",
+    "search_functions",
+    "get_node_details",
+    "get_interface_functions",
+    "get_function_signature",
+    "get_event_dispatcher_details",
 ]
 
-# All 38 names verified against live blueprint namespace catalog.
+# All 46 names verified against live blueprint namespace catalog.
 BLUEPRINT_EDIT_ACTIONS: List[Tuple[str, str]] = [
     # node (7)
     ("add_node", "node"),
@@ -161,79 +213,293 @@ BLUEPRINT_EDIT_ACTIONS: List[Tuple[str, str]] = [
     ("add_event_dispatcher", "event"),
     ("remove_event_dispatcher", "event"),      # was delete_event_dispatcher
     ("set_event_dispatcher_params", "event"),  # was add_event_dispatcher_binding (non-existent)
+    # v5 fixture-lifecycle expansion: schema coverage for high-use authoring actions that
+    # already exist in the live catalog but were not part of the original 38-action slice.
+    ("create_blueprint", "class"),
+    ("duplicate_blueprint", "class"),
+    ("save_dirty_assets", "compilation"),
+    ("duplicate_component", "component"),
+    ("add_comment_node", "node"),
+    ("add_timeline", "node"),
+    ("set_cdo_property", "class"),
+    ("scaffold_interface_implementation", "class"),
 ]
 
-# Verified action names from the live blueprint namespace catalog.
-# requires_actions must match catalog actions[].action values exactly.
-BLUEPRINT_WORKFLOWS = [
+# Executed end-to-end workflows (category workflow_execute). Unlike the old
+# workflow_completeness check (which only asserted the action NAMES exist in the catalog),
+# each of these is actually RUN step-by-step against a fixture, with add_node ids threaded
+# into connect_pins (${label}) and a final read-back that must observe the end state.
+# Scored by _score_op_chain. All action names + params verified against the live catalog
+# (v0.20.2) and the captured live response shapes.
+BLUEPRINT_WORKFLOW_EXECUTE: List[Dict[str, Any]] = [
     {
-        "name": "create_function",
-        "description": "Create a new function, add nodes, connect pins, compile",
-        "requires_actions": ["add_function", "add_node", "connect_pins", "compile_blueprint"],
-    },
-    {
-        "name": "add_variable",
-        "description": "Add a variable, set its type and default value",
-        "requires_actions": ["add_variable", "set_variable_type", "set_variable_defaults"],
-    },
-    {
-        "name": "add_component",
-        "description": "Add a component, configure properties, reparent to hierarchy",
-        "requires_actions": ["add_component", "set_component_property", "reparent_component", "compile_blueprint"],
+        "name": "build_function",
+        "blueprint_type": "Actor", "domain": "gameplay", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/BPB_TestActor", "graph_name": "BenchWfBuildFunc",
+        "description": "Add a function, build its body (two wired PrintString nodes in the function graph), compile clean, read back the function",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "function_name": "BenchWfBuildFunc"}},
+            {"op": "add_node", "capture": "a",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "BenchWfBuildFunc", "node_type": "CallFunction", "function_name": "PrintString"}},
+            {"op": "add_node", "capture": "b",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "BenchWfBuildFunc", "node_type": "CallFunction", "function_name": "PrintString"}},
+            {"op": "connect_pins",
+             "args": {"action": "connect_pins", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "BenchWfBuildFunc", "source_node": "${a}", "source_pin": "then",
+                      "target_node": "${b}", "target_pin": "execute"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPB_TestActor"}},
+        ],
+        "verify_connection": {"from": "a", "from_pin": "then", "to": "b", "to_pin": "execute"},
+        "verify": {"read_action": "get_functions", "contains": ["BenchWfBuildFunc"]},
     },
     {
         "name": "implement_interface",
-        "description": "Implement interface, add required functions, compile",
-        "requires_actions": ["implement_interface", "add_function", "compile_blueprint"],
+        "blueprint_type": "Character", "domain": "gameplay", "edit_domain": "class",
+        "asset_path": "/Game/Benchmarks/BPB_TestCharacter", "graph_name": "EventGraph",
+        "description": "Implement BPI_TestInterface on the Character, compile clean, read back the implemented interface",
+        "chain": [
+            {"op": "implement_interface",
+             "args": {"action": "implement_interface", "asset_path": "/Game/Benchmarks/BPB_TestCharacter",
+                      "interface_class": "BPI_TestInterface"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPB_TestCharacter"}},
+        ],
+        "verify": {"read_action": "get_interfaces", "contains": ["BPI_TestInterface"]},
     },
     {
-        "name": "event_dispatcher_setup",
-        "description": "Create event dispatcher, configure its params",
-        "requires_actions": ["add_event_dispatcher", "set_event_dispatcher_params", "compile_blueprint"],
+        "name": "component_assembly",
+        "blueprint_type": "Character", "domain": "gameplay", "edit_domain": "component",
+        "asset_path": "/Game/Benchmarks/BPB_TestCharacter", "graph_name": "EventGraph",
+        "description": "Add a SphereComponent, set a real property on it, compile clean, read back the component",
+        "chain": [
+            {"op": "add_component",
+             "args": {"action": "add_component", "asset_path": "/Game/Benchmarks/BPB_TestCharacter",
+                      "component_class": "SphereComponent", "component_name": "BenchWfAsmComp"}},
+            {"op": "set_component_property",
+             "args": {"action": "set_component_property", "asset_path": "/Game/Benchmarks/BPB_TestCharacter",
+                      "component_name": "BenchWfAsmComp", "property_name": "SphereRadius", "value": "128.0"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPB_TestCharacter"}},
+        ],
+        "verify": {"read_action": "get_components", "contains": ["BenchWfAsmComp"]},
+    },
+    {
+        "name": "widget_style_refresh",
+        "blueprint_type": "Widget", "domain": "ui", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/WBP_TestWidget", "graph_name": "BenchWfWidgetApplyStyle",
+        "description": "Create a Widget style-refresh function, add typed style inputs, place a FormatText node, compile clean, read back the signature",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "function_name": "BenchWfWidgetApplyStyle", "category": "Benchmark|UI"}},
+            {"op": "set_function_params",
+             "args": {"action": "set_function_params", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "function_name": "BenchWfWidgetApplyStyle",
+                      "inputs": [{"name": "AccentColor", "type": "LinearColor"}]}},
+            {"op": "add_node",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "graph_name": "BenchWfWidgetApplyStyle", "node_type": "FormatText",
+                      "format": "Style {AccentColor}"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/WBP_TestWidget"}},
+        ],
+        "verify": {"read_action": "get_function_signature",
+                   "read_args": {"function_name": "BenchWfWidgetApplyStyle"},
+                   "contains": ["BenchWfWidgetApplyStyle", "AccentColor"]},
+    },
+    {
+        "name": "widget_comment_layout",
+        "blueprint_type": "Widget", "domain": "ui", "edit_domain": "node",
+        "asset_path": "/Game/Benchmarks/WBP_TestWidget", "graph_name": "EventGraph",
+        "description": "Add a UMG layout comment box, auto-layout the Widget graph, compile clean, read back the comment text",
+        "chain": [
+            {"op": "add_comment_node",
+             "args": {"action": "add_comment_node", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "graph_name": "EventGraph", "text": "BenchWfWidgetLayoutZone",
+                      "position": [400, 120], "width": 520, "height": 260}},
+            {"op": "auto_layout",
+             "args": {"action": "auto_layout", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "graph_name": "EventGraph"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/WBP_TestWidget"}},
+        ],
+        "verify": {"read_action": "get_graph_data", "read_args": {"graph_name": "EventGraph"},
+                   "contains": ["BenchWfWidgetLayoutZone"]},
+    },
+    {
+        "name": "anim_threadsafe_graph",
+        "blueprint_type": "AnimInstance", "domain": "animation", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/ABP_TestAnim", "graph_name": "BenchWfAnimThreadSafeUpdate",
+        "description": "Create an AnimBP thread-safe helper function, read Speed in its graph, compile clean, read back the function",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                      "function_name": "BenchWfAnimThreadSafeUpdate"}},
+            {"op": "set_function_thread_safe",
+             "args": {"action": "set_function_thread_safe", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                      "function_name": "BenchWfAnimThreadSafeUpdate", "thread_safe": True}},
+            {"op": "add_node",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                      "graph_name": "BenchWfAnimThreadSafeUpdate", "node_type": "VariableGet",
+                      "variable_name": "Speed"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/ABP_TestAnim"}},
+        ],
+        "verify": {"read_action": "get_functions", "contains": ["BenchWfAnimThreadSafeUpdate"]},
+    },
+    {
+        "name": "gas_activate_override",
+        "blueprint_type": "GameplayAbility", "domain": "ability", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/GA_TestAbility", "graph_name": "K2_ActivateAbility",
+        "description": "Override GameplayAbility activation, add a PrintString node to the override graph, compile clean, read back the override",
+        "chain": [
+            {"op": "override_parent_function",
+             "args": {"action": "override_parent_function", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                      "parent_function_name": "K2_ActivateAbility"}},
+            {"op": "add_node",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                      "graph_name": "K2_ActivateAbility", "node_type": "CallFunction",
+                      "function_name": "PrintString"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/GA_TestAbility"}},
+        ],
+        "verify": {"read_action": "get_functions", "contains": ["K2_ActivateAbility"]},
+    },
+    {
+        "name": "actorcomponent_toggle_contract",
+        "blueprint_type": "ActorComponent", "domain": "component", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/BC_TestComponent", "graph_name": "BenchWfComponentToggle",
+        "description": "Create an ActorComponent toggle function, add a bool input and VariableSet node, compile clean, read back the signature",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                      "function_name": "BenchWfComponentToggle"}},
+            {"op": "set_function_params",
+             "args": {"action": "set_function_params", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                      "function_name": "BenchWfComponentToggle",
+                      "inputs": [{"name": "bNewActive", "type": "bool"}]}},
+            {"op": "add_node",
+             "args": {"action": "add_node", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                      "graph_name": "BenchWfComponentToggle", "node_type": "VariableSet",
+                      "variable_name": "bIsActive"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BC_TestComponent"}},
+        ],
+        "verify": {"read_action": "get_function_signature",
+                   "read_args": {"function_name": "BenchWfComponentToggle"},
+                   "contains": ["BenchWfComponentToggle", "bNewActive"]},
+    },
+    {
+        "name": "interface_signature_contract",
+        "blueprint_type": "Interface", "domain": "interface", "edit_domain": "function",
+        "asset_path": "/Game/Benchmarks/BPI_TestInterface", "graph_name": "BenchWfInterfaceCanUse",
+        "description": "Create an Interface function with a bool output, compile clean, read back the signature",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                      "function_name": "BenchWfInterfaceCanUse"}},
+            {"op": "set_function_params",
+             "args": {"action": "set_function_params", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                      "function_name": "BenchWfInterfaceCanUse",
+                      "outputs": [{"name": "bCanUse", "type": "bool"}]}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPI_TestInterface"}},
+        ],
+        "verify": {"read_action": "get_function_signature",
+                   "read_args": {"function_name": "BenchWfInterfaceCanUse"},
+                   "contains": ["BenchWfInterfaceCanUse", "bCanUse"]},
+    },
+    {
+        "name": "actor_component_property_assembly",
+        "blueprint_type": "Actor", "domain": "gameplay", "edit_domain": "component",
+        "asset_path": "/Game/Benchmarks/BPB_TestActor", "graph_name": "EventGraph",
+        "description": "Add a PointLightComponent to the Actor, set Intensity, compile clean, read back the component",
+        "chain": [
+            {"op": "add_component",
+             "args": {"action": "add_component", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "component_class": "PointLightComponent", "component_name": "BenchWfLightComp"}},
+            {"op": "set_component_property",
+             "args": {"action": "set_component_property", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "component_name": "BenchWfLightComp", "property_name": "Intensity", "value": "4500.0"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPB_TestActor"}},
+        ],
+        "verify": {"read_action": "get_components", "contains": ["BenchWfLightComp"]},
+    },
+    {
+        "name": "duplicate_function_graph",
+        "blueprint_type": "Actor", "domain": "gameplay", "edit_domain": "state",
+        "asset_path": "/Game/Benchmarks/BPB_TestActor", "graph_name": "BenchWfGraphSource",
+        "description": "Create a function graph, duplicate it, compile clean, read back the duplicated graph name",
+        "chain": [
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "function_name": "BenchWfGraphSource"}},
+            {"op": "duplicate_graph",
+             "args": {"action": "duplicate_graph", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "BenchWfGraphSource", "new_name": "BenchWfGraphCopy"}},
+            {"op": "compile_blueprint",
+             "args": {"action": "compile_blueprint", "asset_path": "/Game/Benchmarks/BPB_TestActor"}},
+        ],
+        "verify": {"read_action": "get_functions", "contains": ["BenchWfGraphCopy"]},
     },
 ]
 
 
-# Inputs designed to provoke structured isError responses. Scored inverted:
-# pass = server returns isError (graceful rejection), fail = transport error (crash).
-# All action names use real catalog names so the test exercises actual error handling,
-# not "unknown action" rejection.
+# Inputs designed to provoke structured isError responses. Scored inverted AND input-specific:
+# pass = isError whose message references the offending input (error_tokens), fail = transport
+# error (crash) OR a generic isError that does not mention the bad input. All action names +
+# params are real catalog names/params (verified live), so this exercises actual error handling,
+# not "unknown action" or "missing required param" rejection.
 BLUEPRINT_ERROR_PATH_TASKS: List[Dict[str, Any]] = [
     {
         "action": "get_graph_data", "description": "get_graph_data on non-existent asset",
         "arguments": {"action": "get_graph_data",
                       "asset_path": "/Game/Benchmarks/NONEXISTENT_BenchBP_ZZZZZ"},
+        "error_tokens": ["NONEXISTENT_BenchBP_ZZZZZ", "not found", "does not exist", "could not", "failed to load"],
     },
     {
         "action": "compile_blueprint", "description": "compile_blueprint on non-existent asset",
         "arguments": {"action": "compile_blueprint",
                       "asset_path": "/Game/Benchmarks/NONEXISTENT_BenchBP_ZZZZZ"},
+        "error_tokens": ["NONEXISTENT_BenchBP_ZZZZZ", "not found", "does not exist", "could not", "failed to load"],
     },
     {
         "action": "get_variables", "description": "get_variables on non-existent asset",
         "arguments": {"action": "get_variables",
                       "asset_path": "/Game/Benchmarks/NONEXISTENT_BenchBP_ZZZZZ"},
+        "error_tokens": ["NONEXISTENT_BenchBP_ZZZZZ", "not found", "does not exist", "could not", "failed to load"],
     },
     {
         "action": "list_graphs", "description": "list_graphs on non-existent asset",
         "arguments": {"action": "list_graphs",
                       "asset_path": "/Game/Benchmarks/NONEXISTENT_BenchBP_ZZZZZ"},
+        "error_tokens": ["NONEXISTENT_BenchBP_ZZZZZ", "not found", "does not exist", "could not", "failed to load"],
     },
     {
         "action": "connect_pins", "description": "connect_pins with invalid node IDs",
+        # Real param names are source_node / target_node (NOT *_node_id) — verified live — so
+        # this exercises node-not-found handling, not unknown-param rejection.
         "arguments": {"action": "connect_pins",
                       "asset_path": "/Game/Benchmarks/BPB_TestActor",
                       "graph_name": "EventGraph",
-                      "source_node_id": "INVALID_NODE_AAAA_ZZZZ",
-                      "source_pin": "exec",
-                      "target_node_id": "INVALID_NODE_BBBB_ZZZZ",
+                      "source_node": "INVALID_NODE_AAAA_ZZZZ",
+                      "source_pin": "then",
+                      "target_node": "INVALID_NODE_BBBB_ZZZZ",
                       "target_pin": "execute"},
+        "error_tokens": ["INVALID_NODE", "node", "not found", "invalid", "could not", "no node"],
     },
     {
         "action": "remove_variable", "description": "remove non-existent variable",
         "arguments": {"action": "remove_variable",
                       "asset_path": "/Game/Benchmarks/BPB_TestActor",
                       "name": "NONEXISTENT_VAR_BENCH_ZZZZ"},
+        "error_tokens": ["NONEXISTENT_VAR_BENCH_ZZZZ", "variable", "not found", "does not exist", "no such"],
     },
     {
         "action": "rename_function", "description": "rename non-existent function",
@@ -241,12 +507,74 @@ BLUEPRINT_ERROR_PATH_TASKS: List[Dict[str, Any]] = [
                       "asset_path": "/Game/Benchmarks/BPB_TestActor",
                       "old_name": "NONEXISTENT_FUNC_BENCH_ZZZZ",
                       "new_name": "AnotherName"},
+        "error_tokens": ["NONEXISTENT_FUNC_BENCH_ZZZZ", "function", "not found", "does not exist", "no such"],
     },
     {
         "action": "remove_component", "description": "remove non-existent component",
         "arguments": {"action": "remove_component",
                       "asset_path": "/Game/Benchmarks/BPB_TestActor",
                       "component_name": "NONEXISTENT_COMP_BENCH_ZZZZ"},
+        "error_tokens": ["NONEXISTENT_COMP_BENCH_ZZZZ", "component", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "set_component_property", "description": "set property on non-existent component",
+        "arguments": {"action": "set_component_property",
+                      "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "component_name": "NONEXISTENT_PROP_COMP_ZZZZ",
+                      "property_name": "RelativeLocation", "value": "(X=1,Y=2,Z=3)"},
+        "error_tokens": ["NONEXISTENT_PROP_COMP_ZZZZ", "component", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "add_component", "description": "add_component with invalid component class",
+        "arguments": {"action": "add_component",
+                      "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "component_class": "NONEXISTENT_ComponentClass_ZZZZ",
+                      "component_name": "BadComponentClass"},
+        "error_tokens": ["NONEXISTENT_ComponentClass_ZZZZ", "component class", "class not found", "not found"],
+    },
+    {
+        "action": "set_variable_defaults", "description": "set default on non-existent Widget variable",
+        "arguments": {"action": "set_variable_defaults",
+                      "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "name": "NONEXISTENT_WIDGET_VAR_ZZZZ", "default_value": "true"},
+        "error_tokens": ["NONEXISTENT_WIDGET_VAR_ZZZZ", "variable", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "set_function_params", "description": "set params on non-existent Interface function",
+        "arguments": {"action": "set_function_params",
+                      "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                      "function_name": "NONEXISTENT_IFACE_FUNC_ZZZZ",
+                      "outputs": [{"name": "Value", "type": "float"}]},
+        "error_tokens": ["NONEXISTENT_IFACE_FUNC_ZZZZ", "function", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "get_function_signature", "description": "get signature for non-existent Interface function",
+        "arguments": {"action": "get_function_signature",
+                      "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                      "function_name": "NONEXISTENT_SIGNATURE_FUNC_ZZZZ"},
+        "error_tokens": ["NONEXISTENT_SIGNATURE_FUNC_ZZZZ", "function", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "set_cdo_property", "description": "set non-existent CDO property",
+        "arguments": {"action": "set_cdo_property",
+                      "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "property_name": "NONEXISTENT_CDO_PROP_ZZZZ", "value": "1"},
+        "error_tokens": ["NONEXISTENT_CDO_PROP_ZZZZ", "property", "not found", "does not exist", "unknown"],
+    },
+    {
+        "action": "duplicate_graph", "description": "duplicate non-existent function graph",
+        "arguments": {"action": "duplicate_graph",
+                      "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "NONEXISTENT_GRAPH_ZZZZ", "new_name": "BadGraphCopy"},
+        "error_tokens": ["NONEXISTENT_GRAPH_ZZZZ", "graph", "not found", "does not exist", "no such"],
+    },
+    {
+        "action": "add_node", "description": "add_node with invalid function name",
+        "arguments": {"action": "add_node",
+                      "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                      "graph_name": "EventGraph", "node_type": "CallFunction",
+                      "function_name": "NONEXISTENT_FUNCTION_NODE_ZZZZ"},
+        "error_tokens": ["NONEXISTENT_FUNCTION_NODE_ZZZZ", "function", "not found", "could not", "invalid"],
     },
 ]
 
@@ -297,6 +625,36 @@ BLUEPRINT_DUPLICATE_REJECT_TASKS: List[Dict[str, Any]] = [
         "arguments": {"action": "add_local_variable", "asset_path": "/Game/Benchmarks/BPB_TestActor",
                       "function_name": "DupRejectLocalFunc", "name": "DupRejectLocal", "type": "int"},
     },
+    {
+        "action": "add_variable", "edit_domain": "variable", "blueprint_type": "Widget", "domain": "ui",
+        "description": "Widget add_variable must reject duplicate display-state variable names",
+        "arguments": {"action": "add_variable", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                      "name": "DupRejectWidgetVar", "type": "bool"},
+    },
+    {
+        "action": "add_function", "edit_domain": "function", "blueprint_type": "AnimInstance", "domain": "animation",
+        "description": "AnimInstance add_function must reject duplicate update helper names",
+        "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                      "function_name": "DupRejectAnimFunc"},
+    },
+    {
+        "action": "add_event_dispatcher", "edit_domain": "event", "blueprint_type": "GameplayAbility", "domain": "ability",
+        "description": "GameplayAbility add_event_dispatcher must reject duplicate commit signals",
+        "arguments": {"action": "add_event_dispatcher", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                      "name": "DupRejectAbilitySignal"},
+    },
+    {
+        "action": "add_component", "edit_domain": "component", "blueprint_type": "Character", "domain": "gameplay",
+        "description": "Character add_component must reject duplicate helper component names",
+        "arguments": {"action": "add_component", "asset_path": "/Game/Benchmarks/BPB_TestCharacter",
+                      "component_class": "SceneComponent", "component_name": "DupRejectCharScene"},
+    },
+    {
+        "action": "add_function", "edit_domain": "function", "blueprint_type": "Interface", "domain": "interface",
+        "description": "Interface add_function must reject duplicate contract function names",
+        "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                      "function_name": "DupRejectInterfaceFunc"},
+    },
 ]
 
 # Parent class names for create_blueprint fixture setup.
@@ -309,6 +667,36 @@ FIXTURE_CREATE_PARAMS: Dict[str, Dict[str, str]] = {
     "ActorComponent":  {"parent_class": "ActorComponent",  "blueprint_type": "Normal"},
     "Interface":       {"parent_class": "Interface",       "blueprint_type": "Interface"},
 }
+
+# Explicit per-variable pin types for fixture setup — single source of truth that matches
+# test_blueprints.md (ActorTag=FName, DisplayText=FText, CharacterName=FString, ComponentID=int32).
+# Replaces the old name-based heuristic that silently created ActorTag as string and DisplayText
+# as float. Tokens verified accepted by the live add_variable handler
+# (valid: bool, byte, int, int64, float, double, string, text, name, Vector, Rotator, ...).
+FIXTURE_VAR_TYPES: Dict[str, Dict[str, str]] = {
+    "Actor":          {"Health": "float", "MaxHealth": "float", "ActorTag": "name"},
+    "Character":      {"MoveSpeed": "float", "bIsSprinting": "bool", "CharacterName": "string"},
+    "Widget":         {"DisplayText": "text", "bIsVisible": "bool"},
+    "AnimInstance":   {"Speed": "float", "bIsInAir": "bool"},
+    "GameplayAbility": {"AbilityCooldown": "float", "AbilityCost": "float"},
+    "ActorComponent": {"ComponentID": "int", "bIsActive": "bool"},
+    "Interface":      {},
+}
+
+# Function stubs created by setup_fixtures and asserted by the expanded read/preflight tasks.
+# These match test_blueprints.md and make read-back checks independent of task execution order.
+FIXTURE_FUNCTIONS_BY_TYPE: Dict[str, List[str]] = {
+    "Actor": ["TakeDamage_Bench", "Heal_Bench"],
+    "Character": ["StartSprint_Bench", "StopSprint_Bench"],
+    "Widget": ["UpdateDisplay_Bench"],
+    "AnimInstance": ["UpdateLocomotion_Bench"],
+    "GameplayAbility": ["OnAbilityActivated_Bench"],
+    "ActorComponent": ["Initialize_Bench", "Deactivate_Bench"],
+    "Interface": ["GetDisplayName_Bench", "OnInteract_Bench"],
+}
+
+# Interface function stubs are referenced by variable_read compatibility checks.
+INTERFACE_FIXTURE_FUNCTIONS: List[str] = FIXTURE_FUNCTIONS_BY_TYPE["Interface"]
 
 # 10 type-specific edit_execute tasks per Blueprint type (70 total).
 # All action names verified against live blueprint namespace catalog v0.20.2.
@@ -604,6 +992,137 @@ BLUEPRINT_EDIT_EXECUTE_TASKS_BY_TYPE: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
+BLUEPRINT_ADDITIONAL_EDIT_EXECUTE_TASKS: List[Dict[str, Any]] = [
+    # UMG widget graph/property/style coverage.
+    {"blueprint_type": "Widget", "domain": "ui", "action": "add_variable", "edit_domain": "variable",
+     "arguments": {"action": "add_variable", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                   "name": "BenchWidgetSubtitle", "type": "text"},
+     "description": "Add FText BenchWidgetSubtitle style variable to Widget"},
+    {"blueprint_type": "Widget", "domain": "ui", "action": "set_variable_defaults", "edit_domain": "variable",
+     "arguments": {"action": "set_variable_defaults", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                   "name": "bIsVisible", "default_value": "true"},
+     "description": "Set bIsVisible fixture variable default to true for Widget read-back"},
+    {"blueprint_type": "Widget", "domain": "ui", "action": "add_comment_node", "edit_domain": "node",
+     "arguments": {"action": "add_comment_node", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                   "graph_name": "EventGraph", "text": "BenchWidgetStyleBlock",
+                   "position": [900, 220], "width": 480, "height": 180},
+     "description": "Add BenchWidgetStyleBlock comment box to Widget EventGraph"},
+    {"blueprint_type": "Widget", "domain": "ui", "action": "add_node", "edit_domain": "node",
+     "arguments": {"action": "add_node", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                   "graph_name": "EventGraph", "node_type": "FormatText", "format": "Widget {Label}"},
+     "description": "Add FormatText node for Widget label formatting"},
+    {"blueprint_type": "Widget", "domain": "ui", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/WBP_TestWidget",
+                   "function_name": "BenchWidgetOpenSettings", "category": "Benchmark|UI"},
+     "description": "Add BenchWidgetOpenSettings function graph to Widget"},
+
+    # AnimBP variables and graphs.
+    {"blueprint_type": "AnimInstance", "domain": "animation", "action": "add_variable", "edit_domain": "variable",
+     "arguments": {"action": "add_variable", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                   "name": "BenchAnimAcceleration", "type": "float"},
+     "description": "Add float BenchAnimAcceleration variable to AnimInstance"},
+    {"blueprint_type": "AnimInstance", "domain": "animation", "action": "set_variable_defaults", "edit_domain": "variable",
+     "arguments": {"action": "set_variable_defaults", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                   "name": "bIsInAir", "default_value": "false"},
+     "description": "Set bIsInAir fixture variable default to false for AnimInstance"},
+    {"blueprint_type": "AnimInstance", "domain": "animation", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                   "function_name": "BenchAnimEvaluateTransitions"},
+     "description": "Add BenchAnimEvaluateTransitions function graph to AnimInstance"},
+    {"blueprint_type": "AnimInstance", "domain": "animation", "action": "set_function_thread_safe", "edit_domain": "function",
+     "arguments": {"action": "set_function_thread_safe", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                   "function_name": "BenchAnimEvaluateTransitions", "thread_safe": True},
+     "description": "Mark BenchAnimEvaluateTransitions as thread-safe on AnimInstance"},
+    {"blueprint_type": "AnimInstance", "domain": "animation", "action": "add_node", "edit_domain": "node",
+     "arguments": {"action": "add_node", "asset_path": "/Game/Benchmarks/ABP_TestAnim",
+                   "graph_name": "BenchAnimEvaluateTransitions", "node_type": "VariableGet",
+                   "variable_name": "Speed"},
+     "description": "Add Speed VariableGet node to BenchAnimEvaluateTransitions graph"},
+
+    # GAS ability Blueprint coverage.
+    {"blueprint_type": "GameplayAbility", "domain": "ability", "action": "add_variable", "edit_domain": "variable",
+     "arguments": {"action": "add_variable", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                   "name": "BenchAbilityInputTag", "type": "name"},
+     "description": "Add name BenchAbilityInputTag variable to GameplayAbility"},
+    {"blueprint_type": "GameplayAbility", "domain": "ability", "action": "set_variable_defaults", "edit_domain": "variable",
+     "arguments": {"action": "set_variable_defaults", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                   "name": "AbilityCost", "default_value": "15.0"},
+     "description": "Set AbilityCost fixture variable default to 15.0 for GameplayAbility"},
+    {"blueprint_type": "GameplayAbility", "domain": "ability", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                   "function_name": "BenchAbilityCommitCheck"},
+     "description": "Add BenchAbilityCommitCheck function graph to GameplayAbility"},
+    {"blueprint_type": "GameplayAbility", "domain": "ability", "action": "add_event_dispatcher", "edit_domain": "event",
+     "arguments": {"action": "add_event_dispatcher", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                   "name": "BenchAbilityOnCommitted"},
+     "description": "Add BenchAbilityOnCommitted event dispatcher to GameplayAbility"},
+    {"blueprint_type": "GameplayAbility", "domain": "ability", "action": "add_node", "edit_domain": "node",
+     "arguments": {"action": "add_node", "asset_path": "/Game/Benchmarks/GA_TestAbility",
+                   "graph_name": "EventGraph", "node_type": "CallFunction", "function_name": "PrintString"},
+     "description": "Add PrintString node to GameplayAbility EventGraph for activation logging"},
+
+    # ActorComponent authoring coverage.
+    {"blueprint_type": "ActorComponent", "domain": "component", "action": "add_variable", "edit_domain": "variable",
+     "arguments": {"action": "add_variable", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                   "name": "BenchCompDebugName", "type": "string"},
+     "description": "Add string BenchCompDebugName variable to ActorComponent"},
+    {"blueprint_type": "ActorComponent", "domain": "component", "action": "set_variable_defaults", "edit_domain": "variable",
+     "arguments": {"action": "set_variable_defaults", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                   "name": "bIsActive", "default_value": "true"},
+     "description": "Set bIsActive fixture variable default to true for ActorComponent"},
+    {"blueprint_type": "ActorComponent", "domain": "component", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                   "function_name": "BenchCompRefreshState"},
+     "description": "Add BenchCompRefreshState function graph to ActorComponent"},
+    {"blueprint_type": "ActorComponent", "domain": "component", "action": "add_node", "edit_domain": "node",
+     "arguments": {"action": "add_node", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                   "graph_name": "BenchCompRefreshState", "node_type": "VariableGet",
+                   "variable_name": "ComponentID"},
+     "description": "Add ComponentID VariableGet node to BenchCompRefreshState graph"},
+    {"blueprint_type": "ActorComponent", "domain": "component", "action": "add_event_dispatcher", "edit_domain": "event",
+     "arguments": {"action": "add_event_dispatcher", "asset_path": "/Game/Benchmarks/BC_TestComponent",
+                   "name": "BenchCompOnRefresh"},
+     "description": "Add BenchCompOnRefresh event dispatcher to ActorComponent"},
+
+    # Interface function signature coverage.
+    {"blueprint_type": "Interface", "domain": "interface", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                   "function_name": "BenchIFaceGetScore"},
+     "description": "Add BenchIFaceGetScore function stub to Interface"},
+    {"blueprint_type": "Interface", "domain": "interface", "action": "set_function_params", "edit_domain": "function",
+     "arguments": {"action": "set_function_params", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                   "function_name": "BenchIFaceGetScore",
+                   "outputs": [{"name": "Score", "type": "int"}]},
+     "description": "Set int Score output on BenchIFaceGetScore Interface stub"},
+    {"blueprint_type": "Interface", "domain": "interface", "action": "add_function", "edit_domain": "function",
+     "arguments": {"action": "add_function", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                   "function_name": "BenchIFaceCanTarget"},
+     "description": "Add BenchIFaceCanTarget function stub to Interface"},
+    {"blueprint_type": "Interface", "domain": "interface", "action": "set_function_params", "edit_domain": "function",
+     "arguments": {"action": "set_function_params", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                   "function_name": "BenchIFaceCanTarget",
+                   "outputs": [{"name": "bCanTarget", "type": "bool"}]},
+     "description": "Set bool bCanTarget output on BenchIFaceCanTarget Interface stub"},
+    {"blueprint_type": "Interface", "domain": "interface", "action": "rename_function", "edit_domain": "function",
+     "arguments": {"action": "rename_function", "asset_path": "/Game/Benchmarks/BPI_TestInterface",
+                   "old_name": "BenchIFaceCanTarget", "new_name": "BenchIFaceCanTargetRenamed"},
+     "description": "Rename BenchIFaceCanTarget to BenchIFaceCanTargetRenamed on Interface"},
+
+    # Actor component/property edit coverage.
+    {"blueprint_type": "Actor", "domain": "gameplay", "action": "add_component", "edit_domain": "component",
+     "arguments": {"action": "add_component", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                   "component_class": "SpringArmComponent", "component_name": "BenchCameraBoom"},
+     "description": "Add SpringArmComponent BenchCameraBoom to Actor"},
+    {"blueprint_type": "Actor", "domain": "gameplay", "action": "set_component_property", "edit_domain": "component",
+     "arguments": {"action": "set_component_property", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                   "component_name": "BenchCameraBoom", "property_name": "TargetArmLength", "value": "350.0"},
+     "description": "Set TargetArmLength=350.0 on Actor BenchCameraBoom component"},
+    {"blueprint_type": "Actor", "domain": "gameplay", "action": "duplicate_component", "edit_domain": "component",
+     "arguments": {"action": "duplicate_component", "asset_path": "/Game/Benchmarks/BPB_TestActor",
+                   "component_name": "BenchCameraBoom", "new_name": "BenchCameraBoomCopy"},
+     "description": "Duplicate Actor BenchCameraBoom component to BenchCameraBoomCopy"},
+]
+
 
 # ---------------------------------------------------------------------------
 # Utilities
@@ -803,10 +1322,218 @@ def _is_error(response: Dict[str, Any]) -> bool:
     return bool(result_payload(response).get("isError"))
 
 
+def classify_mcp_failure(response: Dict[str, Any]) -> str:
+    if response.get("transport_error"):
+        return "transport_error"
+    if response.get("parse_error"):
+        return "parse_error"
+    if _is_error(response):
+        return "server_error"
+    return ""
+
+
 def _response_text_contains_any(response: Dict[str, Any], tokens: List[str]) -> bool:
     """True if any non-empty token from tokens appears in the response text."""
     text = result_text(response)
     return any(tok and tok in text for tok in tokens)
+
+
+def _response_text_contains_all(response: Dict[str, Any], tokens: List[str]) -> bool:
+    text = result_text(response)
+    return all(tok and tok in text for tok in tokens)
+
+
+# ---------------------------------------------------------------------------
+# Read-back / round-trip helpers (v5)
+# ---------------------------------------------------------------------------
+
+def _compile_is_clean(response: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
+    """True if a compile_blueprint / validate_blueprint response reports ZERO errors.
+
+    Inspects the structured payload (``error_count`` / ``errors`` / ``status``) rather than
+    trusting the non-error envelope: a handler can return a non-error envelope that DESCRIBES
+    a failed compile. Verified live: compile_blueprint returns
+    {success, status:"UpToDate", errors:[], warnings:[], error_count:0, warning_count:0}.
+    """
+    if response.get("transport_error") or response.get("parse_error"):
+        return False, {"reason": "transport_or_parse_error"}
+    if _is_error(response):
+        return False, {"reason": "isError"}
+    data = result_data(response)
+    error_count = data.get("error_count")
+    errors = data.get("errors")
+    status = str(data.get("status", "")).lower()
+    if isinstance(error_count, int):
+        clean = error_count == 0
+    elif isinstance(errors, list):
+        clean = len(errors) == 0
+    elif status:
+        clean = status in ("uptodate", "success", "ok", "compiled")
+    else:
+        # No structured compile signal — documented text-scan fallback only.
+        text = result_text(response).lower()
+        clean = "0 error" in text or "error" not in text
+    return clean, {"error_count": error_count, "status": status,
+                   "errors_len": len(errors) if isinstance(errors, list) else None}
+
+
+def _extract_node_id(response: Dict[str, Any]) -> Optional[str]:
+    """Pull the node id from an add_node response. Verified live: add_node returns the new
+    node at top-level key ``id`` (e.g. 'K2Node_CallFunction_0')."""
+    data = result_data(response)
+    if not isinstance(data, dict):
+        return None
+    for key in ("id", "node_id", "nodeId", "new_node_id"):
+        val = data.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
+
+
+def _subst_ids(value: Any, captured: Dict[str, str]) -> Any:
+    """Recursively replace ${label} placeholders with captured node ids."""
+    if isinstance(value, str):
+        out = value
+        for label, nid in captured.items():
+            out = out.replace("${%s}" % label, nid)
+        return out
+    if isinstance(value, dict):
+        return {k: _subst_ids(v, captured) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_subst_ids(v, captured) for v in value]
+    return value
+
+
+def _verify_readback(url: str, asset_path: str, verify: Dict[str, Any], timeout_s: float) -> Tuple[bool, Dict[str, Any]]:
+    """Run a read action and assert the edit is actually observable.
+
+    verify supports:
+      read_action : the read action to call (get_variables / get_components / get_functions / ...)
+      contains    : list of tokens that must ALL appear in the read response text
+      var_default : {"name": .., "value": ..} — a variable must exist with that default_value
+    """
+    read_action = verify.get("read_action")
+    if not read_action:
+        return True, {"skipped": "no_read_action"}
+    read_call = {"action": read_action, "asset_path": asset_path}
+    read_call.update(verify.get("read_args", {}))
+    resp = mcp_call(url, "blueprint_query", read_call, timeout_s=timeout_s)
+    if resp.get("transport_error") or resp.get("parse_error") or _is_error(resp):
+        return False, {"read_action": read_action, "read_failed": True,
+                       "snippet": result_text(resp)[:200]}
+    ok = True
+    detail: Dict[str, Any] = {"read_action": read_action}
+    tokens = verify.get("contains")
+    if tokens:
+        ok = all(tok in result_text(resp) for tok in tokens)
+        detail["contains"] = tokens
+        detail["contains_ok"] = ok
+    var_default = verify.get("var_default")
+    if ok and isinstance(var_default, dict):
+        data = result_data(resp)
+        variables = data.get("variables", []) if isinstance(data, dict) else []
+        match = next((v for v in variables if isinstance(v, dict)
+                      and v.get("name") == var_default.get("name")), None)
+        got = match.get("default_value") if isinstance(match, dict) else None
+        want = str(var_default.get("value"))
+
+        def _norm(x: Any) -> str:
+            try:
+                return repr(float(x))
+            except (TypeError, ValueError):
+                return str(x).strip().lower()
+
+        ok = got is not None and _norm(got) == _norm(want)
+        detail["var_default"] = {"name": var_default.get("name"), "want": want, "got": got, "ok": ok}
+    return ok, detail
+
+
+def _score_op_chain(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
+    """Score a multi-step executed chain (edit_execute op_chain or workflow_execute).
+
+    Runs each step in order, capturing add_node ids into a local label table and
+    substituting ${label} placeholders into later steps' arguments — so connect_pins wires
+    REAL nodes by their returned ids. Compile steps must report a clean compile. After the
+    chain a read-back must observe the end state: an actual wired connection
+    (source pin's connected_to contains "<target_id>.<pin>") and/or contains-tokens.
+    """
+    tool = str(task["tool"])
+    asset_path = task.get("asset_path", "")
+    captured: Dict[str, str] = {}
+    steps_evidence: List[Dict[str, Any]] = []
+    ok = True
+
+    for step in task.get("chain", []):
+        args = _subst_ids(dict(step.get("args", {})), captured)
+        resp = mcp_call(url, tool, args, timeout_s=timeout_s)
+        action = str(args.get("action", ""))
+        step_ok = not resp.get("transport_error") and not resp.get("parse_error")
+        is_err = _is_error(resp)
+        already = is_err and "exist" in result_text(resp).lower()
+        if action in ("compile_blueprint", "validate_blueprint"):
+            clean, cdet = _compile_is_clean(resp)
+            step_ok = step_ok and clean
+            steps_evidence.append({"action": action, "compile": cdet, "ok": step_ok})
+        else:
+            step_ok = step_ok and (not is_err or already)
+            steps_evidence.append({"action": action, "is_error": is_err, "already": already,
+                                   "ok": step_ok, "snippet": result_text(resp)[:120]})
+        if "capture" in step:
+            nid = _extract_node_id(resp)
+            if nid:
+                captured[step["capture"]] = nid
+            else:
+                step_ok = False
+                steps_evidence[-1]["no_node_id"] = True
+        if not step_ok:
+            ok = False
+            break
+
+    verify_detail: Dict[str, Any] = {}
+    if ok:
+        conn = task.get("verify_connection")
+        if isinstance(conn, dict):
+            src = captured.get(conn.get("from", ""))
+            dst = captured.get(conn.get("to", ""))
+            want = "%s.%s" % (dst, conn.get("to_pin", "")) if dst else None
+            if src and want:
+                det = mcp_call(url, tool, {"action": "get_node_details", "asset_path": asset_path,
+                                           "node_id": src, "graph_name": task.get("graph_name", "")},
+                               timeout_s=timeout_s)
+                payload = result_data(det)
+                pins = payload.get("pins", []) if isinstance(payload, dict) else []
+                pin = next((p for p in pins if isinstance(p, dict)
+                            and p.get("name") == conn.get("from_pin")), None)
+                wired = bool(pin) and want in (pin.get("connected_to") or [])
+                verify_detail["connection"] = {"from": src, "pin": conn.get("from_pin"),
+                                               "want": want, "wired": wired}
+                ok = ok and wired
+            else:
+                ok = False
+                verify_detail["connection"] = {"missing_capture": True}
+        verify = task.get("verify")
+        if ok and isinstance(verify, dict):
+            v_ok, v_det = _verify_readback(url, asset_path, verify, timeout_s)
+            verify_detail["readback"] = v_det
+            ok = ok and v_ok
+
+    return {
+        "task_id": task.get("id"),
+        "category": task.get("category", ""),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "blueprint_type": task.get("blueprint_type", ""),
+        "domain": task.get("domain", ""),
+        "edit_domain": task.get("edit_domain", ""),
+        "workflow": task.get("workflow", ""),
+        "direct_success": ok,
+        "planning_signals": False,
+        "evidence": {"steps": steps_evidence, "captured": captured, "verify": verify_detail},
+        "transport_error": False,
+        "transport_error_raw": "",
+        "response_is_error": not ok,
+        "response_text": json.dumps(verify_detail)[:500],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -825,9 +1552,14 @@ def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) ->
     tool = str(task["tool"])
     args = dict(task.get("arguments", {}))
 
+    setup_ok = True
     setup_args = task.get("setup_arguments")
     if isinstance(setup_args, dict):
-        mcp_call(url, tool, dict(setup_args), timeout_s=timeout_s)
+        setup_resp = mcp_call(url, tool, dict(setup_args), timeout_s=timeout_s)
+        # The host entity (e.g. the function a local variable lives in) must exist for the
+        # test to be meaningful. Accept success OR "already exists" from a prior run.
+        setup_ok = (not setup_resp.get("transport_error") and not setup_resp.get("parse_error")
+                    and (not _is_error(setup_resp) or "exist" in result_text(setup_resp).lower()))
 
     first = mcp_call(url, tool, dict(args), timeout_s=timeout_s)
     second = mcp_call(url, tool, dict(args), timeout_s=timeout_s)
@@ -836,8 +1568,18 @@ def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) ->
     parse_error = bool(second.get("parse_error"))
     server_handled = not transport_error and not parse_error
     second_is_error = _is_error(second)
-    # Pass = the second identical creation is gracefully refused with isError.
-    direct_success = server_handled and second_is_error
+
+    # The first call must actually create the entity (success, or "already exists" on a
+    # re-run) — otherwise a server that errors on EVERY call would score as having a guard.
+    first_is_error = _is_error(first)
+    first_ok = (not first.get("transport_error") and not first.get("parse_error")
+                and (not first_is_error or "exist" in result_text(first).lower()))
+    # The second call must be refused with a DUPLICATE-specific error, not just any isError.
+    second_text = result_text(second).lower()
+    second_is_duplicate = second_is_error and any(
+        tok in second_text for tok in ("already", "exist", "duplicate", "in use", "taken"))
+
+    direct_success = setup_ok and first_ok and server_handled and second_is_duplicate
 
     return {
         "task_id": task.get("id"),
@@ -851,9 +1593,12 @@ def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) ->
         "direct_success": direct_success,
         "planning_signals": False,
         "evidence": {
-            "first_call_is_error": _is_error(first),
+            "setup_ok": setup_ok,
+            "first_call_ok": first_ok,
+            "first_call_is_error": first_is_error,
             "second_call_handled": server_handled,
             "second_call_is_error": second_is_error,
+            "second_is_duplicate": second_is_duplicate,
             "edit_domain": task.get("edit_domain", ""),
             "response_snippet": result_text(second)[:200],
         },
@@ -868,6 +1613,10 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     category = task.get("category", "")
     if category == "duplicate_reject":
         return _score_duplicate_reject(url, task, timeout_s)
+    # Executed multi-step chains (real node-wiring or end-to-end workflows) are scored by
+    # threading add_node ids and reading the result back.
+    if category == "workflow_execute" or task.get("action") == "op_chain":
+        return _score_op_chain(url, task, timeout_s)
 
     response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
     data = result_data(response)
@@ -906,11 +1655,20 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
             action = task.get("action", "")
             fixture_vars = task.get("expected", {}).get("fixture_vars", [])
             expected_graph = task.get("expected", {}).get("expected_graph", "")
+            expected_functions = task.get("expected", {}).get("expected_functions", [])
             if action == "get_variables" and fixture_vars:
                 content_ok = _response_text_contains_any(response, fixture_vars)
                 content_check_applied = True
             elif action == "list_graphs" and expected_graph:
                 content_ok = _response_text_contains_any(response, [expected_graph])
+                content_check_applied = True
+            elif action == "get_functions" and expected_functions:
+                # Interface fixture: at least one declared interface stub must appear.
+                content_ok = _response_text_contains_any(response, expected_functions)
+                content_check_applied = True
+            expected_contains = task.get("expected", {}).get("contains", [])
+            if content_ok and expected_contains:
+                content_ok = all(str(tok) in result_text(response) for tok in expected_contains)
                 content_check_applied = True
         direct_success = server_ok and content_ok
         evidence = {
@@ -951,51 +1709,53 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
             "edit_domain": task.get("edit_domain", ""),
         }
 
-    elif category == "workflow_completeness":
-        requires = task.get("expected", {}).get("requires_actions", [])
-        # The live catalog returns actions[].action (not actions[].name).
-        action_list = data.get("actions", []) if isinstance(data, dict) else []
-        registered = {a.get("action", "") for a in action_list if isinstance(a, dict)}
-        registered.discard("")  # remove empty-string sentinel from entries missing "action" key
-        if registered:
-            missing = [a for a in requires if a not in registered]
-            used_fallback = False
-        else:
-            # Fallback: substring search in response text (less precise, flagged in evidence).
-            response_text = result_text(response)
-            missing = [a for a in requires if a not in response_text]
-            used_fallback = True
-        direct_success = len(missing) == 0 and not transport_error
-        evidence = {
-            "workflow": task.get("workflow", ""),
-            "requires_actions": requires,
-            "missing_actions": missing,
-            "registered_count": len(registered),
-            "used_text_fallback": used_fallback,
-        }
-
     elif category == "edit_execute":
-        # Strict: requires actual execution success (no isError, no transport error).
-        # Fails if fixture assets do not exist — this is intentional: real capability check.
-        # "already exists" / "already" responses count as success: the item IS present,
-        # which means the server capability works (idempotent across repeated benchmark runs).
-        already_exists = server_is_error and "already" in result_text(response).lower()
-        direct_success = server_handled and (not server_is_error or already_exists)
-        evidence = {
-            "server_handled": server_handled,
-            "is_error": server_is_error,
-            "already_exists": already_exists,
-            "edit_domain": task.get("edit_domain", ""),
-            "response_snippet": result_text(response)[:300],
-        }
+        # Strict + read-back verified. A non-error envelope is necessary but NOT sufficient:
+        #   - compile/validate actions must report a CLEAN compile (error_count == 0), inspected
+        #     from the payload, not just a non-error envelope.
+        #   - actions with a ``verify`` block must have their mutation observable via a follow-up
+        #     read (e.g. after add_variable, get_variables must list the new name).
+        # "already exists" still counts (idempotent across re-runs) but the read-back must still
+        # confirm the entity is present, so a silent no-op cannot pass.
+        action = task.get("action", "")
+        if action in ("compile_blueprint", "validate_blueprint"):
+            clean, cdet = _compile_is_clean(response)
+            direct_success = clean
+            evidence = {"compile_clean": clean, "compile_detail": cdet,
+                        "edit_domain": task.get("edit_domain", "")}
+        else:
+            already_exists = server_is_error and "exist" in result_text(response).lower()
+            base_ok = server_handled and (not server_is_error or already_exists)
+            verify = task.get("verify")
+            verify_ok = True
+            verify_detail: Dict[str, Any] = {}
+            if base_ok and isinstance(verify, dict):
+                asset_path = dict(task.get("arguments", {})).get("asset_path", "")
+                verify_ok, verify_detail = _verify_readback(url, asset_path, verify, timeout_s)
+            direct_success = base_ok and verify_ok
+            evidence = {
+                "server_handled": server_handled,
+                "is_error": server_is_error,
+                "already_exists": already_exists,
+                "verify_ok": verify_ok,
+                "verify": verify_detail,
+                "edit_domain": task.get("edit_domain", ""),
+                "response_snippet": result_text(response)[:300],
+            }
 
     elif category == "error_path":
-        # Inverted: pass = server returned a structured isError (graceful rejection).
-        # fail = transport error (crash/unreachable) or silent success on invalid input.
-        direct_success = server_handled and server_is_error
+        # Inverted + input-specific: pass = a structured isError whose message references the
+        # offending input (a not-found/invalid/exists token or the bad identifier). This denies
+        # credit to a server that returns a generic isError for ALL inputs, valid or not.
+        reason_tokens = task.get("expected", {}).get("error_tokens", [])
+        text_l = result_text(response).lower()
+        reason_ok = (not reason_tokens) or any(str(t).lower() in text_l for t in reason_tokens)
+        direct_success = server_handled and server_is_error and reason_ok
         evidence = {
             "server_handled": server_handled,
             "returned_is_error": server_is_error,
+            "reason_ok": reason_ok,
+            "reason_tokens": reason_tokens,
             "response_snippet": result_text(response)[:200],
         }
 
@@ -1030,27 +1790,9 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
         cat_rows = [r for r in rows if r["category"] == cat]
         return avg([1.0 if r["direct_success"] else 0.0 for r in cat_rows])
 
-    type_discovery_rate = rate("type_discovery")
-    graph_read_rate = rate("graph_read")
-    variable_read_rate = rate("variable_read")
-    read_schema_rate = rate("read_schema")
-    edit_schema_rate = rate("edit_schema")
-    workflow_completeness_rate = rate("workflow_completeness")
-    edit_execute_rate = rate("edit_execute")
-    error_path_rate = rate("error_path")
-    duplicate_reject_rate = rate("duplicate_reject")
-
-    blueprint_editing_score = (
-        0.22 * edit_execute_rate
-        + 0.18 * edit_schema_rate
-        + 0.14 * graph_read_rate
-        + 0.14 * variable_read_rate
-        + 0.10 * error_path_rate
-        + 0.08 * duplicate_reject_rate
-        + 0.07 * read_schema_rate
-        + 0.04 * type_discovery_rate
-        + 0.03 * workflow_completeness_rate
-    )
+    # rates[name] for every weighted dimension, keyed by the WEIGHTS category names.
+    rates: Dict[str, float] = {name: rate(name) for name in WEIGHTS}
+    blueprint_editing_score = sum(WEIGHTS[name] * rates[name] for name in WEIGHTS)
 
     edit_schema_rows = [r for r in rows if r["category"] == "edit_schema"]
     edit_domain_breakdown: Dict[str, Dict[str, Any]] = {}
@@ -1090,15 +1832,7 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
         "category_counts": count_by(tasks, "category"),
         "metrics": {
             "blueprint_editing_score": round(blueprint_editing_score, 6),
-            "edit_execute_rate": round(edit_execute_rate, 6),
-            "edit_schema_rate": round(edit_schema_rate, 6),
-            "graph_read_rate": round(graph_read_rate, 6),
-            "variable_read_rate": round(variable_read_rate, 6),
-            "error_path_rate": round(error_path_rate, 6),
-            "duplicate_reject_rate": round(duplicate_reject_rate, 6),
-            "read_schema_rate": round(read_schema_rate, 6),
-            "type_discovery_rate": round(type_discovery_rate, 6),
-            "workflow_completeness_rate": round(workflow_completeness_rate, 6),
+            **{f"{name}_rate": round(rates[name], 6) for name in WEIGHTS},
             "task_count": len(rows),
             "error_count": error_count,
         },
@@ -1112,13 +1846,222 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
 # Generate
 # ---------------------------------------------------------------------------
 
+def _edit_execute_verify(action: str, args: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Derive a read-back ``verify`` block for an edit_execute task, so a non-error envelope
+    alone cannot pass: the mutation must be observable via a follow-up read. Returns None for
+    actions with no cheap single-read read-back (they still require a clean non-error result;
+    compile/validate are checked separately via _compile_is_clean)."""
+    if action in ("add_variable", "add_replicated_variable"):
+        name = args.get("name") or args.get("variable_name")
+        return {"read_action": "get_variables", "contains": [name]} if name else None
+    if action == "set_variable_defaults":
+        name, val = args.get("name"), args.get("default_value")
+        return ({"read_action": "get_variables", "var_default": {"name": name, "value": val}}
+                if name is not None and val is not None else None)
+    if action == "add_function":
+        fn = args.get("function_name")
+        return {"read_action": "get_functions", "contains": [fn]} if fn else None
+    if action == "set_function_params":
+        fn = args.get("function_name")
+        tokens: List[str] = [str(fn)] if fn else []
+        for key in ("inputs", "outputs"):
+            values = args.get(key)
+            if isinstance(values, list):
+                tokens.extend(str(v.get("name")) for v in values
+                              if isinstance(v, dict) and v.get("name"))
+        return ({"read_action": "get_function_signature",
+                 "read_args": {"function_name": fn}, "contains": tokens}
+                if fn and tokens else None)
+    if action == "set_function_thread_safe":
+        fn = args.get("function_name")
+        return ({"read_action": "get_function_signature",
+                 "read_args": {"function_name": fn}, "contains": [fn]}
+                if fn else None)
+    if action == "rename_function":
+        nn = args.get("new_name")
+        return {"read_action": "get_functions", "contains": [nn]} if nn else None
+    if action == "add_event_node":
+        ev = args.get("event_name")
+        return ({"read_action": "get_graph_data",
+                 "read_args": {"graph_name": args.get("graph_name", "EventGraph")},
+                 "contains": [ev]} if ev else None)
+    if action == "add_node":
+        fn, gn = args.get("function_name"), args.get("graph_name", "EventGraph")
+        tokens = [tok for tok in (fn, args.get("variable_name"), args.get("format")) if tok]
+        return ({"read_action": "get_graph_data", "read_args": {"graph_name": gn},
+                 "contains": [str(tok) for tok in tokens]} if tokens else None)
+    if action == "add_comment_node":
+        text, gn = args.get("text"), args.get("graph_name", "EventGraph")
+        return ({"read_action": "get_graph_data", "read_args": {"graph_name": gn},
+                 "contains": [text]} if text else None)
+    if action == "add_component":
+        cn = args.get("component_name")
+        return {"read_action": "get_components", "contains": [cn]} if cn else None
+    if action in ("rename_component", "duplicate_component"):
+        cn = args.get("new_name")
+        return {"read_action": "get_components", "contains": [cn]} if cn else None
+    if action == "set_component_property":
+        cn = args.get("component_name")
+        if cn:
+            return {"read_action": "get_component_details",
+                    "read_args": {"component_name": cn},
+                    "contains": [cn]}
+    if action in ("set_cdo_property", "set_cdo_properties"):
+        return {"read_action": "get_cdo_properties", "contains": []}
+    if action == "duplicate_graph":
+        nn = args.get("new_name")
+        return {"read_action": "get_functions", "contains": [nn]} if nn else None
+    if action == "add_event_dispatcher":
+        nm = args.get("name")
+        return {"read_action": "get_event_dispatchers", "contains": [nm]} if nm else None
+    return None
+
+
+def build_wiring_chains() -> List[Dict[str, Any]]:
+    """One executed node-wiring chain per EventGraph-bearing fixture: add two PrintString
+    CallFunction nodes, capture their returned ids, wire the first node's ``then`` exec output
+    to the second node's ``execute`` exec input for real, and read back that the connection
+    exists. This is the core of practical Blueprint editing (exec/data flow), which the old
+    benchmark never executed (add_node responses were discarded). CallFunction nodes duplicate
+    freely, so the chain is idempotent across re-runs (no unique-name collision)."""
+    chains: List[Dict[str, Any]] = []
+    for bp in BP_TYPES:
+        if bp["type"] == "Interface":
+            continue  # interfaces have no EventGraph
+        path, t = bp["path"], bp["type"]
+        chains.append({
+            "name": f"wire_{t.lower()}",
+            "blueprint_type": t, "domain": bp["domain"], "edit_domain": "node",
+            "asset_path": path, "graph_name": "EventGraph",
+            "description": f"Wire PrintString.then -> PrintString.execute on {t} EventGraph (executed connect_pins + read-back)",
+            "chain": [
+                {"op": "add_node", "capture": "a",
+                 "args": {"action": "add_node", "asset_path": path, "graph_name": "EventGraph",
+                          "node_type": "CallFunction", "function_name": "PrintString"}},
+                {"op": "add_node", "capture": "b",
+                 "args": {"action": "add_node", "asset_path": path, "graph_name": "EventGraph",
+                          "node_type": "CallFunction", "function_name": "PrintString"}},
+                {"op": "connect_pins",
+                 "args": {"action": "connect_pins", "asset_path": path, "graph_name": "EventGraph",
+                          "source_node": "${a}", "source_pin": "then",
+                          "target_node": "${b}", "target_pin": "execute"}},
+            ],
+            "verify_connection": {"from": "a", "from_pin": "then", "to": "b", "to_pin": "execute"},
+        })
+    return chains
+
+
+def fixture_asset_name(bp: Dict[str, Any]) -> str:
+    return str(bp["path"]).rsplit("/", 1)[-1]
+
+
+def build_additional_graph_read_tasks() -> List[Dict[str, Any]]:
+    tasks: List[Dict[str, Any]] = []
+    for bp in BP_TYPES:
+        asset_name = fixture_asset_name(bp)
+        parent_token = FIXTURE_CREATE_PARAMS[bp["type"]]["parent_class"]
+        tasks.append({
+            "category": "graph_read",
+            "namespace": "blueprint",
+            "action": "get_blueprint_info",
+            "tool": "blueprint_query",
+            "arguments": {"action": "get_blueprint_info", "asset_path": bp["path"]},
+            "expected": {"server_handled": True, "contains": [asset_name]},
+            "safety": "read_only",
+            "blueprint_type": bp["type"],
+            "domain": bp["domain"],
+            "description": f"Read blueprint info for {bp['type']} fixture {asset_name}",
+        })
+        tasks.append({
+            "category": "graph_read",
+            "namespace": "blueprint",
+            "action": "get_parent_class",
+            "tool": "blueprint_query",
+            "arguments": {"action": "get_parent_class", "asset_path": bp["path"]},
+            "expected": {"server_handled": True, "contains": [parent_token]},
+            "safety": "read_only",
+            "blueprint_type": bp["type"],
+            "domain": bp["domain"],
+            "description": f"Read parent class for {bp['type']} fixture {asset_name}",
+        })
+    return tasks
+
+
+def build_additional_variable_read_tasks() -> List[Dict[str, Any]]:
+    tasks: List[Dict[str, Any]] = []
+    for bp in BP_TYPES:
+        funcs = FIXTURE_FUNCTIONS_BY_TYPE.get(bp["type"], [])
+        tasks.append({
+            "category": "variable_read",
+            "namespace": "blueprint",
+            "action": "get_functions" if bp["type"] != "Interface" else "get_interface_functions",
+            "tool": "blueprint_query",
+            "arguments": {"action": "get_functions" if bp["type"] != "Interface" else "get_interface_functions",
+                          "asset_path": bp["path"]},
+            "expected": {"server_handled": True, "expected_functions": funcs, "contains": funcs},
+            "safety": "read_only",
+            "blueprint_type": bp["type"],
+            "domain": bp["domain"],
+            "description": f"Read setup-created function stubs for {bp['type']} fixture",
+        })
+        if bp["type"] == "Interface":
+            tasks.append({
+                "category": "variable_read",
+                "namespace": "blueprint",
+                "action": "get_functions",
+                "tool": "blueprint_query",
+                "arguments": {"action": "get_functions", "asset_path": bp["path"]},
+                "expected": {"server_handled": True, "expected_functions": funcs, "contains": funcs},
+                "safety": "read_only",
+                "blueprint_type": bp["type"],
+                "domain": bp["domain"],
+                "description": "Read Interface function stubs through generic get_functions",
+            })
+        else:
+            tasks.append({
+                "category": "variable_read",
+                "namespace": "blueprint",
+                "action": "get_variables",
+                "tool": "blueprint_query",
+                "arguments": {"action": "get_variables", "asset_path": bp["path"],
+                              "include_inherited": False},
+                "expected": {"server_handled": True, "fixture_vars": bp["fixture_vars"],
+                             "contains": bp["fixture_vars"]},
+                "safety": "read_only",
+                "blueprint_type": bp["type"],
+                "domain": bp["domain"],
+                "description": f"Read declared fixture variables only for {bp['type']}",
+            })
+    return tasks
+
+
+def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
+    seen_ids: Dict[str, int] = {}
+    seen_action_desc: Dict[Tuple[str, str], str] = {}
+    for index, task in enumerate(tasks, 1):
+        task_id = str(task.get("id", ""))
+        if not task_id:
+            raise RuntimeError(f"task at index {index} is missing id")
+        if task_id in seen_ids:
+            raise RuntimeError(f"duplicate task id {task_id} at indexes {seen_ids[task_id]} and {index}")
+        seen_ids[task_id] = index
+        description = str(task.get("description", "")).strip()
+        if not description:
+            raise RuntimeError(f"{task_id} is missing description")
+        key = (str(task.get("action", "")), description)
+        previous = seen_action_desc.get(key)
+        if previous:
+            raise RuntimeError(f"duplicate action+description for {previous} and {task_id}: {key}")
+        seen_action_desc[key] = task_id
+
+
 def build_static_tasks() -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
 
     def next_id() -> str:
         return f"BEB-{len(tasks) + 1:03d}"
 
-    # --- type_discovery (14) ---
+    # --- type_discovery (21) ---
     for query, btype, domain, require_results in TYPE_SEARCH_QUERIES:
         tasks.append({
             "id": next_id(),
@@ -1132,9 +2075,10 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only",
             "blueprint_type": btype,
             "domain": domain,
+            "description": f"Discover {btype} fixture with project.search query '{query}'",
         })
 
-    # --- graph_read (21 = 7 types x 3 ops) ---
+    # --- graph_read (35 = base 21 + info/parent read-backs for each type) ---
     for bp in BP_TYPES:
         tasks.append({
             "id": next_id(),
@@ -1148,6 +2092,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only",
             "blueprint_type": bp["type"],
             "domain": bp["domain"],
+            "description": f"List graphs for {bp['type']} fixture",
         })
         if bp["type"] == "Interface":
             # Interface BPs have no event graphs; use get_blueprint_info instead.
@@ -1162,6 +2107,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
                 "safety": "read_only",
                 "blueprint_type": bp["type"],
                 "domain": bp["domain"],
+                "description": "Read blueprint info for Interface fixture without EventGraph",
             })
         else:
             gd_args: Dict[str, Any] = {"action": "get_graph_data", "asset_path": bp["path"]}
@@ -1178,6 +2124,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
                 "safety": "read_only",
                 "blueprint_type": bp["type"],
                 "domain": bp["domain"],
+                "description": f"Read {bp['type']} fixture default graph data",
             })
         tasks.append({
             "id": next_id(),
@@ -1190,9 +2137,13 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only",
             "blueprint_type": bp["type"],
             "domain": bp["domain"],
+            "description": f"Read graph summary for {bp['type']} fixture",
         })
+    for spec in build_additional_graph_read_tasks():
+        spec["id"] = next_id()
+        tasks.append(spec)
 
-    # --- variable_read (14 = 7 types x 2 ops) ---
+    # --- variable_read (28 = base 14 + function/declared-variable read-backs) ---
     for bp in BP_TYPES:
         tasks.append({
             "id": next_id(),
@@ -1206,6 +2157,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "safety": "read_only",
             "blueprint_type": bp["type"],
             "domain": bp["domain"],
+            "description": f"Read variables for {bp['type']} fixture",
         })
         if bp["type"] == "Interface":
             # Interface has no class-level variables; test get_functions instead.
@@ -1216,11 +2168,13 @@ def build_static_tasks() -> List[Dict[str, Any]]:
                 "action": "get_functions",
                 "tool": "blueprint_query",
                 "arguments": {"action": "get_functions", "asset_path": bp["path"]},
-                "expected": {"server_handled": True},
+                "expected": {"server_handled": True,
+                             "expected_functions": INTERFACE_FIXTURE_FUNCTIONS},
                 "safety": "read_only",
                 "blueprint_type": bp["type"],
                 "domain": bp["domain"],
                 "note": "Interface has no variables; get_functions tests the function-stub surface",
+                "description": "Read Interface fixture functions as variable_read substitute",
             })
         else:
             tasks.append({
@@ -1236,9 +2190,13 @@ def build_static_tasks() -> List[Dict[str, Any]]:
                 "safety": "read_only",
                 "blueprint_type": bp["type"],
                 "domain": bp["domain"],
+                "description": f"Read inherited variables for {bp['type']} fixture",
             })
+    for spec in build_additional_variable_read_tasks():
+        spec["id"] = next_id()
+        tasks.append(spec)
 
-    # --- read_schema (15) ---
+    # --- read_schema (23) ---
     for action in BLUEPRINT_READ_ACTIONS:
         tasks.append({
             "id": next_id(),
@@ -1249,9 +2207,10 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "arguments": {"action": action, "mode": "schema", "namespace": "blueprint"},
             "expected": {"requires_planning_signals": True},
             "safety": "read_only_discovery",
+            "description": f"Discover read-action schema for blueprint.{action}",
         })
 
-    # --- edit_schema (38) ---
+    # --- edit_schema (46) ---
     for action, edit_domain in BLUEPRINT_EDIT_ACTIONS:
         tasks.append({
             "id": next_id(),
@@ -1263,28 +2222,37 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "expected": {"requires_planning_signals": True},
             "safety": "read_only_discovery",
             "edit_domain": edit_domain,
+            "description": f"Discover edit-action schema for blueprint.{action}",
         })
 
-    # --- workflow_completeness (5) ---
-    for wf in BLUEPRINT_WORKFLOWS:
+    # --- workflow_execute (11 executed end-to-end chains) ---
+    for wf in BLUEPRINT_WORKFLOW_EXECUTE:
         tasks.append({
             "id": next_id(),
-            "category": "workflow_completeness",
+            "category": "workflow_execute",
             "namespace": "blueprint",
-            "tool": "monolith_discover",
-            "arguments": {"namespace": "blueprint"},
-            "expected": {"requires_actions": wf["requires_actions"]},
-            "safety": "read_only_discovery",
+            "action": "op_chain",
+            "tool": "blueprint_query",
+            "asset_path": wf["asset_path"],
+            "graph_name": wf.get("graph_name", "EventGraph"),
+            "chain": wf["chain"],
+            **({"verify_connection": wf["verify_connection"]} if "verify_connection" in wf else {}),
+            **({"verify": wf["verify"]} if "verify" in wf else {}),
+            "expected": {"direct_success": True},
+            "safety": "mutating_fixture",
+            "edit_domain": wf.get("edit_domain", ""),
+            "blueprint_type": wf.get("blueprint_type", ""),
+            "domain": wf.get("domain", ""),
             "workflow": wf["name"],
-            "workflow_description": wf["description"],
+            "description": wf["description"],
         })
 
-    # --- edit_execute (70 = 7 types x 10) ---
+    # --- edit_execute (70 = 7 types x 10), each create/set read-back verified ---
     for bp in BP_TYPES:
         bp_type = bp["type"]
         type_tasks = BLUEPRINT_EDIT_EXECUTE_TASKS_BY_TYPE.get(bp_type, [])
         for spec in type_tasks:
-            tasks.append({
+            task: Dict[str, Any] = {
                 "id": next_id(),
                 "category": "edit_execute",
                 "namespace": "blueprint",
@@ -1297,9 +2265,49 @@ def build_static_tasks() -> List[Dict[str, Any]]:
                 "blueprint_type": bp_type,
                 "domain": bp["domain"],
                 "description": spec["description"],
-            })
+            }
+            verify = _edit_execute_verify(spec["action"], spec["arguments"])
+            if verify is not None:
+                task["verify"] = verify
+            tasks.append(task)
 
-    # --- error_path (8) ---
+    # --- edit_execute: executed node-wiring chains (real connect_pins, 6 = non-Interface types) ---
+    for chain in build_wiring_chains():
+        tasks.append({
+            "id": next_id(),
+            "category": "edit_execute",
+            "namespace": "blueprint",
+            "action": "op_chain",
+            "tool": "blueprint_query",
+            "asset_path": chain["asset_path"],
+            "graph_name": chain.get("graph_name", "EventGraph"),
+            "chain": chain["chain"],
+            "verify_connection": chain["verify_connection"],
+            "expected": {"direct_success": True},
+            "safety": "mutating_fixture",
+            "edit_domain": chain["edit_domain"],
+            "blueprint_type": chain["blueprint_type"],
+            "domain": chain["domain"],
+            "description": chain["description"],
+        })
+
+    # --- edit_execute: practical v5 expansion tasks (28) ---
+    for spec in BLUEPRINT_ADDITIONAL_EDIT_EXECUTE_TASKS:
+        task = {
+            "id": next_id(),
+            "category": "edit_execute",
+            "namespace": "blueprint",
+            "tool": "blueprint_query",
+            "expected": {"direct_success": True},
+            "safety": "mutating_fixture",
+            **spec,
+        }
+        verify = _edit_execute_verify(spec["action"], spec["arguments"])
+        if verify is not None:
+            task["verify"] = verify
+        tasks.append(task)
+
+    # --- error_path (16) ---
     for spec in BLUEPRINT_ERROR_PATH_TASKS:
         tasks.append({
             "id": next_id(),
@@ -1308,12 +2316,12 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "action": spec["action"],
             "tool": "blueprint_query",
             "arguments": spec["arguments"],
-            "expected": {"is_error": True},
+            "expected": {"is_error": True, "error_tokens": spec.get("error_tokens", [])},
             "safety": "read_only_invalid",
             "description": spec["description"],
         })
 
-    # --- duplicate_reject (6) ---
+    # --- duplicate_reject (11) ---
     for spec in BLUEPRINT_DUPLICATE_REJECT_TASKS:
         task: Dict[str, Any] = {
             "id": next_id(),
@@ -1325,8 +2333,8 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "expected": {"is_error": True},
             "safety": "mutating_idempotency",
             "edit_domain": spec.get("edit_domain", ""),
-            "blueprint_type": "Actor",
-            "domain": "gameplay",
+            "blueprint_type": spec.get("blueprint_type", "Actor"),
+            "domain": spec.get("domain", "gameplay"),
             "description": spec["description"],
         }
         if "setup_arguments" in spec:
@@ -1336,22 +2344,28 @@ def build_static_tasks() -> List[Dict[str, Any]]:
     for i, task in enumerate(tasks, 1):
         task["id"] = f"BEB-{i:03d}"
 
+    validate_task_integrity(tasks)
     return tasks
 
 
 def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
+    manifest_path = resolve_plugin_path(manifest_path)
     tasks = build_static_tasks()
     write_jsonl(tasks_path, tasks)
 
     domain_counts: Dict[str, int] = {}
     for _, dom in BLUEPRINT_EDIT_ACTIONS:
         domain_counts[dom] = domain_counts.get(dom, 0) + 1
+    edit_execute_counts = count_by((t for t in tasks if t.get("category") == "edit_execute"), "blueprint_type")
 
     manifest = {
         "benchmark": "BlueprintEditing",
         "description": (
             "Measures blueprint editing capability: type discovery, graph/variable reads, "
-            "edit action schemas, edit execution, graceful error handling, workflow completeness"
+            "edit action schemas, read-back-verified edit execution, executed end-to-end "
+            "workflows, graceful input-specific error handling, duplicate-name rejection, "
+            "and explicit fixture lifecycle preflight"
         ),
         "primary_score": "blueprint_editing_score",
         "expected_namespace": "blueprint",
@@ -1360,31 +2374,150 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "category_counts": count_by(tasks, "category"),
         "edit_schema_domains": domain_counts,
         "blueprint_types_tested": [bp["type"] for bp in BP_TYPES],
-        "workflows_tested": [wf["name"] for wf in BLUEPRINT_WORKFLOWS],
-        "score_formula": (
-            "0.22*edit_execute_rate + 0.18*edit_schema_rate + 0.14*graph_read_rate "
-            "+ 0.14*variable_read_rate + 0.10*error_path_rate + 0.08*duplicate_reject_rate "
-            "+ 0.07*read_schema_rate + 0.04*type_discovery_rate + 0.03*workflow_completeness_rate"
-        ),
-        "edit_execute_tasks_per_type": 10,
+        "workflows_tested": [wf["name"] for wf in BLUEPRINT_WORKFLOW_EXECUTE],
+        "score_formula": score_formula_string(),
+        "weights": dict(WEIGHTS),
+        "base_edit_execute_tasks_per_type": 10,
+        "additional_edit_execute_tasks": len(BLUEPRINT_ADDITIONAL_EDIT_EXECUTE_TASKS),
+        "edit_execute_tasks_per_type": edit_execute_counts,
         "fixture_paths": {bp["type"]: bp["path"] for bp in BP_TYPES},
+        "preflight_command": "python Scripts/blueprint_editing_benchmark.py preflight --mcp-url http://localhost:9316/mcp",
         "setup_fixtures_command": "python Scripts/blueprint_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
-        "score_dimensions": [
-            "edit_execute_rate",
-            "edit_schema_rate",
-            "graph_read_rate",
-            "variable_read_rate",
-            "error_path_rate",
-            "duplicate_reject_rate",
-            "read_schema_rate",
-            "type_discovery_rate",
-            "workflow_completeness_rate",
-        ],
+        "score_dimensions": list(SCORE_DIMENSIONS),
         "catalog_version_verified": "v0.20.2-blueprint-138-actions",
-        "task_file": "Benchmarks/BlueprintEditing/tasks.jsonl",
+        "task_file": display_path(tasks_path),
     }
     write_json(manifest_path, manifest)
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# Fixture lifecycle preflight
+# ---------------------------------------------------------------------------
+
+def endpoint_preflight(url: str, timeout_s: float) -> Dict[str, Any]:
+    response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    failure_kind = classify_mcp_failure(response)
+    ok = not failure_kind
+    return {
+        "ok": ok,
+        "phase": "endpoint",
+        "failure_kind": failure_kind,
+        "message": "MCP endpoint reachable" if ok else "MCP endpoint did not return a usable monolith_status response",
+        "status": result_data(response) if ok else None,
+        "raw": str(response.get("raw", ""))[:300] if response.get("transport_error") or response.get("parse_error") else result_text(response)[:300],
+    }
+
+
+def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bool = True) -> Dict[str, Any]:
+    endpoint = endpoint_preflight(url, timeout_s)
+    if not endpoint["ok"] or not require_fixtures:
+        return {
+            "ok": endpoint["ok"],
+            "phase": endpoint["phase"],
+            "failure_kind": endpoint["failure_kind"],
+            "message": endpoint["message"],
+            "endpoint": endpoint,
+            "fixtures": [],
+        }
+
+    fixtures: List[Dict[str, Any]] = []
+    first_failure: Optional[Dict[str, Any]] = None
+
+    for bp in BP_TYPES:
+        bp_type = bp["type"]
+        asset_path = bp["path"]
+        checks: List[Dict[str, Any]] = []
+
+        info_resp = mcp_call(url, "blueprint_query", {
+            "action": "get_blueprint_info", "asset_path": asset_path,
+        }, timeout_s=timeout_s)
+        info_failure = classify_mcp_failure(info_resp)
+        if info_failure:
+            kind = "transport_error" if info_failure == "transport_error" else "fixture_missing_or_invalid"
+            checks.append({
+                "name": "get_blueprint_info",
+                "ok": False,
+                "failure_kind": kind,
+                "snippet": str(info_resp.get("raw", ""))[:200] if info_failure == "transport_error" else result_text(info_resp)[:200],
+            })
+            fixture_ok = False
+        else:
+            checks.append({"name": "get_blueprint_info", "ok": True})
+            fixture_ok = True
+
+        if fixture_ok and bp_type != "Interface":
+            vars_resp = mcp_call(url, "blueprint_query", {
+                "action": "get_variables", "asset_path": asset_path,
+            }, timeout_s=timeout_s)
+            var_failure = classify_mcp_failure(vars_resp)
+            vars_ok = (not var_failure) and _response_text_contains_any(vars_resp, bp["fixture_vars"])
+            checks.append({
+                "name": "get_variables",
+                "ok": vars_ok,
+                "failure_kind": var_failure or ("" if vars_ok else "fixture_contract_missing"),
+                "expected_any": bp["fixture_vars"],
+                "snippet": result_text(vars_resp)[:200],
+            })
+            fixture_ok = fixture_ok and vars_ok
+
+        if fixture_ok:
+            funcs = FIXTURE_FUNCTIONS_BY_TYPE.get(bp_type, [])
+            if funcs:
+                funcs_resp = mcp_call(url, "blueprint_query", {
+                    "action": "get_functions", "asset_path": asset_path,
+                }, timeout_s=timeout_s)
+                func_failure = classify_mcp_failure(funcs_resp)
+                funcs_ok = (not func_failure) and _response_text_contains_any(funcs_resp, funcs)
+                checks.append({
+                    "name": "get_functions",
+                    "ok": funcs_ok,
+                    "failure_kind": func_failure or ("" if funcs_ok else "fixture_contract_missing"),
+                    "expected_any": funcs,
+                    "snippet": result_text(funcs_resp)[:200],
+                })
+                fixture_ok = fixture_ok and funcs_ok
+
+        fixture = {
+            "blueprint_type": bp_type,
+            "asset_path": asset_path,
+            "ok": fixture_ok,
+            "checks": checks,
+        }
+        fixtures.append(fixture)
+        if not fixture_ok and first_failure is None:
+            failed_check = next((c for c in checks if not c.get("ok")), {})
+            first_failure = {
+                "phase": "fixtures",
+                "failure_kind": failed_check.get("failure_kind") or "fixture_readiness_failed",
+                "message": f"Fixture preflight failed for {bp_type} at {asset_path}",
+                "fixture": fixture,
+            }
+
+    ok = first_failure is None
+    return {
+        "ok": ok,
+        "phase": "ready" if ok else "fixtures",
+        "failure_kind": "" if ok else str(first_failure.get("failure_kind", "fixture_readiness_failed")),
+        "message": "All BlueprintEditing fixtures are ready" if ok else str(first_failure.get("message", "Fixture preflight failed")),
+        "endpoint": endpoint,
+        "fixtures": fixtures,
+        "first_failure": first_failure,
+    }
+
+
+def print_preflight_summary(preflight: Dict[str, Any]) -> None:
+    status = "ok" if preflight.get("ok") else "FAILED"
+    print(f"preflight: {status} phase={preflight.get('phase')} failure_kind={preflight.get('failure_kind', '')}", flush=True)
+    if preflight.get("message"):
+        print(f"  {preflight['message']}", flush=True)
+    for fixture in preflight.get("fixtures", []):
+        f_status = "ok" if fixture.get("ok") else "FAILED"
+        print(f"  [{f_status}] {fixture.get('blueprint_type')} {fixture.get('asset_path')}", flush=True)
+        for check in fixture.get("checks", []):
+            c_status = "ok" if check.get("ok") else "FAIL"
+            kind = f" ({check.get('failure_kind')})" if check.get("failure_kind") else ""
+            print(f"       {c_status} {check.get('name')}{kind}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1400,6 +2533,18 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
     Safe to run multiple times: if a fixture already exists the step is skipped
     and reported as ``already_exists`` rather than failing.
     """
+    preflight = fixture_readiness_preflight(url, timeout_s, require_fixtures=False)
+    print_preflight_summary(preflight)
+    if not preflight["ok"]:
+        return {
+            "preflight": preflight,
+            "fixtures": [],
+            "total": len(BP_TYPES),
+            "succeeded": 0,
+            "ready": False,
+            "failure_kind": preflight.get("failure_kind", "transport_error"),
+        }
+
     results: List[Dict[str, Any]] = []
 
     for bp in BP_TYPES:
@@ -1424,18 +2569,15 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
             "success": create_ok and (not create_is_error or already_exists),
             "already_exists": already_exists,
             "is_error": create_is_error,
+            "failure_kind": classify_mcp_failure(create_resp),
             "snippet": result_text(create_resp)[:200],
         })
 
         # 2. Add fixture variables (skip for Interface which has no class variables).
         if bp_type != "Interface":
-            for var_name in bp["fixture_vars"]:
-                var_type = "float" if var_name not in ("ActorTag", "CharacterName", "bIsSprinting",
-                                                        "bIsInAir", "bIsActive", "ComponentID") else "string"
-                if var_name.startswith("b") and len(var_name) > 1 and var_name[1].isupper():
-                    var_type = "bool"
-                if var_name in ("ComponentID",):
-                    var_type = "int"
+            # Explicit per-variable types (FIXTURE_VAR_TYPES) match the test_blueprints.md
+            # contract exactly (ActorTag=FName/name, DisplayText=FText/text, ...).
+            for var_name, var_type in FIXTURE_VAR_TYPES.get(bp_type, {}).items():
                 var_resp = mcp_call(url, "blueprint_query", {
                     "action": "add_variable",
                     "asset_path": asset_path,
@@ -1449,17 +2591,36 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
                     "success": not var_resp.get("transport_error") and (not var_is_error or var_already),
                     "already_exists": var_already,
                     "is_error": var_is_error,
+                    "failure_kind": classify_mcp_failure(var_resp),
                     "snippet": result_text(var_resp)[:100],
                 })
 
-        # 3. compile_blueprint
+        # 3. Add fixture function stubs for read/preflight contract checks.
+        for fn_name in FIXTURE_FUNCTIONS_BY_TYPE.get(bp_type, []):
+            fn_resp = mcp_call(url, "blueprint_query", {
+                "action": "add_function", "asset_path": asset_path, "function_name": fn_name,
+            }, timeout_s=timeout_s)
+            fn_is_error = _is_error(fn_resp)
+            fn_already = fn_is_error and "exist" in result_text(fn_resp).lower()
+            steps.append({
+                "action": f"add_function:{fn_name}",
+                "success": not fn_resp.get("transport_error") and (not fn_is_error or fn_already),
+                "already_exists": fn_already,
+                "is_error": fn_is_error,
+                "failure_kind": classify_mcp_failure(fn_resp),
+                "snippet": result_text(fn_resp)[:100],
+            })
+
+        # 4. compile_blueprint — must be a CLEAN compile (0 errors), inspected from the payload.
         compile_resp = mcp_call(url, "blueprint_query", {
             "action": "compile_blueprint", "asset_path": asset_path,
         }, timeout_s=timeout_s)
-        compile_ok = not compile_resp.get("transport_error") and not _is_error(compile_resp)
+        compile_clean, compile_detail = _compile_is_clean(compile_resp)
         steps.append({
             "action": "compile_blueprint",
-            "success": compile_ok,
+            "success": compile_clean,
+            "compile_detail": compile_detail,
+            "failure_kind": classify_mcp_failure(compile_resp),
             "snippet": result_text(compile_resp)[:150],
         })
 
@@ -1475,11 +2636,22 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
         for s in steps:
             flag = "ok" if s["success"] else "FAIL"
             extra = " (already existed)" if s.get("already_exists") else ""
-            print(f"       {flag} {s['action']}{extra}", flush=True)
+            kind = f" [{s.get('failure_kind')}]" if s.get("failure_kind") else ""
+            print(f"       {flag} {s['action']}{extra}{kind}", flush=True)
 
     total_ok = sum(1 for r in results if r["overall_success"])
+    readiness = fixture_readiness_preflight(url, timeout_s, require_fixtures=True)
+    print_preflight_summary(readiness)
     print(f"\nsetup_fixtures: {total_ok}/{len(results)} fixtures ready", flush=True)
-    return {"fixtures": results, "total": len(results), "succeeded": total_ok}
+    return {
+        "preflight": preflight,
+        "post_setup_readiness": readiness,
+        "fixtures": results,
+        "total": len(results),
+        "succeeded": total_ok,
+        "ready": total_ok == len(results) and readiness.get("ok", False),
+        "failure_kind": "" if total_ok == len(results) and readiness.get("ok", False) else readiness.get("failure_kind", "fixture_edit_failure"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1493,10 +2665,12 @@ def run_benchmark(
     label: str,
     timeout_s: float,
 ) -> Dict[str, Any]:
+    tasks_path = resolve_plugin_path(tasks_path)
     tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
     status = result_data(status_response)
+    benchmark_inputs = build_benchmark_inputs("BlueprintEditing", tasks_path=tasks_path, mcp_status=status)
 
     rows: List[Dict[str, Any]] = []
     per_task_jsonl = output_dir / "per_task.jsonl"
@@ -1514,9 +2688,11 @@ def run_benchmark(
             partial = aggregate(label, status, tasks[:index], rows)
             partial["completed_task_count"] = index
             partial["total_task_count"] = len(tasks)
+            attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
     summary = aggregate(label, status, tasks, rows)
+    attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
     return summary
@@ -1552,17 +2728,13 @@ def write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) ->
     baseline = comparison["baseline"]
     current = comparison["current"]
     deltas = comparison["deltas"]
-    metrics = [
-        "blueprint_editing_score",
-        "edit_execute_rate",
-        "edit_schema_rate",
-        "graph_read_rate",
-        "variable_read_rate",
-        "error_path_rate",
-        "read_schema_rate",
-        "type_discovery_rate",
-        "workflow_completeness_rate",
-    ]
+    # Built from SCORE_DIMENSIONS so every scored dimension (incl. duplicate_reject_rate and
+    # workflow_execute_rate) always renders — a scored dimension can never be silently omitted.
+    # Union with any extra rate keys present in the data keeps old/renamed baselines visible.
+    metrics = ["blueprint_editing_score"] + list(SCORE_DIMENSIONS)
+    for extra in list(current.get("metrics", {})) + list(baseline.get("metrics", {})):
+        if extra.endswith("_rate") and extra not in metrics:
+            metrics.append(extra)
     lines = [
         "# Monolith BlueprintEditing Benchmark Comparison",
         "",
@@ -1601,12 +2773,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     sf_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     sf_cmd.add_argument("--request-timeout-s", type=float, default=30.0)
 
+    pf_cmd = sub.add_parser("preflight",
+                             help="Check MCP endpoint and BlueprintEditing fixture readiness before setup/run")
+    pf_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
+    pf_cmd.add_argument("--request-timeout-s", type=float, default=12.0)
+    pf_cmd.add_argument("--endpoint-only", action="store_true",
+                        help="Only check monolith_status transport; do not require fixture assets")
+
     run_cmd = sub.add_parser("run", help="Run tasks against a live MCP endpoint and score results")
     run_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     run_cmd.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     run_cmd.add_argument("--output-dir", type=pathlib.Path, required=True)
     run_cmd.add_argument("--label", required=True)
     run_cmd.add_argument("--request-timeout-s", type=float, default=12.0)
+    run_cmd.add_argument("--skip-preflight", action="store_true",
+                         help="Compatibility escape hatch: run without fixture readiness preflight")
 
     cmp_cmd = sub.add_parser("compare", help="Compare two run summary files")
     cmp_cmd.add_argument("--baseline", type=pathlib.Path, required=True)
@@ -1624,9 +2805,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Creating benchmark fixture blueprints...", flush=True)
         result = setup_fixtures(args.mcp_url, args.request_timeout_s)
         sys.stdout.buffer.write((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-        return 0 if result["succeeded"] == result["total"] else 1
+        return 0 if result.get("ready") else 1
+
+    if args.cmd == "preflight":
+        result = fixture_readiness_preflight(
+            args.mcp_url,
+            args.request_timeout_s,
+            require_fixtures=not args.endpoint_only,
+        )
+        print_preflight_summary(result)
+        sys.stdout.buffer.write((json.dumps(result, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+        return 0 if result.get("ok") else 1
 
     if args.cmd == "run":
+        if not args.skip_preflight:
+            preflight = fixture_readiness_preflight(args.mcp_url, args.request_timeout_s, require_fixtures=True)
+            print_preflight_summary(preflight)
+            if not preflight.get("ok"):
+                sys.stdout.buffer.write((json.dumps({"preflight": preflight}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+                return 1
         summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s)
         sys.stdout.buffer.write((json.dumps(summary, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
         return 0

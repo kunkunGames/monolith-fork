@@ -710,9 +710,27 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 		{
 			if (CoreActions.Num() == 0) continue;
 
+			// Tool-list minimization: when management tools are hidden, advertise only the
+			// core routing/discovery actions. The management/control-plane actions stay
+			// registered and callable (by name via tools/call or monolith_query) — only
+			// their tools/list advertisement is suppressed. See UMonolithSettings::bExposeManagementTools.
+			// Core routing/discovery actions kept when management tools are hidden.
+			// Paired with the synthetic monolith_query dispatcher (appended below when
+			// bExposeNamespaceTools is false), this yields the minimal 4-tool surface:
+			// monolith_find, monolith_discover, monolith_status, monolith_query.
+			static const TSet<FString> CoreRoutingActions = {
+				TEXT("find"), TEXT("discover"), TEXT("status"),
+			};
+			const bool bHideManagementTools = (MonolithSettings && !MonolithSettings->bExposeManagementTools);
+
 			// Core tools are individual: monolith_discover, monolith_status
 			for (const FMonolithActionInfo& ActionInfo : CoreActions)
 			{
+				if (bHideManagementTools && !CoreRoutingActions.Contains(ActionInfo.Action))
+				{
+					continue;
+				}
+
 				TSharedPtr<FJsonObject> CoreTool = MakeShared<FJsonObject>();
 
 				FString ToolName;
@@ -896,6 +914,48 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 		}
 	}
 
+	// Single cross-namespace dispatcher. When per-namespace {ns}_query tools are
+	// suppressed (bExposeNamespaceTools=false), advertise one monolith_query tool so
+	// domain actions stay reachable over a direct MCP connection without the external
+	// proxy. Dispatched natively in HandleToolsCall (name == "monolith_query").
+	if (!MonolithSettings || !MonolithSettings->bExposeNamespaceTools)
+	{
+		TSharedPtr<FJsonObject> QueryTool = MakeShared<FJsonObject>();
+		QueryTool->SetStringField(TEXT("name"), TEXT("monolith_query"));
+		QueryTool->SetStringField(TEXT("description"),
+			TEXT("Single dispatcher for every Monolith domain namespace. Set 'namespace' and 'action' (and optional 'params'). ")
+			TEXT("Use monolith_discover() to list namespaces, monolith_discover(\"<namespace>\") to list a namespace's actions, ")
+			TEXT("and monolith_discover(\"<namespace>\", \"<action>\") for an action's parameter schema."));
+
+		TSharedPtr<FJsonObject> QSchema = MakeShared<FJsonObject>();
+		QSchema->SetStringField(TEXT("type"), TEXT("object"));
+		TSharedPtr<FJsonObject> QProps = MakeShared<FJsonObject>();
+
+		TSharedPtr<FJsonObject> NsProp = MakeShared<FJsonObject>();
+		NsProp->SetStringField(TEXT("type"), TEXT("string"));
+		NsProp->SetStringField(TEXT("description"), TEXT("Target namespace, e.g. blueprint, material, gas, ai (see monolith_discover())."));
+		QProps->SetObjectField(TEXT("namespace"), NsProp);
+
+		TSharedPtr<FJsonObject> ActProp = MakeShared<FJsonObject>();
+		ActProp->SetStringField(TEXT("type"), TEXT("string"));
+		ActProp->SetStringField(TEXT("description"), TEXT("Action within the namespace (see monolith_discover(\"<namespace>\"))."));
+		QProps->SetObjectField(TEXT("action"), ActProp);
+
+		TSharedPtr<FJsonObject> PProp = MakeShared<FJsonObject>();
+		PProp->SetStringField(TEXT("type"), TEXT("object"));
+		PProp->SetStringField(TEXT("description"), TEXT("Action parameters; call monolith_discover(\"<namespace>\", \"<action>\") for the schema."));
+		QProps->SetObjectField(TEXT("params"), PProp);
+
+		QSchema->SetObjectField(TEXT("properties"), QProps);
+		TArray<TSharedPtr<FJsonValue>> QRequired;
+		QRequired.Add(MakeShared<FJsonValueString>(TEXT("namespace")));
+		QRequired.Add(MakeShared<FJsonValueString>(TEXT("action")));
+		QSchema->SetArrayField(TEXT("required"), QRequired);
+		QueryTool->SetObjectField(TEXT("inputSchema"), QSchema);
+
+		ToolsArray.Add(MakeShared<FJsonValueObject>(QueryTool));
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetArrayField(TEXT("tools"), ToolsArray);
 
@@ -1017,7 +1077,73 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	FString Action;
 
 	// Determine dispatch pattern
-	if (ToolName.StartsWith(TEXT("monolith_")))
+	if (ToolName == TEXT("monolith_query"))
+	{
+		// Single cross-namespace dispatcher: arguments carry {namespace, action, params}.
+		// Checked before the generic monolith_ branch because "monolith_query" also
+		// starts with "monolith_" but must route to the namespace named in arguments.
+		if (!Arguments->TryGetStringField(TEXT("namespace"), Namespace) || Namespace.IsEmpty())
+		{
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				ToolName, TEXT(""), TEXT(""), TEXT("malformed_dispatch"),
+				FMonolithJsonUtils::ErrInvalidParams, TEXT("Missing 'namespace'"));
+			return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+				TEXT("Missing 'namespace' — monolith_query requires arguments.namespace; call monolith_discover() to enumerate namespaces."));
+		}
+		if (!Arguments->TryGetStringField(TEXT("action"), Action) || Action.IsEmpty())
+		{
+			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+				ToolName, Namespace, TEXT(""), TEXT("malformed_dispatch"),
+				FMonolithJsonUtils::ErrInvalidParams, TEXT("Missing 'action'"));
+			return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+				TEXT("Missing 'action' — monolith_query requires arguments.action; call monolith_discover(\"<namespace>\") to enumerate actions."));
+		}
+
+		// Normalise the params shape: top-level extras (excluding namespace/action/params)
+		// merged with a nested "params" object or a JSON-encoded "params" string. Mirrors
+		// the *_query branch so the dispatched handler sees a single flat params object.
+		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
+		for (const auto& Pair : Arguments->Values)
+		{
+			if (Pair.Key != TEXT("namespace") && Pair.Key != TEXT("action") && Pair.Key != TEXT("params"))
+			{
+				TopLevelExtras->SetField(Pair.Key, Pair.Value);
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* NestedParams = nullptr;
+		TSharedPtr<FJsonObject> ParsedParamsObj;
+		bool bHasNestedParams = false;
+		if (Arguments->TryGetObjectField(TEXT("params"), NestedParams) && NestedParams)
+		{
+			bHasNestedParams = true;
+		}
+		else
+		{
+			FString ParamsStr;
+			if (Arguments->TryGetStringField(TEXT("params"), ParamsStr) && !ParamsStr.IsEmpty())
+			{
+				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ParamsStr);
+				if (FJsonSerializer::Deserialize(Reader, ParsedParamsObj) && ParsedParamsObj.IsValid())
+				{
+					NestedParams = &ParsedParamsObj;
+					bHasNestedParams = true;
+				}
+			}
+		}
+
+		if (bHasNestedParams && NestedParams)
+		{
+			Arguments = MakeShared<FJsonObject>();
+			for (const auto& Pair : TopLevelExtras->Values) { Arguments->SetField(Pair.Key, Pair.Value); }
+			for (const auto& Pair : (*NestedParams)->Values) { Arguments->SetField(Pair.Key, Pair.Value); }
+		}
+		else
+		{
+			Arguments = TopLevelExtras;
+		}
+	}
+	else if (ToolName.StartsWith(TEXT("monolith_")))
 	{
 		// Core tool: monolith_discover -> namespace="monolith", action="discover"
 		Namespace = TEXT("monolith");

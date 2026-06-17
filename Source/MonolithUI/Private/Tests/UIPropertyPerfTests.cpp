@@ -4,11 +4,11 @@
 // reflection helper. Plan §1.11 calls for `MonolithUI.Performance.SetWidgetPropertyMicrobench`
 // to gate against regressions in the hot write path.
 //
-// Threshold: 50ms for 1000 cache-hit writes (suggested in mission brief; tune
-// in Phase L once we have a real-world baseline). Failing this threshold is
-// not a hard build break — it logs a warning and lets the suite proceed so
-// noisy CI machines don't false-negative the whole build. Adjust the
-// `bSoftFail` flag below if we want a hard gate later.
+// Calibration: warm the reflection path, measure several cache-hit samples,
+// and report median/p95. The median keeps the original 50ms/1000-write target;
+// p95 gets 1.5x headroom so loaded CI machines do not fail on a single slow
+// slice. Failing these thresholds is not a hard build break; it logs a warning
+// and lets the suite proceed. Adjust `bSoftFail` below if we want a hard gate.
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -51,54 +51,96 @@ bool FMonolithUISetWidgetPropertyMicrobenchTest::RunTest(const FString& /*Parame
 
     FUIReflectionHelper Helper(Cache, Allowlist);
 
-    // Warm the cache with one call so subsequent iterations are cache hits
-    // (we want to measure the steady-state hot path, not the cold-walk path).
-    const TSharedPtr<FJsonValue> WarmupValue = MakeShared<FJsonValueString>(TEXT("warmup"));
-    {
-        const FUIReflectionApplyResult Warm = Helper.Apply(Widget, TEXT("Text"), WarmupValue);
-        if (!TestTrue(TEXT("Warmup write succeeded"), Warm.bSuccess))
-        {
-            return false;
-        }
-    }
-
-    const int32 Iterations = 1000;
-    const double Threshold_ms = 50.0;
+    const int32 IterationsPerSample = 1000;
+    const int32 WarmupIterations = 100;
+    const int32 SampleCount = 9;
+    const double MedianThreshold_ms = 50.0;
+    const double P95Threshold_ms = 75.0;
     const bool bSoftFail = true; // see file header
 
-    const double Start = FPlatformTime::Seconds();
-    for (int32 i = 0; i < Iterations; ++i)
+    TArray<TSharedPtr<FJsonValue>> Values;
+    Values.Reserve(IterationsPerSample);
+    for (int32 i = 0; i < IterationsPerSample; ++i)
     {
-        // Vary the value just enough to stop the JIT folding the call away.
-        const TSharedPtr<FJsonValue> Value = MakeShared<FJsonValueString>(
-            FString::Printf(TEXT("iter-%d"), i));
-        const FUIReflectionApplyResult Res = Helper.Apply(Widget, TEXT("Text"), Value);
-        if (!Res.bSuccess)
+        Values.Add(MakeShared<FJsonValueString>(FString::Printf(TEXT("iter-%d"), i)));
+    }
+
+    // Warm the cache and helper conversion path so timed samples represent the
+    // steady-state Apply() cost rather than first-touch reflection.
+    {
+        for (int32 i = 0; i < WarmupIterations; ++i)
         {
-            AddError(FString::Printf(TEXT("Iteration %d failed: %s/%s"),
-                i, *Res.FailureReason, *Res.Detail));
-            return false;
+            const FUIReflectionApplyResult Warm = Helper.Apply(Widget, TEXT("Text"), Values[i % Values.Num()]);
+            if (!TestTrue(TEXT("Warmup write succeeded"), Warm.bSuccess))
+            {
+                return false;
+            }
         }
     }
-    const double Elapsed_ms = (FPlatformTime::Seconds() - Start) * 1000.0;
 
-    AddInfo(FString::Printf(TEXT("Microbench: %d set_widget_property calls in %.2f ms (%.4f ms/call)"),
-        Iterations, Elapsed_ms, Elapsed_ms / Iterations));
+    const int64 HitsBeforeSamples = Cache->GetHitCount();
+    TArray<double> SampleTimesMs;
+    SampleTimesMs.Reserve(SampleCount);
 
-    if (Elapsed_ms > Threshold_ms)
+    for (int32 SampleIndex = 0; SampleIndex < SampleCount; ++SampleIndex)
+    {
+        const double Start = FPlatformTime::Seconds();
+        for (int32 i = 0; i < IterationsPerSample; ++i)
+        {
+            const FUIReflectionApplyResult Res = Helper.Apply(Widget, TEXT("Text"), Values[i]);
+            if (!Res.bSuccess)
+            {
+                AddError(FString::Printf(TEXT("Sample %d iteration %d failed: %s/%s"),
+                    SampleIndex, i, *Res.FailureReason, *Res.Detail));
+                return false;
+            }
+        }
+        SampleTimesMs.Add((FPlatformTime::Seconds() - Start) * 1000.0);
+    }
+
+    TArray<double> SortedSampleTimesMs = SampleTimesMs;
+    SortedSampleTimesMs.Sort();
+
+    const int32 MedianIndex = SortedSampleTimesMs.Num() / 2;
+    const int32 P95Index = FMath::Clamp(
+        FMath::FloorToInt(0.95 * static_cast<double>(SortedSampleTimesMs.Num() - 1)),
+        0,
+        SortedSampleTimesMs.Num() - 1);
+
+    const double MinMs = SortedSampleTimesMs[0];
+    const double MedianMs = SortedSampleTimesMs[MedianIndex];
+    const double P95Ms = SortedSampleTimesMs[P95Index];
+    const double MaxMs = SortedSampleTimesMs.Last();
+
+    AddInfo(FString::Printf(
+        TEXT("Microbench: %d samples x %d cache-hit set_widget_property calls; min %.2f ms, median %.2f ms, p95 %.2f ms, max %.2f ms (median %.4f ms/call)"),
+        SampleCount,
+        IterationsPerSample,
+        MinMs,
+        MedianMs,
+        P95Ms,
+        MaxMs,
+        MedianMs / static_cast<double>(IterationsPerSample)));
+
+    if (MedianMs > MedianThreshold_ms || P95Ms > P95Threshold_ms)
     {
         const FString Msg = FString::Printf(
-            TEXT("Microbench exceeded %.2f ms threshold (%.2f ms for %d iterations)"),
-            Threshold_ms, Elapsed_ms, Iterations);
+            TEXT("Microbench exceeded thresholds: median %.2f/%.2f ms, p95 %.2f/%.2f ms for %d-call samples"),
+            MedianMs,
+            MedianThreshold_ms,
+            P95Ms,
+            P95Threshold_ms,
+            IterationsPerSample);
         if (bSoftFail) { AddWarning(Msg); }
         else           { AddError(Msg);   return false; }
     }
 
-    // Sanity: the cache should have served (Iterations - 1) hits since we
-    // warmed it with one cold write. Loose check (>= half) — if reset by
-    // another test mid-run we don't want a flaky failure.
+    // Sanity: most measured writes should be cache hits. Loose check so an
+    // external cache counter reset cannot make the perf test flaky.
+    const int64 SampleHitDelta = Cache->GetHitCount() - HitsBeforeSamples;
+    const int32 TotalMeasuredIterations = SampleCount * IterationsPerSample;
     TestTrue(TEXT("Cache served majority of iterations as hits"),
-        Cache->GetHitCount() >= (Iterations / 2));
+        SampleHitDelta >= (TotalMeasuredIterations / 2));
 
     return true;
 }
