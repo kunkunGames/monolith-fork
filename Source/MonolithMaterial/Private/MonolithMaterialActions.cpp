@@ -1565,7 +1565,14 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 			}
 			FString FromPin = TEXT("");
 			OutObj->TryGetStringField(TEXT("from_pin"), FromPin);
-			FString ToProp = OutObj->GetStringField(TEXT("to_property"));
+			FString ToProp;
+			if (!OutObj->TryGetStringField(TEXT("to_property"), ToProp))
+			{
+				auto ErrJson = MakeShared<FJsonObject>();
+				ErrJson->SetStringField(TEXT("error"), TEXT("Parameter 'to_property' must be a string"));
+				ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+				continue;
+			}
 
 			UMaterialExpression** FromPtr = IdToExpr.Find(FromId);
 			if (!FromPtr || !*FromPtr)
@@ -5033,8 +5040,24 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 			continue;
 		}
 
-		FString Name = (*ParamObj)->GetStringField(TEXT("name"));
-		FString Type = (*ParamObj)->GetStringField(TEXT("type"));
+		FString Name;
+		if (!(*ParamObj)->TryGetStringField(TEXT("name"), Name))
+		{
+			auto ErrJson = MakeShared<FJsonObject>();
+			ErrJson->SetStringField(TEXT("error"), TEXT("Parameter 'name' must be a string"));
+			ErrorsArr.Add(MakeShared<FJsonValueObject>(ErrJson));
+			continue;
+		}
+
+		FString Type;
+		if (!(*ParamObj)->TryGetStringField(TEXT("type"), Type))
+		{
+			auto ErrJson = MakeShared<FJsonObject>();
+			ErrJson->SetStringField(TEXT("error"), TEXT("Parameter 'type' must be a string"));
+			ErrorsArr.Add(MakeShared<FJsonValueObject>(ErrJson));
+			continue;
+		}
+
 		FMaterialParameterInfo ParamInfo(*Name);
 
 		if (Name.IsEmpty() || Type.IsEmpty())
@@ -5097,7 +5120,14 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 		}
 		else if (Type.Equals(TEXT("texture"), ESearchCase::IgnoreCase))
 		{
-			FString TexPath = (*ParamObj)->GetStringField(TEXT("value"));
+			FString TexPath;
+			if (!(*ParamObj)->TryGetStringField(TEXT("value"), TexPath))
+			{
+				auto ErrJson = MakeShared<FJsonObject>();
+				ErrJson->SetStringField(TEXT("error"), TEXT("Parameter 'value' must be a string"));
+				ErrorsArr.Add(MakeShared<FJsonValueObject>(ErrJson));
+				continue;
+			}
 			UTexture* Tex = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(TexPath));
 			if (Tex)
 			{
@@ -5536,9 +5566,13 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 			const TSharedPtr<FJsonObject>* InputObjPtr = nullptr;
 			if (InputVal && InputVal->TryGetObject(InputObjPtr) && InputObjPtr)
 			{
-				FCustomInput NewInput;
-				NewInput.InputName = *(*InputObjPtr)->GetStringField(TEXT("name"));
-				CustomExpr->Inputs.Add(NewInput);
+				FString InputNameStr;
+				if ((*InputObjPtr)->TryGetStringField(TEXT("name"), InputNameStr))
+				{
+					FCustomInput NewInput;
+					NewInput.InputName = *InputNameStr;
+					CustomExpr->Inputs.Add(NewInput);
+				}
 			}
 		}
 		UpdatedFields.Add(TEXT("inputs"));
@@ -5553,13 +5587,18 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 			const TSharedPtr<FJsonObject>* OutObjPtr = nullptr;
 			if (OutVal && OutVal->TryGetObject(OutObjPtr) && OutObjPtr)
 			{
-				FCustomOutput NewOutput;
-				NewOutput.OutputName = *(*OutObjPtr)->GetStringField(TEXT("name"));
-				if ((*OutObjPtr)->HasField(TEXT("type")))
+				FString OutputNameStr;
+				if ((*OutObjPtr)->TryGetStringField(TEXT("name"), OutputNameStr))
 				{
-					NewOutput.OutputType = ParseCustomOutputType((*OutObjPtr)->GetStringField(TEXT("type")));
+					FCustomOutput NewOutput;
+					NewOutput.OutputName = *OutputNameStr;
+					FString TypeStr;
+					if ((*OutObjPtr)->TryGetStringField(TEXT("type"), TypeStr))
+					{
+						NewOutput.OutputType = ParseCustomOutputType(TypeStr);
+					}
+					CustomExpr->AdditionalOutputs.Add(NewOutput);
 				}
-				CustomExpr->AdditionalOutputs.Add(NewOutput);
 			}
 		}
 		UpdatedFields.Add(TEXT("additional_outputs"));
@@ -5589,11 +5628,22 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 			const TSharedPtr<FJsonObject>* DefObjPtr = nullptr;
 			if (DefVal && DefVal->TryGetObject(DefObjPtr) && DefObjPtr)
 			{
-				FCustomDefine NewDefine;
-				NewDefine.DefineName = (*DefObjPtr)->GetStringField(TEXT("name"));
-				NewDefine.DefineValue = (*DefObjPtr)->HasField(TEXT("value"))
-					? (*DefObjPtr)->GetStringField(TEXT("value")) : TEXT("");
-				CustomExpr->AdditionalDefines.Add(NewDefine);
+				FString DefineNameStr;
+				if ((*DefObjPtr)->TryGetStringField(TEXT("name"), DefineNameStr))
+				{
+					FCustomDefine NewDefine;
+					NewDefine.DefineName = DefineNameStr;
+					FString DefineValueStr;
+					if ((*DefObjPtr)->TryGetStringField(TEXT("value"), DefineValueStr))
+					{
+						NewDefine.DefineValue = DefineValueStr;
+					}
+					else
+					{
+						NewDefine.DefineValue = TEXT("");
+					}
+					CustomExpr->AdditionalDefines.Add(NewDefine);
+				}
 			}
 		}
 		UpdatedFields.Add(TEXT("additional_defines"));
@@ -6325,14 +6375,21 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			}
 			const TSharedPtr<FJsonObject>& NodeObj = *NodeObjPtr;
 
-			FString Id = NodeObj->GetStringField(TEXT("id"));
+			FString Id;
+			if (!NodeObj->TryGetStringField(TEXT("id"), Id))
+			{
+				auto WarnJson = MakeShared<FJsonObject>();
+				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'id' must be a string"));
+				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				continue;
+			}
 			// BUG #3: also read optional user-provided name alias for connection resolution
 			FString UserName;
 			NodeObj->TryGetStringField(TEXT("name"), UserName);
-			FString ShortClass = NodeObj->GetStringField(TEXT("class"));
-			if (ShortClass.IsEmpty())
+			FString ShortClass;
+			if (!NodeObj->TryGetStringField(TEXT("class"), ShortClass) || ShortClass.IsEmpty())
 			{
-				ShortClass = NodeObj->GetStringField(TEXT("type"));
+				NodeObj->TryGetStringField(TEXT("type"), ShortClass);
 			}
 			if (ShortClass.IsEmpty())
 			{
@@ -6554,7 +6611,14 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			}
 			const TSharedPtr<FJsonObject>& CustomObj = *CustomObjPtr;
 
-			FString Id = CustomObj->GetStringField(TEXT("id"));
+			FString Id;
+			if (!CustomObj->TryGetStringField(TEXT("id"), Id))
+			{
+				auto WarnJson = MakeShared<FJsonObject>();
+				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'id' must be a string"));
+				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				continue;
+			}
 			// BUG #3: also read optional user-provided name alias
 			FString CustomUserName;
 			CustomObj->TryGetStringField(TEXT("name"), CustomUserName);
@@ -6578,17 +6642,23 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 				continue;
 			}
 
-			CustomExpr->Code = CustomObj->GetStringField(TEXT("code"));
+			FString CodeStr;
+			if (CustomObj->TryGetStringField(TEXT("code"), CodeStr))
+			{
+				CustomExpr->Code = CodeStr;
+			}
 			// Unescape double-encoded newlines from JSON string serialization
 			CustomExpr->Code.ReplaceInline(TEXT("\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
 			CustomExpr->Code.ReplaceInline(TEXT("\\t"), TEXT("\t"), ESearchCase::CaseSensitive);
-			if (CustomObj->HasField(TEXT("description")))
+			FString DescStr;
+			if (CustomObj->TryGetStringField(TEXT("description"), DescStr))
 			{
-				CustomExpr->Description = CustomObj->GetStringField(TEXT("description"));
+				CustomExpr->Description = DescStr;
 			}
-			if (CustomObj->HasField(TEXT("output_type")))
+			FString OutputTypeStr;
+			if (CustomObj->TryGetStringField(TEXT("output_type"), OutputTypeStr))
 			{
-				CustomExpr->OutputType = ParseCustomOutputType(CustomObj->GetStringField(TEXT("output_type")));
+				CustomExpr->OutputType = ParseCustomOutputType(OutputTypeStr);
 			}
 
 			const TArray<TSharedPtr<FJsonValue>>* InputsArray = nullptr;
@@ -6600,9 +6670,13 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 					const TSharedPtr<FJsonObject>* InputObjPtr = nullptr;
 					if (InputVal && InputVal->TryGetObject(InputObjPtr) && InputObjPtr)
 					{
-						FCustomInput NewInput;
-						NewInput.InputName = *(*InputObjPtr)->GetStringField(TEXT("name"));
-						CustomExpr->Inputs.Add(NewInput);
+						FString InputNameStr;
+						if ((*InputObjPtr)->TryGetStringField(TEXT("name"), InputNameStr))
+						{
+							FCustomInput NewInput;
+							NewInput.InputName = *InputNameStr;
+							CustomExpr->Inputs.Add(NewInput);
+						}
 					}
 				}
 			}
@@ -6616,13 +6690,18 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 					const TSharedPtr<FJsonObject>* OutObjPtr = nullptr;
 					if (OutVal && OutVal->TryGetObject(OutObjPtr) && OutObjPtr)
 					{
-						FCustomOutput NewOutput;
-						NewOutput.OutputName = *(*OutObjPtr)->GetStringField(TEXT("name"));
-						if ((*OutObjPtr)->HasField(TEXT("type")))
+						FString OutputNameStr;
+						if ((*OutObjPtr)->TryGetStringField(TEXT("name"), OutputNameStr))
 						{
-							NewOutput.OutputType = ParseCustomOutputType((*OutObjPtr)->GetStringField(TEXT("type")));
+							FCustomOutput NewOutput;
+							NewOutput.OutputName = *OutputNameStr;
+							FString TypeStr;
+							if ((*OutObjPtr)->TryGetStringField(TEXT("type"), TypeStr))
+							{
+								NewOutput.OutputType = ParseCustomOutputType(TypeStr);
+							}
+							CustomExpr->AdditionalOutputs.Add(NewOutput);
 						}
-						CustomExpr->AdditionalOutputs.Add(NewOutput);
 					}
 				}
 			}
@@ -6983,7 +7062,14 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 			}
 			const TSharedPtr<FJsonObject>& InputObj = *InputObjPtr;
 
-			FString InputName = InputObj->GetStringField(TEXT("name"));
+			FString InputName;
+			if (!InputObj->TryGetStringField(TEXT("name"), InputName))
+			{
+				auto WarnJson = MakeShared<FJsonObject>();
+				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'name' must be a string"));
+				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				continue;
+			}
 			FString InputId = InputName;
 			InputObj->TryGetStringField(TEXT("id"), InputId);
 
@@ -7089,7 +7175,14 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 			}
 			const TSharedPtr<FJsonObject>& OutputObj = *OutputObjPtr;
 
-			FString OutputName = OutputObj->GetStringField(TEXT("name"));
+			FString OutputName;
+			if (!OutputObj->TryGetStringField(TEXT("name"), OutputName))
+			{
+				auto WarnJson = MakeShared<FJsonObject>();
+				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'name' must be a string"));
+				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				continue;
+			}
 			FString OutputId = OutputName;
 			OutputObj->TryGetStringField(TEXT("id"), OutputId);
 
