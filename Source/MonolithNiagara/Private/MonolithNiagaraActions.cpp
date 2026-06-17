@@ -15771,7 +15771,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	FString TgtUsageStr;
 	if (Params->HasField(TEXT("target_usage")))
 	{
-		TgtUsageStr = Params->GetStringField(TEXT("target_usage"));
+		if (!Params->TryGetStringField(TEXT("target_usage"), TgtUsageStr))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'target_usage': must be a string"));
 	}
 	else
 	{
@@ -15785,9 +15786,31 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	AddParams->SetStringField(TEXT("usage"), TgtUsageStr);
 	AddParams->SetStringField(TEXT("module_script"), ScriptPath);
 	if (TgtIndex >= 0) AddParams->SetNumberField(TEXT("index"), TgtIndex);
-	if (Params->HasField(TEXT("target_stage_name"))) AddParams->SetStringField(TEXT("stage_name"), Params->GetStringField(TEXT("target_stage_name")));
-	if (Params->HasField(TEXT("usage_id"))) AddParams->SetStringField(TEXT("usage_id"), Params->GetStringField(TEXT("usage_id")));
-	if (Params->HasField(TEXT("stage_index"))) AddParams->SetNumberField(TEXT("stage_index"), Params->GetNumberField(TEXT("stage_index")));
+
+	if (Params->HasField(TEXT("target_stage_name")))
+	{
+		FString TgtStageName;
+		if (!Params->TryGetStringField(TEXT("target_stage_name"), TgtStageName))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'target_stage_name': must be a string"));
+		AddParams->SetStringField(TEXT("stage_name"), TgtStageName);
+	}
+
+	if (Params->HasField(TEXT("usage_id")))
+	{
+		FString UsageIdStrParam;
+		if (!Params->TryGetStringField(TEXT("usage_id"), UsageIdStrParam))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'usage_id': must be a string"));
+		AddParams->SetStringField(TEXT("usage_id"), UsageIdStrParam);
+	}
+
+	if (Params->HasField(TEXT("stage_index")))
+	{
+		double StageIndexParam;
+		if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndexParam))
+			return FMonolithActionResult::Error(TEXT("Invalid param 'stage_index': must be a number"));
+		AddParams->SetNumberField(TEXT("stage_index"), StageIndexParam);
+	}
+
 	if (SrcUsage == ENiagaraScriptUsage::ParticleSimulationStageScript && !Params->HasField(TEXT("usage_id"))
 		&& !Params->HasField(TEXT("target_stage_name")) && !Params->HasField(TEXT("stage_index")) && SrcUsageId.IsValid())
 	{
