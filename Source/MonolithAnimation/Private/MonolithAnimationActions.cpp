@@ -1719,11 +1719,18 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceInterpolatio
 	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
 
 	if (Params->HasField(TEXT("use_grid")))
-		BS->bInterpolateUsingGrid = Params->GetBoolField(TEXT("use_grid"));
+	{
+		bool bUseGrid;
+		if (!Params->TryGetBoolField(TEXT("use_grid"), bUseGrid))
+			return FMonolithActionResult::Error(TEXT("Parameter 'use_grid' must be a boolean"));
+		BS->bInterpolateUsingGrid = bUseGrid;
+	}
 
 	if (Params->HasField(TEXT("preferred_triangulation_direction")))
 	{
-		FString DirStr = Params->GetStringField(TEXT("preferred_triangulation_direction"));
+		FString DirStr;
+		if (!Params->TryGetStringField(TEXT("preferred_triangulation_direction"), DirStr))
+			return FMonolithActionResult::Error(TEXT("Parameter 'preferred_triangulation_direction' must be a string"));
 		if (DirStr.Equals(TEXT("None"), ESearchCase::IgnoreCase))
 			BS->PreferredTriangulationDirection = EPreferredTriangulationDirection::None;
 		else if (DirStr.Equals(TEXT("Tangential"), ESearchCase::IgnoreCase))
