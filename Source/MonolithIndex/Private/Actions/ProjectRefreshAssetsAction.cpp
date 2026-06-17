@@ -96,6 +96,7 @@ FMonolithActionResult FProjectRefreshAssetsAction::Execute(const TSharedPtr<FJso
 		// Convert package paths to on-disk filenames for the file-level scan, and
 		// also notify the registry of modified files so it re-reads cached tags.
 		TArray<FString> Filenames;
+		Filenames.Reserve(PackagePaths.Num());
 		for (const FString& Pkg : PackagePaths)
 		{
 			FString DiskFile;
@@ -139,12 +140,14 @@ FMonolithActionResult FProjectRefreshAssetsAction::Execute(const TSharedPtr<FJso
 				FPlatformProcess::Sleep(0.05f);
 			}
 		}
+		MissingOnDiskJson.Reserve(Pending.Num());
 		for (const FString& Still : Pending)
 		{
 			MissingOnDiskJson.Add(MakeShared<FJsonValueString>(Still));
 		}
 	}
 
+	ScannedJson.Reserve(PackagePaths.Num());
 	for (const FString& Pkg : PackagePaths)
 	{
 		ScannedJson.Add(MakeShared<FJsonValueString>(Pkg));
@@ -156,6 +159,7 @@ FMonolithActionResult FProjectRefreshAssetsAction::Execute(const TSharedPtr<FJso
 	Result->SetNumberField(TEXT("packages_scanned"), PackagePaths.Num());
 
 	TArray<TSharedPtr<FJsonValue>> DirJson;
+	DirJson.Reserve(DirectoryPaths.Num());
 	for (const FString& Dir : DirectoryPaths)
 	{
 		DirJson.Add(MakeShared<FJsonValueString>(Dir));
