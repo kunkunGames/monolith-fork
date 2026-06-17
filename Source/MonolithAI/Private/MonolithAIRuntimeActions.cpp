@@ -73,8 +73,8 @@ namespace
 	/** Resolve actor param → AActor* in PIE. Accepts label, name, or path. */
 	AActor* ResolveActorParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FMonolithActionResult& OutError)
 	{
-		FString ActorId = Params->GetStringField(ParamName);
-		if (ActorId.IsEmpty())
+		FString ActorId;
+		if (!Params->TryGetStringField(ParamName, ActorId) || ActorId.IsEmpty())
 		{
 			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Missing required param '%s'"), *ParamName));
 			return nullptr;
@@ -387,8 +387,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeGetBBValue(const T
 	UBlackboardComponent* BB = ResolveBBComponent(Params, Err);
 	if (!BB) return Err;
 
-	FString KeyName = Params->GetStringField(TEXT("key_name"));
-	if (KeyName.IsEmpty())
+	FString KeyName;
+	if (!Params->TryGetStringField(TEXT("key_name"), KeyName) || KeyName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'key_name'"));
 	}
