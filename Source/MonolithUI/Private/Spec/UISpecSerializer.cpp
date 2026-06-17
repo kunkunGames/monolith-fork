@@ -29,6 +29,7 @@
 #include "Spec/UISpecSerializer.h"
 
 #include "MonolithUICommon.h"
+#include "MonolithAssetUtils.h"
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "Registry/UITypeRegistry.h"
 #include "Registry/UIPropertyAllowlist.h"
@@ -883,17 +884,7 @@ FUISpecSerializerResult FUISpecSerializer::Dump(const FUISpecSerializerInputs& I
 
     // Resolve asset_path (with the same `/Game/...` prepending logic as the
     // legacy LoadWidgetBlueprint helper).
-    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *Inputs.AssetPath);
-    if (!WBP)
-    {
-        // Try with `/Game/` prefix when the caller supplied a relative path.
-        FString Prefixed = Inputs.AssetPath;
-        if (!Prefixed.StartsWith(TEXT("/")))
-        {
-            Prefixed = TEXT("/Game/") + Prefixed;
-            WBP = LoadObject<UWidgetBlueprint>(nullptr, *Prefixed);
-        }
-    }
+    UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(Inputs.AssetPath);
     if (!WBP)
     {
         FUISpecError E;
