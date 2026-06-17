@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshLightingActions.h"
+#include "MonolithMeshSpatialActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
@@ -56,6 +57,28 @@ bool FMonolithParamGuardScenePlaceAlongPathMalformedParamsTest::RunTest(const FS
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("place_along_path"), Params);
 	TestFalse(TEXT("place_along_path rejects insufficient path_points parameter"), Result.bSuccess);
 	TestTrue(TEXT("place_along_path reports the validation error"), Result.ErrorMessage.Contains(TEXT("path_points")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLimitGuardSceneSpatialSweepRadiusTest, "Monolith.LimitGuard.MonolithScene.RadialSweepRejectsLargeRadius", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLimitGuardSceneSpatialSweepRadiusTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshSpatialActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("query_radial_sweep action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("query_radial_sweep")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> OriginArr;
+	OriginArr.Add(MakeShared<FJsonValueNumber>(0.0));
+	OriginArr.Add(MakeShared<FJsonValueNumber>(0.0));
+	OriginArr.Add(MakeShared<FJsonValueNumber>(0.0));
+	Params->SetArrayField(TEXT("origin"), OriginArr);
+	Params->SetNumberField(TEXT("radius"), 100000.0); // Pathological radius
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("query_radial_sweep"), Params);
+	TestFalse(TEXT("query_radial_sweep rejects excessively large radius"), Result.bSuccess);
+	TestTrue(TEXT("query_radial_sweep reports the validation error for radius"), Result.ErrorMessage.Contains(TEXT("radius must be <=")));
 
 	return true;
 }

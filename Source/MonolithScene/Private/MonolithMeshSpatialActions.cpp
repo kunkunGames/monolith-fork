@@ -386,7 +386,13 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryRadialSweep(const TShare
 	}
 
 	double Radius = 1000.0;
-	Params->TryGetNumberField(TEXT("radius"), Radius);
+	if (Params->TryGetNumberField(TEXT("radius"), Radius))
+	{
+		if (Radius > 50000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), Radius));
+		}
+	}
 
 	int32 RequestedRayCount = 36;
 	double RayCountD;
@@ -759,7 +765,13 @@ FMonolithActionResult FMonolithMeshSpatialActions::QueryNearest(const TSharedPtr
 	Params->TryGetStringField(TEXT("tag_filter"), TagFilter);
 
 	double RadiusD = 5000.0;
-	Params->TryGetNumberField(TEXT("radius"), RadiusD);
+	if (Params->TryGetNumberField(TEXT("radius"), RadiusD))
+	{
+		if (RadiusD > 50000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), RadiusD));
+		}
+	}
 	float Radius = static_cast<float>(RadiusD);
 
 	int32 Limit = 20;
@@ -1232,7 +1244,13 @@ FMonolithActionResult FMonolithMeshSpatialActions::GetSpatialRelationships(const
 	}
 
 	double RadiusD = 500.0;
-	Params->TryGetNumberField(TEXT("radius"), RadiusD);
+	if (Params->TryGetNumberField(TEXT("radius"), RadiusD))
+	{
+		if (RadiusD > 50000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), RadiusD));
+		}
+	}
 	float Radius = static_cast<float>(RadiusD);
 
 	int32 Limit = 20;
