@@ -6559,7 +6559,13 @@ static FParsedTransitionRule ParseTransitionRule(const TSharedPtr<FJsonObject>& 
 	}
 	const TSharedPtr<FJsonObject>& RuleObj = *RuleObjPtr;
 
-	FString Kind = RuleObj->HasField(TEXT("kind")) ? RuleObj->GetStringField(TEXT("kind")) : FString();
+	FString Kind;
+	if (RuleObj->HasField(TEXT("kind")) && !RuleObj->TryGetStringField(TEXT("kind"), Kind))
+	{
+		Out.Kind = FParsedTransitionRule::EKind::Invalid;
+		Out.ParseError = TEXT("Parameter 'kind' in rule must be a string.");
+		return Out;
+	}
 	if (Kind.Equals(TEXT("auto"), ESearchCase::IgnoreCase))
 	{
 		Out.Kind = FParsedTransitionRule::EKind::Auto;
@@ -7811,8 +7817,12 @@ static void StateMachineGraphToJson(UAnimationStateMachineGraph* SMGraph, TShare
 FMonolithActionResult FMonolithAnimationActions::HandleCreateStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SMName    = Params->HasField(TEXT("state_machine_name")) ? Params->GetStringField(TEXT("state_machine_name")) : TEXT("New State Machine");
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : FString();
+	FString SMName = TEXT("New State Machine");
+	if (Params->HasField(TEXT("state_machine_name")) && !Params->TryGetStringField(TEXT("state_machine_name"), SMName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_machine_name' must be a string"));
+	FString GraphName;
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 
 	double TempVal;
 	int32 PosX = 200;
@@ -7920,9 +7930,15 @@ static bool BuilderSetStateAnimation(UAnimStateNode* StateNode, UAnimSequenceBas
 FMonolithActionResult FMonolithAnimationActions::HandleBuildStateMachine(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SMName    = Params->HasField(TEXT("state_machine_name")) ? Params->GetStringField(TEXT("state_machine_name")) : TEXT("New State Machine");
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : FString();
-	FString EntryState = Params->HasField(TEXT("entry_state")) ? Params->GetStringField(TEXT("entry_state")) : FString();
+	FString SMName = TEXT("New State Machine");
+	if (Params->HasField(TEXT("state_machine_name")) && !Params->TryGetStringField(TEXT("state_machine_name"), SMName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_machine_name' must be a string"));
+	FString GraphName;
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
+	FString EntryState;
+	if (Params->HasField(TEXT("entry_state")) && !Params->TryGetStringField(TEXT("entry_state"), EntryState))
+		return FMonolithActionResult::Error(TEXT("Parameter 'entry_state' must be a string"));
 
 	const TArray<TSharedPtr<FJsonValue>>* StatesJson = nullptr;
 	if (!Params->TryGetArrayField(TEXT("states"), StatesJson) || !StatesJson || StatesJson->Num() == 0)
@@ -8052,8 +8068,24 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildStateMachine(const T
 		{
 			const TSharedPtr<FJsonObject>* TObj = nullptr;
 			if (!TV.IsValid() || !TV->TryGetObject(TObj) || !TObj) continue;
-			FString From = (*TObj)->HasField(TEXT("from")) ? (*TObj)->GetStringField(TEXT("from")) : FString();
-			FString To   = (*TObj)->HasField(TEXT("to"))   ? (*TObj)->GetStringField(TEXT("to"))   : FString();
+			FString From;
+			if ((*TObj)->HasField(TEXT("from")) && !(*TObj)->TryGetStringField(TEXT("from"), From))
+			{
+				TSharedPtr<FJsonObject> Rep = MakeShared<FJsonObject>();
+				Rep->SetBoolField(TEXT("created"), false);
+				Rep->SetStringField(TEXT("note"), TEXT("Parameter 'from' in transition must be a string"));
+				TransReport.Add(MakeShared<FJsonValueObject>(Rep));
+				continue;
+			}
+			FString To;
+			if ((*TObj)->HasField(TEXT("to")) && !(*TObj)->TryGetStringField(TEXT("to"), To))
+			{
+				TSharedPtr<FJsonObject> Rep = MakeShared<FJsonObject>();
+				Rep->SetBoolField(TEXT("created"), false);
+				Rep->SetStringField(TEXT("note"), TEXT("Parameter 'to' in transition must be a string"));
+				TransReport.Add(MakeShared<FJsonValueObject>(Rep));
+				continue;
+			}
 
 			TSharedPtr<FJsonObject> Rep = MakeShared<FJsonObject>();
 			Rep->SetStringField(TEXT("from"), From);
