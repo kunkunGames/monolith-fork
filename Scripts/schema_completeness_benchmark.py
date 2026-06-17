@@ -272,6 +272,8 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         return {"transport_error": True, "status": None, "raw": f"timeout: {exc}"}
     except urllib.error.URLError as exc:
         return {"transport_error": True, "status": None, "raw": str(exc)}
+    except OSError as exc:
+        return {"transport_error": True, "status": None, "raw": str(exc)}
 
     raw = extract_sse_data(raw)
     try:
