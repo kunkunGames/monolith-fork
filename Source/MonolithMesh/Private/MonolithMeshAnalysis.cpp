@@ -79,6 +79,7 @@ TArray<MonolithMeshAnalysis::FPathClearance> MonolithMeshAnalysis::MeasurePathCl
 	{
 		return Results;
 	}
+	Results.Reserve(PathPoints.Num());
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(MonolithClearance), true);
 	QueryParams.bReturnPhysicalMaterial = false;
@@ -468,6 +469,7 @@ TArray<MonolithMeshAnalysis::FDeadEnd> MonolithMeshAnalysis::FloodFillDeadEnds(U
 
 			// Width = average clearance along the chain
 			TArray<FVector> ChainPoints;
+			ChainPoints.Reserve(Chain.Num());
 			for (int32 Idx : Chain)
 			{
 				ChainPoints.Add(Nodes[Idx].Location);
@@ -484,6 +486,7 @@ TArray<MonolithMeshAnalysis::FDeadEnd> MonolithMeshAnalysis::FloodFillDeadEnds(U
 			DE.Width = Clearances.Num() > 0 ? TotalW / Clearances.Num() : 0.0f;
 			DE.ExitWidth = (MinW < TNumericLimits<float>::Max()) ? MinW : 0.0f;
 
+			DE.BoundaryPoints.Reserve(Chain.Num());
 			for (int32 Idx : Chain)
 			{
 				DE.BoundaryPoints.Add(Nodes[Idx].Location);
