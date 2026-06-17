@@ -1,4 +1,5 @@
 #include "MonolithMeshAutoVolumeActions.h"
+#include "MonolithSceneModule.h"
 #include "MonolithMeshSpatialRegistry.h"
 #include "MonolithMeshUtils.h"
 #include "MonolithToolRegistry.h"
@@ -184,7 +185,7 @@ AActor* FMonolithMeshAutoVolumeActions::SpawnNavLinkActor(
 
 	if (!NavLinkProxyClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AutoVolume: Could not load ANavLinkProxy class. Is AIModule enabled?"));
+		UE_LOG(LogMonolithScene, Warning, TEXT("AutoVolume: Could not load ANavLinkProxy class. Is AIModule enabled?"));
 		return nullptr;
 	}
 
