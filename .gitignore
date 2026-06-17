@@ -123,7 +123,6 @@ no_op_reason.txt
 scratch.py
 scratch.sh
 .ruff_cache/
-.jules/logic-driver-keeper.md
 build-verify-batch.ps1
 build-verify-list.json
 build-verify-results.txt
