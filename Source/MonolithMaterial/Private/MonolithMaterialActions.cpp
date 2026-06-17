@@ -3101,25 +3101,46 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("two_sided")))
 	{
-		bool Val = Params->GetBoolField(TEXT("two_sided"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("two_sided"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("two_sided must be a boolean"));
+		}
 		Mat->TwoSided = Val;
 		RecordChange(TEXT("two_sided"), Val ? TEXT("true") : TEXT("false"));
 	}
 	if (Params->HasField(TEXT("opacity_mask_clip_value")))
 	{
-		float Val = static_cast<float>(Params->GetNumberField(TEXT("opacity_mask_clip_value")));
+		double ValDouble = 0.0;
+		if (!Params->TryGetNumberField(TEXT("opacity_mask_clip_value"), ValDouble))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("opacity_mask_clip_value must be a number"));
+		}
+		float Val = static_cast<float>(ValDouble);
 		Mat->OpacityMaskClipValue = Val;
 		RecordChange(TEXT("opacity_mask_clip_value"), FString::SanitizeFloat(Val));
 	}
 	if (Params->HasField(TEXT("dithered_lod_transition")))
 	{
-		bool Val = Params->GetBoolField(TEXT("dithered_lod_transition"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("dithered_lod_transition"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("dithered_lod_transition must be a boolean"));
+		}
 		Mat->DitheredLODTransition = Val;
 		RecordChange(TEXT("dithered_lod_transition"), Val ? TEXT("true") : TEXT("false"));
 	}
 	if (Params->HasField(TEXT("used_with_skeletal_mesh")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_skeletal_mesh"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_skeletal_mesh"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_skeletal_mesh must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3129,7 +3150,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_particle_sprites")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_particle_sprites"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_particle_sprites"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_particle_sprites must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3139,7 +3165,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_niagara_sprites")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_niagara_sprites"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_niagara_sprites"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_sprites must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3149,7 +3180,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_niagara_meshes")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_niagara_meshes"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_niagara_meshes"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_meshes must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3159,7 +3195,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_niagara_ribbons")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_niagara_ribbons"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_niagara_ribbons"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_niagara_ribbons must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3169,7 +3210,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_morph_targets")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_morph_targets"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_morph_targets"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_morph_targets must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3179,7 +3225,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_instanced_static_meshes")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_instanced_static_meshes"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_instanced_static_meshes"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_instanced_static_meshes must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3189,7 +3240,12 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("used_with_static_lighting")))
 	{
-		bool Val = Params->GetBoolField(TEXT("used_with_static_lighting"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("used_with_static_lighting"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("used_with_static_lighting must be a boolean"));
+		}
 		if (Val)
 		{
 			bool bRecompile = false;
@@ -3199,13 +3255,23 @@ FMonolithActionResult FMonolithMaterialActions::SetMaterialProperty(const TShare
 	}
 	if (Params->HasField(TEXT("fully_rough")))
 	{
-		bool Val = Params->GetBoolField(TEXT("fully_rough"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("fully_rough"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("fully_rough must be a boolean"));
+		}
 		Mat->bFullyRough = Val;
 		RecordChange(TEXT("fully_rough"), Val ? TEXT("true") : TEXT("false"));
 	}
 	if (Params->HasField(TEXT("cast_shadow_as_masked")))
 	{
-		bool Val = Params->GetBoolField(TEXT("cast_shadow_as_masked"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("cast_shadow_as_masked"), Val))
+		{
+			GEditor->EndTransaction();
+			return FMonolithActionResult::Error(TEXT("cast_shadow_as_masked must be a boolean"));
+		}
 		Mat->bCastDynamicShadowAsMasked = Val;
 		RecordChange(TEXT("cast_shadow_as_masked"), Val ? TEXT("true") : TEXT("false"));
 	}
