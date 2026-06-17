@@ -6380,7 +6380,7 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			{
 				auto WarnJson = MakeShared<FJsonObject>();
 				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'id' must be a string"));
-				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				OutErrors.Add(MakeShared<FJsonValueObject>(WarnJson));
 				continue;
 			}
 			// BUG #3: also read optional user-provided name alias for connection resolution
@@ -6616,7 +6616,7 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			{
 				auto WarnJson = MakeShared<FJsonObject>();
 				WarnJson->SetStringField(TEXT("warning"), TEXT("Parameter 'id' must be a string"));
-				ErrorsArray.Add(MakeShared<FJsonValueObject>(WarnJson));
+				OutErrors.Add(MakeShared<FJsonValueObject>(WarnJson));
 				continue;
 			}
 			// BUG #3: also read optional user-provided name alias

@@ -3,21 +3,22 @@
   "description": "Measures project namespace quality: asset search recall, gameplay tag lookup, schema adherence",
   "primary_score": "project_index_score",
   "expected_namespace": "project",
-  "generated_at": "2026-06-17T13:18:15.795215+00:00",
+  "generated_at": "2026-06-17T14:38:06.812677+00:00",
   "task_count": 300,
   "category_counts": {
-    "asset_search": 170,
-    "gameplay_tag_lookup": 70,
-    "health_check": 19,
+    "asset_search": 176,
+    "gameplay_tag_lookup": 67,
+    "health_check": 16,
     "schema_field_presence": 40,
     "stats_check": 1
   },
-  "score_formula": "0.40*search_hit_rate + 0.30*field_completeness_rate + 0.20*schema_adherence_rate + 0.10*(1-stale_rate)",
+  "score_formula": "0.35*search_hit_rate + 0.25*field_completeness_rate + 0.20*schema_adherence_rate + 0.10*(1-stale_rate) + 0.10*error_free_rate",
   "score_dimensions": [
     "search_hit_rate",
     "field_completeness_rate",
     "schema_adherence_rate",
-    "stale_rate"
+    "stale_rate",
+    "error_free_rate"
   ],
   "task_file": "Benchmarks/ProjectIndex/tasks.jsonl"
 }

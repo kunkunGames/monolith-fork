@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-06-17T13:18:15.595184+00:00",
+  "generated_at": "2026-06-17T14:38:06.617652+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 319,
+  "task_count": 322,
   "min_tasks_requested": 319,
   "golden_symbols": [
     "AActor",
@@ -46,11 +46,11 @@
   ],
   "category_counts": {
     "ergonomics_text": 40,
-    "health_check": 9,
-    "impact_radius_lookup": 33,
-    "review_context_lookup": 33,
+    "health_check": 7,
+    "impact_radius_lookup": 32,
+    "review_context_lookup": 32,
     "schema_field_presence": 12,
-    "symbol_lookup": 192
+    "symbol_lookup": 199
   },
   "task_file": "Benchmarks/SourceIndex/tasks.jsonl",
   "scoring": {

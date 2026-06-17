@@ -143,6 +143,8 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         return {"transport_error": True, "status": None, "raw": f"timeout: {exc}", "request": body}
     except urllib.error.URLError as exc:
         return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
+    except OSError as exc:
+        return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
 
     raw = extract_sse_data(raw)
     try:
@@ -207,6 +209,32 @@ def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
 
 def avg(values: List[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def task_fingerprint(task: Dict[str, Any]) -> str:
+    payload = {
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "tool": task.get("tool"),
+        "arguments": task.get("arguments"),
+        "expected": task.get("expected"),
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def dedupe_tasks(tasks: Iterable[Dict[str, Any]], id_prefix: str) -> List[Dict[str, Any]]:
+    unique: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for task in tasks:
+        fingerprint = task_fingerprint(task)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        unique.append(dict(task))
+    for index, task in enumerate(unique, 1):
+        task["id"] = f"{id_prefix}-{index:03d}"
+    return unique
 
 
 # ---------------------------------------------------------------------------
@@ -711,10 +739,10 @@ _PRESERVED_PRACTICAL_SIGNATURE_METHODS_20260617 = [
 
 _PRESERVED_PRACTICAL_HEALTH_VARIANTS_20260617 = [
     {"action": "health"},
-    {"action": "health"},
-    {"action": "health"},
-    {"action": "health"},
-    {"action": "health"},
+    {"action": "health", "include_counts": True},
+    {"action": "health", "include_counts": False},
+    {"action": "health", "detail": "summary"},
+    {"action": "health", "mode": "smoke"},
 ]
 
 _ADDED_PRACTICAL_CALLER_METHODS_20260617 = [
@@ -738,6 +766,10 @@ _ADDED_PRACTICAL_CALLER_METHODS_20260617 = [
     "UAssetManager::GetPrimaryAssetObject",
     "USkeletalMeshComponent::PlayAnimation",
     "UPrimitiveComponent::SetCollisionProfileName",
+    "UActorComponent::Activate",
+    "UActorComponent::Deactivate",
+    "APlayerController::ClientTravel",
+    "AController::SetPawn",
 ]
 
 _ADDED_PRACTICAL_CALLEE_METHODS_20260617 = list(_ADDED_PRACTICAL_CALLER_METHODS_20260617)
@@ -763,6 +795,8 @@ _ADDED_PRACTICAL_RISK_SYMBOLS_20260617 = [
     "UWorldSubsystem",
     "UGameInstanceSubsystem",
     "FSoftObjectPath",
+    "UGameplayStatics",
+    "APlayerCameraManager",
 ]
 
 _ADDED_PRACTICAL_REVIEW_SYMBOLS_20260617 = [
@@ -781,6 +815,8 @@ _ADDED_PRACTICAL_REVIEW_SYMBOLS_20260617 = [
     "USceneComponent",
     "UPrimitiveComponent",
     "USkeletalMeshComponent",
+    "UGameInstance",
+    "ULocalPlayer",
 ]
 
 _ADDED_PRACTICAL_IMPACT_SYMBOLS_20260617 = [
@@ -799,6 +835,8 @@ _ADDED_PRACTICAL_IMPACT_SYMBOLS_20260617 = [
     "UPrimaryDataAsset",
     "UAssetManager",
     "FSoftObjectPath",
+    "UNetDriver",
+    "UGameViewportClient",
 ]
 
 _ADDED_PRACTICAL_INCLUDE_SYMBOLS_20260617 = [
@@ -1157,7 +1195,7 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         health_variants=[],
     )
 
-    return tasks
+    return dedupe_tasks(tasks, "SIB")
 
 
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:

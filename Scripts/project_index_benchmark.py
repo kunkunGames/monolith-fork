@@ -312,6 +312,31 @@ _ADDED_HEALTH_VARIANTS_20260617 = [
     {"action": "health", "verbose": False},
 ]
 
+_LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617 = [
+    "ActionGuidance",
+    "BlueprintEditing",
+    "OfflineParity",
+    "SourceIndex",
+    "ProjectIndex",
+    "SchemaCompleteness",
+    "InvocationLog",
+    "ActionAudit",
+    "ToolProfile",
+    "ExecutionGuard",
+    "Readiness",
+    "Onboarding",
+    "RecoverMcp",
+    "HeadlessMcp",
+    "IndexFreshness",
+    "CRG",
+    "CallGraph",
+    "BulkFill",
+    "ReflectionIntel",
+    "MCPProxy",
+    "RunPython",
+    "AgentOps",
+]
+
 
 def append_project_search_tasks(tasks: List[Dict[str, Any]], next_id: Any, queries: List[str]) -> None:
     for query in queries:
@@ -479,6 +504,8 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         return {"transport_error": True, "status": None, "raw": f"timeout: {exc}", "request": body}
     except urllib.error.URLError as exc:
         return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
+    except OSError as exc:
+        return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
 
     raw = extract_sse_data(raw)
     try:
@@ -543,6 +570,32 @@ def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
 
 def avg(values: List[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def task_fingerprint(task: Dict[str, Any]) -> str:
+    payload = {
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "tool": task.get("tool"),
+        "arguments": task.get("arguments"),
+        "expected": task.get("expected"),
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def dedupe_tasks(tasks: Iterable[Dict[str, Any]], id_prefix: str) -> List[Dict[str, Any]]:
+    unique: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for task in tasks:
+        fingerprint = task_fingerprint(task)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        unique.append(dict(task))
+    for index, task in enumerate(unique, 1):
+        task["id"] = f"{id_prefix}-{index:03d}"
+    return unique
 
 
 # ---------------------------------------------------------------------------
@@ -725,15 +778,17 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     # existing weighted formula and its weights stay unchanged.
     stats_check_rate = avg([1.0 if r["direct_success"] else 0.0 for r in stats_rows])
 
+    error_count = sum(1 for r in rows if r.get("transport_error") or r.get("response_is_error"))
+    error_free_rate = 1.0 - (error_count / len(rows) if rows else 0.0)
+
     # project_index_score
     project_index_score = (
-        0.40 * search_hit_rate
-        + 0.30 * field_completeness_rate
+        0.35 * search_hit_rate
+        + 0.25 * field_completeness_rate
         + 0.20 * schema_adherence_rate
         + 0.10 * (1.0 - stale_rate)
+        + 0.10 * error_free_rate
     )
-
-    error_count = sum(1 for r in rows if r.get("transport_error") or r.get("response_is_error"))
 
     return {
         "label": label,
@@ -749,6 +804,7 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
             "schema_adherence_rate": round(schema_adherence_rate, 6),
             "stale_rate": round(stale_rate, 6),
             "stats_check_rate": round(stats_check_rate, 6),
+            "error_free_rate": round(error_free_rate, 6),
             "task_count": len(rows),
             "error_count": error_count,
         },
@@ -897,12 +953,9 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         queries=_ADDED_GAMEPLAY_TAG_SEARCH_QUERIES_20260617,
     )
     append_project_health_tasks(tasks, next_id, _ADDED_HEALTH_VARIANTS_20260617)
+    append_project_search_tasks(tasks, next_id, _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617)
 
-    # Re-assign IDs to be monotonic after any additions.
-    for index, task in enumerate(tasks, 1):
-        task["id"] = f"PIB-{index:03d}"
-
-    return tasks
+    return dedupe_tasks(tasks, "PIB")
 
 
 def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
@@ -921,12 +974,13 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "generated_at": utc_now(),
         "task_count": len(tasks),
         "category_counts": count_by(tasks, "category"),
-        "score_formula": "0.40*search_hit_rate + 0.30*field_completeness_rate + 0.20*schema_adherence_rate + 0.10*(1-stale_rate)",
+        "score_formula": "0.35*search_hit_rate + 0.25*field_completeness_rate + 0.20*schema_adherence_rate + 0.10*(1-stale_rate) + 0.10*error_free_rate",
         "score_dimensions": [
             "search_hit_rate",
             "field_completeness_rate",
             "schema_adherence_rate",
             "stale_rate",
+            "error_free_rate",
         ],
         "task_file": display_path(tasks_path),
     }
@@ -1017,6 +1071,7 @@ def write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) ->
         "field_completeness_rate",
         "schema_adherence_rate",
         "stale_rate",
+        "error_free_rate",
     ]
     lines = [
         "# Monolith ProjectIndex Benchmark Comparison",

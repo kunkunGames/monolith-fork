@@ -122,6 +122,8 @@ def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 
         return {"transport_error": True, "status": None, "raw": f"timeout: {exc}", "request": body}
     except urllib.error.URLError as exc:
         return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
+    except OSError as exc:
+        return {"transport_error": True, "status": None, "raw": str(exc), "request": body}
 
     raw = extract_sse_data(raw)
     try:
@@ -285,6 +287,29 @@ def representative_actions(actions: List[str], count: int = 3) -> List[str]:
     return merged
 
 
+def task_fingerprint(task: Dict[str, Any]) -> str:
+    """Stable identity for de-duplicating generated benchmark tasks."""
+    payload = {
+        "category": task.get("category"),
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "tool": task.get("tool"),
+        "arguments": task.get("arguments"),
+        "expected": task.get("expected"),
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def append_unique_task(tasks: List[Dict[str, Any]], seen: set[str], task: Dict[str, Any]) -> bool:
+    fingerprint = task_fingerprint(task)
+    if fingerprint in seen:
+        return False
+    task["id"] = f"AGB-{len(tasks) + 1:03d}"
+    seen.add(fingerprint)
+    tasks.append(task)
+    return True
+
+
 _STATIC_DISCOVERY_TASKS_20260617 = [
     ("gas", "list_abilities"),
     ("gas", "get_ability"),
@@ -314,6 +339,15 @@ _STATIC_DISCOVERY_TASKS_20260617 = [
 ]
 
 _STATIC_UNKNOWN_ACTION_TASKS_20260617 = [
+    # Log-derived stale or imagined action names that frequently tempt agents.
+    ("source", "find_callees", "get_callee_tree"),
+    ("source", "find_callers", "get_caller_tree"),
+    ("source", "read_source", "read_file"),
+    ("blueprint", "get_dependencies", "get_class_hierarchy"),
+    ("blueprint", "find_variable_references", "find_references"),
+    ("blueprint", "get_components", "list_components"),
+    ("blueprint", "get_execution_flow", "get_event_graph"),
+    ("blueprint", "get_functions", "list_functions"),
     ("gas", "get_gameplay_effect", "get_gameplay_efefct"),
     ("gas", "find_abilities_by_tag", "find_abilities_by_tga"),
     ("niagara", "get_module_inputs", "get_module_inptus"),
@@ -364,8 +398,14 @@ _STATIC_MISSING_PARAM_TASKS_20260617 = [
     ("localization", "get_localized_string", "table"),
     ("source", "search_source", "query"),
     ("source", "review_context", "symbol"),
+    ("source", "find_overrides", "symbol"),
+    ("source", "impact_radius", "symbol"),
+    ("material", "validate_material", "asset_path"),
+    ("material", "get_material_properties", "asset_path"),
+    ("paper2d", "get_asset", "asset_path"),
     ("mesh", "get_mesh_info", "mesh_path"),
     ("project", "search", "query"),
+    ("project", "get_asset_details", "asset_path"),
     ("collection", "get_collection", "name"),
 ]
 
@@ -412,14 +452,38 @@ _STATIC_INVALID_PARAM_TASKS_20260617 = [
     ("project", "get_asset_details", {"asset_path": 12345, "include_content": "not_a_bool"}, "asset_path"),
 ]
 
+_STATIC_ALIAS_PARAM_TASKS_20260617 = [
+    ("source", "find_callers", {"query": "AActor::BeginPlay"}, "symbol"),
+    ("source", "find_callees", {"query": "AActor::BeginPlay"}, "symbol"),
+    ("source", "find_overrides", {"query": "UActorComponent::BeginPlay"}, "symbol"),
+    ("source", "impact_radius", {"query": "UObject"}, "symbol"),
+    ("source", "read_source", {"path": "Source/Monolith/Private/MonolithModule.cpp"}, "symbol"),
+    ("material", "validate_material", {"path": "/Game/Benchmarks/M_Test"}, "asset_path"),
+    ("material", "get_material_properties", {"material_path": "/Game/Benchmarks/M_Test"}, "asset_path"),
+    ("paper2d", "get_asset", {"path": "/Game/Benchmarks/S_Test"}, "asset_path"),
+    ("asset", "inspect_asset", {"path": "/Game/Benchmarks/BPB_TestActor"}, "asset_path"),
+    ("project", "get_asset_details", {"path": "/Game/Benchmarks/BPB_TestActor"}, "asset_path"),
+    (
+        "blueprint",
+        "add_variable",
+        {"asset_path": "/Game/Benchmarks/BPB_TestActor", "variable_name": "Health", "variable_type": "int32"},
+        "name",
+    ),
+    (
+        "blueprint",
+        "connect_pins",
+        {"asset_path": "/Game/Benchmarks/BPB_TestActor", "source_node_id": "A", "target_node_id": "B"},
+        "source_node",
+    ),
+    ("project", "search", {"path": "/Game/Benchmarks"}, "query"),
+]
+
 
 def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
-    def next_id() -> str:
-        return f"AGB-{len(tasks) + 1:03d}"
+    seen = {task_fingerprint(task) for task in tasks}
 
     for namespace, action in _STATIC_DISCOVERY_TASKS_20260617:
-        tasks.append({
-            "id": next_id(),
+        append_unique_task(tasks, seen, {
             "category": "discovery_planning",
             "namespace": namespace,
             "action": action,
@@ -431,8 +495,7 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
 
     for namespace, candidate_action, typo in _STATIC_UNKNOWN_ACTION_TASKS_20260617:
         tool, args = action_tool(namespace, typo, {})
-        tasks.append({
-            "id": next_id(),
+        append_unique_task(tasks, seen, {
             "category": "unknown_action_recovery",
             "namespace": namespace,
             "action": typo,
@@ -444,8 +507,19 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
 
     for namespace, action, missing_param in _STATIC_MISSING_PARAM_TASKS_20260617:
         tool, args = action_tool(namespace, action, {})
-        tasks.append({
-            "id": next_id(),
+        append_unique_task(tasks, seen, {
+            "category": "missing_required_param",
+            "namespace": namespace,
+            "action": action,
+            "tool": tool,
+            "arguments": args,
+            "expected": {"missing_param": missing_param, "failure_cause": "missing_required_param"},
+            "safety": "schema_failure_before_handler",
+        })
+
+    for namespace, action, params, missing_param in _STATIC_ALIAS_PARAM_TASKS_20260617:
+        tool, args = action_tool(namespace, action, dict(params))
+        append_unique_task(tasks, seen, {
             "category": "missing_required_param",
             "namespace": namespace,
             "action": action,
@@ -457,8 +531,7 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
 
     for namespace, action, params, invalid_param in _STATIC_INVALID_PARAM_TASKS_20260617:
         tool, args = action_tool(namespace, action, dict(params))
-        tasks.append({
-            "id": next_id(),
+        append_unique_task(tasks, seen, {
             "category": "invalid_param_type",
             "namespace": namespace,
             "action": action,
