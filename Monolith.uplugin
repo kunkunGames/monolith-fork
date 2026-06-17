@@ -53,6 +53,11 @@
 			"Optional": true
 		},
 		{
+			"Name": "LogicDriver",
+			"Enabled": true,
+			"Optional": true
+		},
+		{
 			"Name": "BlueprintAssist",
 			"Enabled": true,
 			"Optional": true
