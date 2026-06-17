@@ -342,4 +342,17 @@ bool FMonolithParamGuardAudioCreateLayeredSoundCueRejectsMalformedVolumesTest::R
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.BindSoundToPerceptionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("asset_path"), 12345); // Should be string
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("bind_sound_to_perception"), Params);
+	TestTrue(TEXT("BindSoundToPerception with malformed asset_path should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BindSoundToPerception reports malformed asset_path"), Result.ErrorMessage.Contains(TEXT("asset_path must be a string")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

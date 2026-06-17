@@ -313,7 +313,10 @@ namespace
 FMonolithActionResult FMonolithAudioPerceptionActions::BindSoundToPerception(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
+	}
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -379,7 +382,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::BindSoundToPerception(con
 FMonolithActionResult FMonolithAudioPerceptionActions::UnbindSoundFromPerception(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
+	}
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
@@ -425,7 +431,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::UnbindSoundFromPerception
 FMonolithActionResult FMonolithAudioPerceptionActions::GetSoundPerceptionBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
+	}
 	if (AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
