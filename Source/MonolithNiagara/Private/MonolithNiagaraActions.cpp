@@ -7518,7 +7518,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateSystemFromSpec(const 
 
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDIFunctions(const TSharedPtr<FJsonObject>& Params)
 {
-	FString DIClassName = Params->GetStringField(TEXT("di_class"));
+	FString DIClassName;
+	if (!Params->TryGetStringField(TEXT("di_class"), DIClassName) || DIClassName.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Missing required param: di_class"));
+
 	FString DIDiagnostic;
 	UClass* DIC = MonolithNiagaraHelpers::ResolveNiagaraDataInterfaceClass(DIClassName, &DIDiagnostic);
 	if (!DIC)
@@ -15190,8 +15193,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleGetDIProperties(const TSharedPtr<FJsonObject>& Params)
 {
-	FString DIClassName = Params->GetStringField(TEXT("di_class"));
-	if (DIClassName.IsEmpty())
+	FString DIClassName;
+	if (!Params->TryGetStringField(TEXT("di_class"), DIClassName) || DIClassName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: di_class"));
 
 	FString DIDiagnostic;
