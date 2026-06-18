@@ -33,6 +33,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
 | [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
 | [dataflow](#dataflow) | 8 | Optional read-only Dataflow/Chaos graph discovery, bounded graph/node-schema reads, and validation (graph readers under `WITH_MONOLITH_DATAFLOW`) |
+| [source_control](#source_control) | 9 | Unreal SourceControl-provider status and file prepare/delete/revert operations |
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
 | [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
@@ -1255,6 +1256,26 @@ Read-only Dataflow/Chaos graph discovery and bounded graph inspection. `get_stat
 | `list_dataflow_comments` | `asset_path`, `node_limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md` for the deep dive.
+
+---
+
+## source_control
+
+Unreal SourceControl-provider status and guarded file prepare/delete/revert operations. **9 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_capabilities` | none |
+| `get_status` | `paths` |
+| `checkout` | `paths`, `dry_run` (optional boolean) |
+| `add` | `paths`, `dry_run` (optional boolean) |
+| `checkout_or_add` | `paths`, `dry_run` (optional boolean) |
+| `delete` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
+| `mark_for_delete` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
+| `revert` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
+| `revert_unchanged` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithSourceControl.md` for the deep dive.
 
 ---
 
