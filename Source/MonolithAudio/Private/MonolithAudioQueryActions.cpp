@@ -586,6 +586,7 @@ TSharedPtr<FJsonObject> FMonolithAudioQueryActions::BuildSubmixTree(USoundSubmix
 	{
 		// Effect chain
 		TArray<TSharedPtr<FJsonValue>> EffectsArray;
+		EffectsArray.Reserve(Submix->SubmixEffectChain.Num());
 		for (const TObjectPtr<USoundEffectSubmixPreset>& Effect : Submix->SubmixEffectChain)
 		{
 			if (Effect)
