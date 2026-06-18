@@ -19,6 +19,7 @@ namespace
 	TArray<TSharedPtr<FJsonValue>> VectorToJson(const FVector& Value)
 	{
 		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(3);
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.X));
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Z));
@@ -35,6 +36,7 @@ namespace
 		}
 
 		OutActorNameValues = *ActorNames;
+		OutActors.Reserve(ActorNames->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *ActorNames)
 		{
 			FString Name;
@@ -65,6 +67,7 @@ namespace
 		int64 TriangleCount = 0;
 		TSet<FString> Materials;
 		TArray<TSharedPtr<FJsonValue>> ActorRows;
+		ActorRows.Reserve(Actors.Num());
 
 		for (AActor* Actor : Actors)
 		{
@@ -135,6 +138,7 @@ namespace
 		}
 
 		TArray<TSharedPtr<FJsonValue>> MaterialRows;
+		MaterialRows.Reserve(Materials.Num());
 		for (const FString& Material : Materials)
 		{
 			MaterialRows.Add(MakeShared<FJsonValueString>(Material));
