@@ -529,6 +529,7 @@ namespace MonolithSlate::SlateInspectorInternal
 		FChildren* Children = Widget->GetChildren();
 		const int32 ChildCount = Children ? Children->Num() : 0;
 		const int32 ChildLimit = FMath::Min(ChildCount, MaxChildrenInDescribe);
+		ChildRows.Reserve(ChildLimit);
 		for (int32 Index = 0; Index < ChildLimit; ++Index)
 		{
 			TSharedRef<SWidget> Child = Children->GetChildAt(Index);
