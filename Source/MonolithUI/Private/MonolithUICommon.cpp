@@ -1,6 +1,7 @@
 // Copyright tumourlove. All Rights Reserved.
 #include "MonolithUICommon.h"
 
+#include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
 
 // UMG widget classes — required for the WidgetClassFromName curated table.
@@ -134,18 +135,7 @@ namespace MonolithUI
 
     UWidgetBlueprint* LoadWidgetBlueprint(const FString& AssetPath, FMonolithActionResult& OutError)
     {
-        UObject* Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *AssetPath);
-        if (!Loaded)
-        {
-            FString CleanPath = AssetPath;
-            if (!CleanPath.StartsWith(TEXT("/")))
-            {
-                CleanPath = TEXT("/Game/") + CleanPath;
-            }
-            Loaded = StaticLoadObject(UWidgetBlueprint::StaticClass(), nullptr, *CleanPath);
-        }
-
-        UWidgetBlueprint* WBP = Cast<UWidgetBlueprint>(Loaded);
+        UWidgetBlueprint* WBP = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(AssetPath);
         if (!WBP)
         {
             OutError = FMonolithActionResult::Error(
