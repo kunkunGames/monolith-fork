@@ -80,3 +80,9 @@
 **Learning:** Monolith's standard `.gitignore` explicitly ignores `.mypy_cache/`, but `make_release.ps1` explicitly checks for many local developer folders and missed it, leading to it potentially being shipped if accidentally tracked. Likewise, the C++ updater uses a destructive swap script (`monolith_swap.bat`/`.sh`) that moves the old plugin folder to backup, and copies only explicitly listed developer directories back to the new folder.
 **Prevention:** Added explicit rules to exclude `.mypy_cache/` from public release zips in `make_release.ps1` and to preserve the `.mypy_cache/` directory in `monolith_swap.bat` and `monolith_swap.sh`.
 **Avoid:** Packaging workflow artifacts into public release ZIPs or deleting untracked workspace tools and developer settings during an auto-update.
+
+## 2026-06-18 - Forbid numeric branch evasion
+**Coordination issue:** Harbor generated multiple branches with large numeric suffixes (e.g., `-13463229688082065300`, `-723331437391826375`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
