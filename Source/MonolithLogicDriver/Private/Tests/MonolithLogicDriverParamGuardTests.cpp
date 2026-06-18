@@ -694,6 +694,39 @@ bool FMonolithParamGuardLogicDriverAddStateMachineNodeRejectsMalformedParamsTest
 
 	return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetNodePropertiesRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetNodePropertiesRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetNodePropertiesRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_node_properties")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// properties as string instead of object
+	TSharedPtr<FJsonObject> BadStringParams = MakeShared<FJsonObject>();
+	BadStringParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadStringParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	BadStringParams->SetStringField(TEXT("properties"), TEXT("test"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_node_properties"), BadStringParams);
+	TestTrue(TEXT("set_node_properties rejects string properties"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions properties must be an object"), Result1.ErrorMessage.Contains(TEXT("properties")) && Result1.ErrorMessage.Contains(TEXT("must be an object")));
+
+	// properties as array instead of object
+	TSharedPtr<FJsonObject> BadArrayParams = MakeShared<FJsonObject>();
+	BadArrayParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	BadArrayParams->SetStringField(TEXT("node_guid"), TEXT("test-node-guid"));
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	BadArrayParams->SetArrayField(TEXT("properties"), Arr);
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_node_properties"), BadArrayParams);
+	TestTrue(TEXT("set_node_properties rejects array properties"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions properties must be an object"), Result2.ErrorMessage.Contains(TEXT("properties")) && Result2.ErrorMessage.Contains(TEXT("must be an object")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverMoveNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.MoveNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardLogicDriverMoveNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
