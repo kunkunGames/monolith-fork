@@ -7240,6 +7240,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Ops.Num());
 	int32 Ok = 0, Fail = 0;
 
 	for (int32 i = 0; i < Ops.Num(); ++i)

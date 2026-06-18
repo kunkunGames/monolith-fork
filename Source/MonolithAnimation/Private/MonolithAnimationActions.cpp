@@ -9370,6 +9370,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "AnimBatchExec", "Animation Batch Execute"));
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Ops.Num());
 	int32 Ok = 0, Fail = 0;
 
 	for (int32 i = 0; i < Ops.Num(); ++i)
@@ -9870,6 +9871,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBulkAddNotify(const TShar
 	GEditor->BeginTransaction(FText::FromString(TEXT("Bulk Add Notify")));
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(PathValues.Num());
 	int32 Ok = 0, Fail = 0;
 
 	for (int32 i = 0; i < PathValues.Num(); ++i)
@@ -10418,6 +10420,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyProperties(const
 	Seq->Modify();
 
 	TArray<TSharedPtr<FJsonValue>> ResultArray;
+	ResultArray.Reserve((*PropsPtr)->Values.Num());
 	bool bAnyFailed = false;
 
 	for (auto& Pair : (*PropsPtr)->Values)
