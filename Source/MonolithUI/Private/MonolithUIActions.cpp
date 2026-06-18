@@ -663,15 +663,13 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
     const TSharedPtr<FJsonObject>* PadObj = nullptr;
     if (Params->TryGetObjectField(TEXT("padding"), PadObj))
     {
-        double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
-        (*PadObj)->TryGetNumberField(TEXT("left"), Left);
-        (*PadObj)->TryGetNumberField(TEXT("top"), Top);
-        (*PadObj)->TryGetNumberField(TEXT("right"), Right);
-        (*PadObj)->TryGetNumberField(TEXT("bottom"), Bottom);
-        FMargin Pad(Left, Top, Right, Bottom);
-        if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(Slot)) VS->SetPadding(Pad);
-        else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot)) HS->SetPadding(Pad);
-        else if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot)) OS->SetPadding(Pad);
+        FMargin Pad;
+        if (MonolithUIInternal::TryParseMargin(PadObj, Pad))
+        {
+            if (UVerticalBoxSlot* VS = Cast<UVerticalBoxSlot>(Slot)) VS->SetPadding(Pad);
+            else if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Slot)) HS->SetPadding(Pad);
+            else if (UOverlaySlot* OS = Cast<UOverlaySlot>(Slot)) OS->SetPadding(Pad);
+        }
     }
 
     // Mirror editor bookkeeping so the compiler sees a GUID for the final widget name.

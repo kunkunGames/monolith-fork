@@ -461,6 +461,20 @@ namespace MonolithUIInternal
         return W;
     }
 
+    // Parse an object with left/top/right/bottom fields into an FMargin.
+    inline bool TryParseMargin(const TSharedPtr<FJsonObject>* MarginObj, FMargin& OutMargin)
+    {
+        if (!MarginObj || !(*MarginObj).IsValid()) return false;
+        double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
+        (*MarginObj)->TryGetNumberField(TEXT("left"), Left);
+        (*MarginObj)->TryGetNumberField(TEXT("top"), Top);
+        (*MarginObj)->TryGetNumberField(TEXT("right"), Right);
+        (*MarginObj)->TryGetNumberField(TEXT("bottom"), Bottom);
+
+        OutMargin = FMargin(Left, Top, Right, Bottom);
+        return true;
+    }
+
     // Alignment parsers. Forward to MonolithUI:: (Phase A hoist).
     inline EHorizontalAlignment ParseHAlign(const FString& S)
     {

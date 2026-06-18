@@ -235,13 +235,12 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     const TSharedPtr<FJsonObject>* MarginObj = nullptr;
     if (Params->TryGetObjectField(TEXT("margin"), MarginObj))
     {
-        double Left = 0.0, Top = 0.0, Right = 0.0, Bottom = 0.0;
-        (*MarginObj)->TryGetNumberField(TEXT("left"), Left);
-        (*MarginObj)->TryGetNumberField(TEXT("top"), Top);
-        (*MarginObj)->TryGetNumberField(TEXT("right"), Right);
-        (*MarginObj)->TryGetNumberField(TEXT("bottom"), Bottom);
-        Brush->Margin = FMargin(Left, Top, Right, Bottom);
-        PropsSet++;
+        FMargin Pad;
+        if (MonolithUIInternal::TryParseMargin(MarginObj, Pad))
+        {
+            Brush->Margin = Pad;
+            PropsSet++;
+        }
     }
 
     // Corner radius (RoundedBox)
