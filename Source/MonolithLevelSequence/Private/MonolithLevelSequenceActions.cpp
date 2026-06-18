@@ -1650,6 +1650,29 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 			TEXT("No Level Sequence indexed for path '%s'"), *AssetPath));
 	}
 
+	int64 BindingCount = 0;
+	{
+		FString CountSQL = TEXT("SELECT COUNT(*) FROM level_sequence_bindings WHERE ls_asset_id = ?");
+		if (bFilterByKind)
+		{
+			CountSQL += TEXT(" AND kind = ?");
+		}
+		FSQLitePreparedStatement CountStmt;
+		if (CountStmt.Create(*RawDB, *CountSQL))
+		{
+			CountStmt.SetBindingValueByIndex(1, LsAssetId);
+			if (bFilterByKind)
+			{
+				CountStmt.SetBindingValueByIndex(2, KindFilter);
+			}
+			if (CountStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				CountStmt.GetColumnValueByIndex(0, BindingCount);
+			}
+			CountStmt.Destroy();
+		}
+	}
+
 	FString SQL = TEXT(
 		"SELECT binding_guid, binding_index, name, kind, bound_class, "
 		"       custom_binding_class, custom_binding_pretty, track_count "
@@ -1679,6 +1702,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (BindingCount > 0)
+	{
+		Rows.Reserve(static_cast<int32>(BindingCount));
+	}
 	TMap<FString, int32> KindCounts;
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
