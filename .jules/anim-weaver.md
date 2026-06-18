@@ -37,3 +37,8 @@ AnimWeaver PRs improve animation and PoseSearch action safety while preserving t
 **Learning:** Checking `HasField` is insufficient to guarantee type safety for JSON parameters.
 **Prevention:** Replaced these specific `HasField` and blind getter patterns with `TryGetNumberField` that returns a structured error for invalid types.
 **Avoid:** Trusting `HasField` for optional parameters within complex action arrays.
+## 2026-06-11 - Forbid numeric branch evasion
+**Coordination issue:** AnimWeaver generated branches with large numeric suffixes (e.g., `-17448107936242337015`) despite rules forbidding this.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions.
+**Prevention:** Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
+**Avoid:** Generating branches with `-<number>` suffixes.
