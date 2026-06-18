@@ -382,6 +382,7 @@ FMonolithActionResult FMonolithLevelInstanceActions::ListChildInstances(const TS
 	Actor->GetAttachedActors(Attached, false, true);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Attached.Num());
 	for (AActor* Child : Attached)
 	{
 		if (IsLevelInstanceLikeActor(Child))
@@ -410,6 +411,7 @@ FMonolithActionResult FMonolithLevelInstanceActions::ListInstanceActors(const TS
 	Actor->GetAttachedActors(Attached, false, true);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Attached.Num());
 	for (AActor* Child : Attached)
 	{
 		Rows.Add(MakeShared<FJsonValueObject>(MakeLevelInstanceActorRow(Child)));
