@@ -483,9 +483,9 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP asset (for the default Windows build, `../Monolith-vX.Y.Z.zip`; for platform builds, also attach the matching `Monolith-vX.Y.Z-macOS.zip` / `Monolith-vX.Y.Z-Linux.zip` assets).
+6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP asset (for the default Windows build, `../../Monolith-vX.Y.Z.zip`; for platform builds, also attach the matching `../../Monolith-vX.Y.Z-macOS.zip` / `../../Monolith-vX.Y.Z-Linux.zip` assets).
    ```bash
-   gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
    **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script into the release notes body before publishing. When providing platform-specific release assets, include all applicable markers (`Monolith-SHA256: <hash>`, `Monolith-macOS-SHA256: <hash>`, `Monolith-Linux-SHA256: <hash>`). If a platform's marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
 
