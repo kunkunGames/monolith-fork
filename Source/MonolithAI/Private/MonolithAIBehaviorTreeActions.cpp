@@ -2615,7 +2615,12 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleRemoveBTDecorator(co
 		return ErrResult;
 	}
 
-	int32 DecoratorIndex = (int32)Params->GetNumberField(TEXT("decorator_index"));
+	double DecoratorIndexDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("decorator_index"), DecoratorIndexDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'decorator_index' must be a number"));
+	}
+	int32 DecoratorIndex = (int32)DecoratorIndexDouble;
 
 	UBehaviorTreeGraphNode* TargetNode = nullptr;
 	{
@@ -2748,7 +2753,12 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleRemoveBTService(cons
 		return ErrResult;
 	}
 
-	int32 ServiceIndex = (int32)Params->GetNumberField(TEXT("service_index"));
+	double ServiceIndexDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("service_index"), ServiceIndexDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'service_index' must be a number"));
+	}
+	int32 ServiceIndex = (int32)ServiceIndexDouble;
 
 	UBehaviorTreeGraphNode* TargetNode = nullptr;
 	{
@@ -3282,7 +3292,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTSmartObjectTask
 	double SearchRadius = 5000.0;
 	if (Params->HasField(TEXT("search_radius")))
 	{
-		SearchRadius = Params->GetNumberField(TEXT("search_radius"));
+		if (!Params->TryGetNumberField(TEXT("search_radius"), SearchRadius))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'search_radius' must be a number"));
+		}
 	}
 	TSharedPtr<FJsonValue> RadiusVal = MakeShared<FJsonValueNumber>(SearchRadius);
 	SetPropertyValue(TaskNode, TEXT("SearchRadius"), RadiusVal, BT, PropError);
