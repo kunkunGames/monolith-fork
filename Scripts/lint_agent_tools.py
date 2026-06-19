@@ -61,11 +61,11 @@ def parse_tools_line(text: str) -> tuple[set[str], int] | None:
             found_tools = True
             tools_lineno = idx + 1
             value = stripped.split(":", 1)[1].strip()
-            if value:
-                value = clean_tool_value(value).strip("[]")
+            clean_val = clean_tool_value(value).strip("[]")
+            if clean_val:
                 tools.update(
                     clean_tool_value(token)
-                    for token in value.split(",")
+                    for token in clean_val.split(",")
                     if clean_tool_value(token)
                 )
             else:
@@ -143,6 +143,12 @@ def run_selftest() -> int:
         (
             "multiline yaml list",
             "---\ntools:\n  - mcp__monolith__first\n  - mcp__monolith__second\n---\n",
+            {"mcp__monolith__first", "mcp__monolith__second"},
+            2,
+        ),
+        (
+            "multiline yaml list with inline comment",
+            "---\ntools: # multiline list follows\n  - mcp__monolith__first\n  - mcp__monolith__second\n---\n",
             {"mcp__monolith__first", "mcp__monolith__second"},
             2,
         ),

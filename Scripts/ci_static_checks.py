@@ -602,11 +602,11 @@ def parse_agent_tools_frontmatter(text: str) -> set[str] | None:
         if stripped.startswith("tools:"):
             found_tools = True
             value = stripped.split(":", 1)[1].strip()
-            if value:
-                value = clean_tool_value(value).strip("[]")
+            clean_val = clean_tool_value(value).strip("[]")
+            if clean_val:
                 tools.update(
                     clean_tool_value(token)
-                    for token in value.split(",")
+                    for token in clean_val.split(",")
                     if clean_tool_value(token)
                 )
             else:
@@ -1377,6 +1377,10 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
     )
     (root / ".claude/agents/good_bracket.md").write_text(
         "---\ntools: [mcp__monolith__bracket, mcp__monolith__comment] # bracket + inline comment\n---\nUses mcp__monolith__bracket.\n",
+        encoding="utf-8",
+    )
+    (root / ".claude/agents/good_multiline_comment.md").write_text(
+        "---\ntools: # multiline list follows\n  - mcp__monolith__multiline\n---\nUses mcp__monolith__multiline.\n",
         encoding="utf-8",
     )
     (root / "Benchmarks/Foo/tasks.jsonl").write_text(
