@@ -1278,6 +1278,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::SetMeshCollision(const TShare
 				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hull_count'. Expected number."));
 			}
 			int32 MaxHulls = static_cast<int32>(MaxHullsD);
+			if (MaxHulls < 1 || MaxHulls > 256)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'hull_count' must be between 1 and 256 (received: %d)"), MaxHulls));
+			}
 
 			double MaxVertsD = 32.0;
 			if ((*ConvexParams)->HasField(TEXT("max_verts")) && !(*ConvexParams)->TryGetNumberField(TEXT("max_verts"), MaxVertsD))
@@ -1285,6 +1289,10 @@ FMonolithActionResult FMonolithMeshTechArtActions::SetMeshCollision(const TShare
 				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'max_verts'. Expected number."));
 			}
 			int32 MaxVerts = static_cast<int32>(MaxVertsD);
+			if (MaxVerts < 4 || MaxVerts > 256)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'max_verts' must be between 4 and 256 (received: %d)"), MaxVerts));
+			}
 
 			// Load mesh into handle pool
 			FString HandleName = FString::Printf(TEXT("__techart_collision_%s"), *FGuid::NewGuid().ToString());

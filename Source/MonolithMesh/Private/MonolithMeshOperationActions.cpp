@@ -410,6 +410,10 @@ FMonolithActionResult FMonolithMeshOperationActions::SaveHandle(const TSharedPtr
 			return FMonolithActionResult::Error(TEXT("Parameter 'max_hulls' must be a number"));
 		}
 		MaxHulls = static_cast<int32>(TempMaxHulls);
+		if (MaxHulls < 1 || MaxHulls > 256)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'max_hulls' must be between 1 and 256 (received: %d)"), MaxHulls));
+		}
 	}
 
 	// Validate collision mode
@@ -652,6 +656,10 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateCollision(const TSh
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'max_hulls'. Expected number."));
 	}
 	int32 MaxHulls = static_cast<int32>(TempMaxHulls);
+	if (MaxHulls < 1 || MaxHulls > 256)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'max_hulls' must be between 1 and 256 (received: %d)"), MaxHulls));
+	}
 
 	FString Error;
 	UDynamicMesh* Mesh = Pool->GetHandle(HandleName, Error);
