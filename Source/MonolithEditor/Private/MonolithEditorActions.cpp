@@ -2805,7 +2805,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 
 	if (AssetType.Equals(TEXT("niagara"), ESearchCase::IgnoreCase))
 	{
-		UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *AssetPath);
+		UNiagaraSystem* System = FMonolithAssetUtils::LoadAssetByPath<UNiagaraSystem>(AssetPath);
 		if (!System)
 		{
 			return FMonolithActionResult::Error(
@@ -2816,7 +2816,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	}
 	else if (AssetType.Equals(TEXT("material"), ESearchCase::IgnoreCase))
 	{
-		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *AssetPath);
+		UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(AssetPath);
 		if (!Material)
 		{
 			return FMonolithActionResult::Error(
@@ -3336,7 +3336,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSequenceFrames(
 	// Already on game thread (UE HTTP server dispatches via FTicker)
 	check(IsInGameThread());
 
-	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *AssetPath);
+	UNiagaraSystem* System = FMonolithAssetUtils::LoadAssetByPath<UNiagaraSystem>(AssetPath);
 	if (!System)
 	{
 		return FMonolithActionResult::Error(
@@ -5536,7 +5536,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 	IFileManager::Get().MakeDirectory(*OutputDir, true);
 
 	// Load system
-	UNiagaraSystem* System = LoadObject<UNiagaraSystem>(nullptr, *AssetPath);
+	UNiagaraSystem* System = FMonolithAssetUtils::LoadAssetByPath<UNiagaraSystem>(AssetPath);
 	if (!System)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Niagara system: %s"), *AssetPath));
 
