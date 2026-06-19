@@ -606,3 +606,25 @@ bool FMonolithNiagaraTranche2DailyLogSchemaRejectionTest::RunTest(const FString&
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraDuplicateEmitterAliasTest, "Monolith.Registry.Niagara.DuplicateEmitterAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithNiagaraDuplicateEmitterAliasTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	EnsureNiagaraActionsRegistered(Registry);
+
+	TSharedPtr<FJsonObject> DescribeParams;
+	bool bDescribed = DescribeActionSchemaParamsForAction(TEXT("duplicate_emitter"), DescribeParams);
+	TestTrue(TEXT("describe.action_schema succeeds for niagara.duplicate_emitter"), bDescribed);
+	if (bDescribed && DescribeParams.IsValid())
+	{
+		TSharedPtr<FJsonObject> SourceEmitterParam;
+		if (TestTrue(TEXT("source_emitter param schema found"), TryGetParamSchema(DescribeParams, TEXT("source_emitter"), SourceEmitterParam)))
+		{
+			TestTrue(TEXT("source_emitter has 'emitter' alias"), ParamHasAlias(SourceEmitterParam, TEXT("emitter")));
+		}
+	}
+
+	return true;
+}

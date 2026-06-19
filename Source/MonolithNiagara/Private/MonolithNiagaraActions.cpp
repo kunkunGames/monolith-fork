@@ -2693,7 +2693,7 @@ void FMonolithNiagaraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&HandleDuplicateEmitter),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Niagara system asset path"))
-			.Required(TEXT("source_emitter"), TEXT("string"), TEXT("Name of emitter to duplicate"))
+			.Required(TEXT("source_emitter"), TEXT("string"), TEXT("Name of emitter to duplicate"), { TEXT("emitter") })
 			.Optional(TEXT("new_name"), TEXT("string"), TEXT("Name for the duplicated emitter"))
 			.Build());
 	Registry.RegisterAction(TEXT("niagara"), TEXT("set_emitter_enabled"), TEXT("Enable or disable an emitter"),
