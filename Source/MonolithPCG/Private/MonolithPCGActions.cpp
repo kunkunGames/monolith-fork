@@ -297,7 +297,10 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PackagePath = TEXT("/Game");
-	Params->TryGetStringField(TEXT("package_path"), PackagePath);
+	if (Params->HasField(TEXT("package_path")) && !Params->TryGetStringField(TEXT("package_path"), PackagePath))
+	{
+		return FMonolithActionResult::Error(TEXT("package_path must be a string"));
+	}
 	PackagePath.TrimStartAndEndInline();
 	while (PackagePath.Len() > 5 && PackagePath.EndsWith(TEXT("/")))
 	{
@@ -309,7 +312,10 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 	}
 
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+	}
 	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -362,13 +368,22 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("asset_path must be a string"));
+	}
 
 	bool bIncludeTags = true;
-	Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags);
+	if (Params->HasField(TEXT("include_tags")) && !Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags))
+	{
+		return FMonolithActionResult::Error(TEXT("include_tags must be a boolean"));
+	}
 
 	double TagLimitValue = 50.0;
-	Params->TryGetNumberField(TEXT("tag_limit"), TagLimitValue);
+	if (Params->HasField(TEXT("tag_limit")) && !Params->TryGetNumberField(TEXT("tag_limit"), TagLimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("tag_limit must be a number"));
+	}
 	const int32 TagLimit = MonolithPCG::ClampTagLimit(TagLimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -390,7 +405,10 @@ FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonO
 FMonolithActionResult FMonolithPCGActions::ListComponents(const TSharedPtr<FJsonObject>& Params)
 {
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+	}
 	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
 	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
