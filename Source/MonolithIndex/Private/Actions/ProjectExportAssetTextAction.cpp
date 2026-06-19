@@ -115,8 +115,8 @@ FString FProjectExportAssetTextAction::GetDescription()
 
 FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
-	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required"), -32602);
 	}
@@ -148,7 +148,11 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 	// Optional: scope to a sub-object by name/class substring.
 	UObject* ExportRoot = Asset;
 	FString ResolvedObject;
-	const FString ObjectFilter = Params->GetStringField(TEXT("object_filter"));
+	FString ObjectFilter;
+	if (Params->HasField(TEXT("object_filter")) && !Params->TryGetStringField(TEXT("object_filter"), ObjectFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("'object_filter' must be a string"), -32602);
+	}
 	if (!ObjectFilter.IsEmpty())
 	{
 		TArray<FString> Candidates;
@@ -178,7 +182,11 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 	const int32 FullBytes = FullText.Len();
 
 	// Optional grep narrowing.
-	const FString GrepPattern = Params->GetStringField(TEXT("grep_pattern"));
+	FString GrepPattern;
+	if (Params->HasField(TEXT("grep_pattern")) && !Params->TryGetStringField(TEXT("grep_pattern"), GrepPattern))
+	{
+		return FMonolithActionResult::Error(TEXT("'grep_pattern' must be a string"), -32602);
+	}
 	FString PayloadText = FullText;
 	int32 MatchCount = 0;
 	const bool bGrepped = !GrepPattern.IsEmpty();

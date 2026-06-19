@@ -4,6 +4,7 @@
 #include "Actions/ProjectFindReferencesAction.h"
 #include "Actions/ProjectFindByTypeAction.h"
 #include "Actions/ProjectFindUnusedAction.h"
+#include "Actions/ProjectExportAssetTextAction.h"
 #include "Dom/JsonObject.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexParamGuardTest, "Monolith.ParamGuard.ProjectIndex.MalformedInput", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -89,6 +90,32 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FProjectGetAssetDetailsAction::Execute(Params);
 		// It might fail to find the asset, but it shouldn't fail with -32602 (invalid params)
 		TestNotEqual(TEXT("GetAssetDetails: Fallback to package_path when asset_path is empty"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("asset_path"), 12345);
+		FMonolithActionResult Result = FProjectExportAssetTextAction::Execute(Params);
+		TestFalse(TEXT("ExportAssetText: Reject wrong type for asset_path"), Result.bSuccess);
+		TestEqual(TEXT("ExportAssetText: Error code for asset_path"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo"));
+		Params->SetNumberField(TEXT("object_filter"), 12345);
+		FMonolithActionResult Result = FProjectExportAssetTextAction::Execute(Params);
+		TestFalse(TEXT("ExportAssetText: Reject wrong type for object_filter"), Result.bSuccess);
+		TestEqual(TEXT("ExportAssetText: Error code for object_filter"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Foo"));
+		Params->SetNumberField(TEXT("grep_pattern"), 12345);
+		FMonolithActionResult Result = FProjectExportAssetTextAction::Execute(Params);
+		TestFalse(TEXT("ExportAssetText: Reject wrong type for grep_pattern"), Result.bSuccess);
+		TestEqual(TEXT("ExportAssetText: Error code for grep_pattern"), Result.ErrorCode, -32602);
 	}
 
 	return true;
