@@ -1233,6 +1233,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleReplaceEvaluateChoo
 	Root->SetStringField(TEXT("resolved_node_class"), EvalClass->GetPathName());
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Replacements->Num());
 	int32 Rebuilt = 0, Degraded = 0, Failed = 0;
 
 	for (const TSharedPtr<FJsonValue>& V : *Replacements)
