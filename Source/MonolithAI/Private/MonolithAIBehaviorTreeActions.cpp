@@ -4448,7 +4448,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAutoArrangeBT(const 
 
 	FString FormatterPref;
 
-	Params->TryGetStringField(TEXT("formatter"), FormatterPref);
+	if (Params->HasField(TEXT("formatter")) && !Params->TryGetStringField(TEXT("formatter"), FormatterPref))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"));
+	}
 	if (FormatterPref.IsEmpty()) FormatterPref = TEXT("default");
 	FormatterPref = FormatterPref.ToLower();
 
@@ -4743,7 +4746,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTTaskBlueprin
 
 	FString ParentClassName;
 
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+	}
 
 	// Resolve parent class
 	UClass* ParentClass = UBTTask_BlueprintBase::StaticClass();
@@ -4828,7 +4834,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTDecoratorBlu
 
 	FString ParentClassName;
 
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+	}
 
 	UClass* ParentClass = UBTDecorator_BlueprintBase::StaticClass();
 	if (!ParentClassName.IsEmpty())
@@ -4904,7 +4913,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTServiceBluep
 
 	FString ParentClassName;
 
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+	}
 
 	UClass* ParentClass = UBTService_BlueprintBase::StaticClass();
 	if (!ParentClassName.IsEmpty())
@@ -4983,7 +4995,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleGenerateBTDiagram(co
 
 	FString Format;
 
-	Params->TryGetStringField(TEXT("format"), Format);
+	if (Params->HasField(TEXT("format")) && !Params->TryGetStringField(TEXT("format"), Format))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'format' must be a string"));
+	}
 	if (Format.IsEmpty()) Format = TEXT("ascii");
 
 	UBehaviorTreeGraphNode_Root* RootGraphNode = FindRootNode(BTGraph);
