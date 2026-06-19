@@ -70,8 +70,9 @@ bool FMonolithEditorTailLogClampsCountTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Should succeed since it executes the action"), Result.bSuccess);
 	if (Result.Result.IsValid())
 	{
-		TestTrue(TEXT("Result JSON should contain the count field"), Result.Result->HasField(TEXT("count")));
-		TestEqual(TEXT("Should clamp count to exactly 500"), Result.Result->GetNumberField(TEXT("count")), 500.0);
+		double CountOut = 0.0;
+		TestTrue(TEXT("Result JSON should contain the count field"), Result.Result->TryGetNumberField(TEXT("count"), CountOut));
+		TestEqual(TEXT("Should clamp count to exactly 500"), CountOut, 500.0);
 
 		const TArray<TSharedPtr<FJsonValue>>* LinesArray = nullptr;
 		TestTrue(TEXT("Result JSON should contain the lines array"), Result.Result->TryGetArrayField(TEXT("lines"), LinesArray));
@@ -135,8 +136,9 @@ bool FMonolithEditorRunAutomationTestsClampsLimit::RunTest(const FString& Parame
 	TestTrue(TEXT("Should succeed since it executes the action and returns 0 matching tests"), Result.bSuccess);
 	if (Result.Result.IsValid())
 	{
-		TestTrue(TEXT("Result JSON should contain the clamped max_tests field"), Result.Result->HasField(TEXT("max_tests")));
-		TestEqual(TEXT("Should clamp max_tests to 1000"), Result.Result->GetNumberField(TEXT("max_tests")), 1000.0);
+		double MaxTestsOut = 0.0;
+		TestTrue(TEXT("Result JSON should contain the clamped max_tests field"), Result.Result->TryGetNumberField(TEXT("max_tests"), MaxTestsOut));
+		TestEqual(TEXT("Should clamp max_tests to 1000"), MaxTestsOut, 1000.0);
 	}
 	else
 	{
@@ -161,9 +163,14 @@ bool FMonolithEditorAutomationStatusShape::RunTest(const FString& Parameters)
 	}
 
 	TestTrue(TEXT("Status exposes active"), Result.Result->HasField(TEXT("active")));
-	TestTrue(TEXT("Status exposes can_stop"), Result.Result->HasField(TEXT("can_stop")));
-	TestFalse(TEXT("Synchronous runner cannot stop"), Result.Result->GetBoolField(TEXT("can_stop")));
-	TestEqual(TEXT("Stop contract is explicit"), Result.Result->GetStringField(TEXT("stop_status")), FString(TEXT("unsupported_cancel")));
+
+	bool bCanStop = true;
+	TestTrue(TEXT("Status exposes can_stop"), Result.Result->TryGetBoolField(TEXT("can_stop"), bCanStop));
+	TestFalse(TEXT("Synchronous runner cannot stop"), bCanStop);
+
+	FString StopStatus;
+	TestTrue(TEXT("Status exposes stop_status"), Result.Result->TryGetStringField(TEXT("stop_status"), StopStatus));
+	TestEqual(TEXT("Stop contract is explicit"), StopStatus, FString(TEXT("unsupported_cancel")));
 	TestTrue(TEXT("Status exposes history capacity"), Result.Result->HasField(TEXT("history_capacity")));
 
 	return true;
@@ -183,9 +190,17 @@ bool FMonolithEditorAutomationStopUnsupported::RunTest(const FString& Parameters
 		return true;
 	}
 
-	TestFalse(TEXT("No in-flight run is stopped"), Result.Result->GetBoolField(TEXT("stopped")));
-	TestFalse(TEXT("Synchronous runner cannot stop"), Result.Result->GetBoolField(TEXT("can_stop")));
-	TestEqual(TEXT("Stop status reports unsupported_cancel"), Result.Result->GetStringField(TEXT("stop_status")), FString(TEXT("unsupported_cancel")));
+	bool bStopped = true;
+	TestTrue(TEXT("Result exposes stopped flag"), Result.Result->TryGetBoolField(TEXT("stopped"), bStopped));
+	TestFalse(TEXT("No in-flight run is stopped"), bStopped);
+
+	bool bCanStop = true;
+	TestTrue(TEXT("Result exposes can_stop flag"), Result.Result->TryGetBoolField(TEXT("can_stop"), bCanStop));
+	TestFalse(TEXT("Synchronous runner cannot stop"), bCanStop);
+
+	FString StopStatus;
+	TestTrue(TEXT("Result exposes stop_status flag"), Result.Result->TryGetStringField(TEXT("stop_status"), StopStatus));
+	TestEqual(TEXT("Stop status reports unsupported_cancel"), StopStatus, FString(TEXT("unsupported_cancel")));
 
 	return true;
 }
@@ -207,11 +222,21 @@ bool FMonolithEditorAutomationHistoryNoMatchRun::RunTest(const FString& Paramete
 		return true;
 	}
 
-	const FString RunId = RunResult.Result->GetStringField(TEXT("run_id"));
+	FString RunId;
+	TestTrue(TEXT("Result exposes run_id"), RunResult.Result->TryGetStringField(TEXT("run_id"), RunId));
 	TestFalse(TEXT("Run id should not be empty"), RunId.IsEmpty());
-	TestEqual(TEXT("No-match run state completes"), RunResult.Result->GetStringField(TEXT("state")), FString(TEXT("completed")));
-	TestEqual(TEXT("No-match completion reason is explicit"), RunResult.Result->GetStringField(TEXT("completion_reason")), FString(TEXT("no_matching_tests")));
-	TestEqual(TEXT("No-match run progress is complete"), RunResult.Result->GetNumberField(TEXT("progress")), 1.0);
+
+	FString RunState;
+	TestTrue(TEXT("Result exposes state"), RunResult.Result->TryGetStringField(TEXT("state"), RunState));
+	TestEqual(TEXT("No-match run state completes"), RunState, FString(TEXT("completed")));
+
+	FString CompletionReason;
+	TestTrue(TEXT("Result exposes completion_reason"), RunResult.Result->TryGetStringField(TEXT("completion_reason"), CompletionReason));
+	TestEqual(TEXT("No-match completion reason is explicit"), CompletionReason, FString(TEXT("no_matching_tests")));
+
+	double ProgressOut = 0.0;
+	TestTrue(TEXT("Result exposes progress"), RunResult.Result->TryGetNumberField(TEXT("progress"), ProgressOut));
+	TestEqual(TEXT("No-match run progress is complete"), ProgressOut, 1.0);
 
 	TSharedPtr<FJsonObject> HistoryParams = MakeShared<FJsonObject>();
 	HistoryParams->SetNumberField(TEXT("max_results"), 1.0);
@@ -234,8 +259,13 @@ bool FMonolithEditorAutomationHistoryNoMatchRun::RunTest(const FString& Paramete
 	TestTrue(TEXT("History row is an object"), FirstRun.IsValid());
 	if (FirstRun.IsValid())
 	{
-		TestEqual(TEXT("Newest history row matches run id"), FirstRun->GetStringField(TEXT("run_id")), RunId);
-		TestEqual(TEXT("History row is compact completed state"), FirstRun->GetStringField(TEXT("state")), FString(TEXT("completed")));
+		FString HistRunId;
+		TestTrue(TEXT("History row exposes run_id"), FirstRun->TryGetStringField(TEXT("run_id"), HistRunId));
+		TestEqual(TEXT("Newest history row matches run id"), HistRunId, RunId);
+
+		FString HistState;
+		TestTrue(TEXT("History row exposes state"), FirstRun->TryGetStringField(TEXT("state"), HistState));
+		TestEqual(TEXT("History row is compact completed state"), HistState, FString(TEXT("completed")));
 	}
 
 	return true;

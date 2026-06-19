@@ -29,9 +29,13 @@ bool FMonolithEditorLiveCodingDiagnosticsShapeTest::RunTest(const FString& Param
 	TestTrue(TEXT("Normalized result field exists"), Result.Result->HasField(TEXT("compile_result_normalized")));
 	TestTrue(TEXT("Diagnostic freshness field exists"), Result.Result->HasField(TEXT("diagnostic_source_fresh")));
 	TestTrue(TEXT("UBT diagnostics field exists"), Result.Result->HasField(TEXT("ubt_diagnostics")));
-	TestTrue(TEXT("Message field exists"), Result.Result->HasField(TEXT("message")));
-	TestFalse(TEXT("Message is non-empty"), Result.Result->GetStringField(TEXT("message")).IsEmpty());
-	TestEqual(TEXT("Max log entries is echoed"), Result.Result->GetNumberField(TEXT("max_log_entries")), 5.0);
+	FString Message;
+	TestTrue(TEXT("Message field exists and is string"), Result.Result->TryGetStringField(TEXT("message"), Message));
+	TestFalse(TEXT("Message is non-empty"), Message.IsEmpty());
+
+	double EchoedMaxEntries = 0.0;
+	TestTrue(TEXT("Max log entries field exists and is number"), Result.Result->TryGetNumberField(TEXT("max_log_entries"), EchoedMaxEntries));
+	TestEqual(TEXT("Max log entries is echoed"), EchoedMaxEntries, 5.0);
 
 	const TArray<TSharedPtr<FJsonValue>>* UbtDiagnostics = nullptr;
 	TestTrue(TEXT("UBT diagnostics is an array"), Result.Result->TryGetArrayField(TEXT("ubt_diagnostics"), UbtDiagnostics));

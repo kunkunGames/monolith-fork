@@ -405,8 +405,12 @@ bool FMonolithEditorInspectTextureChannelsTest::RunTest(const FString& /*Paramet
 	TestTrue(TEXT("payload has format string"), Result.Result->HasTypedField<EJson::String>(TEXT("format")));
 	TestTrue(TEXT("payload has srgb bool"), Result.Result->HasTypedField<EJson::Boolean>(TEXT("srgb")));
 
-	const double Width = Result.Result->GetNumberField(TEXT("width"));
-	const double Height = Result.Result->GetNumberField(TEXT("height"));
+	double Width = 0.0;
+	TestTrue(TEXT("payload exposes width"), Result.Result->TryGetNumberField(TEXT("width"), Width));
+
+	double Height = 0.0;
+	TestTrue(TEXT("payload exposes height"), Result.Result->TryGetNumberField(TEXT("height"), Height));
+
 	TestTrue(TEXT("width > 0"), Width > 0.0);
 	TestTrue(TEXT("height > 0"), Height > 0.0);
 
@@ -584,10 +588,13 @@ namespace MonolithEditorPreviewTests
 			return false;
 		}
 
+		FString OutMode;
 		Test.TestTrue(TEXT("payload has mode echoed back"), Result.Result.IsValid() &&
-			Result.Result->HasTypedField<EJson::String>(TEXT("mode")));
+			Result.Result->TryGetStringField(TEXT("mode"), OutMode));
+
+		FString OutFile;
 		Test.TestTrue(TEXT("payload has output_file"), Result.Result.IsValid() &&
-			Result.Result->HasTypedField<EJson::String>(TEXT("output_file")));
+			Result.Result->TryGetStringField(TEXT("output_file"), OutFile));
 
 		Test.TestTrue(TEXT("Output PNG exists on disk"), FPaths::FileExists(OutputPath));
 		if (FPaths::FileExists(OutputPath))
