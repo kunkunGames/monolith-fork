@@ -142,6 +142,30 @@ using System.IO;
 
 public class MyPluginBridge : ModuleRules
 {
+    private static bool HasPluginDir(string BaseDir, string PluginName)
+    {
+        if (!Directory.Exists(BaseDir))
+        {
+            return false;
+        }
+
+        if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+        {
+            return true;
+        }
+
+        string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly);
+        foreach (string Dir in Dirs)
+        {
+            if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public MyPluginBridge(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -168,23 +192,19 @@ public class MyPluginBridge : ModuleRules
             {
                 string ProjectPluginsDir = Path.Combine(
                     Target.ProjectFile.Directory.FullName, "Plugins");
-                if (Directory.Exists(ProjectPluginsDir))
-                {
-                    bHasThirdParty = Directory.GetDirectories(
-                        ProjectPluginsDir, "ThirdParty*",
-                        SearchOption.TopDirectoryOnly).Length > 0;
-                }
+                bHasThirdParty = HasPluginDir(ProjectPluginsDir, "ThirdParty");
             }
 
             if (!bHasThirdParty)
             {
                 string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
                 string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-                if (Directory.Exists(MarketplaceDir))
+                bHasThirdParty = HasPluginDir(MarketplaceDir, "ThirdParty");
+
+                if (!bHasThirdParty)
                 {
-                    bHasThirdParty = Directory.GetDirectories(
-                        MarketplaceDir, "ThirdParty*",
-                        SearchOption.TopDirectoryOnly).Length > 0;
+                    string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+                    bHasThirdParty = HasPluginDir(EnginePluginsDir, "ThirdParty");
                 }
             }
         }
