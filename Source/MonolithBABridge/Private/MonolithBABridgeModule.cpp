@@ -19,15 +19,13 @@ public:
 		}
 
 #if WITH_BLUEPRINT_ASSIST
+		ModulesChangedHandle = FModuleManager::Get().OnModulesChanged().AddRaw(
+			this,
+			&FMonolithBABridgeModule::OnModulesChanged);
+
 		if (FModuleManager::Get().IsModuleLoaded(GetBlueprintAssistModuleName()))
 		{
 			RegisterFormatter();
-		}
-		else
-		{
-			ModulesChangedHandle = FModuleManager::Get().OnModulesChanged().AddRaw(
-				this,
-				&FMonolithBABridgeModule::OnModulesChanged);
 		}
 #else
 		UE_LOG(LogMonolithBABridge, Log,
@@ -58,10 +56,16 @@ private:
 
 	void OnModulesChanged(FName ModuleName, EModuleChangeReason ReasonForChange)
 	{
-		if (ModuleName == GetBlueprintAssistModuleName() && ReasonForChange == EModuleChangeReason::ModuleLoaded)
+		if (ModuleName == GetBlueprintAssistModuleName())
 		{
-			RegisterFormatter();
-			UnsubscribeFromModuleChanges();
+			if (ReasonForChange == EModuleChangeReason::ModuleLoaded)
+			{
+				RegisterFormatter();
+			}
+			else if (ReasonForChange == EModuleChangeReason::ModuleUnloaded)
+			{
+				UnregisterFormatter();
+			}
 		}
 	}
 
@@ -84,6 +88,19 @@ private:
 				Formatter.Get());
 			UE_LOG(LogMonolithBABridge, Log,
 				TEXT("MonolithBABridge: Registered BA graph formatter"));
+		}
+	}
+
+	void UnregisterFormatter()
+	{
+		if (Formatter.IsValid())
+		{
+			IModularFeatures::Get().UnregisterModularFeature(
+				IMonolithGraphFormatter::GetModularFeatureName(),
+				Formatter.Get());
+			Formatter.Reset();
+			UE_LOG(LogMonolithBABridge, Log,
+				TEXT("MonolithBABridge: Unregistered BA graph formatter"));
 		}
 	}
 
