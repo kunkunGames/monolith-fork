@@ -43,15 +43,15 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_combo_node_effects` | `asset_path`, `node_id` | Gameplay effects on a node |
 | `validate_combo_graph` | `asset_path` | Lint: orphans, missing montages, broken edges, unreachable nodes |
 | **Create (5)** | | |
-| `create_combo_graph` | `save_path`, `graph_name`? | Create new ComboGraph |
+| `create_combo_graph` | `save_path` | Create new ComboGraph |
 | `add_combo_node` | `asset_path`, `montage_path`, `node_name`? | Add node with montage |
 | `add_combo_edge` | `asset_path`, `source_node`, `target_node`, `input_type`? | Add transition edge |
 | `set_combo_node_effects` | `asset_path`, `node_id`, `effects` | Set gameplay effects |
 | `set_combo_node_cues` | `asset_path`, `node_id`, `cues` | Set gameplay cues |
 | **Scaffold (3)** | | |
-| `create_combo_ability` | `save_path`, `combo_graph_path`, `ability_name`? | Create Gameplay Ability for ComboGraph |
-| `link_ability_to_combo_graph` | `ability_path`, `combo_graph_path` | Link existing ability |
-| `scaffold_combo_from_montages` | `save_path`, `montages`, `graph_name`? | Full graph from ordered montage list |
+| `create_combo_ability` | `save_path`, `combo_graph`?, `initial_input`?, `parent_class`? | Create Gameplay Ability for ComboGraph |
+| `link_ability_to_combo_graph` | `ability_path`, `combo_graph` | Link existing ability |
+| `scaffold_combo_from_montages` | `save_path`, `montages`, `input_action`?, `transition_behavior`? | Full graph from ordered montage list |
 | **Layout (1)** | | |
 | `layout_combo_graph` | `asset_path`, `horizontal_spacing`?, `vertical_spacing`? | Auto-layout nodes (BFS tree) |
 
