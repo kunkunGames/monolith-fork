@@ -8240,7 +8240,12 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		{
 			if (Params->HasField(ParamName))
 			{
-				bool Val = Params->GetBoolField(ParamName);
+				bool Val = false;
+				if (!Params->TryGetBoolField(ParamName, Val))
+				{
+					Errors.Add(FString::Printf(TEXT("%s must be a boolean"), *FString(ParamName)));
+					return;
+				}
 				Setter(Val);
 				RecordChange(ParamName, Val ? TEXT("true") : TEXT("false"));
 			}
@@ -8253,9 +8258,17 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 
 		if (Params->HasField(TEXT("opacity_mask_clip_value")))
 		{
-			float Val = static_cast<float>(Params->GetNumberField(TEXT("opacity_mask_clip_value")));
-			Mat->OpacityMaskClipValue = Val;
-			RecordChange(TEXT("opacity_mask_clip_value"), FString::SanitizeFloat(Val));
+			double ValD = 0.0;
+			if (!Params->TryGetNumberField(TEXT("opacity_mask_clip_value"), ValD))
+			{
+				Errors.Add(TEXT("opacity_mask_clip_value must be a number"));
+			}
+			else
+			{
+				float Val = static_cast<float>(ValD);
+				Mat->OpacityMaskClipValue = Val;
+				RecordChange(TEXT("opacity_mask_clip_value"), FString::SanitizeFloat(Val));
+			}
 		}
 
 		// Usage flags
@@ -8263,7 +8276,12 @@ FMonolithActionResult FMonolithMaterialActions::BatchSetMaterialProperty(const T
 		{
 			if (Params->HasField(ParamName))
 			{
-				bool Val = Params->GetBoolField(ParamName);
+				bool Val = false;
+				if (!Params->TryGetBoolField(ParamName, Val))
+				{
+					Errors.Add(FString::Printf(TEXT("%s must be a boolean"), *FString(ParamName)));
+					return;
+				}
 				if (Val)
 				{
 					bool bRecompile = false;
@@ -8687,7 +8705,12 @@ FMonolithActionResult FMonolithMaterialActions::ImportTexture(const TSharedPtr<F
 	int32 MaxSize = 0;
 	if (Params->HasField(TEXT("max_size")))
 	{
-		MaxSize = static_cast<int32>(Params->GetNumberField(TEXT("max_size")));
+		double Val = 0.0;
+		if (!Params->TryGetNumberField(TEXT("max_size"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("max_size must be a number"));
+		}
+		MaxSize = static_cast<int32>(Val);
 	}
 
 	FTextureImportResult ImportResult = ImportTextureInternal(
@@ -9475,7 +9498,12 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 
 	if (Params->HasField(TEXT("scalar_value")))
 	{
-		float Val = static_cast<float>(Params->GetNumberField(TEXT("scalar_value")));
+		double ValD = 0.0;
+		if (!Params->TryGetNumberField(TEXT("scalar_value"), ValD))
+		{
+			return FMonolithActionResult::Error(TEXT("scalar_value must be a number"));
+		}
+		float Val = static_cast<float>(ValD);
 		// Try to find existing entry first, then create if not found
 		bool bFound = false;
 		for (FScalarParameterValue& Entry : MFI->ScalarParameterValues)
@@ -9593,7 +9621,11 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 	}
 	else if (Params->HasField(TEXT("switch_value")))
 	{
-		bool Val = Params->GetBoolField(TEXT("switch_value"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("switch_value"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("switch_value must be a boolean"));
+		}
 
 		bool bFound = false;
 		for (FStaticSwitchParameter& Entry : MFI->StaticSwitchParameterValues)
