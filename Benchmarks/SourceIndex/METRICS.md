@@ -7,33 +7,44 @@ the same task set and deterministic scorer.
 
 ```text
 SourceIndex Score =
-  0.40 * symbol_hit_rate
-+ 0.30 * field_completeness_rate
-+ 0.20 * schema_adherence_rate
+  0.30 * symbol_hit_rate
++ 0.20 * field_completeness_rate
++ 0.15 * schema_adherence_rate
 + 0.10 * (1 - stale_rate)
++ 0.10 * ergonomics_success_rate
++ 0.15 * negative_recovery_rate
 ```
+
+The six coefficients sum to **1.00**.  This formula is the single source of
+truth and matches `aggregate()` in
+`Plugins/Monolith/Scripts/source_index_benchmark.py` and the `scoring` block in
+`manifest.json`.
 
 ## Metrics
 
 | Metric | Direction | Definition |
 | --- | --- | --- |
-| `source_index_score` | Higher is better | Weighted composite of the four component metrics below. |
-| `symbol_hit_rate` | Higher is better | Fraction of `symbol_lookup` tasks where at least one result was returned and the `name` field is present. |
-| `field_completeness_rate` | Higher is better | Fraction of all individual symbol results (across all `symbol_lookup` tasks) that contain at least 3 of the 4 required fields: `name`, `kind`, `file_path`, `location`. |
+| `source_index_score` | Higher is better | Weighted composite of the six component metrics below. |
+| `symbol_hit_rate` | Higher is better | Fraction of lookup tasks (`symbol_lookup` + `review_context_lookup` + `impact_radius_lookup`) with `direct_success`. For a `require_results` task (a symbol KNOWN to have a definition / callers / callees) an empty or "No direct C++ callers found…" sentinel response is a **miss**, not a hit — this closes the `min_results:0` loophole. |
+| `field_completeness_rate` | Higher is better | Mean per-task field-completeness computed **only over expected-nonempty (`require_results`) lookups**: a required lookup that returned nothing contributes `0`. This closes the divide-by-returned-results loophole where an empty run scored a vacuous `1.0`. |
 | `schema_adherence_rate` | Higher is better | Fraction of `schema_field_presence` tasks where the discovered schema contains `planning_signals`, `skill`, and both `output_contract_status`/`next_actions_status` explicitly declared. |
-| `stale_rate` | Lower is better | Fraction of `health_check` tasks whose response signals a stale, error, or missing-fields condition. |
-| `mean_results_per_lookup` | Higher is better (in range) | Average number of results returned per `symbol_lookup` task. Very low values indicate sparse indexing; this metric is informational only and is not included in the score. |
+| `stale_rate` | Lower is better | Fraction of `health_check` tasks whose response signals a stale, error, or missing-fields condition. Scored as `1 - stale_rate`. |
+| `ergonomics_success_rate` | Higher is better | Fraction of `ergonomics_text` tasks (`get_include_path`, `get_signature`, `verify_symbols`, …) returning non-empty, non-error text. |
+| `negative_recovery_rate` | Higher is better | Mean RESPONSE-QUALITY score (`0..1`) over `negative_recovery` tasks (deliberately bad input — nonexistent symbols, missing params, unqualified names). A transport crash or a silent empty success scores `0`; a structured error that names the offending identifier scores `0.7`; the same error plus a did-you-mean / qualified-symbol / retry hint scores `1.0`. For unqualified-resolution tasks (`expect_error:false`) a populated answer is the pass and a not-found rejection is the failure. |
+| `mean_results_per_lookup` | Higher is better (in range) | Average number of results returned per lookup task. Informational only; not included in the score. |
 
 ## Interpretation
 
 A `source_index_score` at or above **0.80** indicates the source index is
-reliably serving agents with symbol location, call-graph edges, and schema
-planning signals.
+reliably serving agents with symbol location, call-graph edges, schema planning
+signals, **and self-correcting errors on bad input**.
 
 Key improvement vectors:
 
-1. **symbol_hit_rate** — more golden symbols indexed, or fewer connection
-   errors when the live editor is unavailable.
+1. **symbol_hit_rate** — more golden symbols indexed, and the curated
+   `require_results` symbols (e.g. `AActor::BeginPlay` callers) must actually
+   resolve to non-empty call edges, not return the "may be called via delegates"
+   sentinel.
 2. **field_completeness_rate** — result rows should include `kind` and
    `file_path` (or equivalent `location`) alongside `name`.
 3. **schema_adherence_rate** — source actions should declare
@@ -42,3 +53,9 @@ Key improvement vectors:
 4. **stale_rate** — `source health` should return a non-stale status with a
    populated `symbol_count` field even when the editor is not running (offline
    DB mode).
+5. **ergonomics_success_rate** — plain-text helpers should return usable text,
+   not `Error` strings, on valid input.
+6. **negative_recovery_rate** — on bad input, source actions should fail with a
+   structured error that echoes the offending identifier and offers a
+   did-you-mean / qualified-symbol / "run search_source first" hint, never a
+   transport crash or a silent empty success.

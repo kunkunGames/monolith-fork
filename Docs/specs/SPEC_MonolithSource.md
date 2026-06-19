@@ -40,8 +40,8 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 |--------|--------|-------------|
 | `read_source` | `symbol`, `include_header`, `max_lines`, `members_only`, `start_line`, `end_line`, `line_count` | Get source code for a class/function/struct. FTS fallback if exact match fails. Routing tolerance: a path-like value passed as `symbol`, OR a path supplied under `file_path`/`path` with `symbol` absent, delegates to `read_file` (carrying any `start_line`/`end_line`/`line_count`/`max_lines`) instead of erroring. A well-formed symbol absent from `EngineSource.db` returns `error.data.error_class=coverage_miss` with a hint + `next_actions` (`source.search_source`, `source.trigger_project_reindex`, `source.health`) instead of a bare not-found, so an index coverage gap routes to search/reindex rather than an `editor.run_python` fallback |
 | `find_references` | `symbol`, `ref_kind`, `limit` | Find all usage sites. Unknown symbols return success with `match_status=no_symbol`, `count=0`, and `next_actions` instead of a retry-inducing hard error |
-| `find_callers` | `symbol`, `limit` | All functions that call the given function |
-| `find_callees` | `symbol`, `limit` | All functions called by the given function |
+| `find_callers` | `symbol`, `limit` | All functions that call the given function. `symbol` accepts a bare name OR a qualified `Class::Method` (2026-06-18): the trailing method identifier drives the name/FTS lookup and, when a class scope is given, the exact qualified overload is preferred. Previously a qualified input returned "No function found matching ..." — the most common worker form. |
+| `find_callees` | `symbol`, `limit` | All functions called by the given function. Same qualified `Class::Method` resolution as `find_callers` (2026-06-18). |
 | `search_source` | `query`, `scope`, `limit`, `mode`, `module`, `path_filter`, `symbol_kind` | Dual search: symbol FTS + source line FTS |
 | `get_class_hierarchy` | `symbol`, `direction`, `depth` | Inheritance tree (both/ancestors/descendants, max 80 shown) |
 | `get_module_info` | `module_name` | Module stats: file count, symbol counts, key classes |

@@ -1,21 +1,35 @@
 # Offline Parity Benchmark Results
 
-## 2026-06-17 Definition Snapshot
+## 2026-06-18 Externalization + offline-unsupported bucket
 
-No full exe-vs-py benchmark result is checked in yet. This update expands and
-verifies the benchmark definition and report schema.
+This update externalizes the action table to `actions.jsonl` + `manifest.json`
+(ITEM 1, so the table gets the same hosted-static-CI line-count validation as the
+other five benchmarks) and adds the `offline_unsupported` bucket (ITEM 2, so
+"both offline tools agree the surface errors" scores as an `expected_offline`
+`MATCH` instead of a `real` `ERROR` that masks the real parity signal).
 
 | Item | Value |
 | --- | ---: |
 | Benchmark actions | 317 |
-| Added in this update | 100 |
 | `cppreflect` actions | 96 |
 | `network` actions | 46 |
 | `decision` actions | 50 |
 | `risk` actions | 62 |
 | `source` actions | 63 |
-| Expected-error source cases | 5 |
+| Expected-error source cases (`expected_error`) | 5 |
+| Offline-unsupported source rows (`offline_unsupported`) | 58 |
 | CI hard-gate actions (`verify_offline_parity.py`) | 137 |
+
+## 2026-06-18 Offline Validation
+
+| Check | Result |
+| --- | --- |
+| Python compile | `python -m py_compile Scripts/offline_parity_benchmark.py` passed. |
+| Table load | `load_action_specs()` returned 317 rows; `manifest.json` `action_count`=317 equals the `actions.jsonl` non-empty line count. |
+| Loader parity | `build_actions(chain)` reproduces the prior 317 actions, token substitution (`{{uclass}}`/`{{risk_path}}`) and the 6 `decision_id`-dependent SKIP rows. |
+| Hosted-static-CI | `check_benchmark_definitions` on the live config returned 0 findings for the new OfflineParity entry (line-count + manifest path + `DEFAULT_ACTIONS`/`DEFAULT_MANIFEST` attrs). |
+| Full exe-vs-py run | 311 MATCH / 0 DIFF / 0 ERROR / 6 SKIP, `offline_parity_score=1.0`, identical to the pre-change baseline — externalization is behavior-preserving. |
+| Unit test | `python Scripts/test_offline_parity_benchmark.py` — all 8 test functions / 22 assertions passed. Reclassification raises a both-fail run from `0.4167` (real ERROR) to `1.0` (`expected_offline`); a one-sided disagreement still fails as `offline_parity_break`. |
 
 ## CI Threshold View
 
@@ -25,7 +39,7 @@ verifies the benchmark definition and report schema.
 | Benchmark trend gate | `offline_parity_score >= 0.95`, `real_error_count == 0`, `expected_error_problem_count == 0`. |
 | Regression investigation | `offline_parity_score < 0.85` or a drop greater than `0.05` from the previous checked run. |
 
-## Latest Verification
+## Prior Verification (2026-06-17 definition snapshot)
 
 | Check | Result |
 | --- | --- |
@@ -36,7 +50,6 @@ verifies the benchmark definition and report schema.
 | Report smoke | `report --summary <temp>\summary.json` printed `expected_error_rate`, `real_error_rate`, `expected_error_count`, `expected_error_problem_count`, and `real_error_count`. |
 | Expected-error sample | The 5 expected-error source cases returned `MATCH expected` with exit code `1` from both exe and py. |
 | Representative new-action sample | 6 new filter/API cases across `cppreflect`, `network`, `decision`, `risk`, and `source` returned `MATCH none`. |
-| Full 317-action exe-vs-py run | Not run during this update: it would launch both tools for every action, about 634 process invocations, and is better reserved for CI or a dedicated benchmark run. |
 
 ## Evidence Paths
 

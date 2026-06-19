@@ -337,6 +337,53 @@ _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617 = [
     "AgentOps",
 ]
 
+# Known-answer recall fixtures: (query, expected_object_path).
+#
+# Unlike the broad single-token searches above (which use min_results:0 and have no
+# ground truth), each of these queries a distinctive, project-unique asset name and
+# asserts the response actually contains the exact /Game object path for that asset.
+# This closes the "empty/broken index still scores 1.000" loophole: a known-answer
+# task is a HIT only when expected_object_path appears in the result set's
+# match_object_path values, and it requires >=1 result.
+#
+# expected_object_path is the package-relative object path emitted by project.search
+# for an asset-name match (the package path; no trailing `.AssetName` object suffix),
+# matching the live `match_object_path` field. Every pair below was verified against
+# Saved/ProjectIndex.db via `Binaries\monolith_query.exe project search <query>` so the
+# expected path is present in the default content-inclusive search results.
+_KNOWN_ANSWER_FIXTURES_20260618: List[Tuple[str, str]] = [
+    ("DA_Monster_001_Wiggly", "/Game/Design/DataAsset/Monsters/DA_Monster_001_Wiggly"),
+    ("DA_Monster_002_Puffshroom", "/Game/Design/DataAsset/Monsters/DA_Monster_002_Puffshroom"),
+    ("DA_Monster_003_Chonkbee", "/Game/Design/DataAsset/Monsters/DA_Monster_003_Chonkbee"),
+    ("DA_Character_001_Kain", "/Game/Design/DataAsset/Characters/DA_Character_001_Kain"),
+    ("DA_Character_002_Igna", "/Game/Design/DataAsset/Characters/DA_Character_002_Igna"),
+    ("DA_Character_003_Leia", "/Game/Design/DataAsset/Characters/DA_Character_003_Leia"),
+    ("DA_Weapon_001_Whip", "/Game/Design/DataAsset/Weapons/DA_Weapon_001_Whip"),
+    ("DA_Weapon_002_Magic_Wand", "/Game/Design/DataAsset/Weapons/DA_Weapon_002_Magic_Wand"),
+    ("DA_Weapon_004_Axe", "/Game/Design/DataAsset/Weapons/DA_Weapon_004_Axe"),
+    ("DA_Item_001_Egg", "/Game/Design/DataAsset/Item/DA_Item_001_Egg"),
+    ("DA_Potion_001_Potion_of_Life", "/Game/Design/DataAsset/Item/Potions/DA_Potion_001_Potion_of_Life"),
+    ("DA_Potion_005_Potion_of_Vampirism", "/Game/Design/DataAsset/Item/Potions/DA_Potion_005_Potion_of_Vampirism"),
+    ("DA_Pawn_001_PlayerCharacter", "/Game/Design/DataAsset/PawnTable/DA_Pawn_001_PlayerCharacter"),
+    ("DA_Synergy_001_s2_01", "/Game/Design/DataAsset/Synergies/DA_Synergy_001_s2_01"),
+    ("DA_Synergy_010_s2_10", "/Game/Design/DataAsset/Synergies/DA_Synergy_010_s2_10"),
+    ("DA_Stage_001_A", "/Game/Design/DataAsset/Stages/DA_Stage_001_A"),
+    ("DA_NodeMap_001_Generation_Default", "/Game/Design/DataAsset/NodeMap/DA_NodeMap_001_Generation_Default"),
+    ("DA_NodeMap_002_Style_Default", "/Game/Design/DataAsset/NodeMap/DA_NodeMap_002_Style_Default"),
+    ("DA_StageGeneration_001_Config", "/Game/Design/DataAsset/Stages/Generation/DA_StageGeneration_001_Config"),
+    ("DA_GameplayExperience_001_LobbyExperience", "/Game/Design/DataAsset/Experience/DA_GameplayExperience_001_LobbyExperience"),
+    ("DA_World_002_Lobby", "/Game/Design/DataAsset/WorldTable/DA_World_002_Lobby"),
+    ("EUW_StageMaker", "/Game/Editor/StageMaker/EUW_StageMaker"),
+    ("EUW_CheatPanel", "/Game/CheatBoard/EUW_CheatPanel"),
+    ("DT_AbilityTags", "/Game/Design/DataTable/GameplayTags/DT_AbilityTags"),
+    ("DT_CommonTags", "/Game/Design/DataTable/GameplayTags/DT_CommonTags"),
+    ("DT_DamageTypeTags", "/Game/Design/DataTable/GameplayTags/DT_DamageTypeTags"),
+    ("DT_GameplayCueTags", "/Game/Design/DataTable/GameplayTags/DT_GameplayCueTags"),
+    ("IA_Attack", "/Game/Design/PC/Input/Actions/IA_Attack"),
+    ("IA_Interaction", "/Game/Design/PC/Input/Actions/IA_Interaction"),
+    ("IMC_Default", "/Game/GameMode/GameModeSub/IMC_Default"),
+]
+
 
 def append_project_search_tasks(tasks: List[Dict[str, Any]], next_id: Any, queries: List[str]) -> None:
     for query in queries:
@@ -348,6 +395,35 @@ def append_project_search_tasks(tasks: List[Dict[str, Any]], next_id: Any, queri
             "tool": "project_query",
             "arguments": {"action": "search", "query": query},
             "expected": {"valid_response": True, "min_results": 0},
+            "safety": "read_only",
+        })
+
+
+def append_project_known_answer_tasks(
+    tasks: List[Dict[str, Any]],
+    next_id: Any,
+    fixtures: List[Tuple[str, str]],
+) -> None:
+    """Append known-answer recall tasks.
+
+    Each task searches a distinctive asset name and asserts the response contains
+    the exact expected /Game object path. min_results is 1 (require_results), so an
+    empty or broken index cannot pass these tasks.
+    """
+    for query, expected_object_path in fixtures:
+        tasks.append({
+            "id": next_id(),
+            "category": "known_answer",
+            "namespace": "project",
+            "action": "search",
+            "tool": "project_query",
+            "arguments": {"action": "search", "query": query},
+            "expected": {
+                "valid_response": True,
+                "min_results": 1,
+                "expected_object_path": expected_object_path,
+            },
+            "require_results": True,
             "safety": "read_only",
         })
 
@@ -617,6 +693,27 @@ def result_has_project_fields(result: Dict[str, Any]) -> bool:
     return present >= 2
 
 
+def result_object_paths(results: List[Dict[str, Any]]) -> List[str]:
+    """All match_object_path values present across the result rows."""
+    paths: List[str] = []
+    for result in results:
+        value = result.get("match_object_path")
+        if isinstance(value, str) and value:
+            paths.append(value)
+    return paths
+
+
+def known_answer_hit(results: List[Dict[str, Any]], expected_object_path: str) -> bool:
+    """True if the expected /Game object path appears among the result rows.
+
+    A HIT requires the asset to actually be present in the response, so an empty
+    or broken index can never satisfy a known-answer task.
+    """
+    if not expected_object_path:
+        return False
+    return expected_object_path in result_object_paths(results)
+
+
 def is_valid_non_error_response(data: Dict[str, Any], response: Dict[str, Any]) -> bool:
     """True if the response is a valid non-error JSON object (even if results are empty)."""
     if response.get("transport_error"):
@@ -662,25 +759,57 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
     data = result_data(response)
     category = task.get("category")
+    expected = task.get("expected", {}) if isinstance(task.get("expected"), dict) else {}
+    min_results = int(expected.get("min_results", 0) or 0)
 
     direct_success = False
     results_count = 0
     field_complete_count = 0
+    # expected_nonempty marks tasks whose contract demands >=1 result, so the
+    # field_completeness aggregate can penalize zero-result responses instead of
+    # vacuously crediting them. known_answer tasks are always expected-nonempty.
+    expected_nonempty = min_results >= 1
+    known_answer_hit_flag = False
     stale = False
     planning_signals = False
     evidence: Dict[str, Any] = {}
 
-    if category in ("asset_search", "gameplay_tag_lookup"):
+    if category == "known_answer":
         results = project_results(data)
         results_count = len(results)
-        # Lenient scoring: empty result set is OK if the response is a valid non-error object
         valid_resp = is_valid_non_error_response(data, response)
-        direct_success = valid_resp
+        expected_object_path = str(expected.get("expected_object_path", ""))
+        hit = known_answer_hit(results, expected_object_path)
+        known_answer_hit_flag = hit
+        # A known-answer task succeeds only when the response is valid, has >=1
+        # result, AND that result set actually contains the expected asset path.
+        direct_success = valid_resp and results_count >= 1 and hit
         field_complete_count = sum(1 for r in results if result_has_project_fields(r))
         evidence = {
             "results_count": results_count,
             "field_complete_count": field_complete_count,
             "valid_response": valid_resp,
+            "expected_object_path": expected_object_path,
+            "known_answer_hit": hit,
+        }
+
+    elif category in ("asset_search", "gameplay_tag_lookup"):
+        results = project_results(data)
+        results_count = len(results)
+        valid_resp = is_valid_non_error_response(data, response)
+        # Tasks with expected.min_results>=1 (require_results) must return >=1 result;
+        # generic broad-token searches keep min_results:0 and stay lenient (empty OK
+        # if the response is a valid non-error object).
+        if expected_nonempty:
+            direct_success = valid_resp and results_count >= 1
+        else:
+            direct_success = valid_resp
+        field_complete_count = sum(1 for r in results if result_has_project_fields(r))
+        evidence = {
+            "results_count": results_count,
+            "field_complete_count": field_complete_count,
+            "valid_response": valid_resp,
+            "require_results": expected_nonempty,
             "first_result_keys": list(results[0].keys())[:8] if results else [],
         }
 
@@ -738,6 +867,8 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         "direct_success": direct_success,
         "results_count": results_count,
         "field_complete_count": field_complete_count,
+        "expected_nonempty": expected_nonempty,
+        "known_answer_hit": known_answer_hit_flag,
         "stale": stale,
         "planning_signals": planning_signals,
         "evidence": evidence,
@@ -752,20 +883,46 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
 # Aggregate
 # ---------------------------------------------------------------------------
 
+# Hard cap applied to project_index_score when a run returns zero results across
+# every result-bearing task (asset_search + gameplay_tag_lookup + known_answer). An
+# empty or broken index can no longer score near 1.000 -- it is pinned at/below this.
+ALL_EMPTY_SCORE_CAP = 0.30
+
+
 def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     search_rows = [r for r in rows if r["category"] in ("asset_search", "gameplay_tag_lookup")]
+    known_answer_rows = [r for r in rows if r["category"] == "known_answer"]
     health_rows = [r for r in rows if r["category"] == "health_check"]
     stats_rows = [r for r in rows if r["category"] == "stats_check"]
     schema_rows = [r for r in rows if r["category"] == "schema_field_presence"]
 
-    # search_hit_rate: fraction of search rows where direct_success (lenient -- empty OK if valid response)
+    # Result-bearing rows: every task that calls project.search / list_gameplay_tags.
+    result_rows = search_rows + known_answer_rows
+
+    # search_hit_rate: fraction of asset_search + gameplay_tag_lookup rows where
+    # direct_success (lenient for min_results:0 rows -- empty OK if valid response;
+    # strict for require_results rows -- needs >=1 result).
     search_hit_rate = avg([1.0 if r["direct_success"] else 0.0 for r in search_rows])
 
-    # field_completeness_rate: fraction of actual result items with >=2 required fields present
-    # If no results anywhere, vacuously 1.0
-    total_results = sum(r["results_count"] for r in search_rows if r["results_count"] > 0)
-    total_complete = sum(r["field_complete_count"] for r in search_rows if r["results_count"] > 0)
-    field_completeness_rate = total_complete / total_results if total_results > 0 else 1.0
+    # known_answer_hit_rate: fraction of known-answer recall tasks whose response
+    # actually contained the expected /Game object path. Zero ground-truth before;
+    # this is the dimension an empty/broken index cannot fake.
+    known_answer_hit_rate = avg([1.0 if r["direct_success"] else 0.0 for r in known_answer_rows])
+
+    # field_completeness_rate: fraction of returned result items with >=2 required
+    # fields present, computed over EXPECTED-NONEMPTY tasks (known_answer + any
+    # require_results search). Zero-result responses no longer score a vacuous 1.0:
+    #   - if there are expected-nonempty tasks but they returned no rows at all, the
+    #     rate is 0.0 (a broken index is penalized, not credited);
+    #   - only when there are no expected-nonempty tasks defined does it stay 1.0
+    #     (nothing to measure), which cannot happen in the generated corpus.
+    expected_nonempty_rows = [r for r in result_rows if r.get("expected_nonempty")]
+    if expected_nonempty_rows:
+        total_results = sum(r["results_count"] for r in expected_nonempty_rows)
+        total_complete = sum(r["field_complete_count"] for r in expected_nonempty_rows)
+        field_completeness_rate = total_complete / total_results if total_results > 0 else 0.0
+    else:
+        field_completeness_rate = 1.0
 
     # schema_adherence_rate: fraction of schema_field_presence tasks with planning_signals present
     schema_adherence_rate = avg([1.0 if r["planning_signals"] else 0.0 for r in schema_rows])
@@ -774,21 +931,37 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     stale_rate = avg([1.0 if r["stale"] else 0.0 for r in health_rows])
 
     # stats_check_rate: fraction of get_stats tasks returning the success/indexing/stats
-    # contract. Informational only -- not folded into project_index_score so the
-    # existing weighted formula and its weights stay unchanged.
+    # contract. Informational only -- not folded into project_index_score.
     stats_check_rate = avg([1.0 if r["direct_success"] else 0.0 for r in stats_rows])
 
     error_count = sum(1 for r in rows if r.get("transport_error") or r.get("response_is_error"))
     error_free_rate = 1.0 - (error_count / len(rows) if rows else 0.0)
 
-    # project_index_score
+    # all_empty: loud integrity signal. True when there are result-bearing tasks but
+    # NONE of them returned a single result -- i.e. the index is empty or broken.
+    total_result_count = sum(r["results_count"] for r in result_rows)
+    all_empty = bool(result_rows) and total_result_count == 0
+
+    # project_index_score (weights sum to 1.0)
     project_index_score = (
-        0.35 * search_hit_rate
-        + 0.25 * field_completeness_rate
-        + 0.20 * schema_adherence_rate
+        0.25 * search_hit_rate
+        + 0.20 * known_answer_hit_rate
+        + 0.20 * field_completeness_rate
+        + 0.15 * schema_adherence_rate
         + 0.10 * (1.0 - stale_rate)
         + 0.10 * error_free_rate
     )
+    # An all-empty run cannot score near-perfect even if schema/health probes pass.
+    if all_empty:
+        project_index_score = min(project_index_score, ALL_EMPTY_SCORE_CAP)
+
+    if all_empty:
+        print(
+            f"[ALL-EMPTY] WARNING: {len(result_rows)} result-bearing tasks returned 0 results total; "
+            f"index appears EMPTY or BROKEN. project_index_score capped at {ALL_EMPTY_SCORE_CAP}.",
+            file=sys.stderr,
+            flush=True,
+        )
 
     return {
         "label": label,
@@ -796,15 +969,18 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
         "mcp_status": status,
         "task_count": len(rows),
         "error_count": error_count,
+        "all_empty": all_empty,
         "category_counts": count_by(tasks, "category"),
         "metrics": {
             "project_index_score": round(project_index_score, 6),
             "search_hit_rate": round(search_hit_rate, 6),
+            "known_answer_hit_rate": round(known_answer_hit_rate, 6),
             "field_completeness_rate": round(field_completeness_rate, 6),
             "schema_adherence_rate": round(schema_adherence_rate, 6),
             "stale_rate": round(stale_rate, 6),
             "stats_check_rate": round(stats_check_rate, 6),
             "error_free_rate": round(error_free_rate, 6),
+            "all_empty": all_empty,
             "task_count": len(rows),
             "error_count": error_count,
         },
@@ -955,6 +1131,9 @@ def build_static_tasks() -> List[Dict[str, Any]]:
     append_project_health_tasks(tasks, next_id, _ADDED_HEALTH_VARIANTS_20260617)
     append_project_search_tasks(tasks, next_id, _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617)
 
+    # --- known_answer: ground-truth recall fixtures (require_results, HIT-checked) ---
+    append_project_known_answer_tasks(tasks, next_id, _KNOWN_ANSWER_FIXTURES_20260618)
+
     return dedupe_tasks(tasks, "PIB")
 
 
@@ -974,14 +1153,16 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "generated_at": utc_now(),
         "task_count": len(tasks),
         "category_counts": count_by(tasks, "category"),
-        "score_formula": "0.35*search_hit_rate + 0.25*field_completeness_rate + 0.20*schema_adherence_rate + 0.10*(1-stale_rate) + 0.10*error_free_rate",
+        "score_formula": "0.25*search_hit_rate + 0.20*known_answer_hit_rate + 0.20*field_completeness_rate + 0.15*schema_adherence_rate + 0.10*(1-stale_rate) + 0.10*error_free_rate",
         "score_dimensions": [
             "search_hit_rate",
+            "known_answer_hit_rate",
             "field_completeness_rate",
             "schema_adherence_rate",
             "stale_rate",
             "error_free_rate",
         ],
+        "all_empty_score_cap": ALL_EMPTY_SCORE_CAP,
         "task_file": display_path(tasks_path),
     }
     write_json(manifest_path, manifest)
@@ -1068,6 +1249,7 @@ def write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) ->
     metrics = [
         "project_index_score",
         "search_hit_rate",
+        "known_answer_hit_rate",
         "field_completeness_rate",
         "schema_adherence_rate",
         "stale_rate",

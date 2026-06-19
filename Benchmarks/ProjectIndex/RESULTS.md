@@ -17,6 +17,16 @@ Then copy the key metrics here from `Saved\Monolith\Benchmarks\ProjectIndex\init
 
 ## Results table scaffold
 
-| Run label | Date | project_index_score | search_hit_rate | field_completeness_rate | schema_adherence_rate | stale_rate |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| _(no runs yet)_ | -- | -- | -- | -- | -- | -- |
+| Run label | Date | project_index_score | search_hit_rate | known_answer_hit_rate | field_completeness_rate | schema_adherence_rate | stale_rate | error_free_rate |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| _(no complete runs yet)_ | -- | -- | -- | -- | -- | -- | -- | -- |
+
+## Offline scoring self-test (no live editor)
+
+`python Plugins\Monolith\Scripts\test_project_index_benchmark.py` validates the new
+scoring branches without an MCP endpoint. Latest local result:
+
+| Scenario | project_index_score | all_empty | Note |
+| --- | ---: | --- | --- |
+| Empty / broken index (all searches return 0 results) | 0.30 (capped) | true | Was `1.000` before the empty-results loophole fix |
+| Healthy index (known-answer hits + field-complete rows) | 1.00 | false | Ground-truth recall + completeness both satisfied |

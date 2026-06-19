@@ -61,6 +61,12 @@ MONO_ROOT = SCRIPT_DIR.parent
 DEFAULT_EXE_PATH = MONO_ROOT / "Binaries" / "monolith_query.exe"
 DEFAULT_PY_PATH = MONO_ROOT / "Scripts" / "monolith_offline.py"
 
+# Externalized benchmark definition (gets hosted-static-CI line-count validation
+# via .github/monolith-static-ci.json -> benchmark_definitions). The action table
+# lives in actions.jsonl as data, not as a hard-coded Python literal.
+DEFAULT_ACTIONS = MONO_ROOT / "Benchmarks" / "OfflineParity" / "actions.jsonl"
+DEFAULT_MANIFEST = MONO_ROOT / "Benchmarks" / "OfflineParity" / "manifest.json"
+
 # ------------------------------------------------------------------ time helpers
 
 
@@ -158,8 +164,27 @@ TIME_TOLERANCE_SEC = 5
 # Actions whose next_cursor qh is derived from a wall-clock value.
 TIME_DERIVED_CURSOR_ACTIONS = {"risk.get_release_window_hotspots"}
 
+# The action table is externalized to actions.jsonl; manifest.json carries the
+# authoritative count. EXPECTED_ACTION_COUNT is kept as a documented fallback for
+# environments where the manifest is unavailable, and is asserted against the
+# loaded table so drift between the data file and this constant is loud.
 EXPECTED_ACTION_COUNT = 317
-BENCHMARK_EXTENSION_ACTION_COUNT = 100
+
+# Placeholder tokens substituted from chain-discovery at load time. Keeping them
+# as explicit constants makes the actions.jsonl contract self-documenting.
+TOKEN_UCLASS = "{{uclass}}"
+TOKEN_DECISION_ID = "{{decision_id}}"
+TOKEN_RISK_PATH = "{{risk_path}}"
+
+# error_kind classification groups (shared by category breakdown, metrics, and
+# diagnostics so the buckets stay consistent).
+#   - EXPECTED_MATCH_KINDS: the two offline tools AGREE on a failure that is not a
+#     regression (bad-input probe, or an offline-unsupported surface). These keep
+#     status=MATCH and must NOT drag the score down.
+#   - EXPECTED_PROBLEM_KINDS: a negative/offline-unsupported row where the tools
+#     DISAGREE (genuine exe-vs-py parity break). These fail.
+EXPECTED_MATCH_KINDS = ("expected", "expected_offline")
+EXPECTED_PROBLEM_KINDS = ("expected_missing", "expected_mismatch", "offline_parity_break")
 
 
 def _clip_text(text: str, limit: int = 400) -> str:
@@ -326,410 +351,117 @@ def discover_chain_inputs(
 
 
 # ------------------------------------------------------------------ action table
-# (inlined from verify_offline_parity.py)
+# Externalized to Benchmarks/OfflineParity/actions.jsonl (one action per line) so
+# the table is reviewable as data and gets hosted-static-CI line-count validation.
 
 
-def build_actions(chain: Dict[str, Any]) -> List[tuple]:
+def _read_manifest_action_count():
+    """Return the manifest's authoritative action_count, or None if unavailable."""
+    try:
+        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    count = manifest.get("action_count")
+    return count if isinstance(count, int) else None
+
+
+def _substitute_tokens(args, chain):
     """
-    The 317 parity actions with deterministic representative args.
-    Each entry: (label, namespace, action, args_or_None) or
-                (label, namespace, action, args_or_None, compare_mode)
-                (label, namespace, action, args_or_None, compare_mode, metadata)
-    where compare_mode defaults to "json"; "text" uses strict byte-compare.
-    metadata currently supports expected_error=True for negative source cases.
-    None args means the action is reported as SKIP rather than a parity failure.
+    Replace placeholder tokens with chain-discovered values.
+
+    Returns None (-> SKIP) when a required chain input (currently decision_id) is
+    missing, mirroring the legacy `[did] if did else None` behavior.
     """
-    cls = chain["uclass"]
-    did = chain["decision_id"]
-    rpath = chain["risk_path"]
+    out = []
+    for raw in args:
+        if raw == TOKEN_UCLASS:
+            value = chain.get("uclass")
+        elif raw == TOKEN_DECISION_ID:
+            value = chain.get("decision_id")
+        elif raw == TOKEN_RISK_PATH:
+            value = chain.get("risk_path")
+        else:
+            out.append(str(raw))
+            continue
+        if value is None:
+            return None
+        out.append(str(value))
+    return out
 
-    actions = [
-        # ---- cppreflect (26) ----
-        # chain-derived entries (6)
-        ("cppreflect.get_uclass", "cppreflect", "get_uclass", [cls]),
-        ("cppreflect.list_uproperties", "cppreflect", "list_uproperties", [cls]),
-        ("cppreflect.list_ufunctions", "cppreflect", "list_ufunctions", [cls]),
-        ("cppreflect.find_interface_impls", "cppreflect", "find_interface_impls",
-         ["IAbilitySystemInterface"]),
-        ("cppreflect.find_class_specifier", "cppreflect", "find_class_specifier",
-         ["Blueprintable"]),
-        ("cppreflect.list_class_specifiers", "cppreflect", "list_class_specifiers", []),
-        # fixed engine class entries (20)
-        ("cppreflect.get_uclass/ACharacter", "cppreflect", "get_uclass", ["ACharacter"]),
-        ("cppreflect.get_uclass/APlayerController", "cppreflect", "get_uclass", ["APlayerController"]),
-        ("cppreflect.get_uclass/AGameModeBase", "cppreflect", "get_uclass", ["AGameModeBase"]),
-        ("cppreflect.get_uclass/AGameStateBase", "cppreflect", "get_uclass", ["AGameStateBase"]),
-        ("cppreflect.get_uclass/APlayerState", "cppreflect", "get_uclass", ["APlayerState"]),
-        ("cppreflect.get_uclass/UActorComponent", "cppreflect", "get_uclass", ["UActorComponent"]),
-        ("cppreflect.list_uproperties/ACharacter", "cppreflect", "list_uproperties", ["ACharacter"]),
-        ("cppreflect.list_uproperties/AGameModeBase", "cppreflect", "list_uproperties", ["AGameModeBase"]),
-        ("cppreflect.list_uproperties/AGameStateBase", "cppreflect", "list_uproperties", ["AGameStateBase"]),
-        ("cppreflect.list_ufunctions/ACharacter", "cppreflect", "list_ufunctions", ["ACharacter"]),
-        ("cppreflect.list_ufunctions/APlayerController", "cppreflect", "list_ufunctions", ["APlayerController"]),
-        ("cppreflect.list_ufunctions/AGameModeBase", "cppreflect", "list_ufunctions", ["AGameModeBase"]),
-        ("cppreflect.find_interface_impls/IGameplayTaskOwnerInterface", "cppreflect", "find_interface_impls", ["IGameplayTaskOwnerInterface"]),
-        ("cppreflect.find_interface_impls/IAbilitySystemInterface", "cppreflect", "find_interface_impls", ["IAbilitySystemInterface"]),
-        ("cppreflect.find_class_specifier/BlueprintType", "cppreflect", "find_class_specifier", ["BlueprintType"]),
-        ("cppreflect.find_class_specifier/NotBlueprintable", "cppreflect", "find_class_specifier", ["NotBlueprintable"]),
-        ("cppreflect.find_class_specifier/Abstract", "cppreflect", "find_class_specifier", ["Abstract"]),
-        ("cppreflect.find_class_specifier/MinimalAPI", "cppreflect", "find_class_specifier", ["MinimalAPI"]),
-        ("cppreflect.find_class_specifier/Config", "cppreflect", "find_class_specifier", ["Config"]),
-        ("cppreflect.list_class_specifiers(b)", "cppreflect", "list_class_specifiers", []),
 
-        # ---- network (16) ----
-        # original entries (4)
-        ("network.list_replicated_classes", "network", "list_replicated_classes",
-         ["--limit", "5"]),
-        ("network.list_rpc_functions", "network", "list_rpc_functions", ["--limit", "5"]),
-        ("network.list_onrep_handlers", "network", "list_onrep_handlers", ["--limit", "5"]),
-        ("network.audit_unbalanced_onreps", "network", "audit_unbalanced_onreps", []),
-        # limit variants (12)
-        ("network.list_replicated_classes/limit1", "network", "list_replicated_classes", ["--limit", "1"]),
-        ("network.list_replicated_classes/limit10", "network", "list_replicated_classes", ["--limit", "10"]),
-        ("network.list_replicated_classes/limit20", "network", "list_replicated_classes", ["--limit", "20"]),
-        ("network.list_replicated_classes/limit50", "network", "list_replicated_classes", ["--limit", "50"]),
-        ("network.list_rpc_functions/limit1", "network", "list_rpc_functions", ["--limit", "1"]),
-        ("network.list_rpc_functions/limit10", "network", "list_rpc_functions", ["--limit", "10"]),
-        ("network.list_rpc_functions/limit20", "network", "list_rpc_functions", ["--limit", "20"]),
-        ("network.list_onrep_handlers/limit1", "network", "list_onrep_handlers", ["--limit", "1"]),
-        ("network.list_onrep_handlers/limit10", "network", "list_onrep_handlers", ["--limit", "10"]),
-        ("network.list_onrep_handlers/limit20", "network", "list_onrep_handlers", ["--limit", "20"]),
-        # determinism verification (repeat calls)
-        ("network.audit_unbalanced_onreps/det1", "network", "audit_unbalanced_onreps", []),
-        ("network.audit_unbalanced_onreps/det2", "network", "audit_unbalanced_onreps", []),
+def load_action_specs(actions_path=None):
+    """
+    Load the raw action specs from actions.jsonl (no token substitution yet).
 
-        # ---- decision (15) ----
-        # original entries (5)
-        ("decision.list_decisions", "decision", "list_decisions", ["--limit", "5"]),
-        ("decision.get_decision", "decision", "get_decision", [did] if did else None),
-        ("decision.list_stale", "decision", "list_stale", ["3650", "--limit", "5"]),
-        ("decision.find_supersession_chain", "decision", "find_supersession_chain",
-         [did] if did else None),
-        ("decision.find_referent_decisions", "decision", "find_referent_decisions",
-         [did] if did else None),
-        # limit variants (4)
-        ("decision.list_decisions/limit1", "decision", "list_decisions", ["--limit", "1"]),
-        ("decision.list_decisions/limit10", "decision", "list_decisions", ["--limit", "10"]),
-        ("decision.list_decisions/limit20", "decision", "list_decisions", ["--limit", "20"]),
-        ("decision.list_decisions/limit50", "decision", "list_decisions", ["--limit", "50"]),
-        # staleness threshold variants (6)
-        ("decision.list_stale/30d", "decision", "list_stale", ["30", "--limit", "5"]),
-        ("decision.list_stale/90d", "decision", "list_stale", ["90", "--limit", "5"]),
-        ("decision.list_stale/180d", "decision", "list_stale", ["180", "--limit", "5"]),
-        ("decision.list_stale/365d", "decision", "list_stale", ["365", "--limit", "5"]),
-        ("decision.list_stale/730d", "decision", "list_stale", ["730", "--limit", "5"]),
-        ("decision.list_stale/1825d", "decision", "list_stale", ["1825", "--limit", "5"]),
+    Each line is a JSON object with keys:
+      label, namespace, action, args (list, may contain placeholder tokens),
+      and optional: compare ("text"|"json"), expected_error (bool),
+      offline_unsupported (bool), requires ("decision_id").
 
-        # ---- risk (22) ----
-        # original entries (5)
-        ("risk.get_hotspot_score", "risk", "get_hotspot_score", [rpath]),
-        ("risk.get_cochange_pairs", "risk", "get_cochange_pairs", [rpath]),
-        ("risk.get_file_churn", "risk", "get_file_churn", [rpath]),
-        ("risk.get_release_window_hotspots", "risk", "get_release_window_hotspots", []),
-        ("risk.list_conditional_gates", "risk", "list_conditional_gates", []),
-        # get_hotspot_score for additional files (7)
-        ("risk.get_hotspot_score/action_guidance_benchmark", "risk", "get_hotspot_score", ["Scripts/action_guidance_benchmark.py"]),
-        ("risk.get_hotspot_score/source_index_benchmark", "risk", "get_hotspot_score", ["Scripts/source_index_benchmark.py"]),
-        ("risk.get_hotspot_score/schema_completeness_benchmark", "risk", "get_hotspot_score", ["Scripts/schema_completeness_benchmark.py"]),
-        ("risk.get_hotspot_score/offline_parity_benchmark", "risk", "get_hotspot_score", ["Scripts/offline_parity_benchmark.py"]),
-        ("risk.get_hotspot_score/ci_static_checks", "risk", "get_hotspot_score", ["Scripts/ci_static_checks.py"]),
-        ("risk.get_hotspot_score/monolith_proxy", "risk", "get_hotspot_score", ["Scripts/monolith_proxy.py"]),
-        ("risk.get_hotspot_score/verify_offline_parity", "risk", "get_hotspot_score", ["Scripts/verify_offline_parity.py"]),
-        # get_cochange_pairs for additional files (5)
-        ("risk.get_cochange_pairs/monolith_offline", "risk", "get_cochange_pairs", ["Scripts/monolith_offline.py"]),
-        ("risk.get_cochange_pairs/ci_static_checks", "risk", "get_cochange_pairs", ["Scripts/ci_static_checks.py"]),
-        ("risk.get_cochange_pairs/monolith_proxy", "risk", "get_cochange_pairs", ["Scripts/monolith_proxy.py"]),
-        ("risk.get_cochange_pairs/index_project", "risk", "get_cochange_pairs", ["Scripts/index_project.py"]),
-        ("risk.get_cochange_pairs/tag_path_params", "risk", "get_cochange_pairs", ["Scripts/tag_path_params.py"]),
-        # get_file_churn for additional files (5)
-        ("risk.get_file_churn/lint_agent_tools", "risk", "get_file_churn", ["Scripts/lint_agent_tools.py"]),
-        ("risk.get_file_churn/check_offline_exe_fresh", "risk", "get_file_churn", ["Scripts/check_offline_exe_fresh.py"]),
-        ("risk.get_file_churn/check_index_freshness", "risk", "get_file_churn", ["Scripts/check_index_freshness.ps1"]),
-        ("risk.get_file_churn/recover_mcp", "risk", "get_file_churn", ["Scripts/recover_mcp.ps1"]),
-        ("risk.get_file_churn/docs_spec", "risk", "get_file_churn", ["Docs/SPEC.md"]),
+    Validates against the manifest action_count and EXPECTED_ACTION_COUNT so a
+    drifted data file fails loudly instead of silently changing the denominator.
+    """
+    path = actions_path or DEFAULT_ACTIONS
+    if not path.exists():
+        raise FileNotFoundError(f"offline parity action table not found: {path}")
 
-        # ---- source ergonomics (36) -- plain-text output, STRICT byte-compare ----
-        # original entries (7)
-        ("source.get_include_path", "source", "get_include_path", ["AActor"], "text"),
-        ("source.get_signature", "source", "get_signature",
-         ["UGameplayStatics::ApplyDamage"], "text"),
-        ("source.check_deprecations", "source", "check_deprecations",
-         ["PreparePathfinding", "AActor"], "text"),
-        ("source.verify_symbols", "source", "verify_symbols",
-         ["UGameplayStatics::ApplyDamage", "AActor", "UThisDoesNotExistAnywhereXYZ"], "text"),
-        ("source.find_example_usage", "source", "find_example_usage",
-         ["UGameplayStatics::ApplyDamage", "--limit", "5"], "text"),
-        ("source.lint_header", "source", "lint_header",
-         ["Source/MonolithSource/Private/Tests/Fixtures/CppErgoCorpus/Source/CppErgoTestMod/LintOrphanUproperty.h.fixture"], "text"),
-        ("source.generate_class_stub", "source", "generate_class_stub",
-         ["AActor", "AMyParityActor", "MonolithSource"], "text"),
-        # get_include_path for engine classes (10)
-        ("source.get_include_path/ACharacter", "source", "get_include_path", ["ACharacter"], "text"),
-        ("source.get_include_path/APlayerController", "source", "get_include_path", ["APlayerController"], "text"),
-        ("source.get_include_path/AGameModeBase", "source", "get_include_path", ["AGameModeBase"], "text"),
-        ("source.get_include_path/AGameStateBase", "source", "get_include_path", ["AGameStateBase"], "text"),
-        ("source.get_include_path/APlayerState", "source", "get_include_path", ["APlayerState"], "text"),
-        ("source.get_include_path/UActorComponent", "source", "get_include_path", ["UActorComponent"], "text"),
-        ("source.get_include_path/USceneComponent", "source", "get_include_path", ["USceneComponent"], "text"),
-        ("source.get_include_path/UStaticMeshComponent", "source", "get_include_path", ["UStaticMeshComponent"], "text"),
-        ("source.get_include_path/USkeletalMeshComponent", "source", "get_include_path", ["USkeletalMeshComponent"], "text"),
-        ("source.get_include_path/UPrimitiveComponent", "source", "get_include_path", ["UPrimitiveComponent"], "text"),
-        # get_signature for common engine methods (8)
-        ("source.get_signature/AActor_BeginPlay", "source", "get_signature", ["AActor::BeginPlay"], "text"),
-        ("source.get_signature/AActor_EndPlay", "source", "get_signature", ["AActor::EndPlay"], "text"),
-        ("source.get_signature/AActor_Tick", "source", "get_signature", ["AActor::Tick"], "text"),
-        ("source.get_signature/ACharacter_Jump", "source", "get_signature", ["ACharacter::Jump"], "text"),
-        ("source.get_signature/ACharacter_Crouch", "source", "get_signature", ["ACharacter::Crouch"], "text"),
-        ("source.get_signature/APlayerController_Possess", "source", "get_signature", ["APlayerController::Possess"], "text"),
-        ("source.get_signature/UActorComponent_BeginPlay", "source", "get_signature", ["UActorComponent::BeginPlay"], "text"),
-        ("source.get_signature/UActorComponent_TickComponent", "source", "get_signature", ["UActorComponent::TickComponent"], "text"),
-        # check_deprecations for symbol pairs (3)
-        ("source.check_deprecations/ACharacter_UActorComponent", "source", "check_deprecations", ["AActor", "ACharacter"], "text"),
-        ("source.check_deprecations/UObject_UActorComponent", "source", "check_deprecations", ["UObject", "UActorComponent"], "text"),
-        ("source.check_deprecations/AGameModeBase_AGameStateBase", "source", "check_deprecations", ["AGameModeBase", "AGameStateBase"], "text"),
-        # verify_symbols for symbol sets (5)
-        ("source.verify_symbols/AActor_ACharacter_UObject", "source", "verify_symbols", ["AActor", "ACharacter", "UObject"], "text"),
-        ("source.verify_symbols/ApplyDamage_BeginPlay", "source", "verify_symbols", ["UGameplayStatics::ApplyDamage", "AActor::BeginPlay"], "text"),
-        ("source.verify_symbols/APC_APS_AGSB", "source", "verify_symbols", ["APlayerController", "APlayerState", "AGameStateBase"], "text"),
-        ("source.verify_symbols/SMC_SKMC", "source", "verify_symbols", ["UStaticMeshComponent", "USkeletalMeshComponent"], "text"),
-        ("source.verify_symbols/GMB_GI_World", "source", "verify_symbols", ["AGameModeBase", "UGameInstance", "UWorld"], "text"),
-        # find_example_usage with different methods and limits (3)
-        ("source.find_example_usage/BeginPlay_limit3", "source", "find_example_usage", ["AActor::BeginPlay", "--limit", "3"], "text"),
-        ("source.find_example_usage/Jump_limit5", "source", "find_example_usage", ["ACharacter::Jump", "--limit", "5"], "text"),
-        ("source.find_example_usage/ApplyDamage_limit3", "source", "find_example_usage", ["UGameplayStatics::ApplyDamage", "--limit", "3"], "text"),
-        # generate_class_stub for different parent/class combos (2)
-        ("source.generate_class_stub/UObject_MyTestObject", "source", "generate_class_stub", ["UObject", "AMyTestObject", "TestModule"], "text"),
-        ("source.generate_class_stub/UActorComponent_MyTestComp", "source", "generate_class_stub", ["UActorComponent", "UMyTestComp", "TestModule"], "text"),
+    specs = []
+    seen_labels = set()
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, 1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                spec = json.loads(stripped)
+            except ValueError as exc:
+                raise ValueError(f"{path.name}:{line_no} is not valid JSON: {exc}")
+            for key in ("label", "namespace", "action", "args"):
+                if key not in spec:
+                    raise ValueError(f"{path.name}:{line_no} missing required key {key!r}")
+            if not isinstance(spec["args"], list):
+                raise ValueError(f"{path.name}:{line_no} 'args' must be a list")
+            label = spec["label"]
+            if label in seen_labels:
+                raise ValueError(f"{path.name}:{line_no} duplicate label {label!r}")
+            seen_labels.add(label)
+            specs.append(spec)
 
-        # ---- cppreflect (40 new) -- engine/GAS/input/UI/anim/movement reflection bundles ----
-        ("cppreflect.get_uclass/UGameplayAbility", "cppreflect", "get_uclass", ["UGameplayAbility"]),
-        ("cppreflect.get_uclass/UAbilitySystemComponent", "cppreflect", "get_uclass", ["UAbilitySystemComponent"]),
-        ("cppreflect.get_uclass/UAttributeSet", "cppreflect", "get_uclass", ["UAttributeSet"]),
-        ("cppreflect.get_uclass/UGameplayEffect", "cppreflect", "get_uclass", ["UGameplayEffect"]),
-        ("cppreflect.get_uclass/UEnhancedInputComponent", "cppreflect", "get_uclass", ["UEnhancedInputComponent"]),
-        ("cppreflect.get_uclass/UInputAction", "cppreflect", "get_uclass", ["UInputAction"]),
-        ("cppreflect.get_uclass/UInputMappingContext", "cppreflect", "get_uclass", ["UInputMappingContext"]),
-        ("cppreflect.get_uclass/UUserWidget", "cppreflect", "get_uclass", ["UUserWidget"]),
-        ("cppreflect.get_uclass/UAnimMontage", "cppreflect", "get_uclass", ["UAnimMontage"]),
-        ("cppreflect.get_uclass/UAnimInstance", "cppreflect", "get_uclass", ["UAnimInstance"]),
-        ("cppreflect.get_uclass/UCharacterMovementComponent", "cppreflect", "get_uclass", ["UCharacterMovementComponent"]),
-        ("cppreflect.get_uclass/UPawnMovementComponent", "cppreflect", "get_uclass", ["UPawnMovementComponent"]),
-        ("cppreflect.get_uclass/APawn", "cppreflect", "get_uclass", ["APawn"]),
-        ("cppreflect.get_uclass/ADefaultPawn", "cppreflect", "get_uclass", ["ADefaultPawn"]),
-        ("cppreflect.get_uclass/ASpectatorPawn", "cppreflect", "get_uclass", ["ASpectatorPawn"]),
-        ("cppreflect.get_uclass/AHUD", "cppreflect", "get_uclass", ["AHUD"]),
-        ("cppreflect.get_uclass/AInfo", "cppreflect", "get_uclass", ["AInfo"]),
-        ("cppreflect.get_uclass/AController", "cppreflect", "get_uclass", ["AController"]),
-        ("cppreflect.get_uclass/AAIController", "cppreflect", "get_uclass", ["AAIController"]),
-        ("cppreflect.get_uclass/USkeletalMeshComponent", "cppreflect", "get_uclass", ["USkeletalMeshComponent"]),
-        ("cppreflect.get_uclass/UStaticMeshComponent", "cppreflect", "get_uclass", ["UStaticMeshComponent"]),
-        ("cppreflect.get_uclass/USceneComponent", "cppreflect", "get_uclass", ["USceneComponent"]),
-        ("cppreflect.get_uclass/UPrimitiveComponent", "cppreflect", "get_uclass", ["UPrimitiveComponent"]),
-        ("cppreflect.get_uclass/UWorld", "cppreflect", "get_uclass", ["UWorld"]),
-        ("cppreflect.get_uclass/UGameInstance", "cppreflect", "get_uclass", ["UGameInstance"]),
-        ("cppreflect.get_uclass/ULevel", "cppreflect", "get_uclass", ["ULevel"]),
-        ("cppreflect.get_uclass/UGameViewportClient", "cppreflect", "get_uclass", ["UGameViewportClient"]),
-        ("cppreflect.list_uproperties/UActorComponent", "cppreflect", "list_uproperties", ["UActorComponent"]),
-        ("cppreflect.list_uproperties/APawn", "cppreflect", "list_uproperties", ["APawn"]),
-        ("cppreflect.list_uproperties/UWorld", "cppreflect", "list_uproperties", ["UWorld"]),
-        ("cppreflect.list_uproperties/UGameInstance", "cppreflect", "list_uproperties", ["UGameInstance"]),
-        ("cppreflect.list_ufunctions/UActorComponent", "cppreflect", "list_ufunctions", ["UActorComponent"]),
-        ("cppreflect.list_ufunctions/APawn", "cppreflect", "list_ufunctions", ["APawn"]),
-        ("cppreflect.list_ufunctions/UWorld", "cppreflect", "list_ufunctions", ["UWorld"]),
-        ("cppreflect.find_interface_impls/IGameplayTagAssetInterface", "cppreflect", "find_interface_impls", ["IGameplayTagAssetInterface"]),
-        ("cppreflect.find_interface_impls/IGenericTeamAgentInterface", "cppreflect", "find_interface_impls", ["IGenericTeamAgentInterface"]),
-        ("cppreflect.find_class_specifier/DefaultToInstanced", "cppreflect", "find_class_specifier", ["DefaultToInstanced"]),
-        ("cppreflect.find_class_specifier/EditInlineNew", "cppreflect", "find_class_specifier", ["EditInlineNew"]),
-        ("cppreflect.find_class_specifier/Transient", "cppreflect", "find_class_specifier", ["Transient"]),
-        ("cppreflect.find_class_specifier/HideDropdown", "cppreflect", "find_class_specifier", ["HideDropdown"]),
-
-        # ---- network (20 new) -- additional limit variants + determinism repeats ----
-        ("network.list_replicated_classes/limit2", "network", "list_replicated_classes", ["--limit", "2"]),
-        ("network.list_replicated_classes/limit3", "network", "list_replicated_classes", ["--limit", "3"]),
-        ("network.list_replicated_classes/limit4", "network", "list_replicated_classes", ["--limit", "4"]),
-        ("network.list_replicated_classes/limit6", "network", "list_replicated_classes", ["--limit", "6"]),
-        ("network.list_replicated_classes/limit7", "network", "list_replicated_classes", ["--limit", "7"]),
-        ("network.list_replicated_classes/limit8", "network", "list_replicated_classes", ["--limit", "8"]),
-        ("network.list_replicated_classes/limit15", "network", "list_replicated_classes", ["--limit", "15"]),
-        ("network.list_replicated_classes/limit25", "network", "list_replicated_classes", ["--limit", "25"]),
-        ("network.list_replicated_classes/limit30", "network", "list_replicated_classes", ["--limit", "30"]),
-        ("network.list_replicated_classes/limit100", "network", "list_replicated_classes", ["--limit", "100"]),
-        ("network.list_rpc_functions/limit2", "network", "list_rpc_functions", ["--limit", "2"]),
-        ("network.list_rpc_functions/limit3", "network", "list_rpc_functions", ["--limit", "3"]),
-        ("network.list_rpc_functions/limit30", "network", "list_rpc_functions", ["--limit", "30"]),
-        ("network.list_rpc_functions/limit50", "network", "list_rpc_functions", ["--limit", "50"]),
-        ("network.list_onrep_handlers/limit2", "network", "list_onrep_handlers", ["--limit", "2"]),
-        ("network.list_onrep_handlers/limit3", "network", "list_onrep_handlers", ["--limit", "3"]),
-        ("network.list_onrep_handlers/limit30", "network", "list_onrep_handlers", ["--limit", "30"]),
-        ("network.list_onrep_handlers/limit50", "network", "list_onrep_handlers", ["--limit", "50"]),
-        ("network.audit_unbalanced_onreps/det3", "network", "audit_unbalanced_onreps", []),
-        ("network.audit_unbalanced_onreps/det4", "network", "audit_unbalanced_onreps", []),
-
-        # ---- decision (20 new) -- additional limit + staleness-window variants ----
-        ("decision.list_decisions/limit2", "decision", "list_decisions", ["--limit", "2"]),
-        ("decision.list_decisions/limit3", "decision", "list_decisions", ["--limit", "3"]),
-        ("decision.list_decisions/limit4", "decision", "list_decisions", ["--limit", "4"]),
-        ("decision.list_decisions/limit6", "decision", "list_decisions", ["--limit", "6"]),
-        ("decision.list_decisions/limit7", "decision", "list_decisions", ["--limit", "7"]),
-        ("decision.list_decisions/limit8", "decision", "list_decisions", ["--limit", "8"]),
-        ("decision.list_decisions/limit15", "decision", "list_decisions", ["--limit", "15"]),
-        ("decision.list_decisions/limit25", "decision", "list_decisions", ["--limit", "25"]),
-        ("decision.list_decisions/limit30", "decision", "list_decisions", ["--limit", "30"]),
-        ("decision.list_decisions/limit100", "decision", "list_decisions", ["--limit", "100"]),
-        ("decision.list_stale/14d", "decision", "list_stale", ["14", "--limit", "5"]),
-        ("decision.list_stale/45d", "decision", "list_stale", ["45", "--limit", "5"]),
-        ("decision.list_stale/60d", "decision", "list_stale", ["60", "--limit", "5"]),
-        ("decision.list_stale/120d", "decision", "list_stale", ["120", "--limit", "5"]),
-        ("decision.list_stale/270d", "decision", "list_stale", ["270", "--limit", "5"]),
-        ("decision.list_stale/545d", "decision", "list_stale", ["545", "--limit", "5"]),
-        ("decision.list_stale/1095d", "decision", "list_stale", ["1095", "--limit", "5"]),
-        ("decision.list_stale/2920d", "decision", "list_stale", ["2920", "--limit", "5"]),
-        ("decision.list_stale/5475d", "decision", "list_stale", ["5475", "--limit", "5"]),
-        ("decision.list_stale/7300d", "decision", "list_stale", ["7300", "--limit", "5"]),
-
-        # ---- risk (20 new) -- additional Scripts/Docs file hotspot + churn targets ----
-        ("risk.get_hotspot_score/index_project", "risk", "get_hotspot_score", ["Scripts/index_project.py"]),
-        ("risk.get_hotspot_score/tag_path_params", "risk", "get_hotspot_score", ["Scripts/tag_path_params.py"]),
-        ("risk.get_hotspot_score/lint_agent_tools", "risk", "get_hotspot_score", ["Scripts/lint_agent_tools.py"]),
-        ("risk.get_hotspot_score/check_offline_exe_fresh", "risk", "get_hotspot_score", ["Scripts/check_offline_exe_fresh.py"]),
-        ("risk.get_hotspot_score/check_index_freshness", "risk", "get_hotspot_score", ["Scripts/check_index_freshness.ps1"]),
-        ("risk.get_hotspot_score/recover_mcp", "risk", "get_hotspot_score", ["Scripts/recover_mcp.ps1"]),
-        ("risk.get_hotspot_score/prune_invocation_logs", "risk", "get_hotspot_score", ["Scripts/prune_invocation_logs.ps1"]),
-        ("risk.get_hotspot_score/onboard_monolith", "risk", "get_hotspot_score", ["Scripts/onboard_monolith.ps1"]),
-        ("risk.get_hotspot_score/install_monolith_skills", "risk", "get_hotspot_score", ["Scripts/install_monolith_skills.ps1"]),
-        ("risk.get_hotspot_score/validate_monolith_skills", "risk", "get_hotspot_score", ["Scripts/validate_monolith_skills.ps1"]),
-        ("risk.get_hotspot_score/SPEC", "risk", "get_hotspot_score", ["Docs/SPEC.md"]),
-        ("risk.get_hotspot_score/API_REFERENCE", "risk", "get_hotspot_score", ["Docs/API_REFERENCE.md"]),
-        ("risk.get_hotspot_score/TODO", "risk", "get_hotspot_score", ["Docs/TODO.md"]),
-        ("risk.get_hotspot_score/README", "risk", "get_hotspot_score", ["README.md"]),
-        ("risk.get_hotspot_score/Monolith", "risk", "get_hotspot_score", ["Monolith.uplugin"]),
-        ("risk.get_file_churn/index_project", "risk", "get_file_churn", ["Scripts/index_project.py"]),
-        ("risk.get_file_churn/SPEC", "risk", "get_file_churn", ["Docs/SPEC.md"]),
-        ("risk.get_file_churn/README", "risk", "get_file_churn", ["README.md"]),
-        ("risk.get_file_churn/Monolith", "risk", "get_file_churn", ["Monolith.uplugin"]),
-        ("risk.get_file_churn/tag_path_params", "risk", "get_file_churn", ["Scripts/tag_path_params.py"]),
-    ]
-
-    benchmark_extension = [
-        # ---- cppreflect (30 benchmark-only) -- gameplay, UI, data, networking classes ----
-        ("cppreflect.get_uclass/AGameSession", "cppreflect", "get_uclass", ["AGameSession"]),
-        ("cppreflect.get_uclass/AGameNetworkManager", "cppreflect", "get_uclass", ["AGameNetworkManager"]),
-        ("cppreflect.get_uclass/APlayerCameraManager", "cppreflect", "get_uclass", ["APlayerCameraManager"]),
-        ("cppreflect.get_uclass/UPlayer", "cppreflect", "get_uclass", ["UPlayer"]),
-        ("cppreflect.get_uclass/ULocalPlayer", "cppreflect", "get_uclass", ["ULocalPlayer"]),
-        ("cppreflect.get_uclass/UNetDriver", "cppreflect", "get_uclass", ["UNetDriver"]),
-        ("cppreflect.get_uclass/UGameUserSettings", "cppreflect", "get_uclass", ["UGameUserSettings"]),
-        ("cppreflect.get_uclass/UCanvas", "cppreflect", "get_uclass", ["UCanvas"]),
-        ("cppreflect.get_uclass/UDamageType", "cppreflect", "get_uclass", ["UDamageType"]),
-        ("cppreflect.get_uclass/UGameplayStatics", "cppreflect", "get_uclass", ["UGameplayStatics"]),
-        ("cppreflect.get_uclass/UBlueprintFunctionLibrary", "cppreflect", "get_uclass", ["UBlueprintFunctionLibrary"]),
-        ("cppreflect.get_uclass/UDataAsset", "cppreflect", "get_uclass", ["UDataAsset"]),
-        ("cppreflect.get_uclass/UPrimaryDataAsset", "cppreflect", "get_uclass", ["UPrimaryDataAsset"]),
-        ("cppreflect.get_uclass/UCurveFloat", "cppreflect", "get_uclass", ["UCurveFloat"]),
-        ("cppreflect.get_uclass/UDataTable", "cppreflect", "get_uclass", ["UDataTable"]),
-        ("cppreflect.list_uproperties/APlayerController", "cppreflect", "list_uproperties", ["APlayerController"]),
-        ("cppreflect.list_uproperties/APlayerState", "cppreflect", "list_uproperties", ["APlayerState"]),
-        ("cppreflect.list_uproperties/UPrimitiveComponent", "cppreflect", "list_uproperties", ["UPrimitiveComponent"]),
-        ("cppreflect.list_uproperties/USkeletalMeshComponent", "cppreflect", "list_uproperties", ["USkeletalMeshComponent"]),
-        ("cppreflect.list_uproperties/UStaticMeshComponent", "cppreflect", "list_uproperties", ["UStaticMeshComponent"]),
-        ("cppreflect.list_uproperties/UUserWidget", "cppreflect", "list_uproperties", ["UUserWidget"]),
-        ("cppreflect.list_ufunctions/UGameInstance", "cppreflect", "list_ufunctions", ["UGameInstance"]),
-        ("cppreflect.list_ufunctions/AController", "cppreflect", "list_ufunctions", ["AController"]),
-        ("cppreflect.list_ufunctions/AAIController", "cppreflect", "list_ufunctions", ["AAIController"]),
-        ("cppreflect.list_ufunctions/UUserWidget", "cppreflect", "list_ufunctions", ["UUserWidget"]),
-        ("cppreflect.find_interface_impls/INavAgentInterface", "cppreflect", "find_interface_impls", ["INavAgentInterface"]),
-        ("cppreflect.find_interface_impls/IInterface_AssetUserData", "cppreflect", "find_interface_impls", ["IInterface_AssetUserData"]),
-        ("cppreflect.find_class_specifier/BlueprintSpawnableComponent", "cppreflect", "find_class_specifier", ["BlueprintSpawnableComponent"]),
-        ("cppreflect.find_class_specifier/BlueprintAuthorityOnly", "cppreflect", "find_class_specifier", ["BlueprintAuthorityOnly"]),
-        ("cppreflect.find_class_specifier/Within", "cppreflect", "find_class_specifier", ["Within"]),
-
-        # ---- network (10 benchmark-only) -- filtered RPC/OnRep and pagination checks ----
-        ("network.list_rpc_functions/class_APlayerController", "network", "list_rpc_functions", ["--class_name", "APlayerController", "--limit", "10"]),
-        ("network.list_rpc_functions/class_ACharacter", "network", "list_rpc_functions", ["--class_name", "ACharacter", "--limit", "10"]),
-        ("network.list_rpc_functions/rpc_Server", "network", "list_rpc_functions", ["--rpc_kind", "Server", "--limit", "10"]),
-        ("network.list_rpc_functions/rpc_Client", "network", "list_rpc_functions", ["--rpc_kind", "Client", "--limit", "10"]),
-        ("network.list_rpc_functions/rpc_Multicast", "network", "list_rpc_functions", ["--rpc_kind", "Multicast", "--limit", "10"]),
-        ("network.list_onrep_handlers/class_APlayerState", "network", "list_onrep_handlers", ["--class_name", "APlayerState", "--limit", "10"]),
-        ("network.list_onrep_handlers/class_AGameStateBase", "network", "list_onrep_handlers", ["--class_name", "AGameStateBase", "--limit", "10"]),
-        ("network.audit_unbalanced_onreps/limit1", "network", "audit_unbalanced_onreps", ["--limit", "1"]),
-        ("network.audit_unbalanced_onreps/limit10", "network", "audit_unbalanced_onreps", ["--limit", "10"]),
-        ("network.list_replicated_classes/limit75", "network", "list_replicated_classes", ["--limit", "75"]),
-
-        # ---- decision (15 benchmark-only) -- agent decision-record filters and chain depths ----
-        ("decision.list_decisions/path_docs", "decision", "list_decisions", ["--path_filter", "Docs", "--limit", "10"]),
-        ("decision.list_decisions/path_source", "decision", "list_decisions", ["--path_filter", "Source", "--limit", "10"]),
-        ("decision.list_decisions/status_accepted", "decision", "list_decisions", ["--status", "accepted", "--limit", "10"]),
-        ("decision.list_decisions/status_superseded", "decision", "list_decisions", ["--status", "superseded", "--limit", "10"]),
-        ("decision.list_decisions/min_confidence_0_5", "decision", "list_decisions", ["--min_confidence", "0.5", "--limit", "10"]),
-        ("decision.list_decisions/min_confidence_0_8", "decision", "list_decisions", ["--min_confidence", "0.8", "--limit", "10"]),
-        ("decision.list_decisions/min_confidence_0_95", "decision", "list_decisions", ["--min_confidence", "0.95", "--limit", "10"]),
-        ("decision.list_decisions/path_scripts_min_confidence_0_5", "decision", "list_decisions", ["--path_filter", "Scripts", "--min_confidence", "0.5", "--limit", "10"]),
-        ("decision.list_stale/365d_docs", "decision", "list_stale", ["365", "--path_filter", "Docs", "--limit", "10"]),
-        ("decision.list_stale/3650d_scripts", "decision", "list_stale", ["3650", "--path_filter", "Scripts", "--limit", "10"]),
-        ("decision.list_stale/0d", "decision", "list_stale", ["0", "--limit", "10"]),
-        ("decision.list_stale/9999d_limit10", "decision", "list_stale", ["9999", "--limit", "10"]),
-        ("decision.find_supersession_chain/depth1", "decision", "find_supersession_chain", [did, "--depth", "1"] if did else None),
-        ("decision.find_supersession_chain/depth3", "decision", "find_supersession_chain", [did, "--depth", "3"] if did else None),
-        ("decision.get_decision/repeat", "decision", "get_decision", [did] if did else None),
-
-        # ---- risk (20 benchmark-only) -- benchmark/script/doc hotspots and report filters ----
-        ("risk.get_cochange_pairs/offline_parity_benchmark", "risk", "get_cochange_pairs", ["Scripts/offline_parity_benchmark.py"]),
-        ("risk.get_cochange_pairs/verify_offline_parity", "risk", "get_cochange_pairs", ["Scripts/verify_offline_parity.py"]),
-        ("risk.get_cochange_pairs/benchmark_readme", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/README.md"]),
-        ("risk.get_cochange_pairs/benchmark_metrics", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/METRICS.md"]),
-        ("risk.get_cochange_pairs/benchmark_results", "risk", "get_cochange_pairs", ["Benchmarks/OfflineParity/RESULTS.md"]),
-        ("risk.get_cochange_pairs/SPEC_CORE", "risk", "get_cochange_pairs", ["Docs/SPEC_CORE.md"]),
-        ("risk.get_cochange_pairs/API_REFERENCE", "risk", "get_cochange_pairs", ["Docs/API_REFERENCE.md"]),
-        ("risk.get_cochange_pairs/TODO", "risk", "get_cochange_pairs", ["Docs/TODO.md"]),
-        ("risk.get_cochange_pairs/README", "risk", "get_cochange_pairs", ["README.md"]),
-        ("risk.get_cochange_pairs/Monolith", "risk", "get_cochange_pairs", ["Monolith.uplugin"]),
-        ("risk.list_conditional_gates/WITH_EDITOR", "risk", "list_conditional_gates", ["--macro_filter", "WITH_EDITOR", "--limit", "10"]),
-        ("risk.list_conditional_gates/WITH_EDITORONLY_DATA", "risk", "list_conditional_gates", ["--macro_filter", "WITH_EDITORONLY_DATA", "--limit", "10"]),
-        ("risk.list_conditional_gates/UE_BUILD_SHIPPING", "risk", "list_conditional_gates", ["--macro_filter", "UE_BUILD_SHIPPING", "--limit", "10"]),
-        ("risk.list_conditional_gates/path_monolith_source", "risk", "list_conditional_gates", ["--path_filter", "Source/MonolithSource%", "--limit", "10"]),
-        ("risk.list_conditional_gates/path_reflection_intel", "risk", "list_conditional_gates", ["--path_filter", "Source/MonolithReflectionIntel%", "--limit", "10"]),
-        ("risk.get_release_window_hotspots/limit1", "risk", "get_release_window_hotspots", ["--limit", "1"]),
-        ("risk.get_release_window_hotspots/limit10", "risk", "get_release_window_hotspots", ["--limit", "10"]),
-        ("risk.get_release_window_hotspots/since0_limit5", "risk", "get_release_window_hotspots", ["--since_unix", "0", "--limit", "5"]),
-        ("risk.get_release_window_hotspots/since1700000000_limit5", "risk", "get_release_window_hotspots", ["--since_unix", "1700000000", "--limit", "5"]),
-        ("risk.get_release_window_hotspots/since1600000000_limit20", "risk", "get_release_window_hotspots", ["--since_unix", "1600000000", "--limit", "20"]),
-
-        # ---- source ergonomics (25 benchmark-only) -- API lookup and expected-error parity ----
-        ("source.get_include_path/UGameInstance", "source", "get_include_path", ["UGameInstance"], "text"),
-        ("source.get_include_path/UWorld", "source", "get_include_path", ["UWorld"], "text"),
-        ("source.get_include_path/UUserWidget", "source", "get_include_path", ["UUserWidget"], "text"),
-        ("source.get_include_path/UGameplayStatics", "source", "get_include_path", ["UGameplayStatics"], "text"),
-        ("source.get_include_path/UDataTable", "source", "get_include_path", ["UDataTable"], "text"),
-        ("source.get_signature/UGameplayStatics_OpenLevel", "source", "get_signature", ["UGameplayStatics::OpenLevel"], "text"),
-        ("source.get_signature/UGameplayStatics_SpawnEmitter", "source", "get_signature", ["UGameplayStatics::SpawnEmitterAtLocation"], "text"),
-        ("source.get_signature/UActorComponent_Activate", "source", "get_signature", ["UActorComponent::Activate"], "text"),
-        ("source.get_signature/APlayerController_ClientTravel", "source", "get_signature", ["APlayerController::ClientTravel"], "text"),
-        ("source.get_signature/AController_SetPawn", "source", "get_signature", ["AController::SetPawn"], "text"),
-        ("source.check_deprecations/AController_APawn", "source", "check_deprecations", ["AController", "APawn"], "text"),
-        ("source.check_deprecations/UWorld_UGameInstance", "source", "check_deprecations", ["UWorld", "UGameInstance"], "text"),
-        ("source.check_deprecations/UDataTable_UDataAsset", "source", "check_deprecations", ["UDataTable", "UDataAsset"], "text"),
-        ("source.verify_symbols/Input_UI", "source", "verify_symbols", ["UInputAction", "UInputMappingContext", "UUserWidget"], "text"),
-        ("source.verify_symbols/GameFrameworkTravel", "source", "verify_symbols", ["APlayerController::ClientTravel", "AController::SetPawn", "UGameInstance"], "text"),
-        ("source.verify_symbols/GAS", "source", "verify_symbols", ["UAbilitySystemComponent", "UGameplayAbility", "UGameplayEffect"], "text"),
-        ("source.verify_symbols/DataAssets", "source", "verify_symbols", ["UDataAsset", "UPrimaryDataAsset", "UDataTable"], "text"),
-        ("source.find_example_usage/OpenLevel_limit3", "source", "find_example_usage", ["UGameplayStatics::OpenLevel", "--limit", "3"], "text"),
-        ("source.find_example_usage/ClientTravel_limit3", "source", "find_example_usage", ["APlayerController::ClientTravel", "--limit", "3"], "text"),
-        ("source.find_example_usage/SpawnEmitter_limit2", "source", "find_example_usage", ["UGameplayStatics::SpawnEmitterAtLocation", "--limit", "2"], "text"),
-        ("source.get_signature/missing_symbol(expected-error)", "source", "get_signature", ["UThisDoesNotExistAnywhereXYZ::Nope"], "text", {"expected_error": True}),
-        ("source.get_include_path/missing_symbol(expected-error)", "source", "get_include_path", ["UThisDoesNotExistAnywhereXYZ"], "text", {"expected_error": True}),
-        ("source.generate_class_stub/missing_parent(expected-error)", "source", "generate_class_stub", ["UThisDoesNotExistAnywhereXYZ", "AMyBadActor", "TestModule"], "text", {"expected_error": True}),
-        ("source.lint_header/missing_file(expected-error)", "source", "lint_header", ["Source/DoesNotExist/Missing.h"], "text", {"expected_error": True}),
-        ("source.read_file/missing_file(expected-error)", "source", "read_file", ["Source/DoesNotExist/Missing.h"], "text", {"expected_error": True}),
-    ]
-    if len(benchmark_extension) != BENCHMARK_EXTENSION_ACTION_COUNT:
+    manifest_count = _read_manifest_action_count()
+    if manifest_count is not None and len(specs) != manifest_count:
         raise AssertionError(
-            f"benchmark extension must contain {BENCHMARK_EXTENSION_ACTION_COUNT} actions; "
-            f"got {len(benchmark_extension)}"
+            f"{path.name} has {len(specs)} actions but manifest action_count is "
+            f"{manifest_count}; update manifest.json and the data file together."
         )
-    actions.extend(benchmark_extension)
-    if len(actions) != EXPECTED_ACTION_COUNT:
-        raise AssertionError(f"offline parity action table must contain {EXPECTED_ACTION_COUNT} actions; got {len(actions)}")
+    if len(specs) != EXPECTED_ACTION_COUNT:
+        raise AssertionError(
+            f"offline parity action table must contain {EXPECTED_ACTION_COUNT} actions; "
+            f"got {len(specs)} (update EXPECTED_ACTION_COUNT and manifest.json together)."
+        )
+    return specs
+
+
+def build_actions(chain, actions_path=None):
+    """
+    Load the externalized parity action table and bind chain-discovered args.
+
+    Each returned entry is (label, namespace, action, args_or_None, compare, metadata)
+    where compare defaults to "json" ("text" uses strict byte-compare) and metadata
+    carries expected_error / offline_unsupported flags consumed by run_action.
+    args_or_None is None when a required chain input is missing -> the row is SKIPped.
+    """
+    actions = []
+    for spec in load_action_specs(actions_path):
+        args = _substitute_tokens(spec["args"], chain)
+        compare = str(spec.get("compare", "json"))
+        metadata = {}
+        if spec.get("expected_error"):
+            metadata["expected_error"] = True
+        if spec.get("offline_unsupported"):
+            metadata["offline_unsupported"] = True
+        actions.append((spec["label"], spec["namespace"], spec["action"], args, compare, metadata))
     return actions
+
 
 
 # ------------------------------------------------------------------ per-action runner
@@ -764,6 +496,7 @@ def run_action(
     mono_root: pathlib.Path,
     compare: str = "json",
     expected_error: bool = False,
+    offline_unsupported: bool = False,
 ) -> Dict[str, Any]:
     """
     Returns a result dict:
@@ -771,7 +504,18 @@ def run_action(
       diffs:  list of (path, exe_val, py_val)
       warnings: list of (path, exe_val, py_val)
       error:  str | None
-      error_kind: none | expected | expected_missing | expected_mismatch | real
+      error_kind: none | expected | expected_offline | offline_parity_break
+                  | expected_missing | expected_mismatch | real
+
+    Buckets:
+      - expected_error: deliberate bad-input probe; both tools SHOULD fail.
+        both-fail -> MATCH(expected); otherwise DIFF.
+      - offline_unsupported: the offline surface may legitimately be absent.
+        Parity is about agreement, so if BOTH offline tools fail the same way the
+        row is a MATCH(expected_offline) instead of a real ERROR that masks signal.
+        Only a genuine exe-vs-py disagreement (exactly one tool fails) is a
+        DIFF(offline_parity_break). If both succeed, outputs compare normally.
+      - normal: either tool failing is a real ERROR.
     """
     res: Dict[str, Any] = {
         "label": label,
@@ -781,6 +525,7 @@ def run_action(
         "warnings": [],
         "error": None,
         "expected_error": expected_error,
+        "offline_unsupported": offline_unsupported,
         "error_kind": "none",
         "exe_exit_code": None,
         "py_exit_code": None,
@@ -815,6 +560,31 @@ def run_action(
         res["error_kind"] = "expected_missing"
         res["error"] = "expected error was not observed; both tools exited 0"
         res["diffs"] = [("expected_error.nonzero", "both tools should exit non-zero", "both tools exited 0")]
+        return res
+
+    if offline_unsupported and (erc != 0 or prc != 0):
+        # The offline surface may legitimately be absent. Score by AGREEMENT:
+        # both tools failing is parity (MATCH expected_offline); exactly one
+        # failing is a genuine exe-vs-py disagreement (DIFF offline_parity_break).
+        res["error_sources"] = {
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": _process_diagnostics(prc, pout, perr),
+        }
+        exe_failed = erc != 0
+        py_failed = prc != 0
+        if exe_failed and py_failed:
+            res["status"] = "MATCH"
+            res["error_kind"] = "expected_offline"
+            if erc != prc:
+                res["warnings"] = [("offline_unsupported.exit_code", erc, prc)]
+            return res
+        res["status"] = "DIFF"
+        res["error_kind"] = "offline_parity_break"
+        res["error"] = (
+            "offline parity break: only one tool exited non-zero on an "
+            "offline-unsupported action (exe={0}, py={1})".format(erc, prc)
+        )
+        res["diffs"] = [("offline_unsupported.nonzero", exe_failed, py_failed)]
         return res
 
     err_parts = []
@@ -880,6 +650,7 @@ def skipped_action(label: str, reason: str) -> Dict[str, Any]:
         "warnings": [],
         "error": reason,
         "expected_error": False,
+        "offline_unsupported": False,
         "error_kind": "skip",
         "exe_exit_code": None,
         "py_exit_code": None,
@@ -932,10 +703,10 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         n_diff = statuses.count("DIFF")
         n_err = statuses.count("ERROR")
         n_skip = statuses.count("SKIP")
-        n_expected = sum(1 for r in rows if r.get("error_kind") == "expected")
+        n_expected = sum(1 for r in rows if r.get("error_kind") in EXPECTED_MATCH_KINDS)
         n_expected_problem = sum(
             1 for r in rows
-            if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+            if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
         )
         n_real_error = sum(1 for r in rows if r.get("error_kind") == "real")
         action_count = len(statuses) - n_skip
@@ -953,10 +724,10 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def build_error_diagnostics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
-    expected_matches = [r["label"] for r in results if r.get("error_kind") == "expected"]
+    expected_matches = [r["label"] for r in results if r.get("error_kind") in EXPECTED_MATCH_KINDS]
     expected_problems = [
         r["label"] for r in results
-        if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+        if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
     ]
     real_errors = [r["label"] for r in results if r.get("error_kind") == "real"]
     return {
@@ -997,10 +768,10 @@ def compute_metrics(
     n_err = sum(1 for r in results if r["status"] == "ERROR")
     n_skip = sum(1 for r in results if r["status"] == "SKIP")
     comparable = total - n_skip
-    n_expected_error = sum(1 for r in results if r.get("error_kind") == "expected")
+    n_expected_error = sum(1 for r in results if r.get("error_kind") in EXPECTED_MATCH_KINDS)
     n_expected_error_problem = sum(
         1 for r in results
-        if r.get("error_kind") in ("expected_missing", "expected_mismatch")
+        if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
     )
     n_real_error = sum(1 for r in results if r.get("error_kind") == "real")
 
@@ -1091,6 +862,7 @@ def build_per_action_row(r: Dict[str, Any]) -> Dict[str, Any]:
         "warning_count": len(r.get("warnings", [])),
         "error": r.get("error"),
         "expected_error": bool(r.get("expected_error")),
+        "offline_unsupported": bool(r.get("offline_unsupported")),
         "error_kind": r.get("error_kind", "none"),
         "exe_exit_code": r.get("exe_exit_code"),
         "py_exit_code": r.get("py_exit_code"),
@@ -1169,6 +941,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 lbl, ns, action, aargs, ignore_cursor_bytes,
                 exe_path, py_path, MONO_ROOT, compare,
                 expected_error=bool(metadata.get("expected_error")),
+                offline_unsupported=bool(metadata.get("offline_unsupported")),
             )
 
         results.append(r)

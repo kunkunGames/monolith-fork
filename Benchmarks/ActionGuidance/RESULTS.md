@@ -4,8 +4,11 @@
 
 This historical run used the then-current 161-task benchmark set against a
 legacy MCP build restored from CL 735 `#have` sources and then against the
-current MCP build. The checked-in reusable task corpus has since expanded to
-508 tasks.
+current MCP build. The checked-in reusable task corpus has since expanded and
+deduplicated to 281 tasks, including 18 `needed_action_routing` tasks and a
+per-task demand `weight` (see METRICS.md). The 2026-06-16 scores below predate
+the routing category and demand weighting; re-run against a live MCP to refresh
+the baseline before comparing.
 
 | Metric | Legacy `#have` | Current | Delta | Better |
 | --- | ---: | ---: | ---: | --- |

@@ -25,7 +25,24 @@ Current coverage:
   `network`, 50 `decision`, 62 `risk`, and 63 `source` cases. The benchmark
   includes 100 benchmark-only cases beyond the prior 217-action table, plus
   5 expected-error negative source cases that are tracked separately from real
-  tool failures.
+  tool failures. The table is externalized to `actions.jsonl` (one action per
+  line) and validated against `manifest.json` `action_count` by hosted static CI.
+- Of the 63 `source` rows, the 58 non-probe symbol/signature/usage lookups are
+  tagged `offline_unsupported`: their offline surface (the EngineSource DB
+  symbol/signature data) may legitimately be absent, so if BOTH offline tools
+  agree on the failure the row is a parity `MATCH` (`expected_offline`) rather
+  than a `real` `ERROR` that would mask the real exe-vs-py signal. Only a genuine
+  disagreement (exactly one tool fails) counts against the score
+  (`offline_parity_break`). See `METRICS.md` for the full bucket table.
+
+### Scope: what this benchmark cannot see
+
+This benchmark only compares the two OFFLINE tools (`monolith_query.exe` vs
+`monolith_offline.py`). Editor-only surfaces such as the `blueprint` write
+namespace are never exe-vs-py comparable here — neither offline tool implements
+them — so a green score here does not imply those live surfaces are healthy.
+Live-capability coverage for editor surfaces lives in the BlueprintEditing,
+ProjectIndex, and AI capability benchmarks, not here.
 
 For CI thresholding, keep the hard-gate as the binary pass/fail check. Use the
 benchmark as a trend gate: healthy runs should stay at or above `0.95`, with
@@ -36,9 +53,12 @@ benchmark as a trend gate: healthy runs should stay at or above `0.95`, with
 | File | Purpose |
 | --- | --- |
 | `README.md` | This file. Overview, usage, and relationship to the CI gate. |
-| `METRICS.md` | Metric definitions, score formula, and interpretation guidance. |
+| `METRICS.md` | Metric definitions, score formula, action buckets, and interpretation guidance. |
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
-| `Scripts/offline_parity_benchmark.py` | Standalone benchmark runner (run / compare / report). |
+| `manifest.json` | Static seed manifest: `action_count`, `action_file`, category/bucket counts, scoring summary. CI validates `action_count` against the `actions.jsonl` line count. |
+| `actions.jsonl` | The externalized parity action table (one action per line). Reviewable as data; CI line-count-validated like the other benchmarks. |
+| `Scripts/offline_parity_benchmark.py` | Standalone benchmark runner (run / compare / report). Loads the table from `actions.jsonl`. |
+| `Scripts/test_offline_parity_benchmark.py` | Offline unit tests for the loader and the `offline_unsupported` scoring bucket (no live editor). |
 
 ## Run
 

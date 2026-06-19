@@ -1,0 +1,317 @@
+{"action": "get_uclass", "args": ["{{uclass}}"], "label": "cppreflect.get_uclass", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["{{uclass}}"], "label": "cppreflect.list_uproperties", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["{{uclass}}"], "label": "cppreflect.list_ufunctions", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IAbilitySystemInterface"], "label": "cppreflect.find_interface_impls", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["Blueprintable"], "label": "cppreflect.find_class_specifier", "namespace": "cppreflect"}
+{"action": "list_class_specifiers", "args": [], "label": "cppreflect.list_class_specifiers", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["ACharacter"], "label": "cppreflect.get_uclass/ACharacter", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["APlayerController"], "label": "cppreflect.get_uclass/APlayerController", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AGameModeBase"], "label": "cppreflect.get_uclass/AGameModeBase", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AGameStateBase"], "label": "cppreflect.get_uclass/AGameStateBase", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["APlayerState"], "label": "cppreflect.get_uclass/APlayerState", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UActorComponent"], "label": "cppreflect.get_uclass/UActorComponent", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["ACharacter"], "label": "cppreflect.list_uproperties/ACharacter", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["AGameModeBase"], "label": "cppreflect.list_uproperties/AGameModeBase", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["AGameStateBase"], "label": "cppreflect.list_uproperties/AGameStateBase", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["ACharacter"], "label": "cppreflect.list_ufunctions/ACharacter", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["APlayerController"], "label": "cppreflect.list_ufunctions/APlayerController", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["AGameModeBase"], "label": "cppreflect.list_ufunctions/AGameModeBase", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IGameplayTaskOwnerInterface"], "label": "cppreflect.find_interface_impls/IGameplayTaskOwnerInterface", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IAbilitySystemInterface"], "label": "cppreflect.find_interface_impls/IAbilitySystemInterface", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["BlueprintType"], "label": "cppreflect.find_class_specifier/BlueprintType", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["NotBlueprintable"], "label": "cppreflect.find_class_specifier/NotBlueprintable", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["Abstract"], "label": "cppreflect.find_class_specifier/Abstract", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["MinimalAPI"], "label": "cppreflect.find_class_specifier/MinimalAPI", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["Config"], "label": "cppreflect.find_class_specifier/Config", "namespace": "cppreflect"}
+{"action": "list_class_specifiers", "args": [], "label": "cppreflect.list_class_specifiers(b)", "namespace": "cppreflect"}
+{"action": "list_replicated_classes", "args": ["--limit", "5"], "label": "network.list_replicated_classes", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "5"], "label": "network.list_rpc_functions", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "5"], "label": "network.list_onrep_handlers", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": [], "label": "network.audit_unbalanced_onreps", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "1"], "label": "network.list_replicated_classes/limit1", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "10"], "label": "network.list_replicated_classes/limit10", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "20"], "label": "network.list_replicated_classes/limit20", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "50"], "label": "network.list_replicated_classes/limit50", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "1"], "label": "network.list_rpc_functions/limit1", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "10"], "label": "network.list_rpc_functions/limit10", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "20"], "label": "network.list_rpc_functions/limit20", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "1"], "label": "network.list_onrep_handlers/limit1", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "10"], "label": "network.list_onrep_handlers/limit10", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "20"], "label": "network.list_onrep_handlers/limit20", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": [], "label": "network.audit_unbalanced_onreps/det1", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": [], "label": "network.audit_unbalanced_onreps/det2", "namespace": "network"}
+{"action": "list_decisions", "args": ["--limit", "5"], "label": "decision.list_decisions", "namespace": "decision"}
+{"action": "get_decision", "args": ["{{decision_id}}"], "label": "decision.get_decision", "namespace": "decision", "requires": "decision_id"}
+{"action": "list_stale", "args": ["3650", "--limit", "5"], "label": "decision.list_stale", "namespace": "decision"}
+{"action": "find_supersession_chain", "args": ["{{decision_id}}"], "label": "decision.find_supersession_chain", "namespace": "decision", "requires": "decision_id"}
+{"action": "find_referent_decisions", "args": ["{{decision_id}}"], "label": "decision.find_referent_decisions", "namespace": "decision", "requires": "decision_id"}
+{"action": "list_decisions", "args": ["--limit", "1"], "label": "decision.list_decisions/limit1", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "10"], "label": "decision.list_decisions/limit10", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "20"], "label": "decision.list_decisions/limit20", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "50"], "label": "decision.list_decisions/limit50", "namespace": "decision"}
+{"action": "list_stale", "args": ["30", "--limit", "5"], "label": "decision.list_stale/30d", "namespace": "decision"}
+{"action": "list_stale", "args": ["90", "--limit", "5"], "label": "decision.list_stale/90d", "namespace": "decision"}
+{"action": "list_stale", "args": ["180", "--limit", "5"], "label": "decision.list_stale/180d", "namespace": "decision"}
+{"action": "list_stale", "args": ["365", "--limit", "5"], "label": "decision.list_stale/365d", "namespace": "decision"}
+{"action": "list_stale", "args": ["730", "--limit", "5"], "label": "decision.list_stale/730d", "namespace": "decision"}
+{"action": "list_stale", "args": ["1825", "--limit", "5"], "label": "decision.list_stale/1825d", "namespace": "decision"}
+{"action": "get_hotspot_score", "args": ["{{risk_path}}"], "label": "risk.get_hotspot_score", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["{{risk_path}}"], "label": "risk.get_cochange_pairs", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["{{risk_path}}"], "label": "risk.get_file_churn", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": [], "label": "risk.get_release_window_hotspots", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": [], "label": "risk.list_conditional_gates", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/action_guidance_benchmark.py"], "label": "risk.get_hotspot_score/action_guidance_benchmark", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/source_index_benchmark.py"], "label": "risk.get_hotspot_score/source_index_benchmark", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/schema_completeness_benchmark.py"], "label": "risk.get_hotspot_score/schema_completeness_benchmark", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/offline_parity_benchmark.py"], "label": "risk.get_hotspot_score/offline_parity_benchmark", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/ci_static_checks.py"], "label": "risk.get_hotspot_score/ci_static_checks", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/monolith_proxy.py"], "label": "risk.get_hotspot_score/monolith_proxy", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/verify_offline_parity.py"], "label": "risk.get_hotspot_score/verify_offline_parity", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/monolith_offline.py"], "label": "risk.get_cochange_pairs/monolith_offline", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/ci_static_checks.py"], "label": "risk.get_cochange_pairs/ci_static_checks", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/monolith_proxy.py"], "label": "risk.get_cochange_pairs/monolith_proxy", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/index_project.py"], "label": "risk.get_cochange_pairs/index_project", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/tag_path_params.py"], "label": "risk.get_cochange_pairs/tag_path_params", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/lint_agent_tools.py"], "label": "risk.get_file_churn/lint_agent_tools", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/check_offline_exe_fresh.py"], "label": "risk.get_file_churn/check_offline_exe_fresh", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/check_index_freshness.ps1"], "label": "risk.get_file_churn/check_index_freshness", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/recover_mcp.ps1"], "label": "risk.get_file_churn/recover_mcp", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Docs/SPEC.md"], "label": "risk.get_file_churn/docs_spec", "namespace": "risk"}
+{"action": "get_include_path", "args": ["AActor"], "compare": "text", "label": "source.get_include_path", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UGameplayStatics::ApplyDamage"], "compare": "text", "label": "source.get_signature", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["PreparePathfinding", "AActor"], "compare": "text", "label": "source.check_deprecations", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UGameplayStatics::ApplyDamage", "AActor", "UThisDoesNotExistAnywhereXYZ"], "compare": "text", "label": "source.verify_symbols", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["UGameplayStatics::ApplyDamage", "--limit", "5"], "compare": "text", "label": "source.find_example_usage", "namespace": "source", "offline_unsupported": true}
+{"action": "lint_header", "args": ["Source/MonolithSource/Private/Tests/Fixtures/CppErgoCorpus/Source/CppErgoTestMod/LintOrphanUproperty.h.fixture"], "compare": "text", "label": "source.lint_header", "namespace": "source", "offline_unsupported": true}
+{"action": "generate_class_stub", "args": ["AActor", "AMyParityActor", "MonolithSource"], "compare": "text", "label": "source.generate_class_stub", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["ACharacter"], "compare": "text", "label": "source.get_include_path/ACharacter", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["APlayerController"], "compare": "text", "label": "source.get_include_path/APlayerController", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["AGameModeBase"], "compare": "text", "label": "source.get_include_path/AGameModeBase", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["AGameStateBase"], "compare": "text", "label": "source.get_include_path/AGameStateBase", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["APlayerState"], "compare": "text", "label": "source.get_include_path/APlayerState", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UActorComponent"], "compare": "text", "label": "source.get_include_path/UActorComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["USceneComponent"], "compare": "text", "label": "source.get_include_path/USceneComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UStaticMeshComponent"], "compare": "text", "label": "source.get_include_path/UStaticMeshComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["USkeletalMeshComponent"], "compare": "text", "label": "source.get_include_path/USkeletalMeshComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UPrimitiveComponent"], "compare": "text", "label": "source.get_include_path/UPrimitiveComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["AActor::BeginPlay"], "compare": "text", "label": "source.get_signature/AActor_BeginPlay", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["AActor::EndPlay"], "compare": "text", "label": "source.get_signature/AActor_EndPlay", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["AActor::Tick"], "compare": "text", "label": "source.get_signature/AActor_Tick", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["ACharacter::Jump"], "compare": "text", "label": "source.get_signature/ACharacter_Jump", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["ACharacter::Crouch"], "compare": "text", "label": "source.get_signature/ACharacter_Crouch", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["APlayerController::Possess"], "compare": "text", "label": "source.get_signature/APlayerController_Possess", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UActorComponent::BeginPlay"], "compare": "text", "label": "source.get_signature/UActorComponent_BeginPlay", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UActorComponent::TickComponent"], "compare": "text", "label": "source.get_signature/UActorComponent_TickComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["AActor", "ACharacter"], "compare": "text", "label": "source.check_deprecations/ACharacter_UActorComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["UObject", "UActorComponent"], "compare": "text", "label": "source.check_deprecations/UObject_UActorComponent", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["AGameModeBase", "AGameStateBase"], "compare": "text", "label": "source.check_deprecations/AGameModeBase_AGameStateBase", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["AActor", "ACharacter", "UObject"], "compare": "text", "label": "source.verify_symbols/AActor_ACharacter_UObject", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UGameplayStatics::ApplyDamage", "AActor::BeginPlay"], "compare": "text", "label": "source.verify_symbols/ApplyDamage_BeginPlay", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["APlayerController", "APlayerState", "AGameStateBase"], "compare": "text", "label": "source.verify_symbols/APC_APS_AGSB", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UStaticMeshComponent", "USkeletalMeshComponent"], "compare": "text", "label": "source.verify_symbols/SMC_SKMC", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["AGameModeBase", "UGameInstance", "UWorld"], "compare": "text", "label": "source.verify_symbols/GMB_GI_World", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["AActor::BeginPlay", "--limit", "3"], "compare": "text", "label": "source.find_example_usage/BeginPlay_limit3", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["ACharacter::Jump", "--limit", "5"], "compare": "text", "label": "source.find_example_usage/Jump_limit5", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["UGameplayStatics::ApplyDamage", "--limit", "3"], "compare": "text", "label": "source.find_example_usage/ApplyDamage_limit3", "namespace": "source", "offline_unsupported": true}
+{"action": "generate_class_stub", "args": ["UObject", "AMyTestObject", "TestModule"], "compare": "text", "label": "source.generate_class_stub/UObject_MyTestObject", "namespace": "source", "offline_unsupported": true}
+{"action": "generate_class_stub", "args": ["UActorComponent", "UMyTestComp", "TestModule"], "compare": "text", "label": "source.generate_class_stub/UActorComponent_MyTestComp", "namespace": "source", "offline_unsupported": true}
+{"action": "get_uclass", "args": ["UGameplayAbility"], "label": "cppreflect.get_uclass/UGameplayAbility", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UAbilitySystemComponent"], "label": "cppreflect.get_uclass/UAbilitySystemComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UAttributeSet"], "label": "cppreflect.get_uclass/UAttributeSet", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UGameplayEffect"], "label": "cppreflect.get_uclass/UGameplayEffect", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UEnhancedInputComponent"], "label": "cppreflect.get_uclass/UEnhancedInputComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UInputAction"], "label": "cppreflect.get_uclass/UInputAction", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UInputMappingContext"], "label": "cppreflect.get_uclass/UInputMappingContext", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UUserWidget"], "label": "cppreflect.get_uclass/UUserWidget", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UAnimMontage"], "label": "cppreflect.get_uclass/UAnimMontage", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UAnimInstance"], "label": "cppreflect.get_uclass/UAnimInstance", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UCharacterMovementComponent"], "label": "cppreflect.get_uclass/UCharacterMovementComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UPawnMovementComponent"], "label": "cppreflect.get_uclass/UPawnMovementComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["APawn"], "label": "cppreflect.get_uclass/APawn", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["ADefaultPawn"], "label": "cppreflect.get_uclass/ADefaultPawn", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["ASpectatorPawn"], "label": "cppreflect.get_uclass/ASpectatorPawn", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AHUD"], "label": "cppreflect.get_uclass/AHUD", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AInfo"], "label": "cppreflect.get_uclass/AInfo", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AController"], "label": "cppreflect.get_uclass/AController", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AAIController"], "label": "cppreflect.get_uclass/AAIController", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["USkeletalMeshComponent"], "label": "cppreflect.get_uclass/USkeletalMeshComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UStaticMeshComponent"], "label": "cppreflect.get_uclass/UStaticMeshComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["USceneComponent"], "label": "cppreflect.get_uclass/USceneComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UPrimitiveComponent"], "label": "cppreflect.get_uclass/UPrimitiveComponent", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UWorld"], "label": "cppreflect.get_uclass/UWorld", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UGameInstance"], "label": "cppreflect.get_uclass/UGameInstance", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["ULevel"], "label": "cppreflect.get_uclass/ULevel", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UGameViewportClient"], "label": "cppreflect.get_uclass/UGameViewportClient", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UActorComponent"], "label": "cppreflect.list_uproperties/UActorComponent", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["APawn"], "label": "cppreflect.list_uproperties/APawn", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UWorld"], "label": "cppreflect.list_uproperties/UWorld", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UGameInstance"], "label": "cppreflect.list_uproperties/UGameInstance", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["UActorComponent"], "label": "cppreflect.list_ufunctions/UActorComponent", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["APawn"], "label": "cppreflect.list_ufunctions/APawn", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["UWorld"], "label": "cppreflect.list_ufunctions/UWorld", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IGameplayTagAssetInterface"], "label": "cppreflect.find_interface_impls/IGameplayTagAssetInterface", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IGenericTeamAgentInterface"], "label": "cppreflect.find_interface_impls/IGenericTeamAgentInterface", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["DefaultToInstanced"], "label": "cppreflect.find_class_specifier/DefaultToInstanced", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["EditInlineNew"], "label": "cppreflect.find_class_specifier/EditInlineNew", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["Transient"], "label": "cppreflect.find_class_specifier/Transient", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["HideDropdown"], "label": "cppreflect.find_class_specifier/HideDropdown", "namespace": "cppreflect"}
+{"action": "list_replicated_classes", "args": ["--limit", "2"], "label": "network.list_replicated_classes/limit2", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "3"], "label": "network.list_replicated_classes/limit3", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "4"], "label": "network.list_replicated_classes/limit4", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "6"], "label": "network.list_replicated_classes/limit6", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "7"], "label": "network.list_replicated_classes/limit7", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "8"], "label": "network.list_replicated_classes/limit8", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "15"], "label": "network.list_replicated_classes/limit15", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "25"], "label": "network.list_replicated_classes/limit25", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "30"], "label": "network.list_replicated_classes/limit30", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "100"], "label": "network.list_replicated_classes/limit100", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "2"], "label": "network.list_rpc_functions/limit2", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "3"], "label": "network.list_rpc_functions/limit3", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "30"], "label": "network.list_rpc_functions/limit30", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--limit", "50"], "label": "network.list_rpc_functions/limit50", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "2"], "label": "network.list_onrep_handlers/limit2", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "3"], "label": "network.list_onrep_handlers/limit3", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "30"], "label": "network.list_onrep_handlers/limit30", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--limit", "50"], "label": "network.list_onrep_handlers/limit50", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": [], "label": "network.audit_unbalanced_onreps/det3", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": [], "label": "network.audit_unbalanced_onreps/det4", "namespace": "network"}
+{"action": "list_decisions", "args": ["--limit", "2"], "label": "decision.list_decisions/limit2", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "3"], "label": "decision.list_decisions/limit3", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "4"], "label": "decision.list_decisions/limit4", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "6"], "label": "decision.list_decisions/limit6", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "7"], "label": "decision.list_decisions/limit7", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "8"], "label": "decision.list_decisions/limit8", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "15"], "label": "decision.list_decisions/limit15", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "25"], "label": "decision.list_decisions/limit25", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "30"], "label": "decision.list_decisions/limit30", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--limit", "100"], "label": "decision.list_decisions/limit100", "namespace": "decision"}
+{"action": "list_stale", "args": ["14", "--limit", "5"], "label": "decision.list_stale/14d", "namespace": "decision"}
+{"action": "list_stale", "args": ["45", "--limit", "5"], "label": "decision.list_stale/45d", "namespace": "decision"}
+{"action": "list_stale", "args": ["60", "--limit", "5"], "label": "decision.list_stale/60d", "namespace": "decision"}
+{"action": "list_stale", "args": ["120", "--limit", "5"], "label": "decision.list_stale/120d", "namespace": "decision"}
+{"action": "list_stale", "args": ["270", "--limit", "5"], "label": "decision.list_stale/270d", "namespace": "decision"}
+{"action": "list_stale", "args": ["545", "--limit", "5"], "label": "decision.list_stale/545d", "namespace": "decision"}
+{"action": "list_stale", "args": ["1095", "--limit", "5"], "label": "decision.list_stale/1095d", "namespace": "decision"}
+{"action": "list_stale", "args": ["2920", "--limit", "5"], "label": "decision.list_stale/2920d", "namespace": "decision"}
+{"action": "list_stale", "args": ["5475", "--limit", "5"], "label": "decision.list_stale/5475d", "namespace": "decision"}
+{"action": "list_stale", "args": ["7300", "--limit", "5"], "label": "decision.list_stale/7300d", "namespace": "decision"}
+{"action": "get_hotspot_score", "args": ["Scripts/index_project.py"], "label": "risk.get_hotspot_score/index_project", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/tag_path_params.py"], "label": "risk.get_hotspot_score/tag_path_params", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/lint_agent_tools.py"], "label": "risk.get_hotspot_score/lint_agent_tools", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/check_offline_exe_fresh.py"], "label": "risk.get_hotspot_score/check_offline_exe_fresh", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/check_index_freshness.ps1"], "label": "risk.get_hotspot_score/check_index_freshness", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/recover_mcp.ps1"], "label": "risk.get_hotspot_score/recover_mcp", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/prune_invocation_logs.ps1"], "label": "risk.get_hotspot_score/prune_invocation_logs", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/onboard_monolith.ps1"], "label": "risk.get_hotspot_score/onboard_monolith", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/install_monolith_skills.ps1"], "label": "risk.get_hotspot_score/install_monolith_skills", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Scripts/validate_monolith_skills.ps1"], "label": "risk.get_hotspot_score/validate_monolith_skills", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Docs/SPEC.md"], "label": "risk.get_hotspot_score/SPEC", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Docs/API_REFERENCE.md"], "label": "risk.get_hotspot_score/API_REFERENCE", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Docs/TODO.md"], "label": "risk.get_hotspot_score/TODO", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["README.md"], "label": "risk.get_hotspot_score/README", "namespace": "risk"}
+{"action": "get_hotspot_score", "args": ["Monolith.uplugin"], "label": "risk.get_hotspot_score/Monolith", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/index_project.py"], "label": "risk.get_file_churn/index_project", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Docs/SPEC.md"], "label": "risk.get_file_churn/SPEC", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["README.md"], "label": "risk.get_file_churn/README", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Monolith.uplugin"], "label": "risk.get_file_churn/Monolith", "namespace": "risk"}
+{"action": "get_file_churn", "args": ["Scripts/tag_path_params.py"], "label": "risk.get_file_churn/tag_path_params", "namespace": "risk"}
+{"action": "get_uclass", "args": ["AGameSession"], "label": "cppreflect.get_uclass/AGameSession", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["AGameNetworkManager"], "label": "cppreflect.get_uclass/AGameNetworkManager", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["APlayerCameraManager"], "label": "cppreflect.get_uclass/APlayerCameraManager", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UPlayer"], "label": "cppreflect.get_uclass/UPlayer", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["ULocalPlayer"], "label": "cppreflect.get_uclass/ULocalPlayer", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UNetDriver"], "label": "cppreflect.get_uclass/UNetDriver", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UGameUserSettings"], "label": "cppreflect.get_uclass/UGameUserSettings", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UCanvas"], "label": "cppreflect.get_uclass/UCanvas", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UDamageType"], "label": "cppreflect.get_uclass/UDamageType", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UGameplayStatics"], "label": "cppreflect.get_uclass/UGameplayStatics", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UBlueprintFunctionLibrary"], "label": "cppreflect.get_uclass/UBlueprintFunctionLibrary", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UDataAsset"], "label": "cppreflect.get_uclass/UDataAsset", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UPrimaryDataAsset"], "label": "cppreflect.get_uclass/UPrimaryDataAsset", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UCurveFloat"], "label": "cppreflect.get_uclass/UCurveFloat", "namespace": "cppreflect"}
+{"action": "get_uclass", "args": ["UDataTable"], "label": "cppreflect.get_uclass/UDataTable", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["APlayerController"], "label": "cppreflect.list_uproperties/APlayerController", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["APlayerState"], "label": "cppreflect.list_uproperties/APlayerState", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UPrimitiveComponent"], "label": "cppreflect.list_uproperties/UPrimitiveComponent", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["USkeletalMeshComponent"], "label": "cppreflect.list_uproperties/USkeletalMeshComponent", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UStaticMeshComponent"], "label": "cppreflect.list_uproperties/UStaticMeshComponent", "namespace": "cppreflect"}
+{"action": "list_uproperties", "args": ["UUserWidget"], "label": "cppreflect.list_uproperties/UUserWidget", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["UGameInstance"], "label": "cppreflect.list_ufunctions/UGameInstance", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["AController"], "label": "cppreflect.list_ufunctions/AController", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["AAIController"], "label": "cppreflect.list_ufunctions/AAIController", "namespace": "cppreflect"}
+{"action": "list_ufunctions", "args": ["UUserWidget"], "label": "cppreflect.list_ufunctions/UUserWidget", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["INavAgentInterface"], "label": "cppreflect.find_interface_impls/INavAgentInterface", "namespace": "cppreflect"}
+{"action": "find_interface_impls", "args": ["IInterface_AssetUserData"], "label": "cppreflect.find_interface_impls/IInterface_AssetUserData", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["BlueprintSpawnableComponent"], "label": "cppreflect.find_class_specifier/BlueprintSpawnableComponent", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["BlueprintAuthorityOnly"], "label": "cppreflect.find_class_specifier/BlueprintAuthorityOnly", "namespace": "cppreflect"}
+{"action": "find_class_specifier", "args": ["Within"], "label": "cppreflect.find_class_specifier/Within", "namespace": "cppreflect"}
+{"action": "list_rpc_functions", "args": ["--class_name", "APlayerController", "--limit", "10"], "label": "network.list_rpc_functions/class_APlayerController", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--class_name", "ACharacter", "--limit", "10"], "label": "network.list_rpc_functions/class_ACharacter", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--rpc_kind", "Server", "--limit", "10"], "label": "network.list_rpc_functions/rpc_Server", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--rpc_kind", "Client", "--limit", "10"], "label": "network.list_rpc_functions/rpc_Client", "namespace": "network"}
+{"action": "list_rpc_functions", "args": ["--rpc_kind", "Multicast", "--limit", "10"], "label": "network.list_rpc_functions/rpc_Multicast", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--class_name", "APlayerState", "--limit", "10"], "label": "network.list_onrep_handlers/class_APlayerState", "namespace": "network"}
+{"action": "list_onrep_handlers", "args": ["--class_name", "AGameStateBase", "--limit", "10"], "label": "network.list_onrep_handlers/class_AGameStateBase", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": ["--limit", "1"], "label": "network.audit_unbalanced_onreps/limit1", "namespace": "network"}
+{"action": "audit_unbalanced_onreps", "args": ["--limit", "10"], "label": "network.audit_unbalanced_onreps/limit10", "namespace": "network"}
+{"action": "list_replicated_classes", "args": ["--limit", "75"], "label": "network.list_replicated_classes/limit75", "namespace": "network"}
+{"action": "list_decisions", "args": ["--path_filter", "Docs", "--limit", "10"], "label": "decision.list_decisions/path_docs", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--path_filter", "Source", "--limit", "10"], "label": "decision.list_decisions/path_source", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--status", "accepted", "--limit", "10"], "label": "decision.list_decisions/status_accepted", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--status", "superseded", "--limit", "10"], "label": "decision.list_decisions/status_superseded", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--min_confidence", "0.5", "--limit", "10"], "label": "decision.list_decisions/min_confidence_0_5", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--min_confidence", "0.8", "--limit", "10"], "label": "decision.list_decisions/min_confidence_0_8", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--min_confidence", "0.95", "--limit", "10"], "label": "decision.list_decisions/min_confidence_0_95", "namespace": "decision"}
+{"action": "list_decisions", "args": ["--path_filter", "Scripts", "--min_confidence", "0.5", "--limit", "10"], "label": "decision.list_decisions/path_scripts_min_confidence_0_5", "namespace": "decision"}
+{"action": "list_stale", "args": ["365", "--path_filter", "Docs", "--limit", "10"], "label": "decision.list_stale/365d_docs", "namespace": "decision"}
+{"action": "list_stale", "args": ["3650", "--path_filter", "Scripts", "--limit", "10"], "label": "decision.list_stale/3650d_scripts", "namespace": "decision"}
+{"action": "list_stale", "args": ["0", "--limit", "10"], "label": "decision.list_stale/0d", "namespace": "decision"}
+{"action": "list_stale", "args": ["9999", "--limit", "10"], "label": "decision.list_stale/9999d_limit10", "namespace": "decision"}
+{"action": "find_supersession_chain", "args": ["{{decision_id}}", "--depth", "1"], "label": "decision.find_supersession_chain/depth1", "namespace": "decision", "requires": "decision_id"}
+{"action": "find_supersession_chain", "args": ["{{decision_id}}", "--depth", "3"], "label": "decision.find_supersession_chain/depth3", "namespace": "decision", "requires": "decision_id"}
+{"action": "get_decision", "args": ["{{decision_id}}"], "label": "decision.get_decision/repeat", "namespace": "decision", "requires": "decision_id"}
+{"action": "get_cochange_pairs", "args": ["Scripts/offline_parity_benchmark.py"], "label": "risk.get_cochange_pairs/offline_parity_benchmark", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Scripts/verify_offline_parity.py"], "label": "risk.get_cochange_pairs/verify_offline_parity", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Benchmarks/OfflineParity/README.md"], "label": "risk.get_cochange_pairs/benchmark_readme", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Benchmarks/OfflineParity/METRICS.md"], "label": "risk.get_cochange_pairs/benchmark_metrics", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Benchmarks/OfflineParity/RESULTS.md"], "label": "risk.get_cochange_pairs/benchmark_results", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Docs/SPEC_CORE.md"], "label": "risk.get_cochange_pairs/SPEC_CORE", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Docs/API_REFERENCE.md"], "label": "risk.get_cochange_pairs/API_REFERENCE", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Docs/TODO.md"], "label": "risk.get_cochange_pairs/TODO", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["README.md"], "label": "risk.get_cochange_pairs/README", "namespace": "risk"}
+{"action": "get_cochange_pairs", "args": ["Monolith.uplugin"], "label": "risk.get_cochange_pairs/Monolith", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": ["--macro_filter", "WITH_EDITOR", "--limit", "10"], "label": "risk.list_conditional_gates/WITH_EDITOR", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": ["--macro_filter", "WITH_EDITORONLY_DATA", "--limit", "10"], "label": "risk.list_conditional_gates/WITH_EDITORONLY_DATA", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": ["--macro_filter", "UE_BUILD_SHIPPING", "--limit", "10"], "label": "risk.list_conditional_gates/UE_BUILD_SHIPPING", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": ["--path_filter", "Source/MonolithSource%", "--limit", "10"], "label": "risk.list_conditional_gates/path_monolith_source", "namespace": "risk"}
+{"action": "list_conditional_gates", "args": ["--path_filter", "Source/MonolithReflectionIntel%", "--limit", "10"], "label": "risk.list_conditional_gates/path_reflection_intel", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": ["--limit", "1"], "label": "risk.get_release_window_hotspots/limit1", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": ["--limit", "10"], "label": "risk.get_release_window_hotspots/limit10", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": ["--since_unix", "0", "--limit", "5"], "label": "risk.get_release_window_hotspots/since0_limit5", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": ["--since_unix", "1700000000", "--limit", "5"], "label": "risk.get_release_window_hotspots/since1700000000_limit5", "namespace": "risk"}
+{"action": "get_release_window_hotspots", "args": ["--since_unix", "1600000000", "--limit", "20"], "label": "risk.get_release_window_hotspots/since1600000000_limit20", "namespace": "risk"}
+{"action": "get_include_path", "args": ["UGameInstance"], "compare": "text", "label": "source.get_include_path/UGameInstance", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UWorld"], "compare": "text", "label": "source.get_include_path/UWorld", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UUserWidget"], "compare": "text", "label": "source.get_include_path/UUserWidget", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UGameplayStatics"], "compare": "text", "label": "source.get_include_path/UGameplayStatics", "namespace": "source", "offline_unsupported": true}
+{"action": "get_include_path", "args": ["UDataTable"], "compare": "text", "label": "source.get_include_path/UDataTable", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UGameplayStatics::OpenLevel"], "compare": "text", "label": "source.get_signature/UGameplayStatics_OpenLevel", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UGameplayStatics::SpawnEmitterAtLocation"], "compare": "text", "label": "source.get_signature/UGameplayStatics_SpawnEmitter", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UActorComponent::Activate"], "compare": "text", "label": "source.get_signature/UActorComponent_Activate", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["APlayerController::ClientTravel"], "compare": "text", "label": "source.get_signature/APlayerController_ClientTravel", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["AController::SetPawn"], "compare": "text", "label": "source.get_signature/AController_SetPawn", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["AController", "APawn"], "compare": "text", "label": "source.check_deprecations/AController_APawn", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["UWorld", "UGameInstance"], "compare": "text", "label": "source.check_deprecations/UWorld_UGameInstance", "namespace": "source", "offline_unsupported": true}
+{"action": "check_deprecations", "args": ["UDataTable", "UDataAsset"], "compare": "text", "label": "source.check_deprecations/UDataTable_UDataAsset", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UInputAction", "UInputMappingContext", "UUserWidget"], "compare": "text", "label": "source.verify_symbols/Input_UI", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["APlayerController::ClientTravel", "AController::SetPawn", "UGameInstance"], "compare": "text", "label": "source.verify_symbols/GameFrameworkTravel", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UAbilitySystemComponent", "UGameplayAbility", "UGameplayEffect"], "compare": "text", "label": "source.verify_symbols/GAS", "namespace": "source", "offline_unsupported": true}
+{"action": "verify_symbols", "args": ["UDataAsset", "UPrimaryDataAsset", "UDataTable"], "compare": "text", "label": "source.verify_symbols/DataAssets", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["UGameplayStatics::OpenLevel", "--limit", "3"], "compare": "text", "label": "source.find_example_usage/OpenLevel_limit3", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["APlayerController::ClientTravel", "--limit", "3"], "compare": "text", "label": "source.find_example_usage/ClientTravel_limit3", "namespace": "source", "offline_unsupported": true}
+{"action": "find_example_usage", "args": ["UGameplayStatics::SpawnEmitterAtLocation", "--limit", "2"], "compare": "text", "label": "source.find_example_usage/SpawnEmitter_limit2", "namespace": "source", "offline_unsupported": true}
+{"action": "get_signature", "args": ["UThisDoesNotExistAnywhereXYZ::Nope"], "compare": "text", "expected_error": true, "label": "source.get_signature/missing_symbol(expected-error)", "namespace": "source"}
+{"action": "get_include_path", "args": ["UThisDoesNotExistAnywhereXYZ"], "compare": "text", "expected_error": true, "label": "source.get_include_path/missing_symbol(expected-error)", "namespace": "source"}
+{"action": "generate_class_stub", "args": ["UThisDoesNotExistAnywhereXYZ", "AMyBadActor", "TestModule"], "compare": "text", "expected_error": true, "label": "source.generate_class_stub/missing_parent(expected-error)", "namespace": "source"}
+{"action": "lint_header", "args": ["Source/DoesNotExist/Missing.h"], "compare": "text", "expected_error": true, "label": "source.lint_header/missing_file(expected-error)", "namespace": "source"}
+{"action": "read_file", "args": ["Source/DoesNotExist/Missing.h"], "compare": "text", "expected_error": true, "label": "source.read_file/missing_file(expected-error)", "namespace": "source"}

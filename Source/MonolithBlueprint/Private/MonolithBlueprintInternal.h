@@ -36,6 +36,69 @@
 namespace MonolithBlueprintInternal
 {
 	/**
+	 * Resolve an interface UClass from a user-supplied identifier, supporting BOTH C++ interfaces
+	 * (by class name) AND Blueprint Interface assets (by asset path OR short asset name).
+	 *
+	 * The legacy resolution did only FindFirstObject<UClass> name permutations, which can never
+	 * match a Blueprint Interface — its generated class is "<Name>_C" and is loaded on demand —
+	 * even though the action help text promised "use the asset name". (Surfaced by the
+	 * BlueprintEditing benchmark: implement_interface/get_interface_functions with "BPI_TestInterface"
+	 * returned "Interface class not found".) Resolution order:
+	 *   1. Native/direct UClass name: as-is, U-prefixed, I-stripped+U-prepended.
+	 *   2. "<name>_C" (an already-loaded Blueprint Interface's generated class).
+	 *   3. Asset reference: if it looks like a path, load it; else fuzzy-find by short name via the
+	 *      AssetRegistry, then load. Use the loaded Blueprint's GeneratedClass.
+	 * Returns nullptr if nothing resolves. The caller checks CLASS_Interface.
+	 */
+	inline UClass* ResolveInterfaceClass(const FString& InterfaceClassName)
+	{
+		if (InterfaceClassName.IsEmpty())
+		{
+			return nullptr;
+		}
+		UClass* Found = FindFirstObject<UClass>(*InterfaceClassName, EFindFirstObjectOptions::NativeFirst);
+		if (!Found)
+		{
+			Found = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName), EFindFirstObjectOptions::NativeFirst);
+		}
+		if (!Found && InterfaceClassName.StartsWith(TEXT("I")))
+		{
+			Found = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName.Mid(1)), EFindFirstObjectOptions::NativeFirst);
+		}
+		if (!Found && !InterfaceClassName.EndsWith(TEXT("_C")))
+		{
+			Found = FindFirstObject<UClass>(*FString::Printf(TEXT("%s_C"), *InterfaceClassName), EFindFirstObjectOptions::NativeFirst);
+		}
+		if (!Found)
+		{
+			auto ClassFromBlueprintPath = [](const FString& Path) -> UClass*
+			{
+				if (UBlueprint* IfaceBP = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(Path))
+				{
+					return IfaceBP->GeneratedClass;
+				}
+				return nullptr;
+			};
+			if (InterfaceClassName.Contains(TEXT("/")))
+			{
+				Found = ClassFromBlueprintPath(InterfaceClassName);
+			}
+			else
+			{
+				for (const FString& Candidate : FMonolithAssetUtils::FindAssetCandidates(InterfaceClassName, 5))
+				{
+					if (UClass* C = ClassFromBlueprintPath(Candidate))
+					{
+						Found = C;
+						break;
+					}
+				}
+			}
+		}
+		return Found;
+	}
+
+	/**
 	 * Try to resolve a Level Blueprint from a level asset path.
 	 * Level Blueprints are ULevelScriptBlueprint sub-objects of ULevel,
 	 * not top-level assets, so standard LoadAssetByPath<UBlueprint> won't find them.

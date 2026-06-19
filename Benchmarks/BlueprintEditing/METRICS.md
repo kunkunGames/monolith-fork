@@ -1,23 +1,50 @@
 # BlueprintEditing Benchmark Metrics
 
-## Primary Score Formula (v5)
+## Primary Score Formula (v5.1)
 
 ```
-blueprint_editing_score = 0.26 * edit_execute_rate
-                        + 0.14 * edit_schema_rate
+blueprint_editing_score = 0.31 * edit_execute_rate       (delete-first + read-back verified)
                         + 0.12 * graph_read_rate
                         + 0.12 * variable_read_rate
-                        + 0.10 * error_path_rate
-                        + 0.10 * workflow_execute_rate
-                        + 0.08 * duplicate_reject_rate
-                        + 0.05 * read_schema_rate
+                        + 0.10 * error_path_rate          (offending-identifier specific)
+                        + 0.10 * workflow_execute_rate    (executed end-to-end)
+                        + 0.08 * edit_schema_rate
+                        + 0.07 * duplicate_reject_rate    (clean-first-call gated)
+                        + 0.05 * negative_compile_rate    (compiler-runs falsifiable)
                         + 0.03 * type_discovery_rate
+                        + 0.02 * read_schema_rate
 ```
 
 All rates are in `[0.0, 1.0]`. The composite score is in `[0.0, 1.0]`.
 Weights sum to exactly 1.0 and live in the single `WEIGHTS` dict in
 `Scripts/blueprint_editing_benchmark.py` — the sole source of truth for the scorer, the manifest
 formula string, the comparison report, and the module docstring (an `assert` enforces the sum).
+
+> **v5.1 adversarial hardening + practical expansion (2026-06-18):** an adversarial audit plus a
+> live baseline run (`baseline-v5-pre` = 0.967) exposed scoring holes and benchmark defects, all
+> closed here. Task count 295→305 (`edit_execute` 104→113, new `negative_compile` category).
+> Scoring-engine hardening: (a) **`error_path`** scores only on the offending identifier
+> (`specific_tokens`), so a reject-everything server emitting a canned "could not find variable"
+> no longer passes any of the 16 tasks; (b) **`edit_execute` creates are delete-first op_chains**
+> (a same-named leftover from a prior run is deleted first, so the read-back proves THIS run made
+> the edit — a silent no-op can no longer ride leftover state); (c) **`add_node`** reads back the
+> exact returned node id (`${self}`), **`set_component_property`** reads back the value,
+> **`add_replicated_variable`** asserts the replication flag, **CDO** writes assert property+value;
+> (d) **`duplicate_reject`** requires a CLEAN first create (delete-reset each run); (e) an empty
+> `contains:[]` read-back is now a build-time error (`validate_task_integrity`); (f) an empty
+> weighted category is a build-time + run-time error (`aggregate`/`build_static_tasks`). New
+> executed coverage: **`negative_compile`** (break a scratch graph, require `error_count>0` — makes
+> "compile is clean" falsifiable), data-pin (typed value) wiring, `set_pin_default` pin literals,
+> and add→remove→read-gone delete round-trips. **Re-weight:** schema-fetch 0.19→0.10
+> (`edit_schema` 0.14→0.08, `read_schema` 0.05→0.02); `edit_execute` 0.26→0.31; `negative_compile`
+> 0.05; `duplicate_reject` 0.08→0.07. Benchmark defects fixed: the `bIsActive` fixture var collided
+> with `UActorComponent`'s native `bIsActive` (renamed `bComponentActive`); `validate_blueprint`'s
+> lint-report shape (`node_errors`/`unimplemented_interface_functions`/`duplicate_custom_events`)
+> is now scored as clean iff those hard-error lists are empty (it was mis-failed by a text scan);
+> interface tasks pass the full `/Game/Benchmarks/BPI_TestInterface` path, backed by a Monolith
+> interface-resolver fix so `implement_interface`/`get_interface_functions`/`remove_interface`
+> resolve a Blueprint Interface by asset path or short name (previously only native class names
+> resolved, so the natural identifier returned "Interface class not found").
 
 > **v5 formula change (2026-06-17):** the central upgrade. `edit_execute` is now **read-back
 > verified** — a mutation must be observable via a follow-up read, node-wiring is executed for
@@ -47,14 +74,15 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 
 | Metric | Type | Range | Definition |
 |--------|------|-------|------------|
-| `blueprint_editing_score` | composite | 0.0 – 1.0 | Weighted sum of the nine dimension rates |
-| `edit_execute_rate` | rate | 0.0 – 1.0 | Real edit actions against fixtures, **read-back verified** — strict: isError/transport error = fail, AND the mutation must be observable via a follow-up read (node-wiring chains confirm the `connect_pins` connection; compile slots require `error_count == 0`) |
+| `blueprint_editing_score` | composite | 0.0 – 1.0 | Weighted sum of the ten dimension rates |
+| `edit_execute_rate` | rate | 0.0 – 1.0 | Real edit actions against fixtures, **delete-first + read-back verified** — strict: isError/transport error = fail, AND the mutation must be observable via a follow-up read. Creates run a leading remove so the read-back proves THIS run made the edit; `add_node` reads back the exact returned node id; `set_component_property` reads back the value; `add_replicated_variable` asserts the replication flag; node-wiring chains confirm the `connect_pins` connection (exec AND data pins); compile slots require `error_count == 0` |
 | `edit_schema_rate` | rate | 0.0 – 1.0 | Schema fetch for 46 edit actions — strict: isError = fail |
 | `graph_read_rate` | rate | 0.0 – 1.0 | Graph reads — strict: isError = fail + content shape check for known fixtures |
 | `variable_read_rate` | rate | 0.0 – 1.0 | Variable reads — strict: isError = fail + fixture variable / interface function name check |
-| `error_path_rate` | rate | 0.0 – 1.0 | **Inverted + input-specific**: pass = a structured `isError` whose message references the offending input; transport crash OR a generic always-error response = fail |
-| `workflow_execute_rate` | rate | 0.0 – 1.0 | Executed end-to-end workflow chains (build_function / implement_interface / component_assembly) — strict: every step runs, compile is clean, and the end state reads back. Replaces existence-only `workflow_completeness`. |
-| `duplicate_reject_rate` | rate | 0.0 – 1.0 | **Inverted**: first call must create the entity; the second identical call must return a duplicate-specific `isError`. A silent suffix/no-op fails. |
+| `error_path_rate` | rate | 0.0 – 1.0 | **Inverted + input-specific**: pass = a structured `isError` whose message references the **offending identifier** (the unique `NONEXISTENT_*`/`INVALID_*` token); transport crash OR a generic error that names only the category word = fail |
+| `workflow_execute_rate` | rate | 0.0 – 1.0 | Executed end-to-end workflow chains — strict: every step runs, compile is clean, and the end state reads back. Replaces existence-only `workflow_completeness`. |
+| `duplicate_reject_rate` | rate | 0.0 – 1.0 | **Inverted**: the first call must CLEANLY create the entity (delete-reset each run); the second identical call must return a duplicate-specific `isError`. A silent suffix/no-op, OR a server that errors on every call, fails. |
+| `negative_compile_rate` | rate | 0.0 – 1.0 | A deliberately broken scratch blueprint (variable given an invalid struct type) must be REPORTED as a real compile failure (`error_count>0`). Transport/isError (asset-load failure) OR a clean `error_count:0` envelope = fail. Makes "compile is clean" falsifiable. |
 | `read_schema_rate` | rate | 0.0 – 1.0 | Schema fetch for 23 read actions — lenient: only checks `planning_signals` + `skill` |
 | `type_discovery_rate` | rate | 0.0 – 1.0 | project.search for fixture names — requires ≥1 result; required-result queries target the benchmark's own fixtures (portable across projects) |
 | `error_count` | count | 0 – N | Transport errors + isError responses across all tasks (diagnostic only) |
@@ -63,15 +91,16 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 
 | Dimension | Weight | Rationale |
 |-----------|--------|-----------|
-| `edit_execute_rate` | 0.26 | Highest weight: real edit actions on fixtures, now read-back verified. A stub that returns success without truly editing fails the read-back, so this weight is justified. |
-| `edit_schema_rate` | 0.14 | Schema correctness for all 46 edit actions; unknown action names return isError and fail. (Down from 0.18 — a schema-only signal is worth less now that execution is read-back verified.) |
+| `edit_execute_rate` | 0.31 | Highest weight: real edit actions, delete-first + read-back verified (a no-op can no longer ride leftover state). De-diluted (4 read-only tasks moved out) and broadened with delete/data-pin/pin-literal/value tasks, so the weight rose 0.26→0.31. |
 | `graph_read_rate` | 0.12 | Most common inspection call; strict + content shape check means empty envelopes don't pass. |
 | `variable_read_rate` | 0.12 | Variable inspection underlies most edit workflows; strict + fixture/interface content check. |
-| `error_path_rate` | 0.10 | Graceful, input-specific rejection of invalid inputs. Crash, silent success, OR generic always-error all score 0. |
-| `workflow_execute_rate` | 0.10 | Executed end-to-end workflows (build→wire→compile-clean→read-back). Real authoring sequences, not catalog-name presence — high signal, hence 0.10 (was 0.03 existence-only). |
-| `duplicate_reject_rate` | 0.08 | Duplicate-name guard consistency across `add_*` actions; first-call gated and self-contained. |
-| `read_schema_rate` | 0.05 | Lenient introspection signal; rarely fails on healthy endpoints with correct action names. |
+| `error_path_rate` | 0.10 | Input-SPECIFIC rejection: the error must name the offending identifier. Crash, silent success, OR a generic always-error all score 0. |
+| `workflow_execute_rate` | 0.10 | Executed end-to-end workflows (build→wire→compile-clean→read-back). Real authoring sequences, not catalog-name presence. |
+| `edit_schema_rate` | 0.08 | Schema correctness for all 46 edit actions; a coverage tripwire (unknown names isError and fail). Down 0.14→0.08 — a schema-only signal is worth less now that execution is read-back verified. |
+| `duplicate_reject_rate` | 0.07 | Duplicate-name guard consistency across `add_*`; clean-first-call gated and delete-reset. |
+| `negative_compile_rate` | 0.05 | The only dimension that proves the compiler actually runs; without it `error_count:0` is unfalsifiable. |
 | `type_discovery_rate` | 0.03 | Discovery is a prerequisite but converges quickly; fixture-based so it is portable. |
+| `read_schema_rate` | 0.02 | Lenient introspection tripwire; rarely fails on healthy endpoints. Down 0.05→0.02. |
 
 ## Task Category Counts
 
@@ -83,10 +112,11 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 | `read_schema` | 23 | read_only_discovery |
 | `edit_schema` | 46 | read_only_discovery |
 | `workflow_execute` | 11 | mutating_fixture |
-| `edit_execute` | 104 | mutating_fixture |
-| `error_path` | 16 | read_only_invalid |
+| `edit_execute` | 113 | mutating_fixture |
+| `error_path` | 20 | read_only_invalid |
 | `duplicate_reject` | 11 | mutating_idempotency |
-| **Total** | **295** | |
+| `negative_compile` | 1 | mutating_fixture |
+| **Total** | **309** | |
 
 `edit_execute` = 70 base single edit tasks (10 × 7 BP types) + 6 executed node-wiring chains +
 28 practical expansion edits. The expansion covers Widget style/property/graph edits,
@@ -157,22 +187,22 @@ Note: `undo`/`redo` do not exist in the blueprint catalog; replaced with `auto_l
 
 | Category | Can a non-editing stub pass? | Why / Mitigation |
 |----------|------------------------------|-----------------|
-| `edit_execute` | **No** | Each create requires a read-back that names the new entity; node chains require real returned ids to wire and confirm the connection; compile slots require `error_count == 0`. A success-envelope stub fails the read-back; an always-isError-"already" stub fails it too. |
+| `edit_execute` | **No** | Creates are delete-first, so a no-op leaves the entity absent and the read-back fails — leftover state from a prior run can no longer mask it. `add_node` read-back asserts the exact returned id; `set_component_property` asserts the value; node chains wire real returned ids; compile slots require `error_count == 0`. |
 | `workflow_execute` | **No** | Multi-step chain with id threading + compile-clean + final read-back; static catalog mimicry passes nothing. |
-| `error_path` | **No** | Requires an isError whose message references the bad input; a reject-everything server's generic error fails the reason check, and a valid-input server cannot pass without truly rejecting. |
+| `error_path` | **No** | Requires an isError whose message references the **offending identifier**, not a generic word; a reject-everything server emitting "could not find variable" fails all 16. |
+| `duplicate_reject` | **No** | First call must CLEANLY create (delete-reset) AND the second must be a duplicate-specific isError. An always-error server now fails the first-call gate. |
+| `negative_compile` | **No** | A broken graph must be REPORTED as `error_count>0`; an `error_count:0`-always stub fails, and a reject-everything stub fails too (isError is not a compile signal). |
 | `edit_schema` | Only if 46 action names are known | Must return `planning_signals`+`skill` without `isError` for 46 specific names. |
 | `graph_read` | Partially | Content check catches empty `list_graphs`; `get_graph_data`/`get_graph_summary` only no-error. |
 | `variable_read` | Partially | Fixture variable / interface function name check catches empty lists. |
-| `duplicate_reject` | **No** | First call must create AND the second must be a duplicate-specific isError. Requires real, state-dependent duplicate detection. |
 
-**Recomputed stub ceiling (v5).** A name-correct, no-editor stub scores **zero** on `edit_execute`
-(read-back fails), `workflow_execute`, `error_path`, and `duplicate_reject`, and only partial on
-the content-checked reads:
-`0.26*0 + 0.14*1 + 0.12*0.5 + 0.12*0.5 + 0.10*0 + 0.10*0 + 0.08*0 + 0.05*1 + 0.03*0 ≈ 0.31`
-The read-back upgrade drops the stub ceiling from the v4 ≈0.68 to **≈0.31** — the benchmark now
-genuinely separates a live editor that performs and confirms real edits from a server that merely
-returns well-formed envelopes. (Validated offline: a faithful mock server passes all sampled
-categories; a no-op "success envelope" stub is blocked on every read-back-dependent task.)
+**Recomputed stub ceiling (v5.1).** A name-correct, no-editor stub scores **zero** on
+`edit_execute` (delete-first read-back fails), `workflow_execute`, `error_path`,
+`duplicate_reject`, and `negative_compile`, and only partial on the content-checked reads:
+`0.31*0 + 0.08*1 + 0.12*0.5 + 0.12*0.5 + 0.10*0 + 0.10*0 + 0.07*0 + 0.05*0 + 0.03*0 + 0.02*1 ≈ 0.22`
+The hardening drops the stub ceiling from v5 ≈0.31 to **≈0.22** (and the schema-fetch re-weight
+removes most of the residue): the benchmark now genuinely separates a live editor that performs,
+confirms, and compiles real edits from a server that merely returns well-formed envelopes.
 
 ## Catalog Version
 

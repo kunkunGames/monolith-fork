@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-06-17T14:38:06.617652+00:00",
+  "generated_at": "2026-06-18T23:56:32.224545+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 322,
-  "min_tasks_requested": 319,
+  "task_count": 363,
+  "min_tasks_requested": 363,
   "golden_symbols": [
     "AActor",
     "UObject",
@@ -48,18 +48,20 @@
     "ergonomics_text": 40,
     "health_check": 7,
     "impact_radius_lookup": 32,
+    "negative_recovery": 13,
     "review_context_lookup": 32,
     "schema_field_presence": 12,
-    "symbol_lookup": 199
+    "symbol_lookup": 227
   },
   "task_file": "Benchmarks/SourceIndex/tasks.jsonl",
   "scoring": {
-    "source_index_score": "0.35 * symbol_hit_rate + 0.25 * field_completeness_rate + 0.20 * schema_adherence_rate + 0.10 * (1 - stale_rate) + 0.10 * ergonomics_success_rate",
-    "symbol_hit_rate": "fraction of symbol_lookup + review_context_lookup + impact_radius_lookup tasks with direct_success",
-    "field_completeness_rate": "fraction of all symbol results with >=3 required fields (name, kind, file_path, location)",
+    "source_index_score": "0.30 * symbol_hit_rate + 0.20 * field_completeness_rate + 0.15 * schema_adherence_rate + 0.10 * (1 - stale_rate) + 0.10 * ergonomics_success_rate + 0.15 * negative_recovery_rate",
+    "symbol_hit_rate": "fraction of symbol_lookup + review_context_lookup + impact_radius_lookup tasks with direct_success (require_results tasks miss on empty/sentinel responses)",
+    "field_completeness_rate": "mean per-task field-completeness over expected-nonempty (require_results) lookups only; an empty required lookup contributes 0 (closes the divide-by-returned loophole)",
     "schema_adherence_rate": "fraction of schema_field_presence tasks with planning_signals + skill + status declared",
     "stale_rate": "fraction of health_check tasks with stale/error/missing-fields response",
     "ergonomics_success_rate": "fraction of ergonomics_text tasks with non-empty, non-error response",
+    "negative_recovery_rate": "mean response-quality score (0..1) on deliberately bad input: transport crash / silent empty = 0, structured error naming the offending identifier = 0.7, + did-you-mean/qualified hint = 1.0",
     "mean_results_per_lookup": "average result count across symbol_lookup + review_context_lookup + impact_radius_lookup tasks"
   }
 }

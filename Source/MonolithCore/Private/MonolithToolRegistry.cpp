@@ -1411,16 +1411,17 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	}
 
 	// Validate required params from schema before dispatching.
-	// Skip asset_path — GetAssetPath() accepts both asset_path and system_path aliases
-	// and produces a clear error message itself.
+	// asset_path is enforced like any other required param. K2 ApplyAliases (above) has
+	// already canonicalized any declared alias (e.g. system_path) into the asset_path key,
+	// so a missing asset_path here is genuinely missing and must surface the structured
+	// missing_required_param contract rather than a handler's ad-hoc "<asset> not found:"
+	// message built from an empty path.
 	const double SchemaStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		TArray<FString> Missing;
 		for (const auto& Pair : ActionInfo.ParamSchema->Values)
 		{
-			if (Pair.Key == TEXT("asset_path")) continue;
-
 			const TSharedPtr<FJsonObject>* ParamDef = nullptr;
 			if (Pair.Value->TryGetObject(ParamDef) && ParamDef)
 			{

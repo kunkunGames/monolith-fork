@@ -5,26 +5,37 @@
   "expected_action_count": 1766,
   "scoring": {
     "primary_metric": "schema_completeness_score",
-    "formula": "0.30*param_types_declared_rate + 0.25*required_params_marked_rate + 0.20*planning_signals_present_rate + 0.15*skill_routing_present_rate + 0.10*output_contract_declared_rate",
+    "formula": "0.25*param_types_declared_rate + 0.20*required_params_marked_rate + 0.20*value_domain_rate + 0.15*planning_signals_present_rate + 0.10*skill_routing_present_rate + 0.10*output_contract_declared_rate",
+    "param_gated_dimensions": [
+      "param_types_declared",
+      "required_params_marked",
+      "value_domain"
+    ],
+    "param_gated_note": "Param-gated dimensions are scored only for actions that declare parameters; param-less actions are N/A (excluded from the rate, never auto-1.0). A discover fetch failure is a hard fail, not N/A.",
     "dimensions": [
       {
         "name": "param_types_declared",
-        "weight": 0.3,
-        "description": "All parameters have a type field, or action has no parameters"
+        "weight": 0.25,
+        "description": "Every parameter has a non-empty type field (N/A for param-less actions)"
       },
       {
         "name": "required_params_marked",
-        "weight": 0.25,
-        "description": "At least one parameter is required:true, or action has no parameters"
+        "weight": 0.2,
+        "description": "Every parameter carries a boolean required flag (N/A for param-less actions)"
+      },
+      {
+        "name": "value_domain",
+        "weight": 0.2,
+        "description": "Every param is typed, described, and required-flagged, and constrained params document their allowed values (non-empty enum, numeric range). N/A for param-less actions"
       },
       {
         "name": "planning_signals_present",
-        "weight": 0.2,
+        "weight": 0.15,
         "description": "planning_signals key exists and is a non-empty list"
       },
       {
         "name": "skill_routing_present",
-        "weight": 0.15,
+        "weight": 0.1,
         "description": "skill key exists and is a non-empty string"
       },
       {

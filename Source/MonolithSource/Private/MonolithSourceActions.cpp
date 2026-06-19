@@ -1788,14 +1788,37 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallers(const TSharedPtr
 		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
 	}
 
-	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Function, TEXT("function"));
+	// Resolve qualified Class::Method names. GetSymbolsByName / the FTS index key on the trailing
+	// method identifier, so a qualified input (e.g. "AActor::BeginPlay") matched nothing and
+	// returned "No function found" — the single most common worker form (qualified C++ symbols).
+	// Strip to the method name for lookup (matching get_signature/get_include_path), then prefer
+	// the exact qualified overload when a class scope was supplied so the callers are class-precise.
+	FString MethodName = Function;
+	FString ClassScope;
+	const int32 ScopeIdx = Function.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	if (ScopeIdx != INDEX_NONE)
+	{
+		MethodName = Function.Mid(ScopeIdx + 2);
+		ClassScope = Function.Mid(0, ScopeIdx);
+	}
+
+	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(MethodName, TEXT("function"));
 	if (Symbols.Num() == 0)
 	{
-		TArray<FMonolithSourceSymbol> AllSyms = DB->SearchSymbolsFTS(Function, 5);
+		TArray<FMonolithSourceSymbol> AllSyms = DB->SearchSymbolsFTS(MethodName, 5);
 		for (const auto& S : AllSyms)
 		{
 			if (S.Kind == TEXT("function")) Symbols.Add(S);
 		}
+	}
+	if (!ClassScope.IsEmpty() && Symbols.Num() > 1)
+	{
+		TArray<FMonolithSourceSymbol> Exact;
+		for (const auto& S : Symbols)
+		{
+			if (S.QualifiedName == Function) Exact.Add(S);
+		}
+		if (Exact.Num() > 0) Symbols = Exact;
 	}
 	if (Symbols.Num() == 0)
 	{
@@ -1858,14 +1881,37 @@ FMonolithActionResult FMonolithSourceActions::HandleFindCallees(const TSharedPtr
 		Limit = FMath::Clamp(static_cast<int32>(RawLimit), 1, 1000);
 	}
 
-	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Function, TEXT("function"));
+	// Resolve qualified Class::Method names. GetSymbolsByName / the FTS index key on the trailing
+	// method identifier, so a qualified input (e.g. "AActor::BeginPlay") matched nothing and
+	// returned "No function found" — the single most common worker form (qualified C++ symbols).
+	// Strip to the method name for lookup (matching get_signature/get_include_path), then prefer
+	// the exact qualified overload when a class scope was supplied so the callers are class-precise.
+	FString MethodName = Function;
+	FString ClassScope;
+	const int32 ScopeIdx = Function.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+	if (ScopeIdx != INDEX_NONE)
+	{
+		MethodName = Function.Mid(ScopeIdx + 2);
+		ClassScope = Function.Mid(0, ScopeIdx);
+	}
+
+	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(MethodName, TEXT("function"));
 	if (Symbols.Num() == 0)
 	{
-		TArray<FMonolithSourceSymbol> AllSyms = DB->SearchSymbolsFTS(Function, 5);
+		TArray<FMonolithSourceSymbol> AllSyms = DB->SearchSymbolsFTS(MethodName, 5);
 		for (const auto& S : AllSyms)
 		{
 			if (S.Kind == TEXT("function")) Symbols.Add(S);
 		}
+	}
+	if (!ClassScope.IsEmpty() && Symbols.Num() > 1)
+	{
+		TArray<FMonolithSourceSymbol> Exact;
+		for (const auto& S : Symbols)
+		{
+			if (S.QualifiedName == Function) Exact.Add(S);
+		}
+		if (Exact.Num() > 0) Symbols = Exact;
 	}
 	if (Symbols.Num() == 0)
 	{

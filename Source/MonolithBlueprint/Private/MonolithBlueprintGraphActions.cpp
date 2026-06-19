@@ -140,7 +140,8 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		FMonolithActionHandler::CreateStatic(&HandleRemoveEventDispatcher),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"),      TEXT("Blueprint asset path"))
-			.Required(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix)"))
+			.Optional(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix); alias: name"))
+			.Optional(TEXT("name"),            TEXT("string"), TEXT("Alias for dispatcher_name (matches add_event_dispatcher, which uses name)"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_event_dispatcher_params"),
@@ -148,7 +149,8 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 		FMonolithActionHandler::CreateStatic(&HandleSetEventDispatcherParams),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"),      TEXT("Blueprint asset path"))
-			.Required(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix)"))
+			.Optional(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix); alias: name"))
+			.Optional(TEXT("name"),            TEXT("string"), TEXT("Alias for dispatcher_name (matches add_event_dispatcher, which uses name)"))
 			.Required(TEXT("params"),          TEXT("array"),  TEXT("Array of {name, type} objects for the new signature"))
 			.Build());
 
@@ -902,11 +904,14 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleImplementInterface(c
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
 	}
 
-	// Verify the class exists before attempting to add it
-	UClass* InterfaceClass = FindFirstObject<UClass>(*InterfaceClassName, EFindFirstObjectOptions::NativeFirst);
+	// Verify the class exists before attempting to add it. Resolves C++ interfaces by class name
+	// AND Blueprint Interface assets by asset path or short name (see ResolveInterfaceClass).
+	UClass* InterfaceClass = MonolithBlueprintInternal::ResolveInterfaceClass(InterfaceClassName);
 	if (!InterfaceClass)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Interface class not found: %s"), *InterfaceClassName));
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Interface class not found: %s. For C++ interfaces use the I-prefixed name; for "
+			     "Blueprint interfaces use the asset name or /Game path."), *InterfaceClassName));
 	}
 
 	if (!InterfaceClass->HasAnyClassFlags(CLASS_Interface))
@@ -998,17 +1003,9 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleScaffoldInterfaceImp
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
 	}
 
-	// Resolve the interface class — try as-is, then strip leading 'I', then add 'U' prefix
-	UClass* InterfaceClass = FindFirstObject<UClass>(*InterfaceClassName, EFindFirstObjectOptions::NativeFirst);
-	if (!InterfaceClass && InterfaceClassName.StartsWith(TEXT("I")))
-	{
-		// Blueprint interfaces typically have U prefix in the class system (e.g. IBpi_Interactable -> UBpi_Interactable)
-		InterfaceClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName.Mid(1)), EFindFirstObjectOptions::NativeFirst);
-	}
-	if (!InterfaceClass)
-	{
-		InterfaceClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName), EFindFirstObjectOptions::NativeFirst);
-	}
+	// Resolve C++ interfaces by class name AND Blueprint Interface assets by asset path / short
+	// name (the generated "<Name>_C" class or an AssetRegistry load — see ResolveInterfaceClass).
+	UClass* InterfaceClass = MonolithBlueprintInternal::ResolveInterfaceClass(InterfaceClassName);
 	if (!InterfaceClass)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Interface class not found: %s"), *InterfaceClassName));
@@ -1168,7 +1165,12 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	Params->TryGetStringField(TEXT("dispatcher_name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name"));
+		// Accept `name` as an alias so the param matches add_event_dispatcher (which takes `name`).
+		Params->TryGetStringField(TEXT("name"), DispatcherName);
+	}
+	if (DispatcherName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name (or name)"));
 	}
 
 	// Find the delegate signature graph
@@ -1257,7 +1259,12 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleSetEventDispatcherPa
 	Params->TryGetStringField(TEXT("dispatcher_name"), DispatcherName);
 	if (DispatcherName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name"));
+		// Accept `name` as an alias so the param matches add_event_dispatcher (which takes `name`).
+		Params->TryGetStringField(TEXT("name"), DispatcherName);
+	}
+	if (DispatcherName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name (or name)"));
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ParamsArray = nullptr;

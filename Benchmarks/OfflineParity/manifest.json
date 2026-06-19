@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-06-18T00:00:00+00:00",
+  "description": "Static seed manifest for the OfflineParity benchmark. The action table is externalized to actions.jsonl (one action per line) so hosted-static-CI line-count validation covers it like the other benchmarks. action_count must equal the non-empty line count of actions.jsonl. Re-generate actions.jsonl from offline_parity_benchmark.py if the table changes.",
+  "action_count": 317,
+  "action_file": "Benchmarks/OfflineParity/actions.jsonl",
+  "benchmark_script": "Scripts/offline_parity_benchmark.py",
+  "tools_compared": {
+    "exe": "Binaries/monolith_query.exe",
+    "py": "Scripts/monolith_offline.py"
+  },
+  "category_counts": {
+    "cppreflect": 96,
+    "network": 46,
+    "decision": 50,
+    "risk": 62,
+    "source": 63
+  },
+  "bucket_counts": {
+    "expected_error": 5,
+    "offline_unsupported": 58,
+    "requires_decision_id": 6,
+    "text_compare": 63
+  },
+  "placeholder_tokens": {
+    "{{uclass}}": "chain-discovered representative UClass name",
+    "{{decision_id}}": "chain-discovered decision id; rows with requires=decision_id SKIP when absent",
+    "{{risk_path}}": "chain-discovered representative risk file path"
+  },
+  "scoring": {
+    "primary_metric": "offline_parity_score",
+    "formula": "0.50*match_rate + 0.20*(1 - diff_rate) + 0.20*(1 - error_rate) + 0.10*version_parity_score",
+    "simplified": "0.70*match_rate + 0.20*(1 - error_rate) + 0.10*version_parity_score (since match+diff+error=1 for non-skipped)",
+    "match_rate": "fraction of non-skipped actions with status=MATCH (includes expected_error and expected_offline rows where the two offline tools agree on the failure)",
+    "diff_rate": "fraction of non-skipped actions with status=DIFF (genuine exe-vs-py disagreement, including one-sided offline_unsupported failures)",
+    "error_rate": "fraction of non-skipped actions with status=ERROR (unexpected real tool/process/parse failures only)",
+    "version_parity_score": "1.0 if exe parity_spec_rev == py parity_spec_rev, else 0.0",
+    "forced_zero_when": "comparable_actions == 0"
+  },
+  "buckets": {
+    "expected_error": "Deliberate negative-path probe (bad input). Both tools should exit non-zero; both-fail => MATCH (error_kind=expected). One-sided or both-succeed => DIFF.",
+    "offline_unsupported": "Action whose offline surface may legitimately be absent. If BOTH offline tools agree on the failure (both exit non-zero) parity holds => MATCH (error_kind=expected_offline). Only a genuine exe-vs-py disagreement (exactly one tool fails) => DIFF (error_kind=offline_parity_break). If both succeed, outputs are compared normally.",
+    "normal": "Standard parity row. Either tool exiting non-zero => ERROR (error_kind=real)."
+  }
+}

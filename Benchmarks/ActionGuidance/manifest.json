@@ -1,7 +1,7 @@
 {
   "generated_at": "2026-06-17T14:41:57.020299+00:00",
   "mcp_url": "http://localhost:9316/mcp",
-  "task_count": 263,
+  "task_count": 281,
   "min_tasks_requested": 120,
   "catalog_namespace_count": 51,
   "catalog_action_count": 1638,
@@ -215,11 +215,19 @@
     "discovery_planning": 75,
     "invalid_param_type": 46,
     "missing_required_param": 58,
+    "needed_action_routing": 18,
     "unknown_action_recovery": 84
   },
   "task_file": "Benchmarks/ActionGuidance/tasks.jsonl",
   "scoring": {
     "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",
-    "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)"
+    "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)",
+    "aggregation": "Per-task sub-metrics are combined with weighted_avg using each task's demand weight; component weights still sum to 1.0."
+  },
+  "demand_weighting": {
+    "source": "Saved/Monolith/LogAnalysis/20260618-205624/summary.md",
+    "formula": "weight = 1.0 + log10(1 + count * error_rate) for documented high-volume/high-error actions; else 1.0",
+    "weighted_action_count": 38,
+    "weighted_task_count": 38
   }
 }

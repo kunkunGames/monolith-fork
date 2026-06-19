@@ -25,7 +25,17 @@ bool FMonolithParamGuardMeshInspectionMalformedParamsTest::RunTest(const FString
         // No asset_path
         FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("get_mesh_info"), Params);
         TestFalse(TEXT("GetMeshInfo rejects missing asset_path"), Result.bSuccess);
-        TestTrue(TEXT("GetMeshInfo reports the missing asset_path validation error"), Result.ErrorMessage.Contains(TEXT("asset_path is required")));
+        // asset_path now flows through the universal registry required-param validator
+        // (the asset_path dispatch skip was removed), so a missing asset_path returns the
+        // structured missing_required_param contract instead of the handler's ad-hoc message.
+        TestTrue(TEXT("GetMeshInfo error names the missing asset_path param"), Result.ErrorMessage.Contains(TEXT("asset_path")));
+        TestTrue(TEXT("GetMeshInfo emits structured error data"), Result.ErrorData.IsValid());
+        if (Result.ErrorData.IsValid())
+        {
+            FString FailureCause;
+            Result.ErrorData->TryGetStringField(TEXT("failure_cause"), FailureCause);
+            TestEqual(TEXT("GetMeshInfo failure_cause is missing_required_param"), FailureCause, FString(TEXT("missing_required_param")));
+        }
     }
 
     return true;

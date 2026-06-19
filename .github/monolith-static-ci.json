@@ -178,6 +178,18 @@
         "default_path_attrs": {
           "DEFAULT_PROBE_SET": "probe_set"
         }
+      },
+      {
+        "name": "OfflineParity",
+        "script": "Scripts/offline_parity_benchmark.py",
+        "manifest": "Benchmarks/OfflineParity/manifest.json",
+        "tasks": "Benchmarks/OfflineParity/actions.jsonl",
+        "manifest_count_field": "action_count",
+        "manifest_path_field": "action_file",
+        "default_path_attrs": {
+          "DEFAULT_ACTIONS": "tasks",
+          "DEFAULT_MANIFEST": "manifest"
+        }
       }
     ]
   },

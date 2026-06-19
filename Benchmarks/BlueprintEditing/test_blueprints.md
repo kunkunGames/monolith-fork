@@ -40,10 +40,10 @@ The asset paths here match `tasks.jsonl` exactly — do not rename them.
 **Creation steps (blueprint_query MCP calls):**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/BPB_TestActor parent_class=AActor
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor variable_name=Health variable_type=float
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor variable_name=MaxHealth variable_type=float
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor variable_name=ActorTag variable_type=FName
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPB_TestActor parent_class=Actor
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=Health type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=MaxHealth type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=ActorTag type=name
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestActor function_name=TakeDamage_Bench
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestActor function_name=Heal_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestActor
@@ -77,10 +77,10 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestAct
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/BPB_TestCharacter parent_class=ACharacter
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter variable_name=MoveSpeed variable_type=float
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter variable_name=bIsSprinting variable_type=bool
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter variable_name=CharacterName variable_type=FString
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPB_TestCharacter parent_class=Character
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=MoveSpeed type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=bIsSprinting type=bool
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=CharacterName type=string
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestCharacter function_name=StartSprint_Bench
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestCharacter function_name=StopSprint_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestCharacter
@@ -112,9 +112,9 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestCha
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/WBP_TestWidget parent_class=UUserWidget
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget variable_name=DisplayText variable_type=FText
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget variable_name=bIsVisible variable_type=bool
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/WBP_TestWidget parent_class=UserWidget
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget name=DisplayText type=text
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget name=bIsVisible type=bool
 blueprint_query action=add_function asset_path=/Game/Benchmarks/WBP_TestWidget function_name=UpdateDisplay_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/WBP_TestWidget
 ```
@@ -145,9 +145,9 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/WBP_TestWid
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/ABP_TestAnim parent_class=UAnimInstance
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim variable_name=Speed variable_type=float
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim variable_name=bIsInAir variable_type=bool
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/ABP_TestAnim parent_class=AnimInstance
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim name=Speed type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim name=bIsInAir type=bool
 blueprint_query action=add_function asset_path=/Game/Benchmarks/ABP_TestAnim function_name=UpdateLocomotion_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/ABP_TestAnim
 ```
@@ -178,9 +178,9 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/ABP_TestAni
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/GA_TestAbility parent_class=UGameplayAbility
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility variable_name=AbilityCooldown variable_type=float
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility variable_name=AbilityCost variable_type=float
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/GA_TestAbility parent_class=GameplayAbility
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility name=AbilityCooldown type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility name=AbilityCost type=float
 blueprint_query action=add_function asset_path=/Game/Benchmarks/GA_TestAbility function_name=OnAbilityActivated_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/GA_TestAbility
 ```
@@ -200,7 +200,7 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/GA_TestAbil
 | Name | Type | Default |
 |------|------|---------|
 | `ComponentID` | `int32` | `0` |
-| `bIsActive` | `bool` | `true` |
+| `bComponentActive` | `bool` | `true` |
 
 **Functions to create:**
 
@@ -212,9 +212,9 @@ blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/GA_TestAbil
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/BC_TestComponent parent_class=UActorComponent
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent variable_name=ComponentID variable_type=int32
-blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent variable_name=bIsActive variable_type=bool
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BC_TestComponent parent_class=ActorComponent
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent name=ComponentID type=int
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent name=bComponentActive type=bool
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BC_TestComponent function_name=Initialize_Bench
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BC_TestComponent function_name=Deactivate_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BC_TestComponent
@@ -244,7 +244,7 @@ _(Interfaces do not carry member variables; this fixture intentionally has none 
 **Creation steps:**
 
 ```
-blueprint_query action=create_blueprint asset_path=/Game/Benchmarks/BPI_TestInterface parent_class=UInterface
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPI_TestInterface parent_class=Interface
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPI_TestInterface function_name=GetDisplayName_Bench
 blueprint_query action=add_function asset_path=/Game/Benchmarks/BPI_TestInterface function_name=OnInteract_Bench
 blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPI_TestInterface

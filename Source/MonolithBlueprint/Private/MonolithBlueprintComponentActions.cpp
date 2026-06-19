@@ -736,14 +736,23 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleDuplicateCompone
 
 	// Build new node name
 	FString NewName;
-	Params->TryGetStringField(TEXT("new_name"), NewName);
-	if (NewName.IsEmpty())
+	const bool bExplicitName = Params->TryGetStringField(TEXT("new_name"), NewName) && !NewName.IsEmpty();
+	if (!bExplicitName)
 	{
 		NewName = CompName + TEXT("_Copy");
 	}
 
-	// Ensure name is unique
+	// Ensure the name is unique. An EXPLICIT target name that already exists is a user error —
+	// reject it rather than silently creating a suffixed copy (e.g. 'Foo' -> 'Foo_1'), mirroring
+	// the add_component / rename_component duplicate guards. Only the auto-generated '<name>_Copy'
+	// default falls through to a convenience suffix search.
+	if (FindSCSNodeByName(BP->SimpleConstructionScript, FName(*NewName)))
 	{
+		if (bExplicitName)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("A component named '%s' already exists"), *NewName));
+		}
 		FString BaseName = NewName;
 		int32 Suffix = 1;
 		while (FindSCSNodeByName(BP->SimpleConstructionScript, FName(*NewName)))

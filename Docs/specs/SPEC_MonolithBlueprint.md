@@ -74,7 +74,7 @@ Reconcile the member-variable surface of one class against another by name + typ
 | `rename_component` | `asset_path`, `old_name`, `new_name` | Rename a component |
 | `reparent_component` | `asset_path`, `component_name`, `new_parent` | Change a component's parent in the hierarchy |
 | `set_component_property` | `asset_path`, `component_name`, `property_name`, `value` | Set a property on a component via reflection. As of 2026-06-07, when the target is an inherited native component (CDO subobject, no SCS node) it uses the structural-modify + `CompileBlueprint` persistence handshake so the override survives reload; SCS-template writes keep the lighter `MarkBlueprintAsModified` path. |
-| `duplicate_component` | `asset_path`, `component_name`, `new_name` | Duplicate a component with all its settings |
+| `duplicate_component` | `asset_path`, `component_name`, `new_name` | Duplicate a component with all its settings. An explicit `new_name` that already exists is rejected with "A component named '<name>' already exists" (2026-06-18, mirrors `add_component`/`rename_component`); only the auto-generated `<name>_Copy` default falls through to a `_N` suffix. |
 
 **Graph Management (10)**
 | Action | Params | Description |
@@ -84,11 +84,21 @@ Reconcile the member-variable surface of one class against another by name + typ
 | `remove_function` | `asset_path`, `function_name` | Remove a function graph |
 | `rename_function` | `asset_path`, `old_name`, `new_name` | Rename a function graph |
 | `add_macro` | `asset_path`, `macro_name` | Add a new macro graph |
-| `add_event_dispatcher` | `asset_path`, `dispatcher_name` | Add a new event dispatcher |
+| `add_event_dispatcher` | `asset_path`, `name` | Add a new event dispatcher. Rejects a duplicate name with "Event dispatcher already exists". |
+| `remove_event_dispatcher` / `set_event_dispatcher_params` | `asset_path`, `dispatcher_name` (alias `name`) | Remove / set params on a dispatcher. As of 2026-06-18 `dispatcher_name` is optional and `name` is an accepted alias, so the param matches `add_event_dispatcher` (which uses `name`). |
 | `set_function_params` | `asset_path`, `function_name`, `params` | Set input/output parameters on a function |
-| `implement_interface` | `asset_path`, `interface_class` | Add an interface to the Blueprint |
-| `remove_interface` | `asset_path`, `interface_class` | Remove an interface from the Blueprint |
+| `implement_interface` | `asset_path`, `interface_class` | Add an interface to the Blueprint. `interface_class` resolves a C++ interface by class name OR a Blueprint Interface asset by `/Game` path or short asset name (2026-06-18). |
+| `remove_interface` | `asset_path`, `interface_class` | Remove an interface from the Blueprint (same `interface_class` resolution as `implement_interface`). |
 | `reparent_blueprint` | `asset_path`, `new_parent_class` | Change the Blueprint's parent class |
+
+`interface_class` resolution (`implement_interface`, `remove_interface`, and the read action
+`get_interface_functions`) is shared via `MonolithBlueprintInternal::ResolveInterfaceClass`
+(2026-06-18). It tries, in order: the native UClass name (as-is / `U`-prefixed / `I`-stripped+`U`),
+the generated `<Name>_C` class, then — if still unresolved — a Blueprint Interface asset load (by
+`/Game` path, or by short name via an AssetRegistry candidate search) using the loaded Blueprint's
+`GeneratedClass`. Previously only the native-name permutations were attempted, so a Blueprint
+Interface's natural identifier (e.g. `BPI_Interactable`) returned "Interface class not found"
+despite the help text promising asset-name support.
 
 **Node & Pin Operations (7)**
 | Action | Params | Description |

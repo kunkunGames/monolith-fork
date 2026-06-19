@@ -32,6 +32,95 @@ DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/ActionGuidance")
 
 READ_ONLY_POLICY_IDS = {"", "read_only"}
 
+# ---------------------------------------------------------------------------
+# Demand weighting (ITEM 2)
+# ---------------------------------------------------------------------------
+# Live invocation volume x error cost, sourced from the invocation-log analyzer
+# Action Stats table (Saved/Monolith/LogAnalysis/<run>/summary.md). Each entry is
+# "<namespace>.<action>": (count, error_rate). The weight a task receives is
+# 1.0 + log-scaled(count * error_rate) so that a 294-call/47%-error action moves
+# the aggregate far more than a dead 10-call action, without letting a single
+# heavy action dominate. Tasks for actions absent from this table keep weight 1.0.
+#
+# Keep this table in sync with the latest analyzer Action Stats when the demand
+# profile shifts; it is intentionally a small, reviewable snapshot of the live
+# high-volume/high-error rows rather than a full log re-read at benchmark time.
+DEFAULT_WEIGHT = 1.0
+_DEMAND_WEIGHT_SOURCE = "Saved/Monolith/LogAnalysis/20260618-205624/summary.md"
+_ACTION_STATS_20260618 = {
+    "monolith.discover": (5868, 0.088),
+    "monolith.find": (5868, 0.088),  # routing twin of discover; shares live demand
+    "cppreflect.get_uclass": (981, 0.000),
+    "project.search": (601, 0.005),
+    "risk.get_hotspot_score": (597, 0.002),
+    "decision.list_stale": (467, 0.002),
+    "decision.list_decisions": (465, 0.002),
+    "source.get_include_path": (434, 0.601),
+    "blueprint.get_variables": (390, 0.092),
+    "source.get_signature": (380, 0.597),
+    "network.list_replicated_classes": (370, 0.003),
+    "cppreflect.find_class_specifier": (318, 0.003),
+    "risk.get_file_churn": (308, 0.003),
+    "risk.get_cochange_pairs": (298, 0.003),
+    "blueprint.add_variable": (294, 0.466),
+    "cppreflect.list_uproperties": (266, 0.000),
+    "network.list_rpc_functions": (262, 0.004),
+    "source.search_source": (249, 0.036),
+    "source.verify_symbols": (244, 0.574),
+    "blueprint.add_function": (241, 0.461),
+    "blueprint.compile_blueprint": (235, 0.047),
+    "cppreflect.list_ufunctions": (232, 0.000),
+    "blueprint.get_functions": (223, 0.018),
+    "blueprint.add_node": (177, 0.057),
+    "source.find_example_usage": (167, 0.563),
+    "source.find_callers": (166, 0.717),
+    "source.check_deprecations": (166, 0.566),
+    "blueprint.get_graph_data": (165, 0.194),
+    "blueprint.get_blueprint_info": (163, 0.018),
+    "source.find_callees": (134, 0.724),
+    "source.generate_class_stub": (106, 0.660),
+    "blueprint.list_graphs": (105, 0.314),
+    "source.risk_score": (104, 0.115),
+    "blueprint.create_blueprint": (101, 0.871),
+    "blueprint.set_variable_defaults": (87, 0.103),
+    "blueprint.add_event_dispatcher": (85, 0.212),
+    "blueprint.get_graph_summary": (82, 0.207),
+    "source.impact_radius": (74, 0.162),
+}
+
+
+def action_weight(namespace: str, action: str) -> float:
+    """Live-demand weight for a task targeting ``namespace.action``.
+
+    weight = 1.0 + log10(1 + count * error_rate). High-volume/high-error actions
+    earn a larger weight; clean or low-volume actions stay near 1.0. The log keeps
+    a single dominant action (e.g. create_blueprint 101*0.871) from swamping the
+    aggregate while still clearly outweighing a dead 10-call action.
+    """
+    stats = _ACTION_STATS_20260618.get(f"{namespace}.{action}")
+    if not stats:
+        return DEFAULT_WEIGHT
+    count, error_rate = stats
+    error_cost = max(0.0, float(count) * float(error_rate))
+    return round(DEFAULT_WEIGHT + math.log10(1.0 + error_cost), 6)
+
+
+def task_weight(task: Dict[str, Any]) -> float:
+    """Resolve the effective demand weight for a task, honoring an explicit field."""
+    explicit = task.get("weight")
+    if isinstance(explicit, (int, float)) and explicit > 0:
+        return float(explicit)
+    return action_weight(str(task.get("namespace", "")), str(task.get("action", "")))
+
+
+def weighted_avg(pairs: List[Tuple[float, float]]) -> float:
+    """Weighted mean of (value, weight) pairs; falls back to unweighted on zero mass."""
+    total_weight = sum(weight for _, weight in pairs)
+    if total_weight <= 0.0:
+        return avg([value for value, _ in pairs])
+    return sum(value * weight for value, weight in pairs) / total_weight
+
+
 
 def utc_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
@@ -478,6 +567,47 @@ _STATIC_ALIAS_PARAM_TASKS_20260617 = [
     ("project", "search", {"path": "/Game/Benchmarks"}, "query"),
 ]
 
+# ITEM 1: needed_action routing. The agent does not know the exact action name —
+# it has a typo'd name, an invented/stale name, or only a vague task phrase. The
+# routing tool (monolith_find) must name the REAL action_id as a candidate, or the
+# monolith_discover error for a non-existent target must carry a useful hint. This
+# is the discovery side of the #1 live pain (monolith.discover 5868 calls/516 err)
+# that the happy-path discovery_planning tasks never probe. Each row is
+# (subtype, tool, query_args, expected_action_id, expected_namespace, expected_action).
+#
+#   - "find" rows route through monolith_find(query=...); success requires the real
+#     action_id to appear in matches[].action_id.
+#   - "discover_unknown_action" rows call monolith_discover for an absent action;
+#     a bare "Unknown action" error scores LOW — a routing hint naming the real
+#     action (candidate_actions / did_you_mean / matches) scores high.
+_STATIC_NEEDED_ACTION_ROUTING_TASKS_20260618 = [
+    # Typo'd / mis-routed source lookups (source.get_signature mis-routes are a
+    # documented live pain: get_signature 380 calls / 227 err).
+    ("find", {"query": "get function signature for a C++ symbol"}, "source.get_signature", "source", "get_signature"),
+    ("find", {"query": "get_signatuer"}, "source.get_signature", "source", "get_signature"),
+    ("find", {"query": "who calls this function"}, "source.find_callers", "source", "find_callers"),
+    ("find", {"query": "functions this symbol calls"}, "source.find_callees", "source", "find_callees"),
+    ("find", {"query": "header include path for a class"}, "source.get_include_path", "source", "get_include_path"),
+    ("find", {"query": "generate a c++ class stub", "namespace": "source"}, "source.generate_class_stub", "source", "generate_class_stub"),
+    # Vague blueprint authoring intent -> the real high-volume write actions.
+    ("find", {"query": "add a variable to a blueprint"}, "blueprint.add_variable", "blueprint", "add_variable"),
+    ("find", {"query": "add a function to a blueprint"}, "blueprint.add_function", "blueprint", "add_function"),
+    ("find", {"query": "create a new blueprint asset"}, "blueprint.create_blueprint", "blueprint", "create_blueprint"),
+    ("find", {"query": "compile a blueprint"}, "blueprint.compile_blueprint", "blueprint", "compile_blueprint"),
+    # Vague project / asset discovery.
+    ("find", {"query": "search the project for assets"}, "project.search", "project", "search"),
+    ("find", {"query": "details for an asset path", "namespace": "project"}, "project.get_asset_details", "project", "get_asset_details"),
+    # Vague cross-namespace intent (no namespace hint at all).
+    ("find", {"query": "list gameplay abilities"}, "gas.list_abilities", "gas", "list_abilities"),
+    ("find", {"query": "risk hotspot score for a file"}, "risk.get_hotspot_score", "risk", "get_hotspot_score"),
+    # Non-existent / invented action names routed through monolith_discover: the
+    # error must point at the real action rather than dead-ending.
+    ("discover_unknown_action", {"namespace": "source", "action": "get_function_signature"}, "source.get_signature", "source", "get_signature"),
+    ("discover_unknown_action", {"namespace": "source", "action": "read_file"}, "source.read_source", "source", "read_source"),
+    ("discover_unknown_action", {"namespace": "blueprint", "action": "find_references"}, "blueprint.find_variable_references", "blueprint", "find_variable_references"),
+    ("discover_unknown_action", {"namespace": "project", "action": "get_asset_detials"}, "project.get_asset_details", "project", "get_asset_details"),
+]
+
 
 def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
     seen = {task_fingerprint(task) for task in tasks}
@@ -539,6 +669,33 @@ def append_static_unreal_practical_tasks(tasks: List[Dict[str, Any]]) -> None:
             "arguments": args,
             "expected": {"invalid_param": invalid_param, "failure_cause": "invalid_param"},
             "safety": "schema_failure_before_handler",
+        })
+
+    for subtype, query_args, expected_action_id, exp_ns, exp_action in _STATIC_NEEDED_ACTION_ROUTING_TASKS_20260618:
+        if subtype == "find":
+            tool = "monolith_find"
+            args = dict(query_args)
+            safety = "read_only_routing"
+        elif subtype == "discover_unknown_action":
+            tool = "monolith_discover"
+            args = dict(query_args)
+            safety = "lookup_failure_before_handler"
+        else:
+            raise RuntimeError(f"unknown needed_action_routing subtype: {subtype}")
+        # namespace/action describe the REAL action the agent needs so demand
+        # weighting reflects the routed-to action (e.g. source.get_signature).
+        append_unique_task(tasks, seen, {
+            "category": "needed_action_routing",
+            "namespace": exp_ns,
+            "action": exp_action,
+            "tool": tool,
+            "arguments": args,
+            "expected": {
+                "candidate_action": expected_action_id,
+                "routing_subtype": subtype,
+                "failure_cause": "needed_action",
+            },
+            "safety": safety,
         })
 
 
@@ -668,6 +825,15 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
 
     append_static_unreal_practical_tasks(tasks)
 
+    # ITEM 2: stamp a live-demand weight on every task so the aggregate tracks
+    # invocation volume x error cost rather than uniform per-namespace sampling.
+    weighted_task_count = 0
+    for task in tasks:
+        weight = action_weight(str(task.get("namespace", "")), str(task.get("action", "")))
+        task["weight"] = weight
+        if weight > DEFAULT_WEIGHT:
+            weighted_task_count += 1
+
     write_jsonl(tasks_path, tasks)
     manifest = {
         "generated_at": utc_now(),
@@ -679,9 +845,16 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         "namespace_coverage": namespace_rows,
         "category_counts": count_by(tasks, "category"),
         "task_file": display_path(tasks_path),
+        "demand_weighting": {
+            "source": _DEMAND_WEIGHT_SOURCE,
+            "formula": "weight = 1.0 + log10(1 + count * error_rate) for documented high-volume/high-error actions; else 1.0",
+            "weighted_action_count": len(_ACTION_STATS_20260618),
+            "weighted_task_count": weighted_task_count,
+        },
         "scoring": {
             "effectiveness_score": "0.30*task_success_rate + 0.20*first_recovery_success_rate + 0.15*action_selection_accuracy + 0.15*param_correction_accuracy + 0.10*(1-normalized_tool_calls) + 0.10*(1-hallucinated_workflow_rate)",
             "normalized_tool_calls": "clamp((mean_tool_calls_to_success - 1) / 3, 0, 1)",
+            "aggregation": "Per-task sub-metrics are combined with weighted_avg using each task's demand weight; component weights still sum to 1.0.",
         },
     }
     write_json(manifest_path, manifest)
@@ -747,6 +920,49 @@ def candidate_contains(payload: Dict[str, Any], expected_action_id: str) -> bool
     return False
 
 
+def _candidate_action_id(candidate: Any) -> Optional[str]:
+    if isinstance(candidate, str):
+        return candidate
+    if isinstance(candidate, dict):
+        for key in ("action_id", "action", "id"):
+            value = candidate.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
+def routing_candidates(payload: Dict[str, Any], parsed: Dict[str, Any]) -> List[str]:
+    """Collect every action_id a routing response surfaces.
+
+    Covers both the monolith_find shape (top-level ``matches[].action_id``) and any
+    structured discover routing hint (``candidate_actions`` / ``did_you_mean`` /
+    ``suggestions``) on the error/result payload. A bare ``Unknown action`` error
+    with none of these fields yields an empty list and therefore scores LOW.
+    """
+    out: List[str] = []
+    sources: List[Any] = []
+    for container in (parsed, payload):
+        if not isinstance(container, dict):
+            continue
+        for field in ("matches", "candidate_actions", "did_you_mean", "suggestions"):
+            value = container.get(field)
+            if isinstance(value, list):
+                sources.extend(value)
+        # candidate fields may also live in nested error_data on the payload.
+    for field in ("candidate_actions", "did_you_mean", "suggestions"):
+        sources.extend(array_field(payload, field))
+    for candidate in sources:
+        action_id = _candidate_action_id(candidate)
+        if action_id and action_id not in out:
+            out.append(action_id)
+    return out
+
+
+def routing_names_action(payload: Dict[str, Any], parsed: Dict[str, Any], expected_action_id: str, top_n: int = 5) -> bool:
+    candidates = routing_candidates(payload, parsed)
+    return expected_action_id in candidates[:top_n]
+
+
 def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_s: float) -> Dict[str, Any]:
     response = mcp_call(url, str(task["tool"]), dict(task.get("arguments", {})), timeout_s=timeout_s)
     payload = result_payload(response)
@@ -805,6 +1021,36 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
             "failure_cause": failure_cause,
             "retryability": retryability,
         }
+    elif category == "needed_action_routing":
+        # The agent has an absent/typo'd/vague action name. The routing response
+        # (monolith_find matches, or a structured monolith_discover hint) must name
+        # the REAL action_id. A bare no-candidate response scores LOW.
+        expected_candidate = str(expected.get("candidate_action", ""))
+        candidates = routing_candidates(payload, parsed_text if isinstance(parsed_text, dict) else {})
+        direct_named = expected_candidate in candidates[:5]
+        direct_success = bool(direct_named)
+        action_selection_score = 1.0 if direct_named else 0.0
+        recovered = direct_success
+        if not recovered and tool_calls < max_recovery_calls:
+            # Deterministic fallback: re-query monolith_find scoped to the namespace.
+            retry = mcp_call(
+                url,
+                "monolith_find",
+                {"query": str(task.get("action", "")).replace("_", " "), "namespace": str(task.get("namespace", ""))},
+                timeout_s=timeout_s,
+            )
+            tool_calls += 1
+            retry_candidates = routing_candidates(result_payload(retry), result_data(retry))
+            recovered = expected_candidate in retry_candidates[:5]
+            if recovered and action_selection_score == 0.0:
+                action_selection_score = 0.5
+        evidence = {
+            "routing_subtype": expected.get("routing_subtype"),
+            "expected_action_id": expected_candidate,
+            "direct_named": direct_named,
+            "candidate_count": len(candidates),
+            "top_candidates": candidates[:5],
+        }
     elif category == "missing_required_param":
         missing = expected.get("missing_param")
         missing_direct = missing in array_field(payload, "missing_required_params")
@@ -857,6 +1103,7 @@ def score_task(url: str, task: Dict[str, Any], max_recovery_calls: int, timeout_
         "category": category,
         "namespace": task.get("namespace"),
         "action": task.get("action"),
+        "weight": task_weight(task),
         "direct_success": direct_success,
         "task_success": recovered,
         "tool_calls_to_success": tool_calls,
@@ -875,21 +1122,32 @@ def avg(values: List[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _row_weight(row: Dict[str, Any]) -> float:
+    weight = row.get("weight")
+    if isinstance(weight, (int, float)) and weight > 0:
+        return float(weight)
+    return DEFAULT_WEIGHT
+
+
 def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], rows: List[Dict[str, Any]], max_recovery_calls: int) -> Dict[str, Any]:
     total = len(rows)
-    failure_rows = [r for r in rows if r["category"] in ("unknown_action_recovery", "missing_required_param", "invalid_param_type")]
-    action_rows = [r for r in rows if r["category"] in ("unknown_action_recovery", "discovery_planning")]
+    # needed_action_routing is a needed-action recovery (failure_rows) and a routing
+    # selection (action_rows). It contributes to first_recovery and action_selection.
+    failure_rows = [r for r in rows if r["category"] in ("unknown_action_recovery", "needed_action_routing", "missing_required_param", "invalid_param_type")]
+    action_rows = [r for r in rows if r["category"] in ("unknown_action_recovery", "needed_action_routing", "discovery_planning")]
     param_rows = [r for r in rows if r["category"] in ("missing_required_param", "invalid_param_type")]
     workflow_rows = [r for r in rows if r["hallucinated_workflow_risk"] is not None]
 
-    task_success_rate = avg([1.0 if r["task_success"] else 0.0 for r in rows])
-    first_recovery_success_rate = avg([1.0 if r["direct_success"] else 0.0 for r in failure_rows])
-    action_selection_accuracy = avg([float(r["action_selection_score"]) for r in action_rows if r["action_selection_score"] is not None])
-    param_correction_accuracy = avg([float(r["param_correction_score"]) for r in param_rows if r["param_correction_score"] is not None])
-    mean_calls = avg([float(r["tool_calls_to_success"]) for r in rows])
+    # ITEM 2: every sub-metric is a demand-weighted mean so high-volume/high-error
+    # actions move the score far more than dead low-volume actions.
+    task_success_rate = weighted_avg([(1.0 if r["task_success"] else 0.0, _row_weight(r)) for r in rows])
+    first_recovery_success_rate = weighted_avg([(1.0 if r["direct_success"] else 0.0, _row_weight(r)) for r in failure_rows])
+    action_selection_accuracy = weighted_avg([(float(r["action_selection_score"]), _row_weight(r)) for r in action_rows if r["action_selection_score"] is not None])
+    param_correction_accuracy = weighted_avg([(float(r["param_correction_score"]), _row_weight(r)) for r in param_rows if r["param_correction_score"] is not None])
+    mean_calls = weighted_avg([(float(r["tool_calls_to_success"]), _row_weight(r)) for r in rows])
     normalized_tool_calls = max(0.0, min(1.0, (mean_calls - 1.0) / max(1.0, float(max_recovery_calls - 1))))
-    invalid_retry_rate = avg([0.0 if r["direct_success"] else 1.0 for r in failure_rows])
-    hallucinated_workflow_rate = avg([float(r["hallucinated_workflow_risk"]) for r in workflow_rows])
+    invalid_retry_rate = weighted_avg([(0.0 if r["direct_success"] else 1.0, _row_weight(r)) for r in failure_rows])
+    hallucinated_workflow_rate = weighted_avg([(float(r["hallucinated_workflow_risk"]), _row_weight(r)) for r in workflow_rows])
     effectiveness_score = (
         0.30 * task_success_rate
         + 0.20 * first_recovery_success_rate
@@ -900,11 +1158,13 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     )
 
     namespace_count = len({str(t.get("namespace")) for t in tasks})
+    total_weight = sum(_row_weight(r) for r in rows)
     return {
         "label": label,
         "created_at": utc_now(),
         "mcp_status": status,
         "task_count": total,
+        "weighted_task_mass": round(total_weight, 6),
         "namespace_count_in_tasks": namespace_count,
         "category_counts": count_by(tasks, "category"),
         "metrics": {

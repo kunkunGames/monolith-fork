@@ -3,8 +3,15 @@
 Monolith MCP schema-completeness benchmark.
 
 Scans the entire action catalog (all namespaces, all actions) and scores each
-action's schema for five quality dimensions.  Unlike ActionGuidance which samples
+action's schema for six quality dimensions.  Unlike ActionGuidance which samples
 161 tasks, this benchmark covers all 1766 actions across all 51 namespaces.
+
+The three param-gated dimensions (param_types_declared, required_params_marked,
+value_domain) are scored only for actions that declare parameters; param-less
+actions are N/A on them (excluded from the rate, never auto-passed).  value_domain
+goes beyond "a type key exists" and checks that every declared param carries a
+type, a non-empty description, and a correct required flag, and that constrained
+params (enum / numeric range) actually document their allowed values.
 
 Subcommands
 -----------
@@ -39,15 +46,29 @@ DEFAULT_PROBE_SET = "Benchmarks/SchemaCompleteness/probe_set.jsonl"
 PARTIAL_FLUSH_EVERY = 25
 
 # Score weights (must sum to 1.0)
-W_PARAM_TYPES = 0.30
-W_REQUIRED_PARAMS = 0.25
-W_PLANNING_SIGNALS = 0.20
-W_SKILL_ROUTING = 0.15
+W_PARAM_TYPES = 0.25
+W_REQUIRED_PARAMS = 0.20
+W_VALUE_DOMAIN = 0.20
+W_PLANNING_SIGNALS = 0.15
+W_SKILL_ROUTING = 0.10
 W_OUTPUT_CONTRACT = 0.10
+
+# Dimensions that are N/A (excluded from the rate denominator) for param-less
+# actions. A param-less action neither passes nor fails these dimensions: it has
+# no parameter contract to evaluate. Treating it as auto-pass let an action game
+# the score by declaring nothing (ROI report A4 item 2/4); treating it as a fail
+# would punish legitimately param-less reads. So they are scored None and dropped
+# from the rate, never folded in as 1.0 or 0.0.
+PARAM_GATED_DIMENSIONS = (
+    "param_types_declared",
+    "required_params_marked",
+    "value_domain",
+)
 
 STATIC_PROBE_EXPECTED_DIMENSIONS = [
     "param_types_declared",
     "required_params_marked",
+    "value_domain",
     "planning_signals_present",
     "skill_routing_present",
     "output_contract_declared",
@@ -365,71 +386,175 @@ def discover_schema_for_action(url: str, namespace: str, action: str, timeout_s:
 # Schema quality scoring
 # ---------------------------------------------------------------------------
 
+def extract_user_params(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    Return the user-facing param entries from a discover schema.
+
+    Each Monolith action schema nests its params under a "params" object whose
+    keys are param names and whose values are
+    {type, description, required, enum?, minimum?, maximum?, aliases?, kind?}.
+    Keys starting with "_" (e.g. "_validate_types") are internal control flags
+    and are excluded. Returns an empty dict for param-less actions.
+    """
+    params = schema.get("params")
+    if not isinstance(params, dict):
+        return {}
+    return {
+        k: v
+        for k, v in params.items()
+        if not k.startswith("_") and isinstance(v, dict)
+    }
+
+
+def _is_constrained_param(meta: Dict[str, Any]) -> bool:
+    """
+    A param is "constrained" when its accepted values are not free-form: it
+    declares an enum, a numeric range, or a numeric/bool/path type/kind that has
+    a documentable value domain. These are exactly the params whose undocumented
+    value domain causes the wrong-param-contract failures the structural booleans
+    cannot see (ROI report A4 item 1).
+    """
+    if "enum" in meta:
+        return True
+    if "minimum" in meta or "maximum" in meta:
+        return True
+    type_text = str(meta.get("type", "")).lower()
+    if any(tok in type_text for tok in ("integer", "number", "bool")):
+        return True
+    kind_text = str(meta.get("kind", "")).lower()
+    if kind_text and kind_text != "other":
+        return True
+    return False
+
+
+def _param_value_domain_ok(meta: Dict[str, Any]) -> bool:
+    """
+    Score one param's value-domain quality.
+
+    Every param must carry a type, a non-empty description, and a boolean
+    "required" flag (a correct, present required marking — not a missing/garbage
+    one). Constrained params must additionally document their domain: an enum
+    must be a non-empty list of values, and a numeric param must carry at least
+    one of minimum/maximum bounds.
+    """
+    type_text = meta.get("type")
+    if not isinstance(type_text, str) or not type_text.strip():
+        return False
+
+    description = meta.get("description")
+    if not isinstance(description, str) or not description.strip():
+        return False
+
+    # required must be a real boolean flag, present on every declared param.
+    if not isinstance(meta.get("required"), bool):
+        return False
+
+    if "enum" in meta:
+        enum_values = meta.get("enum")
+        if not isinstance(enum_values, list) or not enum_values:
+            return False
+
+    is_numeric = any(tok in type_text.lower() for tok in ("integer", "number"))
+    if is_numeric:
+        # Numeric params should bound their domain. Treat a declared enum as a
+        # complete domain too (enumerated numbers need no range).
+        has_range = "minimum" in meta or "maximum" in meta
+        has_enum = isinstance(meta.get("enum"), list) and bool(meta.get("enum"))
+        if not (has_range or has_enum):
+            return False
+
+    return True
+
+
 def score_schema_quality(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Score one action's schema for five quality dimensions.
+    Score one action's schema for six quality dimensions.
 
-    Returns a dict with five boolean flags and a float schema_score (0.0-1.0).
-    If schema is None (transport/parse failure), all flags are False.
+    Returns a dict with the per-dimension results and a float schema_score.
+
+    Dimension result encoding:
+      * True  — dimension satisfied
+      * False — dimension violated
+      * None  — dimension Not Applicable (param-gated dimensions on a param-less
+                action). N/A dimensions are excluded from rate denominators and
+                from the per-action schema_score, never auto-passed.
+
+    If schema is None (transport/parse failure), every param-gated dimension is
+    False (a fetch failure is a hard failure, not an N/A) and the non-param
+    dimensions are False too, yielding schema_score 0.0.
     """
     if schema is None:
         return {
             "param_types_declared": False,
             "required_params_marked": False,
+            "value_domain": False,
             "planning_signals_present": False,
             "skill_routing_present": False,
             "output_contract_declared": False,
             "schema_score": 0.0,
         }
 
-    # 1. param_types_declared: all params that exist have a "type" field.
-    params = schema.get("params")
-    if isinstance(params, dict):
-        user_params = {k: v for k, v in params.items() if not k.startswith("_") and isinstance(v, dict)}
-        if user_params:
-            param_types_declared = all("type" in meta for meta in user_params.values())
-        else:
-            # no params — vacuously true
-            param_types_declared = True
-    else:
-        # missing params key — treat as vacuously true (action may have no params)
-        param_types_declared = True
+    user_params = extract_user_params(schema)
+    has_params = bool(user_params)
 
-    # 2. required_params_marked: at least one param has "required": true OR no params.
-    if isinstance(params, dict):
-        user_params = {k: v for k, v in params.items() if not k.startswith("_") and isinstance(v, dict)}
-        if user_params:
-            required_params_marked = any(bool(meta.get("required")) for meta in user_params.values())
-        else:
-            required_params_marked = True
-    else:
-        required_params_marked = True
+    if has_params:
+        # 1. param_types_declared: EVERY declared param carries a "type".
+        param_types_declared: Optional[bool] = all(
+            isinstance(meta.get("type"), str) and bool(str(meta.get("type")).strip())
+            for meta in user_params.values()
+        )
 
-    # 3. planning_signals_present: "planning_signals" key exists and is a non-empty list.
+        # 2. required_params_marked: EVERY declared param carries a boolean
+        #    "required" flag (so the required set is fully, correctly specified —
+        #    not merely "at least one is required").
+        required_params_marked: Optional[bool] = all(
+            isinstance(meta.get("required"), bool) for meta in user_params.values()
+        )
+
+        # 3. value_domain: every param is typed + described with a correct
+        #    required flag, and constrained params document their allowed values
+        #    (enum non-empty / numeric range present).
+        value_domain: Optional[bool] = all(
+            _param_value_domain_ok(meta) for meta in user_params.values()
+        )
+    else:
+        # Param-less action: the param contract is N/A, not a free pass.
+        param_types_declared = None
+        required_params_marked = None
+        value_domain = None
+
+    # 4. planning_signals_present: "planning_signals" key exists and is a non-empty list.
     planning_signals = schema.get("planning_signals")
     planning_signals_present = isinstance(planning_signals, list) and len(planning_signals) > 0
 
-    # 4. skill_routing_present: "skill" key exists and is a non-empty string.
+    # 5. skill_routing_present: "skill" key exists and is a non-empty string.
     skill = schema.get("skill")
     skill_routing_present = isinstance(skill, str) and bool(skill.strip())
 
-    # 5. output_contract_declared: "output_contract_status" is explicitly set to
+    # 6. output_contract_declared: "output_contract_status" is explicitly set to
     #    "declared" or "not_declared" (not absent).
     output_contract_status = schema.get("output_contract_status")
     output_contract_declared = output_contract_status in ("declared", "not_declared")
 
-    flags = [
-        param_types_declared,
-        required_params_marked,
-        planning_signals_present,
-        skill_routing_present,
-        output_contract_declared,
+    # schema_score is the mean of the APPLICABLE dimensions only (N/A excluded).
+    applicable = [
+        flag
+        for flag in (
+            param_types_declared,
+            required_params_marked,
+            value_domain,
+            planning_signals_present,
+            skill_routing_present,
+            output_contract_declared,
+        )
+        if flag is not None
     ]
-    schema_score = round(sum(1.0 for f in flags if f) / len(flags), 6)
+    schema_score = round(sum(1.0 for f in applicable if f) / len(applicable), 6) if applicable else 0.0
 
     return {
         "param_types_declared": param_types_declared,
         "required_params_marked": required_params_marked,
+        "value_domain": value_domain,
         "planning_signals_present": planning_signals_present,
         "skill_routing_present": skill_routing_present,
         "output_contract_declared": output_contract_declared,
@@ -445,28 +570,49 @@ def avg(values: List[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def dimension_rate(rows: List[Dict[str, Any]], field: str) -> float:
+    """
+    Fraction of rows that satisfy a dimension, counting only APPLICABLE rows.
+
+    A None value means N/A (param-gated dimension on a param-less action) and is
+    excluded from both numerator and denominator — it is never folded in as 1.0.
+    Returns 0.0 when the dimension is N/A for every row.
+    """
+    applicable = [r.get(field) for r in rows if r.get(field) is not None]
+    if not applicable:
+        return 0.0
+    return avg([1.0 if v else 0.0 for v in applicable])
+
+
 def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: int, ns_breakdown: Dict[str, Any]) -> Dict[str, Any]:
     """
     Compute aggregate schema_completeness_score and per-dimension rates.
 
     schema_completeness_score =
-        0.30 * param_types_declared_rate
-      + 0.25 * required_params_marked_rate
-      + 0.20 * planning_signals_present_rate
-      + 0.15 * skill_routing_present_rate
+        0.25 * param_types_declared_rate
+      + 0.20 * required_params_marked_rate
+      + 0.20 * value_domain_rate
+      + 0.15 * planning_signals_present_rate
+      + 0.10 * skill_routing_present_rate
       + 0.10 * output_contract_declared_rate
+
+    Param-gated rates (param_types/required/value_domain) are computed over only
+    the actions that declare params; param-less actions are N/A, not auto-1.0.
     """
     if not rows:
         zero = {
             "schema_completeness_score": 0.0,
             "param_types_declared_rate": 0.0,
             "required_params_marked_rate": 0.0,
+            "value_domain_rate": 0.0,
             "planning_signals_present_rate": 0.0,
             "skill_routing_present_rate": 0.0,
             "output_contract_declared_rate": 0.0,
             "mean_schema_score": 0.0,
             "failed_action_count": 0,
             "scanned_action_count": 0,
+            "param_bearing_action_count": 0,
+            "param_less_action_count": 0,
         }
         return {
             "label": label,
@@ -480,21 +626,18 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
         }
 
     failed = [r for r in rows if r.get("error")]
-    scored = [r for r in rows if not r.get("error")]
 
-    def rate(field: str) -> float:
-        vals = [1.0 if r.get(field) else 0.0 for r in rows]
-        return avg(vals)
-
-    ptd = rate("param_types_declared")
-    rpm = rate("required_params_marked")
-    psp = rate("planning_signals_present")
-    srp = rate("skill_routing_present")
-    ocd = rate("output_contract_declared")
+    ptd = dimension_rate(rows, "param_types_declared")
+    rpm = dimension_rate(rows, "required_params_marked")
+    vd = dimension_rate(rows, "value_domain")
+    psp = dimension_rate(rows, "planning_signals_present")
+    srp = dimension_rate(rows, "skill_routing_present")
+    ocd = dimension_rate(rows, "output_contract_declared")
 
     schema_completeness_score = (
         W_PARAM_TYPES * ptd
         + W_REQUIRED_PARAMS * rpm
+        + W_VALUE_DOMAIN * vd
         + W_PLANNING_SIGNALS * psp
         + W_SKILL_ROUTING * srp
         + W_OUTPUT_CONTRACT * ocd
@@ -502,6 +645,8 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
 
     mean_schema_score = avg([float(r.get("schema_score", 0.0)) for r in rows])
     namespaces = {r.get("namespace") for r in rows if r.get("namespace")}
+    # An action is param-bearing when value_domain is applicable (not None).
+    param_bearing = sum(1 for r in rows if r.get("value_domain") is not None)
 
     return {
         "label": label,
@@ -514,12 +659,15 @@ def aggregate_metrics(label: str, rows: List[Dict[str, Any]], total_expected: in
             "schema_completeness_score": round(schema_completeness_score, 6),
             "param_types_declared_rate": round(ptd, 6),
             "required_params_marked_rate": round(rpm, 6),
+            "value_domain_rate": round(vd, 6),
             "planning_signals_present_rate": round(psp, 6),
             "skill_routing_present_rate": round(srp, 6),
             "output_contract_declared_rate": round(ocd, 6),
             "mean_schema_score": round(mean_schema_score, 6),
             "failed_action_count": len(failed),
             "scanned_action_count": len(rows),
+            "param_bearing_action_count": param_bearing,
+            "param_less_action_count": len(rows) - param_bearing,
         },
         "namespace_breakdown": ns_breakdown,
     }
@@ -535,20 +683,17 @@ def build_namespace_breakdown(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     breakdown: Dict[str, Any] = {}
     for ns, ns_rows in sorted(by_ns.items()):
         failed_count = sum(1 for r in ns_rows if r.get("error"))
-        scored_count = len(ns_rows) - failed_count
 
-        def ns_rate(field: str) -> float:
-            vals = [1.0 if r.get(field) else 0.0 for r in ns_rows]
-            return round(avg(vals), 6)
-
-        ptd = ns_rate("param_types_declared")
-        rpm = ns_rate("required_params_marked")
-        psp = ns_rate("planning_signals_present")
-        srp = ns_rate("skill_routing_present")
-        ocd = ns_rate("output_contract_declared")
+        ptd = round(dimension_rate(ns_rows, "param_types_declared"), 6)
+        rpm = round(dimension_rate(ns_rows, "required_params_marked"), 6)
+        vd = round(dimension_rate(ns_rows, "value_domain"), 6)
+        psp = round(dimension_rate(ns_rows, "planning_signals_present"), 6)
+        srp = round(dimension_rate(ns_rows, "skill_routing_present"), 6)
+        ocd = round(dimension_rate(ns_rows, "output_contract_declared"), 6)
         ns_score = round(
             W_PARAM_TYPES * ptd
             + W_REQUIRED_PARAMS * rpm
+            + W_VALUE_DOMAIN * vd
             + W_PLANNING_SIGNALS * psp
             + W_SKILL_ROUTING * srp
             + W_OUTPUT_CONTRACT * ocd,
@@ -557,9 +702,11 @@ def build_namespace_breakdown(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         breakdown[ns] = {
             "action_count": len(ns_rows),
             "failed_count": failed_count,
+            "param_bearing_count": sum(1 for r in ns_rows if r.get("value_domain") is not None),
             "schema_completeness_score": ns_score,
             "param_types_declared_rate": ptd,
             "required_params_marked_rate": rpm,
+            "value_domain_rate": vd,
             "planning_signals_present_rate": psp,
             "skill_routing_present_rate": srp,
             "output_contract_declared_rate": ocd,
@@ -641,6 +788,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
             "action": act,
             "param_types_declared": quality["param_types_declared"],
             "required_params_marked": quality["required_params_marked"],
+            "value_domain": quality["value_domain"],
             "planning_signals_present": quality["planning_signals_present"],
             "skill_routing_present": quality["skill_routing_present"],
             "output_contract_declared": quality["output_contract_declared"],
@@ -686,6 +834,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 ALL_DIMENSIONS = [
     "param_types_declared",
     "required_params_marked",
+    "value_domain",
     "planning_signals_present",
     "skill_routing_present",
     "output_contract_declared",
@@ -737,9 +886,15 @@ def _probe_pass_rates(
     for r in probe_results:
         if priority_filter is not None and r.get("priority") != priority_filter:
             continue
+        dim_results = r.get("dimension_results", {})
         for dim in r.get("expected_dimensions", []):
+            result = dim_results.get(dim)
+            if result is None:
+                # N/A (param-gated dimension on a param-less action) — excluded
+                # from the denominator, never counted as a failed check.
+                continue
             total += 1
-            if r.get("dimension_results", {}).get(dim):
+            if result:
                 passed += 1
     rate = round(passed / total, 6) if total > 0 else 0.0
     return rate, passed, total
@@ -812,6 +967,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
             "action": act,
             "param_types_declared": quality["param_types_declared"],
             "required_params_marked": quality["required_params_marked"],
+            "value_domain": quality["value_domain"],
             "planning_signals_present": quality["planning_signals_present"],
             "skill_routing_present": quality["skill_routing_present"],
             "output_contract_declared": quality["output_contract_declared"],
@@ -821,13 +977,19 @@ def cmd_probe(args: argparse.Namespace) -> int:
         rows.append(row)
         append_jsonl_row(per_action_path, row)
 
-        # Probe-specific result
-        dim_results: Dict[str, bool] = {
-            dim: bool(quality.get(dim, False)) for dim in ALL_DIMENSIONS
+        # Probe-specific result. dimension_results preserves the tri-state
+        # (True / False / None), so a param-gated dimension on a param-less
+        # action is reported as N/A rather than silently coerced to a fail.
+        dim_results: Dict[str, Optional[bool]] = {
+            dim: quality.get(dim) for dim in ALL_DIMENSIONS
         }
-        expected_passed = [d for d in expected_dims if dim_results.get(d, False)]
-        expected_failed = [d for d in expected_dims if not dim_results.get(d, False)]
-        probe_pass = len(expected_failed) == 0 and bool(expected_dims)
+        expected_passed = [d for d in expected_dims if dim_results.get(d) is True]
+        expected_failed = [d for d in expected_dims if dim_results.get(d) is False]
+        expected_na = [d for d in expected_dims if dim_results.get(d) is None]
+        # A probe passes when no expected dimension fails AND at least one
+        # expected dimension was applicable and satisfied (an all-N/A probe is
+        # inconclusive, not a pass).
+        probe_pass = len(expected_failed) == 0 and len(expected_passed) > 0
 
         probe_result: Dict[str, Any] = {
             "namespace": ns,
@@ -838,6 +1000,7 @@ def cmd_probe(args: argparse.Namespace) -> int:
             "dimension_results": dim_results,
             "expected_passed": expected_passed,
             "expected_failed": expected_failed,
+            "expected_na": expected_na,
             "probe_pass": probe_pass,
             "error": error_msg,
         }
@@ -915,6 +1078,7 @@ COMPARE_METRICS = [
     "schema_completeness_score",
     "param_types_declared_rate",
     "required_params_marked_rate",
+    "value_domain_rate",
     "planning_signals_present_rate",
     "skill_routing_present_rate",
     "output_contract_declared_rate",
@@ -1011,15 +1175,17 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"  schema_completeness_score  : {metrics.get('schema_completeness_score', 'N/A'):.4f}" if isinstance(metrics.get('schema_completeness_score'), float) else f"  schema_completeness_score  : {metrics.get('schema_completeness_score', 'N/A')}")
     print(f"  param_types_declared_rate  : {metrics.get('param_types_declared_rate', 'N/A')}")
     print(f"  required_params_marked_rate: {metrics.get('required_params_marked_rate', 'N/A')}")
+    print(f"  value_domain_rate          : {metrics.get('value_domain_rate', 'N/A')}")
     print(f"  planning_signals_rate      : {metrics.get('planning_signals_present_rate', 'N/A')}")
     print(f"  skill_routing_rate         : {metrics.get('skill_routing_present_rate', 'N/A')}")
     print(f"  output_contract_rate       : {metrics.get('output_contract_declared_rate', 'N/A')}")
     print(f"  mean_schema_score          : {metrics.get('mean_schema_score', 'N/A')}")
+    print(f"  param_bearing/param_less   : {metrics.get('param_bearing_action_count', '?')} / {metrics.get('param_less_action_count', '?')}")
     print()
 
     if ns_breakdown:
         col_w = max((len(ns) for ns in ns_breakdown), default=10)
-        header = f"  {'Namespace':<{col_w}}  {'Actions':>7}  {'Failed':>6}  {'Score':>6}  {'PTypes':>6}  {'ReqPrm':>6}  {'Signals':>7}  {'Skill':>6}  {'OutCtx':>6}"
+        header = f"  {'Namespace':<{col_w}}  {'Actions':>7}  {'Failed':>6}  {'Score':>6}  {'PTypes':>6}  {'ReqPrm':>6}  {'ValDom':>6}  {'Signals':>7}  {'Skill':>6}  {'OutCtx':>6}"
         print(header)
         print("  " + "-" * (len(header) - 2))
         for ns, ns_data in sorted(ns_breakdown.items(), key=lambda x: -x[1].get("schema_completeness_score", 0)):
@@ -1030,6 +1196,7 @@ def cmd_report(args: argparse.Namespace) -> int:
                 f"  {ns_data.get('schema_completeness_score', 0.0):>6.3f}"
                 f"  {ns_data.get('param_types_declared_rate', 0.0):>6.3f}"
                 f"  {ns_data.get('required_params_marked_rate', 0.0):>6.3f}"
+                f"  {ns_data.get('value_domain_rate', 0.0):>6.3f}"
                 f"  {ns_data.get('planning_signals_present_rate', 0.0):>7.3f}"
                 f"  {ns_data.get('skill_routing_present_rate', 0.0):>6.3f}"
                 f"  {ns_data.get('output_contract_declared_rate', 0.0):>6.3f}"

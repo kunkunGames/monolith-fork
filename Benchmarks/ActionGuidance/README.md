@@ -18,22 +18,52 @@ machine-readable evidence an agent needs to recover or plan.
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
 | `Plugins/Monolith/Scripts/action_guidance_benchmark.py` | Generator, runner, and comparison tool. |
 
-Checked-in corpus size: **508 tasks**. The live catalog generator appends a
-fixed 100-task Unreal practical supplement after catalog-derived tasks so the
-domain cases survive regeneration.
+Checked-in corpus size: **281 tasks**. The live catalog generator appends a
+deduplicated Unreal practical supplement after catalog-derived tasks so the
+domain cases survive regeneration without keeping repeated task fingerprints.
 
 ## Task Categories
 
 | Category | Request type | Scored evidence |
 | --- | --- | --- |
 | `discovery_planning` | `monolith_discover(..., mode=schema)` | `planning_signals`, `skill`, explicit `output_contract_status`, explicit `next_actions_status`. |
+| `needed_action_routing` | `monolith_find(query=...)` for a vague/typoed action, or `monolith_discover` for an absent action | A routing candidate (`matches[].action_id`, `candidate_actions`, or `did_you_mean`) that names the REAL action_id. A bare no-candidate error scores LOW. |
 | `unknown_action_recovery` | Typoed namespace action | `failure_cause=unknown_action`, `retryability`, `candidate_actions`. |
 | `missing_required_param` | Read-only action called without a required param | `missing_required_params` or `required_params`, plus failure cause. |
 | `invalid_param_type` | Read-only action called with a deliberately wrong type | `validation_errors`, `failure_cause=invalid_param`, `retryability`. |
 
-All handler-facing negative tasks are selected from actions that the current
-catalog marks as read-only. They should fail during lookup or schema validation
-before mutating editor/project state.
+`needed_action_routing` is the discovery side of the largest live-ROI bucket
+(`needed_action`). It asserts that when an agent does not know the exact action
+name, `monolith_find` (or a structured `monolith_discover` hint) names the real
+action rather than dead-ending on a bare `Unknown action` error. It feeds
+`action_selection_accuracy` and `first_recovery_success_rate`. It never executes
+a mutating handler: every routing request is read-only discovery or a
+before-handler lookup failure.
+
+All other handler-facing negative tasks are selected from actions that the
+current catalog marks as read-only. They should fail during lookup or schema
+validation before mutating editor/project state.
+
+## Demand Weighting
+
+Each task carries a `weight` field derived from the invocation-log analyzer
+Action Stats (`Saved/Monolith/LogAnalysis/<run>/summary.md`):
+
+```text
+weight = 1.0 + log10(1 + count * error_rate)   (for documented high-volume /
+                                                 high-error actions; else 1.0)
+```
+
+The runner combines every sub-metric with a demand-weighted mean, so a
+294-call / 47%-error action (`blueprint.add_variable`) moves the aggregate far
+more than a dead 10-call action. The static demand snapshot lives in
+`_ACTION_STATS_20260618` inside `action_guidance_benchmark.py`; refresh it from
+the latest Action Stats when the demand profile shifts. The
+`effectiveness_score` component weights still sum to 1.0 — only the per-task
+averaging inside each component is weighted.
+
+The offline unit test for both additions is
+`Plugins/Monolith/Scripts/tests/test_action_guidance_routing_weight.py`.
 
 ## Generate
 

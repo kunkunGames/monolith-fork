@@ -1,0 +1,61 @@
+{
+  "benchmark": "AICapability",
+  "description": "Measures engine-native AI authoring capability over the ai namespace's largest subsystems (Behavior Tree, Blackboard, EQS, plus the StateTree SCHEMA surface): fixture discovery, read/edit action schemas, read-back-verified edit execution, input-specific error handling that names the offending identifier, duplicate-name rejection, and a falsifiable Behavior Tree validate gate (an empty BT must validate valid==false with an error issue; a clean BT must validate valid==true). NOTE: StateTree is compiled out on this build (WITH_STATETREE=0), so its create/lint actions are runtime stubs and are exercised only via schema-presence tasks, never execute/gate",
+  "primary_score": "ai_capability_score",
+  "expected_namespace": "ai",
+  "ai_tool": "ai_query",
+  "generated_at": "2026-06-18T15:21:21.119982+00:00",
+  "task_count": 73,
+  "category_counts": {
+    "compile_gate": 2,
+    "discovery": 6,
+    "duplicate_reject": 4,
+    "edit_execute": 9,
+    "edit_schema": 28,
+    "error_path": 8,
+    "read_schema": 16
+  },
+  "edit_schema_subsystems": {
+    "blackboard": 8,
+    "behavior_tree": 12,
+    "state_tree": 1,
+    "eqs": 7
+  },
+  "subsystems_tested": [
+    "blackboard",
+    "behavior_tree",
+    "state_tree",
+    "eqs"
+  ],
+  "score_formula": "0.34*edit_execute_rate + 0.16*error_path_rate + 0.12*compile_gate_rate + 0.1*duplicate_reject_rate + 0.1*edit_schema_rate + 0.1*discovery_rate + 0.08*read_schema_rate",
+  "weights": {
+    "edit_execute": 0.34,
+    "error_path": 0.16,
+    "compile_gate": 0.12,
+    "duplicate_reject": 0.1,
+    "edit_schema": 0.1,
+    "discovery": 0.1,
+    "read_schema": 0.08
+  },
+  "fixture_paths": {
+    "blackboard": "/Game/Benchmarks/AI/BB_BenchAI",
+    "behavior_tree": "/Game/Benchmarks/AI/BT_BenchAI",
+    "eqs": "/Game/Benchmarks/AI/EQS_BenchAI",
+    "empty_scratch": "/Game/Benchmarks/AI/BT_BenchEmptyScratch",
+    "validate_scratch": "/Game/Benchmarks/AI/BT_BenchValidateScratch"
+  },
+  "fixture_root": "/Game/Benchmarks/AI",
+  "setup_fixtures_command": "python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
+  "run_command": "python Scripts/ai_capability_benchmark.py run --mcp-url http://localhost:9316/mcp --output-dir Saved/Monolith/Benchmarks/AICapability/<label> --label <label>",
+  "score_dimensions": [
+    "edit_execute_rate",
+    "error_path_rate",
+    "compile_gate_rate",
+    "duplicate_reject_rate",
+    "edit_schema_rate",
+    "discovery_rate",
+    "read_schema_rate"
+  ],
+  "catalog_version_verified": "ai-182-actions (Saved/Monolith/LogAnalysis/_ai_catalog.txt + Source/MonolithAI RegisterAction verified 2026-06-18; StateTree create/lint registered but stubbed on WITH_STATETREE=0)",
+  "task_file": "Benchmarks/AICapability/tasks.jsonl"
+}

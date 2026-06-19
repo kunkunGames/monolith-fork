@@ -1813,28 +1813,16 @@ FMonolithActionResult FMonolithBlueprintActions::HandleGetInterfaceFunctions(con
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: interface_class"));
 	}
 
-	// Resolve class — try as-is, then with U/I prefix variants
-	UClass* InterfaceClass = FindFirstObject<UClass>(*InterfaceClassName, EFindFirstObjectOptions::NativeFirst);
-	if (!InterfaceClass)
-	{
-		// Try with U prefix (C++ convention for UInterface base)
-		InterfaceClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName), EFindFirstObjectOptions::NativeFirst);
-	}
-	if (!InterfaceClass)
-	{
-		// Strip leading I (BP convention: BPI_Foo -> search for UBPI_Foo)
-		if (InterfaceClassName.StartsWith(TEXT("I")))
-		{
-			InterfaceClass = FindFirstObject<UClass>(*FString::Printf(TEXT("U%s"), *InterfaceClassName.Mid(1)), EFindFirstObjectOptions::NativeFirst);
-		}
-	}
+	// Resolve C++ interfaces by class name AND Blueprint Interface assets by asset path / short
+	// name (the generated "<Name>_C" class or an AssetRegistry load — see ResolveInterfaceClass).
+	UClass* InterfaceClass = MonolithBlueprintInternal::ResolveInterfaceClass(InterfaceClassName);
 
 	if (!InterfaceClass)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Interface class not found: '%s'. Tried as-is, with 'U' prefix, and with 'I' stripped + 'U' prepended. "
-			     "For C++ interfaces use the I-prefixed name (e.g. IGameplayTagAssetInterface). "
-			     "For Blueprint interfaces use the asset name (e.g. BPI_Interactable)."),
+			TEXT("Interface class not found: '%s'. For C++ interfaces use the I-prefixed name "
+			     "(e.g. IGameplayTagAssetInterface). For Blueprint interfaces use the asset name "
+			     "(e.g. BPI_Interactable) or the /Game asset path."),
 			*InterfaceClassName));
 	}
 

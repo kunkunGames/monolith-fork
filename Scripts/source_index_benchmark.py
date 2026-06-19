@@ -53,6 +53,73 @@ SCHEMA_ACTIONS = [
 ]
 REQUIRED_RESULT_FIELDS = {"name", "kind", "file_path", "location"}
 
+# Sentinel substrings the source handlers emit for a *successfully executed* lookup
+# whose truthful answer is "no rows" (e.g. find_callers/find_callees/search_source
+# return isError=false with one of these phrases).  A require_results task must NOT
+# match any of these — an empty-but-non-error response is the exact loophole this
+# benchmark closes, so it counts as a miss, not a hit.
+_EMPTY_RESULT_SENTINELS = (
+    "no direct c++ callers found",
+    "no callees found",
+    "no results found",
+    "no function found matching",
+    "no symbol found matching",
+    "no matches",
+    "no impacted symbols",
+    "no overrides found",
+    "not found in the source index",
+)
+
+# Symbols whose definition is GUARANTEED indexed in EngineSource.db: search_source /
+# risk_score / review_context / impact_radius must return >=1 row for these, so an
+# empty response is a real index defect (require_results gate, not min_results:0).
+_KNOWN_DEFINED_SYMBOLS = [
+    "AActor", "UObject", "UActorComponent", "UGameplayStatics", "ACharacter",
+    "UWorld", "USceneComponent", "APlayerController",
+]
+
+# Qualified method symbols KNOWN to have C++ callers AND callees inside the engine
+# tree (every gameplay/component lifecycle hook is invoked by the framework).  An
+# empty find_callers/find_callees here is the 72%-live-failure the headline must
+# reflect, so these carry require_results.
+# Qualified Class::Method names with REAL direct C++ callers (verified live against EngineSource).
+# The previous set (AActor::BeginPlay/Tick/EndPlay, UActorComponent::*, UWorld::SpawnActor) were all
+# virtual overrides dispatched by the engine framework via vtable/reflection, so find_callers
+# (direct C++ callers) legitimately returns none — the benchmark was asserting callers that cannot
+# exist. These are concrete functions reached by direct calls, and also exercise the 2026-06-18
+# find_callers/find_callees qualified-name fix (before it, every Class::Method input returned
+# "No function found matching ...").
+_KNOWN_CALLED_METHODS = [
+    "FString::Printf",            # ~34 direct callers
+    "UObject::GetName",           # ~33
+    "UObject::GetClass",          # ~13
+    "UWorld::GetTimerManager",    # ~4
+    "UWorld::GetGameInstance",    # ~2
+    "UObject::StaticClass",       # >0
+]
+
+# Negative / error-recovery inputs.  Each is deliberately malformed; the benchmark
+# scores RESPONSE QUALITY (structured error that names the offending identifier +
+# a did-you-mean/qualified-symbol hint), not transport success.  `offending_identifier`
+# is the token the response must echo back so the agent can correct the call.
+_NEGATIVE_NONEXISTENT_SYMBOLS = [
+    ("search_source", "query", "UTotallyMadeUpClass_ZZZ999"),
+    ("find_callers", "symbol", "UNonExistentClass999::DoesNotExist"),
+    ("find_callees", "symbol", "UNonExistentClass999::DoesNotExist"),
+    ("get_include_path", "symbol", "UTotallyMadeUpClass_ZZZ999"),
+    ("get_signature", "symbol", "UTotallyMadeUpClass_ZZZ999::Method"),
+    ("risk_score", "symbol", "UTotallyMadeUpClass_ZZZ999"),
+    ("review_context", "symbol", "UTotallyMadeUpClass_ZZZ999"),
+    ("impact_radius", "symbol", "UTotallyMadeUpClass_ZZZ999"),
+]
+
+# Unqualified method names that resolution should still handle (or reject with a
+# qualified-symbol hint).  `expect_error: false` — a populated answer is the pass.
+_NEGATIVE_UNQUALIFIED_SYMBOLS = [
+    ("find_callers", "symbol", "BeginPlay"),
+    ("find_callees", "symbol", "Tick"),
+]
+
 
 def utc_now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
@@ -385,6 +452,141 @@ def schema_statuses_declared(schema: Dict[str, Any]) -> bool:
     )
 
 
+def is_empty_result_text(text: str) -> bool:
+    """True if a non-error lookup response is an explicit "no rows" sentinel.
+
+    Closes the empty-response loophole: find_callers / find_callees / search_source
+    return ``isError=false`` with a "No direct C++ callers found ..." / "No results
+    found ..." sentence when the query resolved but produced zero edges.  A
+    require_results task that lands on one of these has *not* produced the data an
+    agent needs, so it must not score as a hit.
+    """
+    lowered = text.lower()
+    return any(sentinel in lowered for sentinel in _EMPTY_RESULT_SENTINELS)
+
+
+def lookup_has_data(
+    data: Dict[str, Any],
+    response_text: str,
+    is_error_response: bool,
+) -> bool:
+    """True if a lookup response carries at least one real symbol row.
+
+    A response counts as carrying data when it is not a transport/handler error,
+    is not an explicit empty-result sentinel, and either parses to >=1 structured
+    symbol row or returns non-empty plain text (the find_callers/find_callees text
+    blob does not parse to structured rows, so non-empty non-sentinel text is the
+    truthful positive signal for those actions).
+    """
+    if is_error_response:
+        return False
+    if is_empty_result_text(response_text):
+        return False
+    if symbol_results(data):
+        return True
+    return bool(response_text and response_text.strip())
+
+
+def references_offending_identifier(text: str, identifier: str) -> bool:
+    """True if the response text mentions the offending identifier from bad input.
+
+    A self-correcting error names what the caller asked for so the agent can fix
+    the call; a generic "internal error" that drops the identifier does not.
+    """
+    if not identifier or not text:
+        return False
+    return identifier.lower() in text.lower()
+
+
+def has_recovery_hint(text: str, hints: List[str], offending_identifier: str = "") -> bool:
+    """True if the response offers a did-you-mean / qualified-symbol / retry hint.
+
+    The offending identifier is stripped from the text first so that ``::`` echoed
+    back inside the caller's own ``Class::Method`` token is NOT mistaken for a
+    qualified-symbol *suggestion* — only a Class::Method appearing outside the echoed
+    input (i.e. an actual alternative the handler offers) counts as a hint.
+    """
+    cleaned_text = text
+    if offending_identifier:
+        cleaned_text = cleaned_text.replace(offending_identifier, "")
+    blob = (cleaned_text + "\n" + "\n".join(hints)).lower()
+    needles = (
+        "did you mean",
+        "did_you_mean",
+        "qualified",
+        "::",  # a Class::Method qualified-symbol suggestion (outside the echoed input)
+        "search_source first",
+        "run source.",
+        "trigger_reindex",
+        "discover",
+        "try ",
+        "instead",
+        "coverage gap",
+    )
+    return any(needle in blob for needle in needles)
+
+
+def score_negative_response(
+    *,
+    transport_error: bool,
+    is_error_response: bool,
+    response_text: str,
+    hints: List[str],
+    data: Dict[str, Any],
+    identifier: str,
+    expect: Dict[str, Any],
+) -> Tuple[float, Dict[str, Any]]:
+    """Grade RESPONSE QUALITY on deliberately bad input (0.0 .. 1.0).
+
+    A bad call should fail loudly and helpfully:
+      * transport crash / parse failure        -> 0.0 (worst: agent gets nothing actionable)
+      * silent empty-but-success / data row     -> 0.0 (masks the bad input)
+      * structured error that drops the symbol  -> 0.4 (loud but not self-correcting)
+      * structured error naming the symbol       -> 0.7
+      * + a did-you-mean / qualified hint         -> 1.0 (self-correcting)
+
+    When the task declares ``expect_error: false`` (e.g. an unqualified symbol that
+    SHOULD still resolve) the contract inverts: a populated answer is the pass and a
+    not-found error is the failure.
+    """
+    expect_error = bool(expect.get("expect_error", True))
+    require_identifier = bool(expect.get("require_identifier", True))
+    require_hint = bool(expect.get("require_hint", False))
+
+    if transport_error:
+        return 0.0, {"reason": "transport_crash"}
+
+    if not expect_error:
+        # Resolution task: a structured non-error answer with data is the pass.
+        if not is_error_response and lookup_has_data(data, response_text, is_error_response):
+            return 1.0, {"reason": "resolved_as_expected"}
+        if is_error_response:
+            return 0.0, {"reason": "rejected_resolvable_input"}
+        return 0.0, {"reason": "empty_on_resolvable_input"}
+
+    if not is_error_response:
+        # Bad input must not pass silently.  A non-error response that still surfaces
+        # the problem in text earns partial credit; a clean "success" earns nothing.
+        if references_offending_identifier(response_text, identifier) and is_empty_result_text(response_text):
+            return 0.5, {"reason": "non_error_but_names_problem"}
+        return 0.0, {"reason": "silent_non_error_on_bad_input"}
+
+    names_it = references_offending_identifier(response_text, identifier)
+    hint = has_recovery_hint(response_text, hints, offending_identifier=identifier)
+    score = 0.4
+    if names_it or not require_identifier:
+        score = 0.7
+    if hint:
+        score = 1.0
+    if require_hint and not hint:
+        score = min(score, 0.7)
+    return score, {
+        "reason": "structured_error",
+        "names_identifier": names_it,
+        "has_hint": hint,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Task scoring
 # ---------------------------------------------------------------------------
@@ -397,28 +599,52 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     expected = task.get("expected") if isinstance(task.get("expected"), dict) else {}
     min_results = expected.get("min_results")
     allows_empty = isinstance(min_results, int) and min_results == 0
+    # require_results closes the empty-response loophole: for symbols KNOWN to have
+    # callers/callees/a definition the truthful answer is NOT empty, so an empty or
+    # sentinel ("No direct C++ callers found ...") response is a real miss, not a hit.
+    require_results = bool(expected.get("require_results")) or (isinstance(min_results, int) and min_results >= 1)
+    response_text_full = result_text(response)
 
     direct_success = False
     action_selection_score: Optional[float] = None
     param_correction_score: Optional[float] = None
     hallucinated_workflow_risk: Optional[float] = None
+    negative_quality_score: Optional[float] = None
     results_count = 0
     field_complete_count = 0
+    # expected_nonempty drives field_completeness: only require_results lookups
+    # (those whose truthful answer must carry rows) feed the completeness ratio, so
+    # an all-empty run can no longer earn a vacuous 1.0.
+    expected_nonempty = False
     evidence: Dict[str, Any] = {}
 
     if category == "symbol_lookup":
         results = symbol_results(data)
         results_count = len(results)
         has_named = results_count > 0 and any(r.get("name") is not None for r in results)
-        # A successfully executed query whose truthful answer is "no results"
-        # (e.g. no direct C++ callers for an engine base class) is a hit when the
-        # task authored min_results == 0.
-        direct_success = has_named or (not is_error_response and allows_empty)
-        action_selection_score = 1.0 if (results_count > 0 or (not is_error_response and allows_empty)) else 0.0
+        has_data = lookup_has_data(data, response_text_full, is_error_response)
+        if require_results:
+            # Empty / sentinel / error responses are misses for known-nonempty symbols.
+            expected_nonempty = True
+            direct_success = has_data
+            action_selection_score = 1.0 if has_data else 0.0
+        else:
+            # A successfully executed query whose truthful answer is "no results" is a hit when
+            # the task allows empty (min_results == 0) OR the action is find_callers/find_callees:
+            # a framework-dispatched method (AActor::BeginPlay, ACharacter::Jump, ...) legitimately
+            # has NO direct C++ callers, so a structured non-error "No direct callers/callees found"
+            # is a CORRECT definitive answer, not a miss. The require_results subset (curated
+            # caller-rich symbols) still forces real rows, so a broken find_callers can't pass.
+            action_name = task.get("action", "")
+            answers_empty_ok = allows_empty or action_name in ("find_callers", "find_callees")
+            direct_success = has_named or (not is_error_response and answers_empty_ok)
+            action_selection_score = 1.0 if (results_count > 0 or (not is_error_response and answers_empty_ok)) else 0.0
         field_complete_count = sum(1 for r in results if result_has_min_fields(r))
         evidence = {
             "results_count": results_count,
             "field_complete_count": field_complete_count,
+            "require_results": require_results,
+            "has_data": has_data,
             "first_result_keys": list(results[0].keys())[:8] if results else [],
         }
 
@@ -474,13 +700,49 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         results = symbol_results(data)
         results_count = len(results)
         has_named = results_count > 0 and any(r.get("name") is not None for r in results)
-        direct_success = has_named or (not is_error_response and allows_empty)
-        action_selection_score = 1.0 if (results_count > 0 or (not is_error_response and allows_empty)) else 0.0
+        has_data = lookup_has_data(data, response_text_full, is_error_response)
+        if require_results:
+            expected_nonempty = True
+            direct_success = has_data
+            action_selection_score = 1.0 if has_data else 0.0
+        else:
+            direct_success = has_named or (not is_error_response and allows_empty)
+            action_selection_score = 1.0 if (results_count > 0 or (not is_error_response and allows_empty)) else 0.0
         field_complete_count = sum(1 for r in results if result_has_min_fields(r))
         evidence = {
             "results_count": results_count,
             "field_complete_count": field_complete_count,
+            "require_results": require_results,
+            "has_data": has_data,
             "first_result_keys": list(results[0].keys())[:8] if results else [],
+        }
+
+    elif category == "negative_recovery":
+        # Deliberately bad input: score RESPONSE QUALITY, not transport success.
+        hints_arr = result_payload(response).get("hints")
+        hints = [str(h) for h in hints_arr] if isinstance(hints_arr, list) else []
+        related = result_payload(response).get("related_actions")
+        if isinstance(related, list):
+            hints.extend(str(r) for r in related)
+        identifier = str(expected.get("offending_identifier", ""))
+        negative_quality_score, neg_evidence = score_negative_response(
+            transport_error=bool(response.get("transport_error")),
+            is_error_response=is_error_response,
+            response_text=response_text_full,
+            hints=hints,
+            data=data,
+            identifier=identifier,
+            expect=expected,
+        )
+        # A negative task "passes" only when the response is meaningfully self-correcting.
+        direct_success = negative_quality_score >= float(expected.get("pass_threshold", 0.7))
+        evidence = {
+            "negative_quality_score": round(negative_quality_score, 4),
+            "offending_identifier": identifier,
+            "response_is_error": is_error_response,
+            "transport_error": bool(response.get("transport_error")),
+            **neg_evidence,
+            "response_preview": response_text_full[:120],
         }
 
     else:
@@ -495,6 +757,8 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
         "action_selection_score": action_selection_score,
         "param_correction_score": param_correction_score,
         "hallucinated_workflow_risk": hallucinated_workflow_risk,
+        "negative_quality_score": negative_quality_score,
+        "expected_nonempty": expected_nonempty,
         "results_count": results_count,
         "field_complete_count": field_complete_count,
         "evidence": evidence,
@@ -517,14 +781,22 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     health_rows = [r for r in rows if r["category"] == "health_check"]
     schema_rows = [r for r in rows if r["category"] == "schema_field_presence"]
     ergonomics_rows = [r for r in rows if r["category"] == "ergonomics_text"]
+    negative_rows = [r for r in rows if r["category"] == "negative_recovery"]
 
     # symbol_hit_rate: fraction of symbol_lookup + review_context_lookup + impact_radius_lookup with direct_success
     symbol_hit_rate = avg([1.0 if r["direct_success"] else 0.0 for r in lookup_rows])
 
-    # field_completeness_rate: across all symbol results, fraction that have >=3 required fields
-    total_results = sum(r["results_count"] for r in lookup_rows)
-    total_complete = sum(r["field_complete_count"] for r in lookup_rows)
-    field_completeness_rate = total_complete / total_results if total_results > 0 else 0.0
+    # field_completeness_rate: computed ONLY over expected-nonempty (require_results)
+    # lookups so an all-empty run cannot earn a vacuous 1.0 — closes the
+    # divide-by-returned-results loophole.  Each such task contributes its own
+    # completeness ratio (field-complete rows / returned rows; 0 when it returned
+    # nothing), and the metric is the mean of those per-task ratios.
+    nonempty_lookup_rows = [r for r in lookup_rows if r.get("expected_nonempty")]
+    per_task_completeness: List[float] = []
+    for r in nonempty_lookup_rows:
+        rc = r["results_count"]
+        per_task_completeness.append((r["field_complete_count"] / rc) if rc > 0 else 0.0)
+    field_completeness_rate = avg(per_task_completeness)
 
     # schema_adherence_rate: fraction of schema_field_presence tasks that pass
     schema_adherence_rate = avg([1.0 if r["direct_success"] else 0.0 for r in schema_rows])
@@ -538,12 +810,20 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     # ergonomics_success_rate: fraction of ergonomics_text tasks with non-empty, non-error response
     ergonomics_success_rate = avg([1.0 if r["direct_success"] else 0.0 for r in ergonomics_rows])
 
+    # negative_recovery_rate: mean RESPONSE-QUALITY score on deliberately bad input.
+    # A transport crash or silent empty success scores 0; a structured, self-correcting
+    # error (names the offending identifier + did-you-mean/qualified hint) scores 1.
+    negative_recovery_rate = avg(
+        [float(r["negative_quality_score"]) for r in negative_rows if r.get("negative_quality_score") is not None]
+    )
+
     source_index_score = (
-        0.35 * symbol_hit_rate
-        + 0.25 * field_completeness_rate
-        + 0.20 * schema_adherence_rate
+        0.30 * symbol_hit_rate
+        + 0.20 * field_completeness_rate
+        + 0.15 * schema_adherence_rate
         + 0.10 * (1.0 - stale_rate)
         + 0.10 * ergonomics_success_rate
+        + 0.15 * negative_recovery_rate
     )
 
     return {
@@ -559,7 +839,9 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
             "schema_adherence_rate": round(schema_adherence_rate, 6),
             "stale_rate": round(stale_rate, 6),
             "ergonomics_success_rate": round(ergonomics_success_rate, 6),
+            "negative_recovery_rate": round(negative_recovery_rate, 6),
             "mean_results_per_lookup": round(mean_results_per_lookup, 6),
+            "expected_nonempty_lookup_count": len(nonempty_lookup_rows),
         },
     }
 
@@ -568,11 +850,18 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
 # Generate
 # ---------------------------------------------------------------------------
 
+# find_callers/find_callees are FUNCTION-call actions: they take a function (bare name or
+# qualified Class::Method), NOT a class. The previous list was 15 CLASS names (AActor, UObject,
+# UGameplayStatics, ...) for which find_callers correctly returns "No function found" — the
+# benchmark was testing find_callers with semantically invalid input. These are real functions
+# that resolve (after the 2026-06-18 qualified-name fix) and return either direct callers or a
+# truthful "no direct callers" (both valid; min_results:0 + the find_callers/find_callees
+# empty-answer-ok scorer pass them, while the curated require_results set still forces real rows).
 _CALLERS_CALLEES_SYMBOLS = [
-    "AActor", "UObject", "UActorComponent", "UGameplayStatics", "FVector",
-    "ACharacter", "APlayerController", "UStaticMeshComponent", "AGameModeBase",
-    "UGameInstance", "UWorld", "FHitResult", "FTransform", "USceneComponent",
-    "USkeletalMeshComponent",
+    "FString::Printf", "UObject::GetName", "UObject::GetClass", "UObject::StaticClass",
+    "UWorld::GetTimerManager", "UWorld::GetGameInstance", "UActorComponent::GetOwner",
+    "AActor::BeginPlay", "AActor::Tick", "AActor::EndPlay", "UActorComponent::BeginPlay",
+    "UActorComponent::TickComponent", "FName::ToString", "FVector::Size", "UObject::IsA",
 ]
 
 _RISK_SCORE_SYMBOLS = [
@@ -1195,7 +1484,122 @@ def build_static_tasks() -> List[Dict[str, Any]]:
         health_variants=[],
     )
 
+    append_require_results_tasks(tasks, next_id)
+    append_negative_recovery_tasks(tasks, next_id)
+
     return dedupe_tasks(tasks, "SIB")
+
+
+def append_require_results_tasks(tasks: List[Dict[str, Any]], next_id: Any) -> None:
+    """Curated known-nonempty lookups that MUST return >=1 row (require_results gate).
+
+    These close the min_results:0 loophole: an empty / sentinel response for a symbol
+    whose definition or call edges are guaranteed indexed is a real index miss, scored 0.
+    """
+    for symbol in _KNOWN_DEFINED_SYMBOLS:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "search_source",
+            "tool": "source_query",
+            "arguments": {"action": "search_source", "query": symbol},
+            "expected": {"min_results": 1, "require_results": True,
+                         "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in _KNOWN_DEFINED_SYMBOLS:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "risk_score",
+            "tool": "source_query",
+            "arguments": {"action": "risk_score", "symbol": symbol},
+            "expected": {"min_results": 1, "require_results": True,
+                         "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in _KNOWN_CALLED_METHODS:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "find_callers",
+            "tool": "source_query",
+            "arguments": {"action": "find_callers", "symbol": symbol},
+            "expected": {"min_results": 1, "require_results": True,
+                         "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+    for symbol in _KNOWN_CALLED_METHODS:
+        tasks.append({
+            "id": next_id(),
+            "category": "symbol_lookup",
+            "namespace": "source",
+            "action": "find_callees",
+            "tool": "source_query",
+            "arguments": {"action": "find_callees", "symbol": symbol},
+            "expected": {"min_results": 1, "require_results": True,
+                         "required_fields": ["name", "kind", "file_path"]},
+            "safety": "read_only",
+        })
+
+
+def append_negative_recovery_tasks(tasks: List[Dict[str, Any]], next_id: Any) -> None:
+    """Adversarial bad-input tasks scored on response quality, not transport success."""
+    for action, arg_key, bad_value in _NEGATIVE_NONEXISTENT_SYMBOLS:
+        tasks.append({
+            "id": next_id(),
+            "category": "negative_recovery",
+            "namespace": "source",
+            "action": action,
+            "tool": "source_query",
+            "arguments": {"action": action, arg_key: bad_value},
+            "expected": {
+                "expect_error": True,
+                "require_identifier": True,
+                "offending_identifier": bad_value,
+                "pass_threshold": 0.7,
+            },
+            "safety": "read_only",
+        })
+    # Missing required param: the handler must reject with a structured error naming
+    # the missing field, not crash or silently succeed.
+    for action, arg_key in (("find_callers", "symbol"), ("get_signature", "symbol"),
+                            ("get_include_path", "symbol")):
+        tasks.append({
+            "id": next_id(),
+            "category": "negative_recovery",
+            "namespace": "source",
+            "action": action,
+            "tool": "source_query",
+            "arguments": {"action": action},
+            "expected": {
+                "expect_error": True,
+                "require_identifier": True,
+                "offending_identifier": arg_key,
+                "pass_threshold": 0.7,
+            },
+            "safety": "read_only",
+        })
+    # Unqualified-vs-qualified resolution: an unqualified method name should still
+    # resolve (or be rejected with a qualified-symbol hint).  expect_error: false.
+    for action, arg_key, value in _NEGATIVE_UNQUALIFIED_SYMBOLS:
+        tasks.append({
+            "id": next_id(),
+            "category": "negative_recovery",
+            "namespace": "source",
+            "action": action,
+            "tool": "source_query",
+            "arguments": {"action": action, arg_key: value},
+            "expected": {
+                "expect_error": False,
+                "offending_identifier": value,
+                "pass_threshold": 0.7,
+            },
+            "safety": "read_only",
+        })
 
 
 def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dict[str, Any]:
@@ -1254,17 +1658,19 @@ def generate_tasks(url: str, min_tasks: int, tasks_path: pathlib.Path, manifest_
         "task_file": display_path(tasks_path),
         "scoring": {
             "source_index_score": (
-                "0.35 * symbol_hit_rate"
-                " + 0.25 * field_completeness_rate"
-                " + 0.20 * schema_adherence_rate"
+                "0.30 * symbol_hit_rate"
+                " + 0.20 * field_completeness_rate"
+                " + 0.15 * schema_adherence_rate"
                 " + 0.10 * (1 - stale_rate)"
                 " + 0.10 * ergonomics_success_rate"
+                " + 0.15 * negative_recovery_rate"
             ),
-            "symbol_hit_rate": "fraction of symbol_lookup + review_context_lookup + impact_radius_lookup tasks with direct_success",
-            "field_completeness_rate": "fraction of all symbol results with >=3 required fields (name, kind, file_path, location)",
+            "symbol_hit_rate": "fraction of symbol_lookup + review_context_lookup + impact_radius_lookup tasks with direct_success (require_results tasks miss on empty/sentinel responses)",
+            "field_completeness_rate": "mean per-task field-completeness over expected-nonempty (require_results) lookups only; an empty required lookup contributes 0 (closes the divide-by-returned loophole)",
             "schema_adherence_rate": "fraction of schema_field_presence tasks with planning_signals + skill + status declared",
             "stale_rate": "fraction of health_check tasks with stale/error/missing-fields response",
             "ergonomics_success_rate": "fraction of ergonomics_text tasks with non-empty, non-error response",
+            "negative_recovery_rate": "mean response-quality score (0..1) on deliberately bad input: transport crash / silent empty = 0, structured error naming the offending identifier = 0.7, + did-you-mean/qualified hint = 1.0",
             "mean_results_per_lookup": "average result count across symbol_lookup + review_context_lookup + impact_radius_lookup tasks",
         },
     }
@@ -1355,6 +1761,8 @@ def write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) ->
         "field_completeness_rate",
         "schema_adherence_rate",
         "stale_rate",
+        "ergonomics_success_rate",
+        "negative_recovery_rate",
         "mean_results_per_lookup",
     ]
     lines = [
@@ -1390,7 +1798,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     gen.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
     gen.add_argument("--tasks", type=pathlib.Path, default=DEFAULT_TASKS)
     gen.add_argument("--manifest", type=pathlib.Path, default=DEFAULT_MANIFEST)
-    gen.add_argument("--min-tasks", type=int, default=319)
+    gen.add_argument("--min-tasks", type=int, default=363)
 
     run_cmd = sub.add_parser("run", help="Run tasks against a live MCP endpoint and score results")
     run_cmd.add_argument("--mcp-url", default=DEFAULT_MCP_URL)
