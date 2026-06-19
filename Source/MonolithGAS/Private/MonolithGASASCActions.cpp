@@ -243,7 +243,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleAddASCToActor(const TSharedP
 
 	// Parse location
 	FString Location;
-	Params->TryGetStringField(TEXT("location"), Location);
+	if (Params->HasField(TEXT("location")) && !Params->TryGetStringField(TEXT("location"), Location))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'location' (expected string)"));
+	}
 	if (Location.IsEmpty())
 	{
 		Location = TEXT("self");
@@ -257,7 +260,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleAddASCToActor(const TSharedP
 
 	// Resolve ASC class
 	FString ASCClassName;
-	Params->TryGetStringField(TEXT("asc_class"), ASCClassName);
+	if (Params->HasField(TEXT("asc_class")) && !Params->TryGetStringField(TEXT("asc_class"), ASCClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'asc_class' (expected string)"));
+	}
 	if (ASCClassName.IsEmpty())
 	{
 		ASCClassName = TEXT("AbilitySystemComponent");
@@ -381,7 +387,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 
 	// --- Replication mode ---
 	FString RepModeStr;
-	Params->TryGetStringField(TEXT("replication_mode"), RepModeStr);
+	if (Params->HasField(TEXT("replication_mode")) && !Params->TryGetStringField(TEXT("replication_mode"), RepModeStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'replication_mode' (expected string)"));
+	}
 	if (!RepModeStr.IsEmpty())
 	{
 		int32 ModeVal = ParseReplicationMode(RepModeStr);
@@ -495,8 +504,12 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 	}
 
 	// --- Default attribute sets ---
-	const TArray<TSharedPtr<FJsonValue>>* AttrSetArray;
-	if (Params->TryGetArrayField(TEXT("default_attribute_sets"), AttrSetArray))
+	const TArray<TSharedPtr<FJsonValue>>* AttrSetArray = nullptr;
+	if (Params->HasField(TEXT("default_attribute_sets")) && !Params->TryGetArrayField(TEXT("default_attribute_sets"), AttrSetArray))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'default_attribute_sets' (expected array)"));
+	}
+	if (AttrSetArray)
 	{
 		TArray<TSharedPtr<FJsonValue>> ValidatedSets;
 		ValidatedSets.Reserve(AttrSetArray->Num());
@@ -511,9 +524,15 @@ FMonolithActionResult FMonolithGASASCActions::HandleConfigureASC(const TSharedPt
 			}
 
 			FString SetClassName;
-			(*SetObj)->TryGetStringField(TEXT("class"), SetClassName);
+			if ((*SetObj)->HasField(TEXT("class")) && !(*SetObj)->TryGetStringField(TEXT("class"), SetClassName))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'class' in attribute set (expected string)"));
+			}
 			FString InitDT;
-			(*SetObj)->TryGetStringField(TEXT("init_datatable"), InitDT);
+			if ((*SetObj)->HasField(TEXT("init_datatable")) && !(*SetObj)->TryGetStringField(TEXT("init_datatable"), InitDT))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'init_datatable' in attribute set (expected string)"));
+			}
 
 			if (SetClassName.IsEmpty())
 			{
@@ -755,7 +774,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetupAbilitySystemInterface(
 
 	// Derive class name
 	FString ClassName;
-	Params->TryGetStringField(TEXT("class_name"), ClassName);
+	if (Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'class_name' (expected string)"));
+	}
 	if (ClassName.IsEmpty())
 	{
 		// Derive from Blueprint name (strip BP_ prefix if present)
@@ -774,7 +796,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetupAbilitySystemInterface(
 
 	// Derive parent class
 	FString ParentClass;
-	Params->TryGetStringField(TEXT("parent_class"), ParentClass);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClass))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'parent_class' (expected string)"));
+	}
 	if (ParentClass.IsEmpty())
 	{
 		if (BP->ParentClass)
@@ -1128,12 +1153,19 @@ FMonolithActionResult FMonolithGASASCActions::HandleApplyASCTemplate(const TShar
 
 	// Apply overrides
 	const TSharedPtr<FJsonObject>* OverridesPtr = nullptr;
-	if (Params->TryGetObjectField(TEXT("overrides"), OverridesPtr) && OverridesPtr && (*OverridesPtr).IsValid())
+	if (Params->HasField(TEXT("overrides")) && !Params->TryGetObjectField(TEXT("overrides"), OverridesPtr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'overrides' (expected object)"));
+	}
+	if (OverridesPtr && (*OverridesPtr).IsValid())
 	{
 		const TSharedPtr<FJsonObject>& Ov = *OverridesPtr;
 
 		FString RepMode;
-		Ov->TryGetStringField(TEXT("replication_mode"), RepMode);
+		if (Ov->HasField(TEXT("replication_mode")) && !Ov->TryGetStringField(TEXT("replication_mode"), RepMode))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'overrides.replication_mode' (expected string)"));
+		}
 		if (!RepMode.IsEmpty()) Def.ReplicationMode = RepMode;
 
 		TArray<FString> OvAttrSets = MonolithGAS::ParseStringArray(Ov, TEXT("attribute_sets"));
@@ -1263,7 +1295,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAbilities(const TS
 	}
 
 	FString Mode;
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'mode' (expected string)"));
+	}
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1343,7 +1378,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultEffects(const TSha
 	}
 
 	FString Mode;
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'mode' (expected string)"));
+	}
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1414,14 +1452,21 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 	FMonolithActionResult Err;
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("actor_path"), ActorPath, Err)) return Err;
 
-	const TArray<TSharedPtr<FJsonValue>>* SetsArray;
-	if (!Params->TryGetArrayField(TEXT("attribute_sets"), SetsArray) || !SetsArray || SetsArray->Num() == 0)
+	const TArray<TSharedPtr<FJsonValue>>* SetsArray = nullptr;
+	if (Params->HasField(TEXT("attribute_sets")) && !Params->TryGetArrayField(TEXT("attribute_sets"), SetsArray))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'attribute_sets' (expected array)"));
+	}
+	if (!SetsArray || SetsArray->Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or empty required parameter: attribute_sets (array)"));
 	}
 
 	FString Mode;
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'mode' (expected string)"));
+	}
 	if (Mode.IsEmpty()) Mode = TEXT("set");
 	Mode = Mode.ToLower();
 
@@ -1448,12 +1493,18 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 
 		if (SetVal->TryGetObject(SetObjPtr))
 		{
-			(*SetObjPtr)->TryGetStringField(TEXT("class"), SetClassName);
+			if ((*SetObjPtr)->HasField(TEXT("class")) && !(*SetObjPtr)->TryGetStringField(TEXT("class"), SetClassName))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'class' in attribute_sets array (expected string)"));
+			}
 		}
 		else
 		{
 			// Allow bare string for convenience
-			SetVal->TryGetString(SetClassName);
+			if (!SetVal->TryGetString(SetClassName))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for parameter in attribute_sets array (expected string or object)"));
+			}
 		}
 
 		if (SetClassName.IsEmpty())
@@ -1492,7 +1543,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleSetDefaultAttributeSets(cons
 		if (SetObjPtr && (*SetObjPtr).IsValid())
 		{
 			FString InitDT;
-			(*SetObjPtr)->TryGetStringField(TEXT("init_datatable"), InitDT);
+			if ((*SetObjPtr)->HasField(TEXT("init_datatable")) && !(*SetObjPtr)->TryGetStringField(TEXT("init_datatable"), InitDT))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'init_datatable' in attribute_sets array (expected string)"));
+			}
 			if (!InitDT.IsEmpty())
 			{
 				ValidEntry->SetStringField(TEXT("init_datatable"), InitDT);
@@ -1926,8 +1980,14 @@ FMonolithActionResult FMonolithGASASCActions::HandleGrantAbility(const TSharedPt
 
 	double Level = 1.0;
 	double InputID = -1.0;
-	Params->TryGetNumberField(TEXT("level"), Level);
-	Params->TryGetNumberField(TEXT("input_id"), InputID);
+	if (Params->HasField(TEXT("level")) && !Params->TryGetNumberField(TEXT("level"), Level))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'level' (expected number)"));
+	}
+	if (Params->HasField(TEXT("input_id")) && !Params->TryGetNumberField(TEXT("input_id"), InputID))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'input_id' (expected number)"));
+	}
 
 	UWorld* PIEWorld = MonolithGAS::GetPIEWorld();
 	if (!PIEWorld)
@@ -2068,11 +2128,16 @@ FMonolithActionResult FMonolithGASASCActions::HandleGetASCSnapshot(const TShared
 
 	bool bIncludeAbilities = true, bIncludeEffects = true, bIncludeAttributes = true;
 	bool bIncludeTags = true, bIncludeCooldowns = true;
-	Params->TryGetBoolField(TEXT("include_abilities"), bIncludeAbilities);
-	Params->TryGetBoolField(TEXT("include_effects"), bIncludeEffects);
-	Params->TryGetBoolField(TEXT("include_attributes"), bIncludeAttributes);
-	Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags);
-	Params->TryGetBoolField(TEXT("include_cooldowns"), bIncludeCooldowns);
+	if (Params->HasField(TEXT("include_abilities")) && !Params->TryGetBoolField(TEXT("include_abilities"), bIncludeAbilities))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'include_abilities' (expected boolean)"));
+	if (Params->HasField(TEXT("include_effects")) && !Params->TryGetBoolField(TEXT("include_effects"), bIncludeEffects))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'include_effects' (expected boolean)"));
+	if (Params->HasField(TEXT("include_attributes")) && !Params->TryGetBoolField(TEXT("include_attributes"), bIncludeAttributes))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'include_attributes' (expected boolean)"));
+	if (Params->HasField(TEXT("include_tags")) && !Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'include_tags' (expected boolean)"));
+	if (Params->HasField(TEXT("include_cooldowns")) && !Params->TryGetBoolField(TEXT("include_cooldowns"), bIncludeCooldowns))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'include_cooldowns' (expected boolean)"));
 
 	UWorld* PIEWorld = MonolithGAS::GetPIEWorld();
 	if (!PIEWorld)
@@ -2320,8 +2385,10 @@ FMonolithActionResult FMonolithGASASCActions::HandleGetASCSnapshot(const TShared
 FMonolithActionResult FMonolithGASASCActions::HandleGetAllASCs(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ClassFilter, TagFilter;
-	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
-	Params->TryGetStringField(TEXT("tag_filter"), TagFilter);
+	if (Params->HasField(TEXT("class_filter")) && !Params->TryGetStringField(TEXT("class_filter"), ClassFilter))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'class_filter' (expected string)"));
+	if (Params->HasField(TEXT("tag_filter")) && !Params->TryGetStringField(TEXT("tag_filter"), TagFilter))
+		return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'tag_filter' (expected string)"));
 
 	FGameplayTag FilterTag;
 	if (!TagFilter.IsEmpty())
