@@ -1670,6 +1670,20 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 		Result += Tokens[i];
 		Result += TEXT("\"*");
 	}
+
+	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion — see the asset-side
+	// EscapeFTS for rationale. OR the AND-prefix expression with the concatenated
+	// identifier so "get health component" also matches GetHealthComponent. Superset;
+	// bounded to avoid a pathological MATCH expression.
+	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
+	{
+		FString Concat;
+		for (const FString& Token : Tokens) { Concat += Token; }
+		if (Concat.Len() <= 64)
+		{
+			Result = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Result, *Concat);
+		}
+	}
 	return Result;
 }
 
@@ -1816,7 +1830,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTS(const FS
 	FString FTSQuery = EscapeFTS(Query);
 
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts fts JOIN symbols s ON s.id = fts.rowid LEFT JOIN files f ON f.id = s.file_id WHERE symbols_fts MATCH ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, bm25(symbols_fts), s.id LIMIT ?;"));
+	Stmt.Create(*Database, TEXT("SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, s.line_start, s.line_end, s.parent_symbol_id, s.access, s.signature, s.docstring, s.is_ue_macro FROM symbols_fts fts JOIN symbols s ON s.id = fts.rowid LEFT JOIN files f ON f.id = s.file_id WHERE symbols_fts MATCH ? ORDER BY CASE WHEN f.path IS NULL OR f.path = '' OR f.path = '<unknown>' THEN 1 ELSE 0 END, bm25(symbols_fts, 10.0, 5.0, 1.0), s.id LIMIT ?;"));
 	Stmt.SetBindingValueByIndex(1, FTSQuery);
 	Stmt.SetBindingValueByIndex(2, static_cast<int64>(SafeLimit));
 
@@ -2409,7 +2423,7 @@ TArray<FMonolithSourceSymbol> FMonolithSourceDatabase::SearchSymbolsFTSFiltered(
 	}
 
 	SQL += TEXT("WHERE ") + FString::Join(Conditions, TEXT(" AND "));
-	SQL += TEXT(" ORDER BY bm25(symbols_fts) LIMIT ?;");
+	SQL += TEXT(" ORDER BY bm25(symbols_fts, 10.0, 5.0, 1.0) LIMIT ?;");
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, *SQL);

@@ -1,5 +1,6 @@
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceDatabase.h"
+#include "MonolithSQLiteMaintenance.h"
 #include "MonolithCppParser.h"
 #include "MonolithShaderParser.h"
 #include "MonolithReferenceBuilder.h"
@@ -785,4 +786,21 @@ void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 	DB.SetMeta(TEXT("index_timestamp"), FString::FromInt(FDateTime::UtcNow().ToUnixTimestamp()));
 	DB.SetMeta(TEXT("total_files"), FString::FromInt(TotalFilesProcessed.Load()));
 	DB.SetMeta(TEXT("total_symbols"), FString::FromInt(TotalSymbolsExtracted.Load()));
+
+	// Q5 (PRD AssetSearchSemanticSearch): compact symbols_fts once per full source
+	// reindex (source_fts is a plain non-content fts5 and is excluded — it cannot take a
+	// cheap 'optimize' merge). The ai/ad/au-trigger churn during indexing leaves segment
+	// fragmentation that an end-of-bulk 'optimize' + PRAGMA optimize consolidates. Borrow
+	// the raw handle under the DB lock per GetRawHandle()'s contract.
+	{
+		FScopeLock MaintLock(&DB.GetLock());
+		if (FSQLiteDatabase* RawDb = DB.GetRawHandle())
+		{
+			FMonolithSQLiteMaintenanceOptions MaintOpts;
+			MaintOpts.bRunPragmaOptimize = true;
+			MaintOpts.bRunIncrementalVacuum = false;
+			MaintOpts.FtsTablesToOptimize = { TEXT("symbols_fts") };
+			RunMonolithSQLiteMaintenance(*RawDb, MaintOpts);
+		}
+	}
 }

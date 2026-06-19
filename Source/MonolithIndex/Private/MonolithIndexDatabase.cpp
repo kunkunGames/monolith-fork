@@ -1267,6 +1267,22 @@ FString FMonolithIndexDatabase::EscapeFTS(const FString& Query)
 			Escaped += TEXT(" ");
 		}
 	}
+
+	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion. A spaced natural-
+	// language query ("health bar") should also match the fused CamelCase identifier it
+	// indexes as ("HealthBar"), which unicode61 stores as a single token. The AND-prefix
+	// expression above is kept byte-identical and OR-ed with the concatenated form, so
+	// results are a guaranteed superset (recall only rises). Bounded to avoid a
+	// pathological MATCH expression.
+	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
+	{
+		FString Concat;
+		for (const FString& Token : Tokens) { Concat += Token; }
+		if (Concat.Len() <= 64)
+		{
+			Escaped = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Escaped, *Concat);
+		}
+	}
 	return Escaped;
 }
 
@@ -1316,10 +1332,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	{
 		AddMatches(TEXT(
 			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-			"snippet(fts_assets, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"snippet(fts_assets, -1, '>>>', '<<<', '...', 32) AS ctx, bm25(fts_assets, 10.0, 2.0, 3.0, 1.0, 1.0), "
 			"'assets', 'asset', a.package_path, a.asset_name "
 			"FROM fts_assets f JOIN assets a ON a.id = f.rowid "
-			"WHERE fts_assets MATCH ? ORDER BY f.rank LIMIT ?;"),
+			"WHERE fts_assets MATCH ? ORDER BY bm25(fts_assets, 10.0, 2.0, 3.0, 1.0, 1.0) LIMIT ?;"),
 			TEXT("asset"));
 	}
 
@@ -1327,10 +1343,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	{
 		AddMatches(TEXT(
 			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-			"snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"snippet(fts_nodes, -1, '>>>', '<<<', '...', 32) AS ctx, bm25(fts_nodes, 10.0, 3.0, 2.0), "
 			"'nodes', n.node_name, n.node_name, n.node_class "
 			"FROM fts_nodes f JOIN nodes n ON n.id = f.rowid JOIN assets a ON a.id = n.asset_id "
-			"WHERE fts_nodes MATCH ? ORDER BY f.rank LIMIT ?;"),
+			"WHERE fts_nodes MATCH ? ORDER BY bm25(fts_nodes, 10.0, 3.0, 2.0) LIMIT ?;"),
 			TEXT("node"));
 	}
 
@@ -1338,18 +1354,18 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	{
 		AddMatches(TEXT(
 			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-			"snippet(fts_variables, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"snippet(fts_variables, -1, '>>>', '<<<', '...', 32) AS ctx, bm25(fts_variables, 10.0, 2.0, 1.0, 1.0), "
 			"'variables', v.var_name, v.var_name, v.default_value "
 			"FROM fts_variables f JOIN variables v ON v.id = f.rowid JOIN assets a ON a.id = v.asset_id "
-			"WHERE fts_variables MATCH ? ORDER BY f.rank LIMIT ?;"),
+			"WHERE fts_variables MATCH ? ORDER BY bm25(fts_variables, 10.0, 2.0, 1.0, 1.0) LIMIT ?;"),
 			TEXT("variable"));
 
 		AddMatches(TEXT(
 			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-			"snippet(fts_parameters, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"snippet(fts_parameters, -1, '>>>', '<<<', '...', 32) AS ctx, bm25(fts_parameters, 10.0, 2.0, 1.0, 1.0, 1.0), "
 			"'parameters', p.param_name, p.param_name, p.default_value "
 			"FROM fts_parameters f JOIN parameters p ON p.id = f.rowid JOIN assets a ON a.id = p.asset_id "
-			"WHERE fts_parameters MATCH ? ORDER BY f.rank LIMIT ?;"),
+			"WHERE fts_parameters MATCH ? ORDER BY bm25(fts_parameters, 10.0, 2.0, 1.0, 1.0, 1.0) LIMIT ?;"),
 			TEXT("parameter"));
 
 		AddMatches(TEXT(
@@ -1362,10 +1378,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 
 		AddMatches(TEXT(
 			"SELECT a.package_path, a.asset_name, a.asset_class, a.module_name, "
-			"snippet(fts_actors, -1, '>>>', '<<<', '...', 32) AS ctx, f.rank, "
+			"snippet(fts_actors, -1, '>>>', '<<<', '...', 32) AS ctx, bm25(fts_actors, 10.0, 3.0, 5.0), "
 			"'actors', ac.actor_label, ac.actor_name, ac.actor_class "
 			"FROM fts_actors f JOIN actors ac ON ac.id = f.rowid JOIN assets a ON a.id = ac.asset_id "
-			"WHERE fts_actors MATCH ? ORDER BY f.rank LIMIT ?;"),
+			"WHERE fts_actors MATCH ? ORDER BY bm25(fts_actors, 10.0, 3.0, 5.0) LIMIT ?;"),
 			TEXT("actor"));
 	}
 

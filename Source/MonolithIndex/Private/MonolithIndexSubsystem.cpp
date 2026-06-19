@@ -1,6 +1,7 @@
 ﻿#include "MonolithIndexSubsystem.h"
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
+#include "MonolithSQLiteMaintenance.h"
 #include "MonolithSettings.h"
 #include "MonolithMemoryHelper.h"
 #include "MonolithCompilerSafeDispatch.h"
@@ -1299,6 +1300,27 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 		else
 		{
 			UE_LOG(LogMonolithIndex, Warning, TEXT("Project CRG projection/cache rebuild after indexing did not complete cleanly: %s"), *Summary);
+		}
+
+		// Q5 (PRD AssetSearchSemanticSearch): compact the project FTS5 indexes once per
+		// full reindex. Every asset/node/.../value write fires ai/ad/au triggers, leaving
+		// segment fragmentation the per-write path never compacts; an end-of-bulk
+		// 'optimize' merge + refreshed planner stats (PRAGMA optimize) improve query
+		// latency and DB size. Gated by this bSuccess full-reindex completion point — the
+		// same gate as the CRG repair above, so the live-incremental path never runs it.
+		if (FSQLiteDatabase* RawDb = Database->GetRawDatabase())
+		{
+			FMonolithSQLiteMaintenanceOptions MaintOpts;
+			MaintOpts.bRunPragmaOptimize = true;
+			MaintOpts.bRunIncrementalVacuum = false;
+			MaintOpts.FtsTablesToOptimize = {
+				TEXT("fts_assets"), TEXT("fts_nodes"), TEXT("fts_variables"),
+				TEXT("fts_parameters"), TEXT("fts_datatable_rows"), TEXT("fts_actors"),
+				TEXT("fts_asset_search_values") };
+			if (RunMonolithSQLiteMaintenance(*RawDb, MaintOpts))
+			{
+				UE_LOG(LogMonolithIndex, Log, TEXT("Project FTS maintenance (optimize) complete after indexing"));
+			}
 		}
 	}
 
