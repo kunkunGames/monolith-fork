@@ -1280,13 +1280,22 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 	int32 ToIndex = static_cast<int32>(ToIndexVal);
 
 	FString InputAction;
-	Params->TryGetStringField(TEXT("input_action"), InputAction);
+	if (Params->HasField(TEXT("input_action")) && !Params->TryGetStringField(TEXT("input_action"), InputAction))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'input_action', expected string"));
+	}
 
 	FString TriggerEvent;
-	Params->TryGetStringField(TEXT("trigger_event"), TriggerEvent);
+	if (Params->HasField(TEXT("trigger_event")) && !Params->TryGetStringField(TEXT("trigger_event"), TriggerEvent))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'trigger_event', expected string"));
+	}
 
 	FString TransitionBehavior;
-	Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior);
+	if (Params->HasField(TEXT("transition_behavior")) && !Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'transition_behavior', expected string"));
+	}
 
 	// Load graph
 	FString Error;
