@@ -1267,6 +1267,7 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	const TArray<FMonolithActionInfo> Actions = NamespaceFilter.IsEmpty()
 		? FMonolithToolRegistry::Get().GetAllActions()
 		: FMonolithToolRegistry::Get().GetActions(NamespaceFilter);
+	Matches.Reserve(Actions.Num());
 
 	for (const FMonolithActionInfo& Info : Actions)
 	{
