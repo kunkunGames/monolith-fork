@@ -429,6 +429,10 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleDescribeCurrentSele
 
 	if (USelection* SelectedActors = GEditor->GetSelectedActors())
 	{
+		const int32 ActorNum = SelectedActors->Num();
+		Items.Reserve(FMath::Min(ActorNum, MaxItems));
+		Skipped.Reserve(FMath::Max(0, ActorNum - MaxItems));
+
 		for (FSelectionIterator It(*SelectedActors); It; ++It)
 		{
 			AActor* Actor = Cast<AActor>(*It);
@@ -602,6 +606,7 @@ FMonolithActionResult FMonolithEditorSelectionActions::HandleDescribeActorContex
 FMonolithActionResult FMonolithEditorSelectionActions::HandleListContextEntrypoints(const TSharedPtr<FJsonObject>& /*Params*/)
 {
 	TArray<TSharedPtr<FJsonValue>> Entrypoints;
+	Entrypoints.Reserve(4);
 
 	auto AddEntrypoint = [&Entrypoints](const FString& Id, const FString& Action, const FString& ObjectTypes, bool bAvailable, const FString& Status)
 	{
