@@ -954,6 +954,12 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\.antigravitycli\" xcopy /s /e /i /q /h \"%s\\.antigravitycli\" \"%s\\.antigravitycli\\\"\r\n")
 
 		TEXT("if exist \"%s\\.code-review-graph\" xcopy /s /e /i /q /h \"%s\\.code-review-graph\" \"%s\\.code-review-graph\\\"\r\n")
+		TEXT("if exist \"%s\\CRG\" xcopy /s /e /i /q /h \"%s\\CRG\" \"%s\\CRG\\\"\r\n")
+		TEXT("if exist \"%s\\PRD\" xcopy /s /e /i /q /h \"%s\\PRD\" \"%s\\PRD\\\"\r\n")
+		TEXT("if exist \"%s\\Plans\" xcopy /s /e /i /q /h \"%s\\Plans\" \"%s\\Plans\\\"\r\n")
+		TEXT("if exist \"%s\\Docs\\plans\" xcopy /s /e /i /q /h \"%s\\Docs\\plans\" \"%s\\Docs\\plans\\\"\r\n")
+		TEXT("if exist \"%s\\Docs\\research\" xcopy /s /e /i /q /h \"%s\\Docs\\research\" \"%s\\Docs\\research\\\"\r\n")
+		TEXT("if exist \"%s\\TrainingMemory\" xcopy /s /e /i /q /h \"%s\\TrainingMemory\" \"%s\\TrainingMemory\\\"\r\n")
 		TEXT("if exist \"%s\\Logs\" xcopy /s /e /i /q /h \"%s\\Logs\" \"%s\\Logs\\\"\r\n")
 		TEXT("rem Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\r\n")
 		TEXT("if exist \"%s\\Saved\" (\r\n")
@@ -987,6 +993,12 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*WinPluginDir,
 		// Preserve .git from backup
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
@@ -1043,6 +1055,12 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.antigravitycli\" ] && cp -r \"%s/.antigravitycli\" \"%s/.antigravitycli\"\n")
 
 		TEXT("[ -d \"%s/.code-review-graph\" ] && cp -r \"%s/.code-review-graph\" \"%s/.code-review-graph\"\n")
+		TEXT("[ -d \"%s/CRG\" ] && cp -r \"%s/CRG\" \"%s/CRG\"\n")
+		TEXT("[ -d \"%s/PRD\" ] && cp -r \"%s/PRD\" \"%s/PRD\"\n")
+		TEXT("[ -d \"%s/Plans\" ] && cp -r \"%s/Plans\" \"%s/Plans\"\n")
+		TEXT("[ -d \"%s/Docs/plans\" ] && cp -r \"%s/Docs/plans\" \"%s/Docs/plans\"\n")
+		TEXT("[ -d \"%s/Docs/research\" ] && cp -r \"%s/Docs/research\" \"%s/Docs/research\"\n")
+		TEXT("[ -d \"%s/TrainingMemory\" ] && cp -r \"%s/TrainingMemory\" \"%s/TrainingMemory\"\n")
 		TEXT("[ -d \"%s/Logs\" ] && cp -r \"%s/Logs\" \"%s/Logs\"\n")
 		TEXT("# Preserve Saved/ (contains EngineSource.db, ProjectIndex.db, previews, etc.)\n")
 		TEXT("[ -d \"%s/Saved\" ] && cp -r \"%s/Saved\" \"%s/Saved\"\n")
@@ -1055,6 +1073,12 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
