@@ -112,10 +112,8 @@ void FMonolithFooModule::StartupModule()
         TEXT("foo"),                    // namespace
         TEXT("my_action"),             // action name
         TEXT("Description of what it does"),
-        FMonolithActionHandler::CreateStatic(&FMonolithFooActions::HandleMyAction),
-        FParamSchemaBuilder()           // param schema
-            .Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset to load"))
-            .Build()
+        TEXT("{\"asset_path\": \"string (required)\"}"),  // param schema
+        &FMonolithFooActions::HandleMyAction
     );
 }
 ```
