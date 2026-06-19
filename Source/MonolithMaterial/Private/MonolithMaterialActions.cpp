@@ -1239,16 +1239,32 @@ FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TShar
 		return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString InputName = TEXT("");
-	Params->TryGetStringField(TEXT("input_name"), InputName);
+	if (Params->HasField(TEXT("input_name")) && !Params->TryGetStringField(TEXT("input_name"), InputName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'input_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bDisconnectOutputs = false;
-	Params->TryGetBoolField(TEXT("disconnect_outputs"), bDisconnectOutputs);
+	if (Params->HasField(TEXT("disconnect_outputs")) && !Params->TryGetBoolField(TEXT("disconnect_outputs"), bDisconnectOutputs))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'disconnect_outputs' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	// Optional filter: only disconnect from a specific downstream expression (when disconnect_outputs=true)
 	FString TargetDownstream = TEXT("");
-	Params->TryGetStringField(TEXT("target_expression"), TargetDownstream);
+	if (Params->HasField(TEXT("target_expression")) && !Params->TryGetStringField(TEXT("target_expression"), TargetDownstream))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_expression' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	// Optional filter: only disconnect a specific output index
 	int32 TargetOutputIndex = -1;
 	double TargetOutputIndex_Val;
-	if (Params->TryGetNumberField(TEXT("output_index"), TargetOutputIndex_Val)) TargetOutputIndex = static_cast<int32>(TargetOutputIndex_Val);
+	if (Params->HasField(TEXT("output_index")))
+	{
+		if (!Params->TryGetNumberField(TEXT("output_index"), TargetOutputIndex_Val))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'output_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		TargetOutputIndex = static_cast<int32>(TargetOutputIndex_Val);
+	}
 
 	UMaterial* Mat = LoadBaseMaterial(AssetPath);
 	if (!Mat)
