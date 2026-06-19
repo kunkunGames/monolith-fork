@@ -704,8 +704,44 @@ function queryToolSchema() {
         type: "object",
         description: "Parameters for the selected action.",
       },
+      _fields: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+      },
+      _omit: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+      },
+      _compact_json: {
+        type: "boolean",
+        description: "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+      },
     },
     required: ["action"],
+  };
+}
+
+function emptyObjectSchema() {
+  return {
+    type: "object",
+    properties: {
+      _fields: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+      },
+      _omit: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+      },
+      _compact_json: {
+        type: "boolean",
+        description: "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+      },
+    },
   };
 }
 
@@ -759,17 +795,53 @@ function seedTools() {
     );
   });
 
-  tools.push(makeTool("monolith_discover", "List available tool namespaces and their actions.", {
+  tools.push(makeTool("monolith_discover", "List available tool namespaces and their actions. Pass namespace and optional category to filter.", {
     type: "object",
     properties: {
       namespace: { type: "string", description: "Optional: filter to a specific namespace" },
       category: { type: "string", description: "Optional: filter actions within the namespace by category" },
+      _fields: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+      },
+      _omit: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+      },
+      _compact_json: {
+        type: "boolean",
+        description: "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+      },
     },
   }));
-  tools.push(makeTool("monolith_status", "Get Monolith server health.", {
+  tools.push(makeTool("monolith_status", "Get Monolith server health: version, uptime, port, registered action count, and module status.", emptyObjectSchema()));
+  tools.push(makeTool("monolith_update", "Check for or install Monolith updates from GitHub Releases.", {
     type: "object",
-    properties: {},
+    properties: {
+      action: {
+        type: "string",
+        description: "'check' to compare versions, 'install' to download and stage update",
+        default: "check",
+      },
+      _fields: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit.",
+      },
+      _omit: {
+        type: "array",
+        items: { type: "string" },
+        description: "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields.",
+      },
+      _compact_json: {
+        type: "boolean",
+        description: "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object.",
+      },
+    },
   }));
+  tools.push(makeTool("monolith_reindex", "Re-index the Monolith project database. Requires the editor-side Monolith server.", emptyObjectSchema()));
   tools.push(makeTool("monolith_query",
     "Execute any Monolith action. Use monolith_find(query) to locate the right action, " +
     "monolith_discover(namespace) to inspect its schema, then call monolith_query with " +
