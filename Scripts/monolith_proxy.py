@@ -818,6 +818,47 @@ def _make_tool(name: str, description: str, schema: dict) -> dict:
     return {"name": name, "description": description, "inputSchema": schema}
 
 
+def _inject_monolith_query(response_str: str) -> str:
+    try:
+        payload = json.loads(response_str)
+        tools = payload.get("result", {}).get("tools")
+        if not isinstance(tools, list):
+            return response_str
+
+        for t in tools:
+            if t.get("name") == "monolith_query":
+                return response_str
+
+        tools.append(_make_tool(
+            "monolith_query",
+            "Execute any Monolith action. Use monolith_find(query) to locate the right action, "
+            "monolith_discover(namespace) to inspect its schema, then call monolith_query with "
+            "the resolved namespace, action, and params.",
+            {
+                "type": "object",
+                "properties": {
+                    "namespace": {
+                        "type": "string",
+                        "description": "Target namespace, e.g. 'blueprint', 'source', 'gas'. Call monolith_discover() with no args to list all available namespaces.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Target action name within the namespace.",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Arguments for the action.",
+                    },
+                },
+                "required": ["namespace", "action"],
+            }
+        ))
+        return json.dumps(payload)
+    except Exception as e:
+        _log(f"_inject_monolith_query parse error: {e}")
+        return response_str
+
+
 def _seed_tools() -> list[dict]:
     tools = []
     for name in CORE_QUERY_TOOLS:
@@ -1013,7 +1054,7 @@ def handle_tools_list(msg: dict) -> str:
 
     if resp:
         _write_tools_cache(resp)
-        return resp
+        return _inject_monolith_query(resp)
     return _fallback_tools_list(msg)
 
 
