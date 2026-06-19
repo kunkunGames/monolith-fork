@@ -15264,9 +15264,17 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetDIProperties(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString UsageFilter = TEXT("all");
-	if (Params->TryGetStringField(TEXT("usage"), UsageFilter)) UsageFilter = UsageFilter.ToLower();
+	if (Params->HasField(TEXT("usage")) && !Params->TryGetStringField(TEXT("usage"), UsageFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'usage' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	UsageFilter = UsageFilter.ToLower();
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
