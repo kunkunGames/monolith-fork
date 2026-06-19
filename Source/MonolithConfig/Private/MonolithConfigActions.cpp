@@ -333,18 +333,31 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Category, Section, Key;
-	if (Params->TryGetStringField(TEXT("file"), Category) && Category.Contains(TEXT("..")))
+	if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), Category))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: file must be a string"));
+	}
+	if (Category.Contains(TEXT("..")))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Cannot contain path traversal characters."));
 	}
-	Params->TryGetStringField(TEXT("section"), Section);
-	Params->TryGetStringField(TEXT("key"), Key);
+	if (Params->HasField(TEXT("section")) && !Params->TryGetStringField(TEXT("section"), Section))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: section must be a string"));
+	}
+	if (Params->HasField(TEXT("key")) && !Params->TryGetStringField(TEXT("key"), Key))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: key must be a string"));
+	}
 
 	// Convenience: if 'setting' param provided instead of file/section/key, search for it
 	if (Category.IsEmpty() && Section.IsEmpty() && Key.IsEmpty())
 	{
 		FString Setting;
-		Params->TryGetStringField(TEXT("setting"), Setting);
+		if (Params->HasField(TEXT("setting")) && !Params->TryGetStringField(TEXT("setting"), Setting))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: setting must be a string"));
+		}
 		if (!Setting.IsEmpty())
 		{
 			Key = Setting;
@@ -584,7 +597,10 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 	}
 
 	FString FilterSection;
-	Params->TryGetStringField(TEXT("section"), FilterSection);
+	if (Params->HasField(TEXT("section")) && !Params->TryGetStringField(TEXT("section"), FilterSection))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: section must be a string"));
+	}
 
 	// Strip 'Default' or 'Base' prefix if user passed it (e.g. "DefaultEngine" -> "Engine")
 	if (Category.StartsWith(TEXT("Default")))
@@ -689,7 +705,11 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 	}
 
 	FString FilterCategory;
-	if (Params->TryGetStringField(TEXT("category"), FilterCategory) && FilterCategory.Contains(TEXT("..")))
+	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: category must be a string"));
+	}
+	if (FilterCategory.Contains(TEXT("..")))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid 'category' parameter. Cannot contain path traversal characters."));
 	}
@@ -893,7 +913,11 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJsonObject>& Params)
 {
 	FString FilterCategory;
-	if (Params->TryGetStringField(TEXT("category"), FilterCategory) && FilterCategory.Contains(TEXT("..")))
+	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: category must be a string"));
+	}
+	if (FilterCategory.Contains(TEXT("..")))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid 'category' parameter. Cannot contain path traversal characters."));
 	}
@@ -955,8 +979,14 @@ FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJson
 	int32 Limit = 200;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("name_contains"), NameContains);
-		Params->TryGetBoolField(TEXT("enabled_only"), bEnabledOnly);
+		if (Params->HasField(TEXT("name_contains")) && !Params->TryGetStringField(TEXT("name_contains"), NameContains))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: name_contains must be a string"));
+		}
+		if (Params->HasField(TEXT("enabled_only")) && !Params->TryGetBoolField(TEXT("enabled_only"), bEnabledOnly))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: enabled_only must be a boolean"));
+		}
 		if (Params->HasField(TEXT("limit")))
 		{
 			double LimitValue = 0.0;
@@ -1044,8 +1074,14 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 	int32 Limit = 100;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("query"), Query);
-		Params->TryGetStringField(TEXT("mode"), Mode);
+		if (Params->HasField(TEXT("query")) && !Params->TryGetStringField(TEXT("query"), Query))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: query must be a string"));
+		}
+		if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: mode must be a string"));
+		}
 		if (Params->HasField(TEXT("limit")))
 		{
 			double LimitValue = 0.0;
@@ -1153,7 +1189,10 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 	}
 
 	bool bSaveConfig = false;
-	Params->TryGetBoolField(TEXT("save_config"), bSaveConfig);
+	if (Params->HasField(TEXT("save_config")) && !Params->TryGetBoolField(TEXT("save_config"), bSaveConfig))
+	{
+		return FMonolithActionResult::Error(TEXT("Malformed parameter: save_config must be a boolean"));
+	}
 
 	// 1) Resolve class. Try full-path first (works for '/Script/Module.Class'),
 	//    then short-name lookup biased toward native classes.
