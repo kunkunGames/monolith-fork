@@ -760,4 +760,32 @@ bool FMonolithParamGuardLogicDriverMoveNodeRejectsMalformedParamsTest::RunTest(c
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetInitialStateRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetInitialStateRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetInitialStateRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_initial_state")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// Missing asset_path
+	TSharedPtr<FJsonObject> MissingAssetPathParams = MakeShared<FJsonObject>();
+	MissingAssetPathParams->SetStringField(TEXT("node_guid"), TEXT("test-guid"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_initial_state"), MissingAssetPathParams);
+	TestTrue(TEXT("set_initial_state rejects missing asset_path"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions asset_path"), Result1.ErrorMessage.Contains(TEXT("asset_path")));
+
+	// Missing node_guid
+	TSharedPtr<FJsonObject> MissingNodeGuidParams = MakeShared<FJsonObject>();
+	MissingNodeGuidParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_initial_state"), MissingNodeGuidParams);
+	TestTrue(TEXT("set_initial_state rejects missing node_guid"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions node_guid"), Result2.ErrorMessage.Contains(TEXT("node_guid")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
