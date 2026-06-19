@@ -1142,7 +1142,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTState(const TShare
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateName = Params->GetStringField(TEXT("name"));
+	FString StateName;
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'name': expected string"));
+	}
+
 	if (StateName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
@@ -1169,9 +1174,18 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTState(const TShare
 		}
 	}
 
-	FString TypeStr = Params->GetStringField(TEXT("type"));
-	FString SelectionStr = Params->GetStringField(TEXT("selection_behavior"));
-	FString LinkedAssetPath = Params->GetStringField(TEXT("linked_asset_path"));
+	FString TypeStr;
+	if (Params->HasField(TEXT("type")) && !Params->TryGetStringField(TEXT("type"), TypeStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'type': expected string"));
+	}
+	FString SelectionStr;
+	if (Params->HasField(TEXT("selection_behavior")) && !Params->TryGetStringField(TEXT("selection_behavior"), SelectionStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'selection_behavior': expected string"));
+	}
+	FString LinkedAssetPath;
+	Params->TryGetStringField(TEXT("linked_asset_path"), LinkedAssetPath);
 
 	EStateTreeStateType StateType = ParseStateType(TypeStr);
 
