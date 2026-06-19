@@ -2562,7 +2562,8 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddSlotNode(const TSharedP
 	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
 
 	bool bValidateSlot = true;
-	if (Params->HasField(TEXT("validate_slot"))) bValidateSlot = Params->GetBoolField(TEXT("validate_slot"));
+	if (Params->HasField(TEXT("validate_slot")) && !Params->TryGetBoolField(TEXT("validate_slot"), bValidateSlot))
+		return FMonolithActionResult::Error(TEXT("Parameter 'validate_slot' must be a boolean"));
 
 	double TempVal;
 	float PosX = 200.f, PosY = 0.f;
@@ -2752,7 +2753,8 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddUseCachedPose(const TSh
 	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
 
 	bool bValidatePair = true;
-	if (Params->HasField(TEXT("validate_pair"))) bValidatePair = Params->GetBoolField(TEXT("validate_pair"));
+	if (Params->HasField(TEXT("validate_pair")) && !Params->TryGetBoolField(TEXT("validate_pair"), bValidatePair))
+		return FMonolithActionResult::Error(TEXT("Parameter 'validate_pair' must be a boolean"));
 
 	double TempVal;
 	float PosX = 200.f, PosY = 0.f;
@@ -2841,7 +2843,8 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetOutputPoseSource(const 
 	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
 
 	bool bBreakExisting = true;
-	if (Params->HasField(TEXT("break_existing"))) bBreakExisting = Params->GetBoolField(TEXT("break_existing"));
+	if (Params->HasField(TEXT("break_existing")) && !Params->TryGetBoolField(TEXT("break_existing"), bBreakExisting))
+		return FMonolithActionResult::Error(TEXT("Parameter 'break_existing' must be a boolean"));
 
 	if (SourceNode.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: source_node"));
 
@@ -2952,7 +2955,8 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetStateResultSource(const
 	FString SourcePin;   Params->TryGetStringField(TEXT("source_pin"), SourcePin);
 
 	bool bBreakExisting = true;
-	if (Params->HasField(TEXT("break_existing"))) bBreakExisting = Params->GetBoolField(TEXT("break_existing"));
+	if (Params->HasField(TEXT("break_existing")) && !Params->TryGetBoolField(TEXT("break_existing"), bBreakExisting))
+		return FMonolithActionResult::Error(TEXT("Parameter 'break_existing' must be a boolean"));
 
 	if (MachineName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: machine_name"));
 	if (StateName.IsEmpty())   return FMonolithActionResult::Error(TEXT("Missing required parameter: state_name"));
@@ -3486,7 +3490,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetSyncGroup(const TShared
 	EAnimGroupRole::Type Role = EAnimGroupRole::CanBeLeader;
 	if (Params->HasField(TEXT("group_role")))
 	{
-		const FString RoleStr = Params->GetStringField(TEXT("group_role"));
+		FString RoleStr;
+		if (!Params->TryGetStringField(TEXT("group_role"), RoleStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'group_role' must be a string"));
+		}
 		if (!ParseAnimGroupRole(RoleStr, Role))
 		{
 			return FMonolithActionResult::Error(FString::Printf(
@@ -3497,7 +3505,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetSyncGroup(const TShared
 	EAnimSyncMethod Method = EAnimSyncMethod::SyncGroup;
 	if (Params->HasField(TEXT("sync_method")))
 	{
-		const FString MethodStr = Params->GetStringField(TEXT("sync_method"));
+		FString MethodStr;
+		if (!Params->TryGetStringField(TEXT("sync_method"), MethodStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'sync_method' must be a string"));
+		}
 		if (!ParseAnimSyncMethod(MethodStr, Method))
 		{
 			return FMonolithActionResult::Error(FString::Printf(
