@@ -642,6 +642,38 @@ FMonolithSourceDatabase* FMonolithSourceActions::GetDB()
 // CRG-inspired navigation/review handlers
 // ============================================================================
 
+namespace
+{
+	// risk_score / review_context / impact_radius report a symbol-not-found inside the
+	// result BODY as status:"error" with a "Symbol not found: <sym>" summary. Returning
+	// that on the ::Success path produces an isError=false MCP envelope, so a caller that
+	// checks only the transport-level error flag treats the not-found as a successful
+	// empty answer. Promote the body error to a real action error so the envelope matches,
+	// preserving the structured body (summary + next_actions) as error.data and pointing
+	// at the recovery action. status "ok"/"warning"/"stale" (degraded-but-has-data) stay
+	// successes — only an explicit "error" status is promoted.
+	FMonolithActionResult WrapReviewResult(const TSharedPtr<FJsonObject>& R, const FString& Symbol)
+	{
+		if (R.IsValid())
+		{
+			FString Status;
+			if (R->TryGetStringField(TEXT("status"), Status) && Status.Equals(TEXT("error"), ESearchCase::IgnoreCase))
+			{
+				FString Summary;
+				if (!R->TryGetStringField(TEXT("summary"), Summary) || Summary.IsEmpty())
+				{
+					Summary = FString::Printf(TEXT("Symbol not found: %s"), *Symbol);
+				}
+				return FMonolithActionResult::Error(Summary, -32602)
+					.WithErrorData(R)
+					.WithHint(TEXT("Run source.search_source to find the correct symbol name, then retry (a qualified Class::Method resolves best)."))
+					.WithRelatedAction(TEXT("source.search_source"));
+			}
+		}
+		return FMonolithActionResult::Success(R);
+	}
+}
+
 FMonolithActionResult FMonolithSourceActions::HandleImpactRadius(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString Symbol = FMonolithSourceReview::PStr(Params, TEXT("symbol"));
@@ -659,7 +691,7 @@ FMonolithActionResult FMonolithSourceActions::HandleImpactRadius(const TSharedPt
 		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
 		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
 		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200));
-	return FMonolithActionResult::Success(R);
+	return WrapReviewResult(R, Symbol);
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleFindOverrides(const TSharedPtr<FJsonObject>& Params)
@@ -865,7 +897,8 @@ FMonolithActionResult FMonolithSourceActions::HandleRiskScore(const TSharedPtr<F
 	}
 	const int32 Limit = FMonolithSourceReview::PInt(Params, TEXT("limit"), 10);
 	const FString MinTier = FMonolithSourceReview::PStr(Params, TEXT("min_tier"), TEXT("low"));
-	return FMonolithActionResult::Success(FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier));
+	TSharedPtr<FJsonObject> R = FMonolithSourceReview::RiskScore(*DB, Symbol, Limit, MinTier);
+	return WrapReviewResult(R, Symbol);
 }
 
 FMonolithActionResult FMonolithSourceActions::HandleDetectChanges(const TSharedPtr<FJsonObject>& Params)
@@ -978,7 +1011,7 @@ FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedP
 		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
 		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
 		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")));
-	return FMonolithActionResult::Success(R);
+	return WrapReviewResult(R, Symbol);
 }
 
 FString FMonolithSourceActions::ShortPath(const FString& FullPath)
@@ -1142,18 +1175,24 @@ bool FMonolithSourceActions::ResolveFirstSignature(FMonolithSourceDatabase* DB, 
 	OutSource.Empty();
 	if (!DB) return false;
 
-	// Method name = trailing identifier.
+	// Method name = trailing identifier; a leading Class:: qualifier constrains the class.
 	FString MethodName = Symbol;
+	FString ClassScope;
 	const int32 ScopeIdx = Symbol.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 	if (ScopeIdx != INDEX_NONE)
 	{
 		MethodName = Symbol.Mid(ScopeIdx + 2);
+		ClassScope = Symbol.Mid(0, ScopeIdx);
 	}
 
-	// Fast path: body-free signature column.
+	// Fast path: body-free signature column. A qualified input only accepts the exact
+	// class's overloads (else verify_signature returns a foreign class's signature); an
+	// empty own-column row falls through to the qualified FTS path (implicit class AND method
+	// AND), so a nonexistent class resolves to not-found rather than a wrong-class match.
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(MethodName, TEXT("function"));
 	for (const FMonolithSourceSymbol& S : Symbols)
 	{
+		if (!ClassScope.IsEmpty() && S.QualifiedName != Symbol) continue;
 		if (S.Signature.IsEmpty()) continue;
 		if (S.Signature.Contains(TEXT("{")) || S.Signature.Contains(TEXT("\\"))) continue;
 		OutSignature = S.Signature.TrimStartAndEnd();
@@ -2848,22 +2887,43 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSignature(const TSharedPt
 		Limit = static_cast<int32>(LimitVal);
 	}
 
-	// The method name for FTS / column matching is the trailing identifier.
+	// The method name for FTS / column matching is the trailing identifier; a leading
+	// Class:: qualifier (when present) constrains which class's overloads are valid.
 	FString MethodName = Symbol;
+	FString ClassScope;
 	int32 ScopeIdx = Symbol.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
 	if (ScopeIdx != INDEX_NONE)
 	{
 		MethodName = Symbol.Mid(ScopeIdx + 2);
+		ClassScope = Symbol.Mid(0, ScopeIdx);
 	}
 
 	struct FOverload { FString Signature; FString Source; FString File; int32 Line = 0; };
 	TArray<FOverload> Overloads;
+	// Other classes that declare MethodName — collected for a did-you-mean when a
+	// qualified lookup resolves no signature on the requested class.
+	TSet<FString> OtherClassesWithMethod;
 
 	// --- Fast path: a body-free `signature` column on an indexed symbol row. ---
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(MethodName, TEXT("function"));
 	for (const FMonolithSourceSymbol& S : Symbols)
 	{
 		if (Overloads.Num() >= Limit) break;
+		// Qualified input (Class::Method): only the exact class's overloads are valid —
+		// otherwise get_signature("MadeUpClass::Method") returns a foreign class's signature.
+		// A bare method name leaves ClassScope empty, so every overload is kept (unchanged).
+		// Symbols whose own column row is empty fall through to the FTS declaration-read
+		// path below (the qualified FTS query is an implicit AND over class + method, so a
+		// nonexistent class yields no chunks and the lookup correctly resolves to not-found).
+		if (!ClassScope.IsEmpty() && S.QualifiedName != Symbol)
+		{
+			const int32 OwnIdx = S.QualifiedName.Find(TEXT("::"), ESearchCase::CaseSensitive, ESearchDir::FromEnd);
+			if (OwnIdx != INDEX_NONE)
+			{
+				OtherClassesWithMethod.Add(S.QualifiedName.Mid(0, OwnIdx));
+			}
+			continue;
+		}
 		if (S.Signature.IsEmpty()) continue;
 		// Body-free only — reject anything carrying an inline body or continuation.
 		if (S.Signature.Contains(TEXT("{")) || S.Signature.Contains(TEXT("\\"))) continue;
@@ -2932,7 +2992,22 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSignature(const TSharedPt
 
 	if (Overloads.Num() == 0)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No signature found for '%s'."), *Symbol));
+		FMonolithActionResult Err = FMonolithActionResult::Error(FString::Printf(TEXT("No signature found for '%s'."), *Symbol));
+		// Self-correcting not-found: if a qualified class was requested that does not declare
+		// MethodName but other classes do, surface those as a did-you-mean / recovery hint.
+		if (!ClassScope.IsEmpty() && OtherClassesWithMethod.Num() > 0)
+		{
+			TArray<FString> Candidates;
+			for (const FString& Cls : OtherClassesWithMethod)
+			{
+				Candidates.Add(FString::Printf(TEXT("%s::%s"), *Cls, *MethodName));
+				if (Candidates.Num() >= 8) break;
+			}
+			Err.WithDidYouMean(Candidates)
+				.WithHint(FString::Printf(TEXT("'%s' is not declared on '%s'. That method name is declared on: %s."),
+					*MethodName, *ClassScope, *FString::Join(Candidates, TEXT(", "))));
+		}
+		return Err;
 	}
 
 	// Structured + text envelope.

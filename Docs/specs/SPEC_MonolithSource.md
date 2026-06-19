@@ -72,7 +72,7 @@ After F17, agents do not need to invoke any source-reindex action manually in th
 | `review_hotspots` | `kind` (all), `limit` (50), `min_lines` (100), `include_questions` (true) | Global review queue over fan-in/fan-out/risk/large/override symbol signals with optional advisory questions |
 | `review_context` | `symbol` (required), `direction` (both), `max_depth` (2), `max_results` (200), `detail_level` (minimal) | Token-efficient package: seed + impact + risk reasons + next actions. Seed/context symbols expose `path_status`, known-path seeds are preferred over missing-path duplicates, and top impacted rows de-duplicate repeated missing-path variants. Distinct from single-item `bridge.build_attachment` |
 | `get_include_path` | `symbol` (required) | C++ authoring helper: resolve the `#include` path for a symbol, preferring the `.h` row among same-name symbols, plus owning `Module` and Build.cs deps note and a private-header `WARNING` when applicable. Plain-text output; offline `monolith_query.exe` byte-matches `Scripts/monolith_offline.py`. Exits non-zero with `No symbol found matching '<symbol>'.` when unresolved |
-| `get_signature` | `symbol` (required), `limit` (10) | Print declaration signatures for a function/method: column signatures first, then `source_fts` declaration reads via a 12-line paren-balanced compaction. Each overload prints `<sig>` plus a `// <source> @ <shortpath>:<line>` provenance line. Plain-text; byte-parity-gated. Exits non-zero with `No signature found for '<symbol>'.` when none |
+| `get_signature` | `symbol` (required), `limit` (10) | Print declaration signatures for a function/method: column signatures first, then `source_fts` declaration reads via a 12-line paren-balanced compaction. Each overload prints `<sig>` plus a `// <source> @ <shortpath>:<line>` provenance line. Plain-text; byte-parity-gated. `symbol` accepts a bare name OR a qualified `Class::Method` (2026-06-19): a class scope is column-strict (only the exact `qualified_name` overload is emitted from the column path; a body-free own-row falls through to the qualified `source_fts` read, whose implicit class-AND-method match resolves real templated/inline symbols like `FString::Printf` while a nonexistent class yields no chunks). A made-up `Class::Method` therefore resolves to `No signature found for '<symbol>'.` plus a `did_you_mean` of the classes that DO declare the method — never a foreign class's signature. The shared `ResolveFirstSignature` helper behind `verify_signature` applies the same class-strict rule |
 | `check_deprecations` | `symbols` (1+ positional) | Report deprecation verdicts from `symbol_deprecations` (`DEPRECATED (<ver>) [<kind>] <msg>` or `not deprecated`). Prints the empty-index sentinel when the table is unpopulated. Plain-text; byte-parity-gated |
 | `verify_symbols` | `symbols` (1+ positional) | Per-symbol existence + composed include/first-signature/deprecation summary (`<symbol>: exists | #include "..." | <sig> | DEPRECATED`, or `<symbol>: NOT FOUND`). Existence uses class row, `symbols_fts`, then a bounded `source_fts` `method(` scan. Plain-text; byte-parity-gated |
 | `find_example_usage` | `symbol` (required), `prefer` (engine\|project, engine), `limit` (10) | Indexed call-site examples: `source_fts` MATCH (fetch 400), token-boundary `method(` match, 7-line context windows, engine/runtime ranking flipped by `prefer`, hard cap 500. Emits only `--- <shortpath>:<line> ---` blocks (no `total_estimate`/`next_cursor`). Plain-text; byte-parity-gated |
@@ -110,7 +110,15 @@ There is no Python runtime or generic parser replacement (monolith-native:
 source-symbol, lexical/local).
 `impact_radius`/`find_overrides`/`risk_score`/`review_hotspots`/`review_context` live in
 `FMonolithSourceReview` (`Private/MonolithSourceReview.{h,cpp}`) using only
-public DB queries or DB-owned helpers; `ComputeHealth`/`RepairFts`/
+public DB queries or DB-owned helpers.
+**Symbol-not-found is a real error envelope.** `risk_score`, `review_context`, and
+`impact_radius` report a missing symbol in the result body as `status:"error"` with a
+`"Symbol not found: <sym>"` summary; the handlers promote that body status to a real
+action error (`isError=true`, code `-32602`) via `WrapReviewResult`, preserving the body
+as `error.data` and attaching a `source.search_source` recovery hint/related action, so a
+caller checking only the transport-level `isError` flag cannot mistake a not-found for a
+successful empty answer. Bodies with `status` `ok`/`warning`/`stale` (degraded-but-has-data)
+stay successes. `ComputeHealth`/`RepairFts`/
 `RepairCrgCache`/`DetectChanges`/`PreMergeCheck`/`Snapshot`/`DiffSnapshots`/`ReviewHotspots`/`FindUnused` are methods on `FMonolithSourceDatabase`
 (private `DbLock`).
 Source-of-truth specification now lives in this file and `Docs/API_REFERENCE.md`.
