@@ -541,10 +541,10 @@ void FMonolithAudioMetaSoundActions::RegisterActions(FMonolithToolRegistry& Regi
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString PackagePath, AssetName;
@@ -615,10 +615,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundSource(cons
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundPatch(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString PackagePath, AssetName;
@@ -663,10 +663,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundPatch(const
 FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ClassArray = nullptr;
@@ -757,7 +757,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundNode(const TSh
 FMonolithActionResult FMonolithAudioMetaSoundActions::RemoveMetaSoundNode(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString NodeIdStr;
 	Params->TryGetStringField(TEXT("node_id_or_handle"), NodeIdStr);
 	if (AssetPath.IsEmpty() || NodeIdStr.IsEmpty())
@@ -795,7 +799,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::RemoveMetaSoundNode(const 
 FMonolithActionResult FMonolithAudioMetaSoundActions::ConnectMetaSoundNodes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString FromNode;
 	Params->TryGetStringField(TEXT("from_node"), FromNode);
 	FString FromOutput;
@@ -845,7 +853,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ConnectMetaSoundNodes(cons
 FMonolithActionResult FMonolithAudioMetaSoundActions::DisconnectMetaSoundNodes(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString FromNode;
 	Params->TryGetStringField(TEXT("from_node"), FromNode);
 	FString FromOutput;
@@ -907,7 +919,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::DisconnectMetaSoundNodes(c
 FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundInput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString Name;
 	Params->TryGetStringField(TEXT("name"), Name);
 	FString DataType;
@@ -958,7 +974,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundInput(const TS
 FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundOutput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString Name;
 	Params->TryGetStringField(TEXT("name"), Name);
 	FString DataType;
@@ -1003,7 +1023,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundOutput(const T
 FMonolithActionResult FMonolithAudioMetaSoundActions::SetMetaSoundInputDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString InputName;
 	Params->TryGetStringField(TEXT("input_name"), InputName);
 
@@ -1065,7 +1089,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::SetMetaSoundInputDefault(c
 FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundInterface(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString InterfaceName;
 	Params->TryGetStringField(TEXT("interface_name"), InterfaceName);
 
@@ -1098,10 +1126,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundInterface(cons
 FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	// Load asset and access document via IMetaSoundDocumentInterface
@@ -1228,10 +1256,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundGraph(const TS
 FMonolithActionResult FMonolithAudioMetaSoundActions::ListMetaSoundConnections(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
@@ -1470,7 +1498,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 FMonolithActionResult FMonolithAudioMetaSoundActions::FindMetaSoundNodeInputs(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString NodeIdStr;
 	Params->TryGetStringField(TEXT("node_id_or_handle"), NodeIdStr);
 
@@ -1543,7 +1575,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::FindMetaSoundNodeInputs(co
 FMonolithActionResult FMonolithAudioMetaSoundActions::FindMetaSoundNodeOutputs(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString NodeIdStr;
 	Params->TryGetStringField(TEXT("node_id_or_handle"), NodeIdStr);
 
@@ -1615,10 +1651,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::FindMetaSoundNodeOutputs(c
 FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundInputNames(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	IAssetRegistry& AssetRegistry = IAssetRegistry::GetChecked();
@@ -1671,10 +1707,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundInputNames(con
 FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
@@ -2360,7 +2396,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundPreset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString ReferencePath;
 	Params->TryGetStringField(TEXT("reference_metasound"), ReferencePath);
 
@@ -2432,7 +2472,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateMetaSoundPreset(cons
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateOneShotSfx(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString WavePath;
 	Params->TryGetStringField(TEXT("sound_wave"), WavePath);
 
@@ -2537,7 +2581,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateOneShotSfx(const TSh
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateLoopingAmbientMetaSound(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString WavePath;
 	Params->TryGetStringField(TEXT("sound_wave"), WavePath);
 
@@ -2710,10 +2758,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateLoopingAmbientMetaSo
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateSynthesizedTone(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString OscType = TEXT("Sine");
@@ -2897,10 +2945,10 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateSynthesizedTone(cons
 FMonolithActionResult FMonolithAudioMetaSoundActions::CreateInteractiveMetaSound(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* WavesArray = nullptr;
@@ -3088,7 +3136,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::CreateInteractiveMetaSound
 FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundVariable(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString VarName;
 	Params->TryGetStringField(TEXT("name"), VarName);
 	FString DataType;
@@ -3144,7 +3196,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::AddMetaSoundVariable(const
 FMonolithActionResult FMonolithAudioMetaSoundActions::SetMetaSoundNodeLocation(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
+	{
+		return FMonolithActionResult::Error(_ErrAssetPath);
+	}
 	FString NodeIdStr;
 	Params->TryGetStringField(TEXT("node_id_or_handle"), NodeIdStr);
 

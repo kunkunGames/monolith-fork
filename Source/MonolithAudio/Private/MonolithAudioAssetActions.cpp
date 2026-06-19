@@ -128,6 +128,33 @@ namespace
 	}
 }
 
+namespace MonolithAudio
+{
+	bool RequireAssetPath(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			OutError = TEXT("asset_path is required");
+			return false;
+		}
+
+		OutAssetPath.Reset();
+		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
+		if (OutAssetPath.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("path"), OutAssetPath);
+		}
+
+		if (OutAssetPath.IsEmpty())
+		{
+			OutError = TEXT("asset_path is required");
+			return false;
+		}
+
+		return true;
+	}
+}
+
 bool FMonolithAudioAssetActions::SplitAssetPath(const FString& AssetPath, FString& OutPackagePath, FString& OutAssetName)
 {
 	int32 LastSlash;
@@ -714,10 +741,10 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 FMonolithActionResult FMonolithAudioAssetActions::CreateSoundAttenuation(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -748,10 +775,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundAttenuation(const T
 FMonolithActionResult FMonolithAudioAssetActions::GetAttenuationSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -770,10 +797,10 @@ FMonolithActionResult FMonolithAudioAssetActions::GetAttenuationSettings(const T
 FMonolithActionResult FMonolithAudioAssetActions::SetAttenuationSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TSharedPtr<FJsonObject>* SettingsJson = nullptr;
@@ -810,10 +837,10 @@ FMonolithActionResult FMonolithAudioAssetActions::SetAttenuationSettings(const T
 FMonolithActionResult FMonolithAudioAssetActions::CreateSoundClass(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -863,10 +890,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundClass(const TShared
 FMonolithActionResult FMonolithAudioAssetActions::GetSoundClassProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -899,10 +926,10 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSoundClassProperties(const 
 FMonolithActionResult FMonolithAudioAssetActions::SetSoundClassProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1042,10 +1069,10 @@ static bool JsonToSoundClassAdjuster(const TSharedPtr<FJsonObject>& Json, FSound
 FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	// 1. Pre-validate timing fields
@@ -1162,10 +1189,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 FMonolithActionResult FMonolithAudioAssetActions::GetSoundMixSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1197,10 +1224,10 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSoundMixSettings(const TSha
 FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1324,10 +1351,10 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 FMonolithActionResult FMonolithAudioAssetActions::CreateSoundConcurrency(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1358,10 +1385,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundConcurrency(const T
 FMonolithActionResult FMonolithAudioAssetActions::GetConcurrencySettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1380,10 +1407,10 @@ FMonolithActionResult FMonolithAudioAssetActions::GetConcurrencySettings(const T
 FMonolithActionResult FMonolithAudioAssetActions::SetConcurrencySettings(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TSharedPtr<FJsonObject>* SettingsJson = nullptr;
@@ -1420,10 +1447,10 @@ FMonolithActionResult FMonolithAudioAssetActions::SetConcurrencySettings(const T
 FMonolithActionResult FMonolithAudioAssetActions::CreateSoundSubmix(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1488,10 +1515,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundSubmix(const TShare
 FMonolithActionResult FMonolithAudioAssetActions::GetSubmixProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	FString Error;
@@ -1535,10 +1562,10 @@ FMonolithActionResult FMonolithAudioAssetActions::GetSubmixProperties(const TSha
 FMonolithActionResult FMonolithAudioAssetActions::SetSubmixProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
-	if (AssetPath.IsEmpty())
+	FString Err;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, Err))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(Err);
 	}
 
 	const TSharedPtr<FJsonObject>* PropsJson = nullptr;
@@ -1747,13 +1774,10 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateTestWave(const TSharedPt
 {
 	// ---- 1. Validate path ---------------------------------------------------
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	FString ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, ErrAssetPath))
 	{
-		Params->TryGetStringField(TEXT("path"), AssetPath); // Fallback for backward compatibility
-	}
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(ErrAssetPath);
 	}
 	if (!AssetPath.StartsWith(TEXT("/Game/")))
 	{

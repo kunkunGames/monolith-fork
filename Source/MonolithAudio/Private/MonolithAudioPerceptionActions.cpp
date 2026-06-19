@@ -313,13 +313,10 @@ namespace
 FMonolithActionResult FMonolithAudioPerceptionActions::BindSoundToPerception(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
-	}
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(_ErrAssetPath);
 	}
 
 	// Phase J F11: validate every input field BEFORE loading the asset, BEFORE any mutation.
@@ -382,13 +379,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::BindSoundToPerception(con
 FMonolithActionResult FMonolithAudioPerceptionActions::UnbindSoundFromPerception(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
-	}
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(_ErrAssetPath);
 	}
 
 	FString LoadError;
@@ -431,13 +425,10 @@ FMonolithActionResult FMonolithAudioPerceptionActions::UnbindSoundFromPerception
 FMonolithActionResult FMonolithAudioPerceptionActions::GetSoundPerceptionBinding(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	FString _ErrAssetPath;
+	if (!MonolithAudio::RequireAssetPath(Params, AssetPath, _ErrAssetPath))
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: asset_path must be a string"));
-	}
-	if (AssetPath.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(_ErrAssetPath);
 	}
 
 	FString LoadError;
