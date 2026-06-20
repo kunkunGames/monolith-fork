@@ -2,6 +2,7 @@
 
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithProgressRegistry.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Interfaces/IPluginManager.h"
@@ -166,6 +167,22 @@ void FMonolithResourceRegistry::RegisterDefaultResources()
 				const TSharedPtr<FJsonObject> Audit =
 					FMonolithActionExecutionGuard::Get().GetRecentAuditJson(50);
 				return Audit.IsValid() ? FMonolithJsonUtils::Serialize(Audit) : FString(TEXT("{}"));
+			}),
+			131072);
+	}
+	{
+		FMonolithResourceDescriptor Descriptor;
+		Descriptor.Uri = TEXT("monolith://progress/active");
+		Descriptor.Name = TEXT("Active MCP progress");
+		Descriptor.Description = TEXT("In-flight per-progressToken progress reported by long-running actions (poll-delivered; real-time SSE push is transport-limited)");
+		Descriptor.MimeType = TEXT("application/json");
+		RegisterTextResource(
+			Descriptor,
+			FTextResourceProvider::CreateLambda([]()
+			{
+				const TSharedPtr<FJsonObject> Progress =
+					FMonolithProgressRegistry::Get().GetActiveJson();
+				return Progress.IsValid() ? FMonolithJsonUtils::Serialize(Progress) : FString(TEXT("{}"));
 			}),
 			131072);
 	}

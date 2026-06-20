@@ -187,6 +187,7 @@ bool FMonolithLiveResourcesTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("resources array exists"), List->TryGetArrayField(TEXT("resources"), Resources));
 		TestTrue(TEXT("tool-calls/recent URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://tool-calls/recent")));
 		TestTrue(TEXT("audit/recent URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://audit/recent")));
+		TestTrue(TEXT("progress/active URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://progress/active")));
 	}
 
 	// Live providers evaluate at read time and return bounded JSON objects even
@@ -200,6 +201,11 @@ bool FMonolithLiveResourcesTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("audit read succeeds"), Audit.bFound);
 	TestEqual(TEXT("audit mime is json"), Audit.MimeType, FString(TEXT("application/json")));
 	TestTrue(TEXT("audit content is a JSON object"), Audit.Text.StartsWith(TEXT("{")));
+
+	FMonolithResourceReadResult Progress = Registry.ReadResource(TEXT("monolith://progress/active"));
+	TestTrue(TEXT("progress read succeeds"), Progress.bFound);
+	TestEqual(TEXT("progress mime is json"), Progress.MimeType, FString(TEXT("application/json")));
+	TestTrue(TEXT("progress content is a JSON object"), Progress.Text.StartsWith(TEXT("{")));
 
 	Registry.ResetForTests();
 	return true;

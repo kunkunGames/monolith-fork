@@ -97,6 +97,7 @@ Live (read-time) providers backed by Monolith services — these evaluate on eac
 |-----|--------|-----------|
 | `monolith://tool-calls/recent` | `FMonolithActionExecutionGuard::GetToolCallRecordsJson(50)` | `application/json` |
 | `monolith://audit/recent` | `FMonolithActionExecutionGuard::GetRecentAuditJson(50)` | `application/json` |
+| `monolith://progress/active` | `FMonolithProgressRegistry::GetActiveJson()` (in-flight per-progressToken progress; poll-delivered) | `application/json` |
 
 Missing optional docs must be skipped rather than returned as broken descriptors.
 

@@ -5,6 +5,7 @@
 #include "MonolithExecutionContext.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithMcpSessionTracker.h"
+#include "MonolithProgressRegistry.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithToolInvocationLogger.h"
@@ -1358,6 +1359,11 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	// request-id-keyed registry, not the thread-local context). Opt-in long-running
 	// actions poll FMonolithCancellationRegistry::IsCancellationRequested(json_rpc_id).
 	FScopedMonolithCancellationRegistration CancellationRegistration(ExecutionContextParams.JsonRpcId);
+
+	// Track in-flight progress for this request's progressToken (if any) so an
+	// opt-in long-running action can report progress visible via the
+	// monolith://progress/active resource. Empty token (the common case) is inert.
+	FScopedMonolithProgressRegistration ProgressRegistration(ExecutionContextParams.ProgressToken);
 
 	// Execute via registry
 	FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Arguments);

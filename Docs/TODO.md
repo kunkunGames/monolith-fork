@@ -10,6 +10,7 @@ Spec: [PRD/UnrealMCP/Spec/04_session_progress_cancellation.md]. The execution-co
 
 - [ ] **Session-id slice** — When persistent session mode wires a real `MCP-Session-Id` into the execution context, route it through `FMonolithExecutionContext::RedactSessionId(...)` only; never store or record the raw header. Until then `session_id_redacted` is correctly `"stateless"`.
 - [x] **Cancellation transport** — Landed: `FMonolithCancellationRegistry` (request-id-keyed, thread-safe) is the cross-thread cancellation mechanism and `notifications/cancelled` signals it — honoring the contract (cancellation does NOT rely on the thread-local `GetCurrent()`). **Remaining:** make specific long-running async actions (PIE smoke, deep index, batch retarget) poll `FMonolithCancellationRegistry::Get().IsCancellationRequested(json_rpc_id)` and abort cooperatively; cancellation has no effect until an action opts in to polling.
+- [x] **Progress reporting transport** — Landed: `FMonolithProgressRegistry` (per-`progressToken`, thread-safe) + the `monolith://progress/active` poll resource. **Remaining (two parts):** (1) make the same long-running async actions call `FMonolithProgressRegistry::Get().Report(...)`; (2) **real-time push** — the embedded UE HTTP server has no long-lived SSE (`HandleGetMcp` returns a single event and closes), so true `notifications/progress` streaming needs a push transport (held-open SSE via a socket-level handler, or forwarding through the `monolith_proxy.py` stdio bridge). Until then progress is poll-only via `resources/read`.
 
 ---
 
