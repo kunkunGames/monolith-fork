@@ -82,3 +82,22 @@ bool FMonolithLimitGuardSceneSpatialSweepRadiusTest::RunTest(const FString& Para
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneLightingSuggestMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.SuggestLightPlacementRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneLightingSuggestMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("suggest_light_placement action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("suggest_light_placement")));
+
+	TSharedPtr<FJsonObject> SuggestParams = MakeShared<FJsonObject>();
+	SuggestParams->SetStringField(TEXT("volume_name"), TEXT("TestVolume"));
+	SuggestParams->SetStringField(TEXT("mood"), TEXT("horror_dim"));
+	SuggestParams->SetStringField(TEXT("max_lights"), TEXT("not_a_number"));
+
+	FMonolithActionResult SuggestResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("suggest_light_placement"), SuggestParams);
+	TestFalse(TEXT("suggest_light_placement rejects malformed max_lights parameter"), SuggestResult.bSuccess);
+	TestTrue(TEXT("suggest_light_placement reports the validation error"), SuggestResult.ErrorMessage.Contains(TEXT("max_lights")));
+
+	return true;
+}
