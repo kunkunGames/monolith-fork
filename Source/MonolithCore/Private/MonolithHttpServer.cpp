@@ -514,8 +514,10 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	Transport->SetNumberField(TEXT("max_request_body_bytes"), MaxMcpRequestBodyBytes);
 
 	TArray<TSharedPtr<FJsonValue>> Protocols;
-	Protocols.Add(MakeShared<FJsonValueString>(TEXT("2024-11-05")));
-	Protocols.Add(MakeShared<FJsonValueString>(TEXT("2025-03-26")));
+	for (const FString& ProtocolVersion : GetSupportedProtocolVersions())
+	{
+		Protocols.Add(MakeShared<FJsonValueString>(ProtocolVersion));
+	}
 	Transport->SetArrayField(TEXT("supported_protocol_versions"), Protocols);
 	Health->SetObjectField(TEXT("mcp_transport"), Transport);
 
@@ -528,6 +530,29 @@ bool FMonolithHttpServer::HandleHealthCheck(const FHttpServerRequest& Request, c
 	AddCorsHeaders(*Response, Request);
 	OnComplete(MoveTemp(Response));
 	return true;
+}
+
+// ============================================================================
+// MCP protocol version negotiation
+// ============================================================================
+
+const TArray<FString>& FMonolithHttpServer::GetSupportedProtocolVersions()
+{
+	// Oldest first; the last entry is the server-preferred version. Single source
+	// of truth for the initialize negotiation and the /health advertisement.
+	static const TArray<FString> Versions = {
+		TEXT("2024-11-05"),
+		TEXT("2025-03-26"),
+		TEXT("2025-06-18"),
+		TEXT("2025-11-25"),
+	};
+	return Versions;
+}
+
+FString FMonolithHttpServer::NegotiateProtocolVersion(const FString& RequestedVersion)
+{
+	const TArray<FString>& Versions = GetSupportedProtocolVersions();
+	return Versions.Contains(RequestedVersion) ? RequestedVersion : Versions.Last();
 }
 
 // ============================================================================
@@ -629,17 +654,14 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleInitialize(const TSharedPtr<F
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 
 	// Protocol version negotiation: echo the client's requested version if we
-	// support it, otherwise fall back to the latest we support.
+	// support it, otherwise fall back to the latest version we support (per the
+	// MCP spec, the server returns its preferred version on a version mismatch).
 	FString ClientVersion;
-	if (Params.IsValid() && Params->TryGetStringField(TEXT("protocolVersion"), ClientVersion)
-		&& (ClientVersion == TEXT("2024-11-05") || ClientVersion == TEXT("2025-03-26")))
+	if (Params.IsValid())
 	{
-		Result->SetStringField(TEXT("protocolVersion"), ClientVersion);
+		Params->TryGetStringField(TEXT("protocolVersion"), ClientVersion);
 	}
-	else
-	{
-		Result->SetStringField(TEXT("protocolVersion"), TEXT("2025-03-26"));
-	}
+	Result->SetStringField(TEXT("protocolVersion"), NegotiateProtocolVersion(ClientVersion));
 
 	// Server info
 	TSharedPtr<FJsonObject> ServerInfo = MakeShared<FJsonObject>();

@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **MCP protocol version negotiation (2025-06-18, 2025-11-25)** — The embedded MCP server now negotiates the two newer MCP protocol revisions in addition to `2024-11-05` and `2025-03-26`, so current MCP clients (Claude Code/Desktop) keep their latest-revision features instead of being silently downgraded. `initialize` echoes the client's requested version when supported and otherwise falls back to the latest supported version (`2025-11-25`) per the MCP version-mismatch rule; `/health` advertises the full set under `mcp_transport.supported_protocol_versions`. The version list is now a single source of truth (`FMonolithHttpServer::GetSupportedProtocolVersions()` / `NegotiateProtocolVersion()`), removing the duplicated hard-coded lists in `/health` and `initialize`. Covered by `Monolith.Core.Mcp.ProtocolVersionNegotiation` automation test. (UnrealMCP gap spec P0)
+
 ### Changed
 
 - **Parameter Hardening** — Standardized parameter parsing to use `TryGetStringField()` and similar safe accessors across multiple modules, rejecting malformed input with explicit JSON-RPC errors instead of crashing or returning empty strings (e.g., 12ed4b6, 3940803).

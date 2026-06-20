@@ -70,7 +70,7 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 
 ### MCP Protocol
 
-- **Protocol version:** Echoes client's requested version; supports both `2024-11-05` and `2025-03-26` (defaults to `2025-03-26`)
+- **Protocol version:** Echoes the client's requested version when supported; supports `2024-11-05`, `2025-03-26`, `2025-06-18`, and `2025-11-25` (falls back to the latest supported version, `2025-11-25`, on an unsupported or missing request, per the MCP version-mismatch rule). Single source of truth: `FMonolithHttpServer::GetSupportedProtocolVersions()` / `NegotiateProtocolVersion()`, also advertised in `/health` `mcp_transport.supported_protocol_versions`
 - **Transport:** HTTP with JSON-RPC 2.0 (POST for requests, GET for SSE stub, OPTIONS for CORS). Transport type in `.mcp.json` varies by client: `"http"` for Claude Code, `"streamableHttp"` for Cursor/Cline
 - **Endpoint:** `http://localhost:{port}/mcp` (default port 9316)
 - **Bind retry:** `FMonolithHttpServer::Start()` attempts up to 5 binds with exponential backoff and TCP port probe before failing. `Restart()` method available for runtime recovery. Console command: `Monolith.Restart`

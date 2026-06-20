@@ -39,6 +39,15 @@ public:
 	// Validates origin against localhost/loopback allowlist. Exposed for testing.
 	static bool IsAllowedOrigin(const FString& Origin);
 
+	// MCP protocol versions this server supports, oldest first; the last entry is
+	// the server-preferred version. Exposed for testing and the /health endpoint.
+	static const TArray<FString>& GetSupportedProtocolVersions();
+
+	// Negotiate the response protocolVersion for an initialize request: echoes
+	// RequestedVersion when supported, otherwise returns the latest supported
+	// version (server-preferred, per the MCP version-mismatch rule). For testing.
+	static FString NegotiateProtocolVersion(const FString& RequestedVersion);
+
 private:
 	// --- Route Handlers ---
 	bool HandlePostMcp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete);
