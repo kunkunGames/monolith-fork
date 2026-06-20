@@ -87,7 +87,11 @@ namespace
 			if (ExtraParams.IsValid())
 			{
 				FString BaseClassName;
-				ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName);
+				if (ExtraParams->HasField(TEXT("base_class")) && !ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName))
+				{
+					OutError = TEXT("Parameter 'base_class' must be a string");
+					return nullptr;
+				}
 				if (!BaseClassName.IsEmpty())
 				{
 					UClass* BaseClass = FindFirstObject<UClass>(*BaseClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -118,7 +122,11 @@ namespace
 			if (ExtraParams.IsValid())
 			{
 				FString BaseClassName;
-				ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName);
+				if (ExtraParams->HasField(TEXT("base_class")) && !ExtraParams->TryGetStringField(TEXT("base_class"), BaseClassName))
+				{
+					OutError = TEXT("Parameter 'base_class' must be a string");
+					return nullptr;
+				}
 				if (!BaseClassName.IsEmpty())
 				{
 					UClass* BaseClass = FindFirstObject<UClass>(*BaseClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -144,7 +152,11 @@ namespace
 			if (ExtraParams.IsValid())
 			{
 				FString EnumName;
-				ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName);
+				if (ExtraParams->HasField(TEXT("enum_type")) && !ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName))
+				{
+					OutError = TEXT("Parameter 'enum_type' must be a string");
+					return nullptr;
+				}
 				if (!EnumName.IsEmpty())
 				{
 					UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -170,7 +182,11 @@ namespace
 			if (ExtraParams.IsValid())
 			{
 				FString EnumName;
-				ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName);
+				if (ExtraParams->HasField(TEXT("enum_type")) && !ExtraParams->TryGetStringField(TEXT("enum_type"), EnumName))
+				{
+					OutError = TEXT("Parameter 'enum_type' must be a string");
+					return nullptr;
+				}
 				if (!EnumName.IsEmpty())
 				{
 					NativeEnumKey->EnumName = EnumName;
@@ -430,7 +446,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 
 	// Derive asset name from path or explicit param
 	FString AssetName;
-	Params->TryGetStringField(TEXT("name"), AssetName);
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -467,7 +486,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 
 	// Set parent if specified
 	FString ParentPath;
-	Params->TryGetStringField(TEXT("parent_bb"), ParentPath);
+	if (Params->HasField(TEXT("parent_bb")) && !Params->TryGetStringField(TEXT("parent_bb"), ParentPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_bb' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!ParentPath.IsEmpty())
 	{
 		UObject* ParentObj = FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), ParentPath);
@@ -566,7 +588,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleListBlackboards(const 
 
 	FString PathFilter;
 
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'path_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	Items.Reserve(Assets.Num());
@@ -651,7 +676,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleDuplicateBlackboard(co
 	}
 
 	bool bOverwrite = false;
-	Params->TryGetBoolField(TEXT("overwrite"), bOverwrite);
+	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'overwrite' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Load source
 	UBlackboardData* SourceBB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), SourcePath));
@@ -789,7 +817,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleAddBBKey(const TShared
 
 #if WITH_EDITORONLY_DATA
 	FString Description;
-	Params->TryGetStringField(TEXT("description"), Description);
+	if (Params->HasField(TEXT("description")) && !Params->TryGetStringField(TEXT("description"), Description))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'description' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!Description.IsEmpty())
 	{
 		NewEntry.EntryDescription = Description;
@@ -798,8 +829,12 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleAddBBKey(const TShared
 
 	// Instance synced
 	bool bInstanceSynced = false;
-	if (Params->TryGetBoolField(TEXT("instance_synced"), bInstanceSynced))
+	if (Params->HasField(TEXT("instance_synced")))
 	{
+		if (!Params->TryGetBoolField(TEXT("instance_synced"), bInstanceSynced))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'instance_synced' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		NewEntry.bInstanceSynced = bInstanceSynced ? 1 : 0;
 	}
 
@@ -1011,9 +1046,23 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleBatchAddBBKeys(const T
 
 		FString KName;
 
-		(*KeyObj)->TryGetStringField(TEXT("name"), KName);
+		if ((*KeyObj)->HasField(TEXT("name")) && !(*KeyObj)->TryGetStringField(TEXT("name"), KName))
+		{
+			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+			ErrObj->SetNumberField(TEXT("index"), i);
+			ErrObj->SetStringField(TEXT("error"), TEXT("Parameter 'name' must be a string"));
+			Errors.Add(MakeShared<FJsonValueObject>(ErrObj));
+			continue;
+		}
 		FString KType;
-		(*KeyObj)->TryGetStringField(TEXT("type"), KType);
+		if ((*KeyObj)->HasField(TEXT("type")) && !(*KeyObj)->TryGetStringField(TEXT("type"), KType))
+		{
+			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+			ErrObj->SetNumberField(TEXT("index"), i);
+			ErrObj->SetStringField(TEXT("error"), TEXT("Parameter 'type' must be a string"));
+			Errors.Add(MakeShared<FJsonValueObject>(ErrObj));
+			continue;
+		}
 
 		if (KName.IsEmpty() || KType.IsEmpty())
 		{
@@ -1054,12 +1103,25 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleBatchAddBBKeys(const T
 
 #if WITH_EDITORONLY_DATA
 		FString Desc;
-		(*KeyObj)->TryGetStringField(TEXT("description"), Desc);
+		if ((*KeyObj)->HasField(TEXT("description")) && !(*KeyObj)->TryGetStringField(TEXT("description"), Desc))
+		{
+			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+			ErrObj->SetNumberField(TEXT("index"), i);
+			ErrObj->SetStringField(TEXT("error"), TEXT("Parameter 'description' must be a string"));
+			Errors.Add(MakeShared<FJsonValueObject>(ErrObj));
+			continue;
+		}
 		if (!Desc.IsEmpty())
 		{
 			NewEntry.EntryDescription = Desc;
 		}
 #endif
+
+		bool bSync = false;
+		if ((*KeyObj)->TryGetBoolField(TEXT("instance_synced"), bSync))
+		{
+			NewEntry.bInstanceSynced = bSync ? 1 : 0;
+		}
 
 		BB->Keys.Add(NewEntry);
 		AddedCount++;
@@ -1101,7 +1163,10 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleSetBBParent(const TSha
 
 	// parent_path can be empty/"none"/"null" to clear parent
 	FString ParentPath;
-	Params->TryGetStringField(TEXT("parent_path"), ParentPath);
+	if (Params->HasField(TEXT("parent_path")) && !Params->TryGetStringField(TEXT("parent_path"), ParentPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set BB Parent")));
 	BB->Modify();
