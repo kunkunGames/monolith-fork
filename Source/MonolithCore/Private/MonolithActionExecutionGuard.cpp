@@ -1,6 +1,7 @@
 #include "MonolithActionExecutionGuard.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithExecutionContext.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
 #include "MonolithSourceControlUtils.h"
@@ -577,6 +578,16 @@ void FMonolithActionExecutionGuard::EndAction(FExecutionScope& Scope)
 		: FString::Printf(TEXT("%s_query"), *Scope.Namespace);
 	Row.ActiveProfileId = FMonolithToolProfileManager::Get().GetActiveProfileId();
 	Row.SessionIdRedacted = TEXT("stateless");
+	// Consume the current MCP execution context (set around dispatch in
+	// HandleToolsCall) when present. Off-dispatch callers leave it null, so the
+	// record keeps its stateless/unknown defaults — fully backward-compatible.
+	if (const FMonolithExecutionContext* Context = FMonolithExecutionContext::GetCurrent())
+	{
+		Row.JsonRpcId = Context->GetJsonRpcId();
+		Row.ToolCallId = Context->GetToolCallId();
+		Row.ProgressToken = Context->GetProgressToken();
+		Row.SessionIdRedacted = Context->GetSessionIdRedacted();
+	}
 	Row.StartedUtc = Scope.StartedUtc;
 	Row.DurationMs = FMath::Max(0.0, (FPlatformTime::Seconds() - Scope.StartedSeconds) * 1000.0);
 	Row.ChangedPackageCount = ChangedPackages.Num();
@@ -1241,9 +1252,13 @@ TSharedPtr<FJsonObject> FMonolithActionExecutionGuard::ToolCallRecordToJson(cons
 {
 	auto Obj = MakeShared<FJsonObject>();
 	Obj->SetStringField(TEXT("id"), Row.Id.ToString(EGuidFormats::DigitsWithHyphens));
-	Obj->SetStringField(TEXT("json_rpc_id"), TEXT("unknown"));
-	Obj->SetStringField(TEXT("tool_call_id"), TEXT("unknown"));
+	Obj->SetStringField(TEXT("json_rpc_id"), Row.JsonRpcId.IsEmpty() ? TEXT("unknown") : Row.JsonRpcId);
+	Obj->SetStringField(TEXT("tool_call_id"), Row.ToolCallId.IsEmpty() ? TEXT("unknown") : Row.ToolCallId);
 	Obj->SetStringField(TEXT("session_id_redacted"), Row.SessionIdRedacted.IsEmpty() ? TEXT("stateless") : Row.SessionIdRedacted);
+	if (!Row.ProgressToken.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("progress_token"), Row.ProgressToken);
+	}
 	Obj->SetStringField(TEXT("namespace"), Row.Namespace);
 	Obj->SetStringField(TEXT("action"), Row.Action);
 	Obj->SetStringField(TEXT("action_name"), Row.ActionName);

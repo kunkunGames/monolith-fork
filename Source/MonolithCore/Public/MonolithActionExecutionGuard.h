@@ -104,6 +104,9 @@ private:
 		FString SourceToolName;
 		FString ActiveProfileId;
 		FString SessionIdRedacted;
+		FString JsonRpcId;
+		FString ToolCallId;
+		FString ProgressToken;
 		FString ResultKind;
 		FMonolithActionExecutionPolicy ExecutionPolicy;
 		FString DirtyPackageTrackingStatus;

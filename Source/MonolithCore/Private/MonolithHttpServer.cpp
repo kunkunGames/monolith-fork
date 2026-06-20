@@ -1,6 +1,7 @@
 #include "MonolithHttpServer.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCoreModule.h"
+#include "MonolithExecutionContext.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithMcpSessionTracker.h"
 #include "MonolithResourceRegistry.h"
@@ -1320,6 +1321,19 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 
 	// Record start time for duration measurement without shadowing the server start timestamp member.
 	double ActionStartTimeSeconds = FPlatformTime::Seconds();
+
+	// Publish a per-request execution context for the duration of dispatch so the
+	// ToolCall-record guard (and future cancellation/progress wiring) can read the
+	// request metadata via FMonolithExecutionContext::GetCurrent(). Additive: any
+	// handler that does not consult the context is unaffected.
+	FMonolithExecutionContext::FParams ExecutionContextParams;
+	ExecutionContextParams.JsonRpcId = FMonolithExecutionContext::JsonRpcIdToString(Id);
+	ExecutionContextParams.SourceToolName = ToolName;
+	ExecutionContextParams.Namespace = Namespace;
+	ExecutionContextParams.Action = Action;
+	ExecutionContextParams.ProgressToken = FMonolithExecutionContext::ExtractProgressToken(Params);
+	FMonolithExecutionContext ExecutionContext(ExecutionContextParams);
+	FScopedMonolithExecutionContext ScopedExecutionContext(ExecutionContext);
 
 	// Execute via registry
 	FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Arguments);

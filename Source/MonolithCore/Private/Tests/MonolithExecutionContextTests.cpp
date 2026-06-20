@@ -1,7 +1,9 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "MonolithActionExecutionGuard.h"
 #include "MonolithExecutionContext.h"
+#include "MonolithSettings.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -93,6 +95,74 @@ bool FMonolithExecutionContextHelpersTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Missing _meta yields empty token"),
 		FMonolithExecutionContext::ExtractProgressToken(MakeShared<FJsonObject>()), FString());
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithExecutionContextToolCallRecordTest,
+	"Monolith.Core.ExecutionContext.ToolCallRecordUsesContext",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithExecutionContextToolCallRecordTest::RunTest(const FString& Parameters)
+{
+	UMonolithSettings* Settings = GetMutableDefault<UMonolithSettings>();
+	TestNotNull(TEXT("Monolith settings are available"), Settings);
+	if (!Settings)
+	{
+		return false;
+	}
+
+	// bEnableAdvancedToolCallRecords gates record RETRIEVAL (GetToolCallRecordsJson),
+	// not append — rows are appended unconditionally by EndAction.
+	const bool bOriginalRecords = Settings->bEnableAdvancedToolCallRecords;
+	Settings->bEnableAdvancedToolCallRecords = true;
+
+	FMonolithActionExecutionGuard& Guard = FMonolithActionExecutionGuard::Get();
+	Guard.ResetForTests();
+
+	const FString RedactedSession = FMonolithExecutionContext::RedactSessionId(TEXT("record-session"));
+
+	FMonolithExecutionContext::FParams ContextParams;
+	ContextParams.JsonRpcId = TEXT("99");
+	ContextParams.ToolCallId = TEXT("local-record-context");
+	ContextParams.SessionIdRedacted = RedactedSession;
+	ContextParams.SourceToolName = TEXT("material_query");
+	ContextParams.Namespace = TEXT("material");
+	ContextParams.Action = TEXT("inspect_material");
+	ContextParams.ProgressToken = TEXT("progress-record");
+	FMonolithExecutionContext Context(ContextParams);
+
+	{
+		FScopedMonolithExecutionContext ContextScope(Context);
+		FMonolithActionExecutionGuard::FExecutionScope Scope = Guard.BeginAction(TEXT("material"), TEXT("inspect_material"));
+		TSharedPtr<FJsonObject> SuccessPayload = MakeShared<FJsonObject>();
+		SuccessPayload->SetBoolField(TEXT("ok"), true);
+		Guard.SetActionOutcome(Scope, true, 0, SuccessPayload, FString());
+		Guard.EndAction(Scope);
+	}
+
+	TSharedPtr<FJsonObject> Records = Guard.GetToolCallRecordsJson(10, FString(), FString());
+	TestTrue(TEXT("Records result object exists"), Records.IsValid());
+	if (Records.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		TestTrue(TEXT("Records array exists"), Records->TryGetArrayField(TEXT("records"), Rows));
+		TestTrue(TEXT("One row returned"), Rows && Rows->Num() == 1);
+		if (Rows && Rows->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject>* Row = nullptr;
+			TestTrue(TEXT("Row is object"), (*Rows)[0]->TryGetObject(Row));
+			if (Row && Row->IsValid())
+			{
+				TestEqual(TEXT("JSON-RPC id copied from context"), (*Row)->GetStringField(TEXT("json_rpc_id")), FString(TEXT("99")));
+				TestEqual(TEXT("ToolCall id copied from context"), (*Row)->GetStringField(TEXT("tool_call_id")), FString(TEXT("local-record-context")));
+				TestEqual(TEXT("Session id is redacted from context"), (*Row)->GetStringField(TEXT("session_id_redacted")), RedactedSession);
+				TestEqual(TEXT("Progress token copied from context"), (*Row)->GetStringField(TEXT("progress_token")), FString(TEXT("progress-record")));
+			}
+		}
+	}
+
+	Settings->bEnableAdvancedToolCallRecords = bOriginalRecords;
+	Guard.ResetForTests();
 	return true;
 }
 

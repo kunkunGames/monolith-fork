@@ -4,6 +4,15 @@ Last updated: 2026-06-16 (Monolith CRG residual ROI follow-up verified: scoped p
 
 ---
 
+### UnrealMCP M4 — Execution-Context Follow-Up Contracts (2026-06-20)
+
+Spec: [PRD/UnrealMCP/Spec/04_session_progress_cancellation.md]. The execution-context foundation (`FMonolithExecutionContext`) and dispatch wiring have landed — ToolCall records now carry the real `json_rpc_id` / `tool_call_id` / `progress_token`. Two contracts constrain the remaining slices (surfaced by the wiring-slice review):
+
+- [ ] **Session-id slice** — When persistent session mode wires a real `MCP-Session-Id` into the execution context, route it through `FMonolithExecutionContext::RedactSessionId(...)` only; never store or record the raw header. Until then `session_id_redacted` is correctly `"stateless"`.
+- [ ] **Cancellation slice** — `FMonolithExecutionContext::RequestCancellation` may be invoked from a non-game thread. The canceller must hold a strong/shared reference or a registry keyed by `tool_call_id`; it must NOT rely on the thread-local `GetCurrent()`, whose pointer is unreachable cross-thread and whose owning stack frame may have returned.
+
+---
+
 ### MonolithImageGen — SVG Source and Future MSDF Pipeline (2026-06-05)
 
 Spec: [specs/SPEC_MonolithImageGen.md](specs/SPEC_MonolithImageGen.md#8-svg--vector-source-extension). The feature extends `imagegen` with sanitized SVG source generation/import/validation for web and Unreal editor source assets plus explicit editor-time Multi-channel Signed Distance Field Texture2D conversion. SVG source actions write source `.svg` files and provenance sidecars only; `generate_msdf_from_svg` is the conversion boundary for precomputed runtime-ready MSDF textures/materials.
