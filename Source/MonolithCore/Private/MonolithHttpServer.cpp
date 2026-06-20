@@ -1,5 +1,6 @@
 #include "MonolithHttpServer.h"
 #include "MonolithActionExecutionGuard.h"
+#include "MonolithCancellationRegistry.h"
 #include "MonolithCoreModule.h"
 #include "MonolithExecutionContext.h"
 #include "MonolithJsonUtils.h"
@@ -613,6 +614,23 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::ProcessJsonRpcRequest(const TShared
 	else if (Method == TEXT("notifications/initialized"))
 	{
 		// Notification — no response
+		return nullptr;
+	}
+	else if (Method == TEXT("notifications/cancelled"))
+	{
+		// MCP cancellation notification. Signal the in-flight request (if it is
+		// still running) through the request-id-keyed registry, then return no
+		// response (it is a notification). Already-finished / synchronous requests
+		// are a no-op; cooperative long-running actions observe the flag and abort.
+		const TSharedPtr<FJsonValue> CancelIdField = Params->TryGetField(TEXT("requestId"));
+		const FString CancelRequestId = FMonolithExecutionContext::JsonRpcIdToString(CancelIdField);
+		FString CancelReason;
+		Params->TryGetStringField(TEXT("reason"), CancelReason);
+		if (CancelRequestId != TEXT("notification") && CancelRequestId != TEXT("unknown"))
+		{
+			const bool bFound = FMonolithCancellationRegistry::Get().RequestCancellation(CancelRequestId, CancelReason);
+			UE_LOG(LogMonolith, Verbose, TEXT("notifications/cancelled requestId=%s found=%d"), *CancelRequestId, bFound ? 1 : 0);
+		}
 		return nullptr;
 	}
 	else if (Method == TEXT("tools/list"))
@@ -1334,6 +1352,12 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	ExecutionContextParams.ProgressToken = FMonolithExecutionContext::ExtractProgressToken(Params);
 	FMonolithExecutionContext ExecutionContext(ExecutionContextParams);
 	FScopedMonolithExecutionContext ScopedExecutionContext(ExecutionContext);
+
+	// Register this request as cancellable for the duration of dispatch so a
+	// concurrent notifications/cancelled can signal it cross-thread (via the
+	// request-id-keyed registry, not the thread-local context). Opt-in long-running
+	// actions poll FMonolithCancellationRegistry::IsCancellationRequested(json_rpc_id).
+	FScopedMonolithCancellationRegistration CancellationRegistration(ExecutionContextParams.JsonRpcId);
 
 	// Execute via registry
 	FMonolithActionResult ActionResult = FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Arguments);

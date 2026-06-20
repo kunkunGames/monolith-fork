@@ -18,7 +18,19 @@ namespace
 		case EJson::String:
 			return Value->AsString();
 		case EJson::Number:
-			return FString::SanitizeFloat(Value->AsNumber());
+		{
+			// Canonicalize JSON-RPC ids: a numeric id (42) and the equivalent
+			// string id ("42") must produce the same key. Integral numbers must
+			// not gain a SanitizeFloat ".0" artifact, or request-id correlation
+			// (e.g. cancellation) silently fails across id types.
+			const double Number = Value->AsNumber();
+			if (FMath::IsFinite(Number) && Number == FMath::TruncToDouble(Number)
+				&& FMath::Abs(Number) < 9.007199254740992e15 /* 2^53 */)
+			{
+				return FString::Printf(TEXT("%lld"), static_cast<int64>(Number));
+			}
+			return FString::SanitizeFloat(Number);
+		}
 		case EJson::Boolean:
 			return Value->AsBool() ? TEXT("true") : TEXT("false");
 		default:

@@ -9,7 +9,7 @@ Last updated: 2026-06-16 (Monolith CRG residual ROI follow-up verified: scoped p
 Spec: [PRD/UnrealMCP/Spec/04_session_progress_cancellation.md]. The execution-context foundation (`FMonolithExecutionContext`) and dispatch wiring have landed — ToolCall records now carry the real `json_rpc_id` / `tool_call_id` / `progress_token`. Two contracts constrain the remaining slices (surfaced by the wiring-slice review):
 
 - [ ] **Session-id slice** — When persistent session mode wires a real `MCP-Session-Id` into the execution context, route it through `FMonolithExecutionContext::RedactSessionId(...)` only; never store or record the raw header. Until then `session_id_redacted` is correctly `"stateless"`.
-- [ ] **Cancellation slice** — `FMonolithExecutionContext::RequestCancellation` may be invoked from a non-game thread. The canceller must hold a strong/shared reference or a registry keyed by `tool_call_id`; it must NOT rely on the thread-local `GetCurrent()`, whose pointer is unreachable cross-thread and whose owning stack frame may have returned.
+- [x] **Cancellation transport** — Landed: `FMonolithCancellationRegistry` (request-id-keyed, thread-safe) is the cross-thread cancellation mechanism and `notifications/cancelled` signals it — honoring the contract (cancellation does NOT rely on the thread-local `GetCurrent()`). **Remaining:** make specific long-running async actions (PIE smoke, deep index, batch retarget) poll `FMonolithCancellationRegistry::Get().IsCancellationRequested(json_rpc_id)` and abort cooperatively; cancellation has no effect until an action opts in to polling.
 
 ---
 
