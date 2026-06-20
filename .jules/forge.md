@@ -105,3 +105,9 @@ Avoid: Directly calling `Directory.GetDirectories` on dynamically constructed pl
 **Learning:** For optional Engine plugins that are conditionally queried and linked in a module's Build.cs, failing to explicitly mark them as `"Optional": true` in the `.uplugin` file can cause the Engine to refuse to load the plugin entirely or fail dependency resolution when the optional dependency is enabled. This also applies when moving from disk-presence checks to `.uproject` enablement checks.
 **Prevention:** Always ensure that dynamically checked optional dependencies in `Build.cs` have a corresponding `"Optional": true` entry defined in `Monolith.uplugin`.
 **Avoid:** Linking optional plugins in `Build.cs` without adding them to `.uplugin`.
+
+## 2026-06-19 - Forbid numeric branch evasion
+**Coordination issue:** Forge generated multiple branches with large numeric suffixes (e.g., `-8306146049153877827`, `-12874753197961638571`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
