@@ -591,35 +591,22 @@ FMonolithActionResult FMonolithGASUIBindingActions::HandleBindWidgetToAttribute(
     if (!MonolithGAS::RequireStringParam(Params, TEXT("target_property"), TargetPropStr, Err)) return Err;
     if (!MonolithGAS::RequireStringParam(Params, TEXT("attribute"),       AttrStr,       Err)) return Err;
 
+    FString ParamError;
+
     FString MaxAttrStr;
-    if (Params->HasField(TEXT("max_attribute")) && !Params->TryGetStringField(TEXT("max_attribute"), MaxAttrStr))
-    {
-        return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'max_attribute' (expected string)"));
-    }
+    if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("max_attribute"), MaxAttrStr, ParamError)) return FMonolithActionResult::Error(ParamError);
 
     FString OwnerStr = TEXT("owning_player_pawn");
-    if (Params->HasField(TEXT("owner_resolver")) && !Params->TryGetStringField(TEXT("owner_resolver"), OwnerStr))
-    {
-        return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'owner_resolver' (expected string)"));
-    }
+    if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("owner_resolver"), OwnerStr, ParamError)) return FMonolithActionResult::Error(ParamError);
 
     FString FormatStr = TEXT("auto");
-    if (Params->HasField(TEXT("format")) && !Params->TryGetStringField(TEXT("format"), FormatStr))
-    {
-        return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'format' (expected string)"));
-    }
+    if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("format"), FormatStr, ParamError)) return FMonolithActionResult::Error(ParamError);
 
     FString UpdateStr = TEXT("on_change");
-    if (Params->HasField(TEXT("update_policy")) && !Params->TryGetStringField(TEXT("update_policy"), UpdateStr))
-    {
-        return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'update_policy' (expected string)"));
-    }
+    if (!MonolithGAS::TryReadOptionalStringParam(Params, TEXT("update_policy"), UpdateStr, ParamError)) return FMonolithActionResult::Error(ParamError);
 
     bool bReplaceExisting = true;
-    if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting))
-    {
-        return FMonolithActionResult::Error(TEXT("Invalid type for optional parameter 'replace_existing' (expected boolean)"));
-    }
+    if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("replace_existing"), bReplaceExisting, ParamError)) return FMonolithActionResult::Error(ParamError);
 
     FString LoadErr;
     UWidgetBlueprint* WBP = LoadWBP(WbpPath, LoadErr);
