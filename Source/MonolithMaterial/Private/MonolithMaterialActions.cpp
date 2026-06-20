@@ -3532,7 +3532,12 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 
 	if (Params->HasField(TEXT("scalar_value")))
 	{
-		float Val = static_cast<float>(Params->GetNumberField(TEXT("scalar_value")));
+		double ValD;
+		if (!Params->TryGetNumberField(TEXT("scalar_value"), ValD))
+		{
+			return FMonolithActionResult::Error(TEXT("'scalar_value' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		float Val = static_cast<float>(ValD);
 		MIC->SetScalarParameterValueEditorOnly(ParamInfo, Val);
 		SetType = TEXT("scalar");
 		SetValue = FString::SanitizeFloat(Val);
@@ -3579,7 +3584,11 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 	}
 	else if (Params->HasField(TEXT("switch_value")))
 	{
-		bool Val = Params->GetBoolField(TEXT("switch_value"));
+		bool Val = false;
+		if (!Params->TryGetBoolField(TEXT("switch_value"), Val))
+		{
+			return FMonolithActionResult::Error(TEXT("'switch_value' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		MIC->SetStaticSwitchParameterValueEditorOnly(ParamInfo, Val);
 		SetType = TEXT("static_switch");
 		SetValue = Val ? TEXT("true") : TEXT("false");
@@ -4226,7 +4235,10 @@ FMonolithActionResult FMonolithMaterialActions::AutoLayout(const TSharedPtr<FJso
 	FString Formatter = TEXT("auto");
 	if (Params->HasField(TEXT("formatter")))
 	{
-		Formatter = Params->GetStringField(TEXT("formatter"));
+		if (!Params->TryGetStringField(TEXT("formatter"), Formatter))
+		{
+			return FMonolithActionResult::Error(TEXT("'formatter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	// Validate formatter
@@ -5623,19 +5635,34 @@ FMonolithActionResult FMonolithMaterialActions::UpdateCustomHlslNode(const TShar
 
 	if (Params->HasField(TEXT("code")))
 	{
-		CustomExpr->Code = Params->GetStringField(TEXT("code"));
+		FString CodeStr;
+		if (!Params->TryGetStringField(TEXT("code"), CodeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("'code' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		CustomExpr->Code = CodeStr;
 		UpdatedFields.Add(TEXT("code"));
 	}
 
 	if (Params->HasField(TEXT("description")))
 	{
-		CustomExpr->Description = Params->GetStringField(TEXT("description"));
+		FString DescStr;
+		if (!Params->TryGetStringField(TEXT("description"), DescStr))
+		{
+			return FMonolithActionResult::Error(TEXT("'description' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		CustomExpr->Description = DescStr;
 		UpdatedFields.Add(TEXT("description"));
 	}
 
 	if (Params->HasField(TEXT("output_type")))
 	{
-		CustomExpr->OutputType = ParseCustomOutputType(Params->GetStringField(TEXT("output_type")));
+		FString OutputTypeStr;
+		if (!Params->TryGetStringField(TEXT("output_type"), OutputTypeStr))
+		{
+			return FMonolithActionResult::Error(TEXT("'output_type' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		CustomExpr->OutputType = ParseCustomOutputType(OutputTypeStr);
 		UpdatedFields.Add(TEXT("output_type"));
 	}
 
@@ -6991,7 +7018,12 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialFunction(const TSh
 	// Set optional properties
 	if (Params->HasField(TEXT("description")))
 	{
-		NewFunc->Description = Params->GetStringField(TEXT("description"));
+		FString DescStr;
+		if (!Params->TryGetStringField(TEXT("description"), DescStr))
+		{
+			return FMonolithActionResult::Error(TEXT("'description' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		NewFunc->Description = DescStr;
 	}
 
 	bool bExposeToLibrary = true;
@@ -7182,7 +7214,15 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 			// Parse input type via StaticEnum
 			if (InputObj->HasField(TEXT("type")))
 			{
-				FString TypeStr = InputObj->GetStringField(TEXT("type"));
+				FString TypeStr;
+				if (!InputObj->TryGetStringField(TEXT("type"), TypeStr))
+				{
+					auto ErrJson = MakeShared<FJsonObject>();
+					ErrJson->SetStringField(TEXT("input"), InputName);
+					ErrJson->SetStringField(TEXT("error"), TEXT("'type' must be a string"));
+					ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+					continue;
+				}
 
 				// UX #2: normalize type shorthands before enum lookup
 				if (TypeStr.Equals(TEXT("float"), ESearchCase::IgnoreCase) || TypeStr.Equals(TEXT("scalar"), ESearchCase::IgnoreCase))
@@ -7219,7 +7259,16 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 
 			if (InputObj->HasField(TEXT("sort_priority")))
 			{
-				FuncInput->SortPriority = static_cast<int32>(InputObj->GetNumberField(TEXT("sort_priority")));
+				double SortPriorityD;
+				if (!InputObj->TryGetNumberField(TEXT("sort_priority"), SortPriorityD))
+				{
+					auto ErrJson = MakeShared<FJsonObject>();
+					ErrJson->SetStringField(TEXT("input"), InputName);
+					ErrJson->SetStringField(TEXT("error"), TEXT("'sort_priority' must be a number"));
+					ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+					continue;
+				}
+				FuncInput->SortPriority = static_cast<int32>(SortPriorityD);
 			}
 			else
 			{
@@ -7228,7 +7277,16 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 
 			if (InputObj->HasField(TEXT("description")))
 			{
-				FuncInput->Description = InputObj->GetStringField(TEXT("description"));
+				FString DescStr;
+				if (!InputObj->TryGetStringField(TEXT("description"), DescStr))
+				{
+					auto ErrJson = MakeShared<FJsonObject>();
+					ErrJson->SetStringField(TEXT("input"), InputName);
+					ErrJson->SetStringField(TEXT("error"), TEXT("'description' must be a string"));
+					ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+					continue;
+				}
+				FuncInput->Description = DescStr;
 			}
 
 			if (InputObj->HasField(TEXT("preview_value")))
@@ -7294,7 +7352,16 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 
 			if (OutputObj->HasField(TEXT("sort_priority")))
 			{
-				FuncOutput->SortPriority = static_cast<int32>(OutputObj->GetNumberField(TEXT("sort_priority")));
+				double SortPriorityD;
+				if (!OutputObj->TryGetNumberField(TEXT("sort_priority"), SortPriorityD))
+				{
+					auto ErrJson = MakeShared<FJsonObject>();
+					ErrJson->SetStringField(TEXT("output"), OutputName);
+					ErrJson->SetStringField(TEXT("error"), TEXT("'sort_priority' must be a number"));
+					ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+					continue;
+				}
+				FuncOutput->SortPriority = static_cast<int32>(SortPriorityD);
 			}
 			else
 			{
@@ -7303,7 +7370,16 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 
 			if (OutputObj->HasField(TEXT("description")))
 			{
-				FuncOutput->Description = OutputObj->GetStringField(TEXT("description"));
+				FString DescStr;
+				if (!OutputObj->TryGetStringField(TEXT("description"), DescStr))
+				{
+					auto ErrJson = MakeShared<FJsonObject>();
+					ErrJson->SetStringField(TEXT("output"), OutputName);
+					ErrJson->SetStringField(TEXT("error"), TEXT("'description' must be a string"));
+					ErrorsArray.Add(MakeShared<FJsonValueObject>(ErrJson));
+					continue;
+				}
+				FuncOutput->Description = DescStr;
 			}
 
 			IdToExpr.Add(OutputId, FuncOutput);
