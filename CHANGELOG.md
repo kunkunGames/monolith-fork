@@ -25,6 +25,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Asset Loading Refactoring** — Standardized asset loading across modules by replacing raw `LoadObject`/`StaticLoadObject` calls with the unified `FMonolithAssetUtils::LoadAssetByPath<T>` (e.g., e176978).
 - **Level Sequence** — Removed redundant COUNT(*) queries used for local array sizing, preserving result shapes (73e820c).
 
+### Internal
+
+- **Test Coverage** — Expanded validation tests for `MonolithLogicDriver` graph actions (`set_initial_state`, `set_end_state`) and added a runtime audio perception statics test scaffold in `MonolithAudio` (e.g., 38aed6e, 4fdb053, 3a48e26).
+
 ## [0.20.2] - 2026-06-15
 
 ### Fixed
