@@ -35,6 +35,7 @@
 
 #include "MonolithEditorActions.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithAssetUtils.h"
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
@@ -268,7 +269,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 		{
 			continue;
 		}
-		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *Path);
+		UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(Path);
 		if (!Material)
 		{
 			UE_LOG(LogMonolithPreviewActions, Warning,
@@ -319,7 +320,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 	}
 	const FString PreviewMeshPath = ResolvePreviewMeshPath(PreviewMeshKind);
 
-	UStaticMesh* PreviewMesh = LoadObject<UStaticMesh>(nullptr, *PreviewMeshPath);
+	UStaticMesh* PreviewMesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(PreviewMeshPath);
 	if (!PreviewMesh)
 	{
 		return FMonolithActionResult::Error(
@@ -508,7 +509,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureWithOverlay(
 			*Mode), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath);
+	UStaticMesh* Mesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(AssetPath);
 	if (!Mesh)
 	{
 		return FMonolithActionResult::Error(
