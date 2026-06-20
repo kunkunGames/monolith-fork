@@ -108,13 +108,22 @@ static TArray<FString> GetStringArrayParam(const TSharedPtr<FJsonObject>& Params
 	}
 
 	FString ScalarValue;
-	if (Params->TryGetStringField(ScalarName, ScalarValue) && !ScalarValue.IsEmpty())
+	const bool bHasScalar = Params->TryGetStringField(ScalarName, ScalarValue) && !ScalarValue.IsEmpty();
+
+	const TArray<TSharedPtr<FJsonValue>>* ArrayValues = nullptr;
+	Params->TryGetArrayField(ArrayName, ArrayValues);
+
+	if (bHasScalar || ArrayValues)
+	{
+		Result.Reserve((bHasScalar ? 1 : 0) + (ArrayValues ? ArrayValues->Num() : 0));
+	}
+
+	if (bHasScalar)
 	{
 		Result.Add(ScalarValue);
 	}
 
-	const TArray<TSharedPtr<FJsonValue>>* ArrayValues = nullptr;
-	if (Params->TryGetArrayField(ArrayName, ArrayValues) && ArrayValues)
+	if (ArrayValues)
 	{
 		for (const TSharedPtr<FJsonValue>& Value : *ArrayValues)
 		{
