@@ -276,6 +276,32 @@ bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedPropsTest::RunTest(con
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBuildSoundCueRejectsMalformedAttenuationTest, "Monolith.ParamGuard.Audio.BuildSoundCueRejectsMalformedAttenuation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioBuildSoundCueRejectsMalformedAttenuationTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformedAttenuation"));
+
+	TSharedPtr<FJsonObject> Spec = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> NodesArray;
+	TSharedPtr<FJsonObject> NodeObj = MakeShared<FJsonObject>();
+	NodeObj->SetStringField(TEXT("id"), TEXT("root"));
+	NodeObj->SetStringField(TEXT("type"), TEXT("Oscillator"));
+	NodesArray.Add(MakeShared<FJsonValueObject>(NodeObj));
+	Spec->SetArrayField(TEXT("nodes"), NodesArray);
+
+	TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+	Props->SetStringField(TEXT("bOverrideAttenuation"), TEXT("malformed")); // Should be bool
+	Spec->SetObjectField(TEXT("properties"), Props);
+	Params->SetObjectField(TEXT("spec"), Spec);
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("build_sound_cue_from_spec"), Params);
+	TestTrue(TEXT("BuildSoundCueFromSpec with malformed property should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BuildSoundCueFromSpec reports malformed property"), Result.ErrorMessage.Contains(TEXT("bOverrideAttenuation must be a boolean")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateSoundCueRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateSoundCueRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioCreateSoundCueRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {
