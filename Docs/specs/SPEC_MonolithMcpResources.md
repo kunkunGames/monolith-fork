@@ -91,6 +91,13 @@ The first built-in provider set should expose stable documentation resources fro
 | `monolith://docs/api-reference` | `Docs/API_REFERENCE.md` | `text/markdown` |
 | `monolith://docs/todo` | `Docs/TODO.md` | `text/markdown` |
 
+Live (read-time) providers backed by Monolith services — these evaluate on each read so the payload reflects current state, and emit redacted, bounded JSON (no raw request/response payloads):
+
+| URI | Source | Mime type |
+|-----|--------|-----------|
+| `monolith://tool-calls/recent` | `FMonolithActionExecutionGuard::GetToolCallRecordsJson(50)` | `application/json` |
+| `monolith://audit/recent` | `FMonolithActionExecutionGuard::GetRecentAuditJson(50)` | `application/json` |
+
 Missing optional docs must be skipped rather than returned as broken descriptors.
 
 ---

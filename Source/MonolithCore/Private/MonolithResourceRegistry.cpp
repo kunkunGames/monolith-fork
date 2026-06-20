@@ -1,5 +1,7 @@
 #include "MonolithResourceRegistry.h"
 
+#include "MonolithActionExecutionGuard.h"
+#include "MonolithJsonUtils.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Interfaces/IPluginManager.h"
@@ -130,6 +132,42 @@ void FMonolithResourceRegistry::RegisterDefaultResources()
 				return DocText;
 			}),
 			65536);
+	}
+
+	// Live (read-time) resources backed by Monolith services. Unlike the doc
+	// resources above, these evaluate their provider on each read so the payload
+	// reflects current state. Both return redacted, bounded JSON (no raw payloads).
+	{
+		FMonolithResourceDescriptor Descriptor;
+		Descriptor.Uri = TEXT("monolith://tool-calls/recent");
+		Descriptor.Name = TEXT("Recent ToolCall records");
+		Descriptor.Description = TEXT("Most recent redacted ToolCall audit records (no raw request/response payloads)");
+		Descriptor.MimeType = TEXT("application/json");
+		RegisterTextResource(
+			Descriptor,
+			FTextResourceProvider::CreateLambda([]()
+			{
+				const TSharedPtr<FJsonObject> Records =
+					FMonolithActionExecutionGuard::Get().GetToolCallRecordsJson(50, FString(), FString());
+				return Records.IsValid() ? FMonolithJsonUtils::Serialize(Records) : FString(TEXT("{}"));
+			}),
+			131072);
+	}
+	{
+		FMonolithResourceDescriptor Descriptor;
+		Descriptor.Uri = TEXT("monolith://audit/recent");
+		Descriptor.Name = TEXT("Recent action audit");
+		Descriptor.Description = TEXT("Most recent central action-execution audit rows (redacted, bounded)");
+		Descriptor.MimeType = TEXT("application/json");
+		RegisterTextResource(
+			Descriptor,
+			FTextResourceProvider::CreateLambda([]()
+			{
+				const TSharedPtr<FJsonObject> Audit =
+					FMonolithActionExecutionGuard::Get().GetRecentAuditJson(50);
+				return Audit.IsValid() ? FMonolithJsonUtils::Serialize(Audit) : FString(TEXT("{}"));
+			}),
+			131072);
 	}
 }
 

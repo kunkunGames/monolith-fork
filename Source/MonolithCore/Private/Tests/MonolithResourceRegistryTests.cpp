@@ -169,4 +169,40 @@ bool FMonolithDefaultSpecResourcesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLiveResourcesTest,
+	"Monolith.Core.Resources.LiveProviders",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLiveResourcesTest::RunTest(const FString& Parameters)
+{
+	FMonolithResourceRegistry& Registry = FMonolithResourceRegistry::Get();
+	Registry.ResetForTests();
+	Registry.RegisterDefaultResources();
+
+	TSharedPtr<FJsonObject> List = Registry.ListResourcesJson(100, FString());
+	TestTrue(TEXT("List exists"), List.IsValid());
+	if (List.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Resources = nullptr;
+		TestTrue(TEXT("resources array exists"), List->TryGetArrayField(TEXT("resources"), Resources));
+		TestTrue(TEXT("tool-calls/recent URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://tool-calls/recent")));
+		TestTrue(TEXT("audit/recent URI is listed"), ResourceArrayContainsUri(Resources, TEXT("monolith://audit/recent")));
+	}
+
+	// Live providers evaluate at read time and return bounded JSON objects even
+	// when no records exist yet (no doc file dependency).
+	FMonolithResourceReadResult ToolCalls = Registry.ReadResource(TEXT("monolith://tool-calls/recent"));
+	TestTrue(TEXT("tool-calls read succeeds"), ToolCalls.bFound);
+	TestEqual(TEXT("tool-calls mime is json"), ToolCalls.MimeType, FString(TEXT("application/json")));
+	TestTrue(TEXT("tool-calls content is a JSON object"), ToolCalls.Text.StartsWith(TEXT("{")));
+
+	FMonolithResourceReadResult Audit = Registry.ReadResource(TEXT("monolith://audit/recent"));
+	TestTrue(TEXT("audit read succeeds"), Audit.bFound);
+	TestEqual(TEXT("audit mime is json"), Audit.MimeType, FString(TEXT("application/json")));
+	TestTrue(TEXT("audit content is a JSON object"), Audit.Text.StartsWith(TEXT("{")));
+
+	Registry.ResetForTests();
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
