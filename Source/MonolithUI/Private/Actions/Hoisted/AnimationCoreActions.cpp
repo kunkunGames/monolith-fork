@@ -40,6 +40,16 @@
 
 namespace MonolithUI::AnimationInternal
 {
+    static bool TryGetRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FMonolithActionResult& OutError)
+    {
+        if (!Params->TryGetStringField(FieldName, OutValue) || OutValue.IsEmpty())
+        {
+            OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Missing or empty required param: %s"), FieldName), -32602);
+            return false;
+        }
+        return true;
+    }
+
     /** Resolve a property name to the track property path UMG expects. */
     static FString ResolvePropertyPath(const FString& PropertyName)
     {
@@ -336,21 +346,16 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleCreateAnimationV2
 {
     using namespace MonolithUI::AnimationInternal;
 
+    FMonolithActionResult Err;
     if (!Params.IsValid())
     {
         return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
     }
 
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Err)) return Err;
     FString AnimName;
-    if (!Params->TryGetStringField(TEXT("animation_name"), AnimName) || AnimName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: animation_name"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("animation_name"), AnimName, Err)) return Err;
     double DurationSec = 0.0;
     if (!Params->TryGetNumberField(TEXT("duration_sec"), DurationSec) || DurationSec <= 0.0)
     {
@@ -537,32 +542,20 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleAddBezierEasedSeg
 {
     using namespace MonolithUI::AnimationInternal;
 
+    FMonolithActionResult Err;
     if (!Params.IsValid())
     {
         return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
     }
 
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Err)) return Err;
     FString AnimName;
-    if (!Params->TryGetStringField(TEXT("animation_name"), AnimName) || AnimName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: animation_name"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("animation_name"), AnimName, Err)) return Err;
     FString WidgetName;
-    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: widget_name"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("widget_name"), WidgetName, Err)) return Err;
     FString PropertyName;
-    if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: property"), -32602);
-    }
-
+    if (!TryGetRequiredStringParam(Params, TEXT("property"), PropertyName, Err)) return Err;
     double FromValue = 0.0, ToValue = 0.0;
     if (!Params->TryGetNumberField(TEXT("from_value"), FromValue))
     {
@@ -702,32 +695,20 @@ FMonolithActionResult MonolithUI::FAnimationCoreActions::HandleBakeSpringAnimati
 {
     using namespace MonolithUI::AnimationInternal;
 
+    FMonolithActionResult Err;
     if (!Params.IsValid())
     {
         return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
     }
 
     FString AssetPath;
-    if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, Err)) return Err;
     FString AnimName;
-    if (!Params->TryGetStringField(TEXT("animation_name"), AnimName) || AnimName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: animation_name"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("animation_name"), AnimName, Err)) return Err;
     FString WidgetName;
-    if (!Params->TryGetStringField(TEXT("widget_name"), WidgetName) || WidgetName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: widget_name"), -32602);
-    }
+    if (!TryGetRequiredStringParam(Params, TEXT("widget_name"), WidgetName, Err)) return Err;
     FString PropertyName;
-    if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
-    {
-        return FMonolithActionResult::Error(TEXT("Missing or empty required param: property"), -32602);
-    }
-
+    if (!TryGetRequiredStringParam(Params, TEXT("property"), PropertyName, Err)) return Err;
     double FromValue = 0.0, ToValue = 0.0;
     if (!Params->TryGetNumberField(TEXT("from_value"), FromValue))
     {
