@@ -12842,6 +12842,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
 		Obj->SetNumberField(TEXT("count"), Times.Num());
 		TArray<TSharedPtr<FJsonValue>> Arr;
+			Arr.Reserve(Times.Num());
 		for (float T : Times) Arr.Add(MakeShared<FJsonValueNumber>(T));
 		Obj->SetArrayField(TEXT("times"), Arr);
 		return Obj;
