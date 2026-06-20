@@ -355,6 +355,11 @@
 			"Name": "MonolithReflectionIntel",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithToolsetBridge",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	]
 }

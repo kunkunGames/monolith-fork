@@ -95,6 +95,14 @@ public:
 			  ToolTip="Append bounded/redacted editor action call and return records to Plugins/Monolith/Logs/yyyyMMdd/action.jsonl. Default off."))
 	bool bEnableDailyLog = false;
 
+	/** Enables the optional ToolsetRegistry bridge (UE 5.8 Experimental ToolsetRegistry).
+	 *  Inert unless the build is compiled with MONOLITH_WITH_TOOLSET_REGISTRY_BRIDGE=1 and
+	 *  the ToolsetRegistry plugin is present; never a hard dependency of public builds. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Bridge",
+		meta=(DisplayName="Enable ToolsetRegistry Bridge",
+			  ToolTip="Reserved opt-in for the optional UE 5.8 ToolsetRegistry bridge module. Inert unless the build sets MONOLITH_WITH_TOOLSET_REGISTRY_BRIDGE=1 and the ToolsetRegistry plugin is present. Default off."))
+	bool bEnableToolsetRegistryBridge = false;
+
 	/** Enables read-only GameFeatures inspection actions beyond get_status. */
 	UPROPERTY(config, EditAnywhere, Category="Project|GameFeatures",
 		meta=(DisplayName="Enable GameFeature Inspection Actions",
