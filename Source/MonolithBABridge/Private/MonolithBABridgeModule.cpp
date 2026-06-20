@@ -37,13 +37,7 @@ public:
 	{
 #if WITH_BLUEPRINT_ASSIST
 		UnsubscribeFromModuleChanges();
-		if (Formatter.IsValid())
-		{
-			IModularFeatures::Get().UnregisterModularFeature(
-				IMonolithGraphFormatter::GetModularFeatureName(),
-				Formatter.Get());
-			Formatter.Reset();
-		}
+		UnregisterFormatter();
 #endif
 	}
 
