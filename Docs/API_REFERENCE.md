@@ -36,6 +36,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [source_control](#source_control) | 9 | Unreal SourceControl-provider status and file prepare/delete/revert operations |
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
 | [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
+| [gamefeatures](#gamefeatures) | 5 | Optional GameFeature plugin discovery, inspection, and validation |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1304,6 +1305,20 @@ Optional WorldConditions inspection. Read-only probes; does not mutate condition
 | `describe_condition_types` | `limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithWorldConditions.md` for the deep dive.
+
+---
+
+## gamefeatures
+
+Optional GameFeature plugin discovery, inspection, and validation. **5 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_plugins` | `limit` (optional integer), `include_engine` (optional bool) |
+| `find_game_feature_data` | `plugin_name` (optional string), `asset_path` (optional string) |
+| `describe_game_feature_data` | `plugin_name` (optional string), `asset_path` (optional string) |
+| `validate_plugin` | `plugin_name` (required string) |
 
 ---
 
