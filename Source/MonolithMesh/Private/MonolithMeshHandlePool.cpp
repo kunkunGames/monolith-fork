@@ -335,6 +335,7 @@ TSharedPtr<FJsonObject> UMonolithMeshHandlePool::ListHandles() const
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> HandleArray;
+	HandleArray.Reserve(Handles.Num());
 
 	for (const auto& Pair : Handles)
 	{
