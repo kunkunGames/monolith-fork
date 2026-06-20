@@ -73,6 +73,7 @@ FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetEvents(const TS
     }
 
     TArray<TSharedPtr<FJsonValue>> EventsArray;
+    EventsArray.Reserve(64);
 
     auto ProcessWidget = [&](UWidget* Widget)
     {
@@ -163,6 +164,7 @@ FMonolithActionResult FMonolithUIBindingActions::HandleListWidgetProperties(cons
     }
 
     TArray<TSharedPtr<FJsonValue>> PropsArray;
+    PropsArray.Reserve(64);
     UClass* WidgetClass = Widget->GetClass();
 
     for (TFieldIterator<FProperty> PropIt(WidgetClass); PropIt; ++PropIt)
