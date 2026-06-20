@@ -168,4 +168,33 @@ bool FMonolithAnimMontageCreateFromSectionsParamGuardTest::RunTest(const FString
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBuildSequenceFromPosesParamGuardTest, "Monolith.ParamGuard.Animation.BuildSequenceFromPoses", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_BuildSequence");
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), AssetPath);
+	Params->SetStringField(TEXT("skeleton_path"), TEXT("/Game/Anims/MySkeleton"));
+
+	TArray<TSharedPtr<FJsonValue>> FramesArr;
+	TSharedPtr<FJsonObject> FrameObj = MakeShared<FJsonObject>();
+
+	TArray<TSharedPtr<FJsonValue>> BonesArr;
+	TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
+	BoneObj->SetNumberField(TEXT("name"), 123); // Invalid type, should be string
+	BonesArr.Add(MakeShared<FJsonValueObject>(BoneObj));
+
+	FrameObj->SetArrayField(TEXT("bones"), BonesArr);
+	FramesArr.Add(MakeShared<FJsonValueObject>(FrameObj));
+
+	Params->SetArrayField(TEXT("frames"), FramesArr);
+
+	FMonolithActionResult Result = FMonolithAnimationActions::HandleBuildSequenceFromPoses(Params);
+	TestFalse(TEXT("HandleBuildSequenceFromPoses with malformed bone name should return Error"), Result.bSuccess);
+	TestTrue(TEXT("Error message should complain about the bone name type"), Result.ErrorMessage.Contains(TEXT("name' in bone must be a string")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

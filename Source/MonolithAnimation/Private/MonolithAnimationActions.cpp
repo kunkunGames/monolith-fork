@@ -10250,9 +10250,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildSequenceFromPoses(co
 			for (const auto& BoneVal : *BonesArr)
 			{
 				TSharedPtr<FJsonObject> BoneObj = BoneVal->AsObject();
+					FString TempBoneName;
 				if (BoneObj.IsValid() && BoneObj->HasField(TEXT("name")))
 				{
-					BoneNameSet.Add(FName(*BoneObj->GetStringField(TEXT("name"))));
+						if (!BoneObj->TryGetStringField(TEXT("name"), TempBoneName)) return FMonolithActionResult::Error(TEXT("Parameter 'name' in bone must be a string"));
+						BoneNameSet.Add(FName(*TempBoneName));
 				}
 			}
 		}
@@ -10299,7 +10301,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildSequenceFromPoses(co
 			TSharedPtr<FJsonObject> BoneObj = BoneVal->AsObject();
 			if (!BoneObj.IsValid()) continue;
 
-			FName BoneName(*BoneObj->GetStringField(TEXT("name")));
+				FString TempBoneName;
+				if (!BoneObj->TryGetStringField(TEXT("name"), TempBoneName)) return FMonolithActionResult::Error(TEXT("Parameter 'name' in bone must be a string"));
+				FName BoneName(*TempBoneName);
 			FBoneTrackData* Data = BoneDataMap.Find(BoneName);
 			if (!Data) continue;
 
