@@ -1,4 +1,5 @@
 ﻿#include "MonolithIndexSubsystem.h"
+#include "MonolithAsyncJobRegistry.h"
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
 #include "MonolithSQLiteMaintenance.h"
@@ -284,6 +285,7 @@ void UMonolithIndexSubsystem::Deinitialize()
 		IndexingTaskPtr.Reset();
 	}
 
+	FinishActiveAsyncJob(false);
 	bIsIndexing = false;
 
 	// Restore GC setting if the editor is shutting down mid-index (this abort
@@ -443,13 +445,37 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 
 void UMonolithIndexSubsystem::StartFullIndex()
 {
+	StartFullIndexInternal(FString());
+}
+
+bool UMonolithIndexSubsystem::StartFullIndexWithAsyncJob(const FString& JobId)
+{
+	return StartFullIndexInternal(JobId);
+}
+
+bool UMonolithIndexSubsystem::StartIncrementalIndexWithAsyncJob(const FString& JobId)
+{
+	return StartIncrementalIndexInternal(JobId);
+}
+
+bool UMonolithIndexSubsystem::StartFullIndexInternal(const FString& JobId)
+{
 	if (bIsIndexing)
 	{
 		UE_LOG(LogMonolithIndex, Warning, TEXT("Indexing already in progress"));
-		return;
+		FailSubmittedAsyncJob(JobId, TEXT("Project indexing is already in progress."));
+		return false;
+	}
+
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		UE_LOG(LogMonolithIndex, Warning, TEXT("Cannot start full index because ProjectIndex.db is not open"));
+		FailSubmittedAsyncJob(JobId, TEXT("Project index database is not open."));
+		return false;
 	}
 
 	bIsIndexing = true;
+	BeginActiveAsyncJob(JobId, TEXT("full"), TEXT("Full re-index starting."));
 
 	// Force blocking (non-incremental) reachability GC for the whole run so the
 	// engine cannot leak GC worker-context bits across suspended incremental
@@ -474,15 +500,120 @@ void UMonolithIndexSubsystem::StartFullIndex()
 	// Launch background thread
 	IndexingTaskPtr = MakeUnique<FIndexingTask>(this);
 	IndexingTaskPtr->PluginsToIndex = IndexedPlugins;
+	IndexingTaskPtr->AsyncJobId = JobId;
 	IndexingThread.Reset(FRunnableThread::Create(
 		IndexingTaskPtr.Get(),
 		TEXT("MonolithIndexing"),
 		0,
 		TPri_BelowNormal
 	));
+	if (!IndexingThread)
+	{
+		UE_LOG(LogMonolithIndex, Error, TEXT("Failed to create MonolithIndexing worker thread"));
+		bIsIndexing = false;
+		GIncrementalGCOverride.Reset();
+		IndexingTaskPtr.Reset();
+		if (TaskNotification)
+		{
+			TaskNotification->SetComplete(
+				FText::FromString(TEXT("Monolith")),
+				FText::FromString(TEXT("Project indexing failed to start")),
+				false);
+			TaskNotification.Reset();
+		}
+		FinishActiveAsyncJob(false);
+		return false;
+	}
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Background indexing started"));
+	return true;
 }
+
+void UMonolithIndexSubsystem::BeginActiveAsyncJob(const FString& JobId, const FString& IndexMode, const FString& Message)
+{
+	ActiveAsyncJobId = JobId;
+	ActiveAsyncJobMode = IndexMode;
+	if (!ActiveAsyncJobId.IsEmpty())
+	{
+		FMonolithAsyncJobRegistry::Get().UpdateProgress(ActiveAsyncJobId, 0.0, TEXT("starting"), Message);
+	}
+}
+
+bool UMonolithIndexSubsystem::IsActiveAsyncJobCancellationRequested() const
+{
+	return !ActiveAsyncJobId.IsEmpty() && FMonolithAsyncJobRegistry::Get().IsCancelRequested(ActiveAsyncJobId);
+}
+
+void UMonolithIndexSubsystem::UpdateActiveAsyncJobProgress(double Percent, const FString& Stage, const FString& Message)
+{
+	if (!ActiveAsyncJobId.IsEmpty())
+	{
+		FMonolithAsyncJobRegistry::Get().UpdateProgress(ActiveAsyncJobId, Percent, Stage, Message);
+	}
+}
+
+void UMonolithIndexSubsystem::UpdateActiveAsyncJobProgress(int32 Current, int32 Total, const FString& Stage)
+{
+	const double Percent = Total > 0
+		? FMath::Clamp((static_cast<double>(Current) / static_cast<double>(Total)) * 100.0, 0.0, 99.0)
+		: 0.0;
+	UpdateActiveAsyncJobProgress(
+		Percent,
+		Stage,
+		FString::Printf(TEXT("Indexed %d / %d project index units."), Current, Total));
+}
+
+void UMonolithIndexSubsystem::FinishActiveAsyncJob(bool bSuccess)
+{
+	const FString JobId = ActiveAsyncJobId;
+	const FString IndexMode = ActiveAsyncJobMode;
+	ActiveAsyncJobId.Empty();
+	ActiveAsyncJobMode.Empty();
+
+	if (JobId.IsEmpty())
+	{
+		return;
+	}
+
+	FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+	if (JobRegistry.IsCancelRequested(JobId))
+	{
+		return;
+	}
+
+	if (bSuccess)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("completed"));
+		Result->SetStringField(TEXT("index_mode"), IndexMode.IsEmpty() ? TEXT("unknown") : IndexMode);
+		Result->SetStringField(TEXT("message"), TEXT("Project index completed."));
+		JobRegistry.CompleteJob(JobId, Result);
+	}
+	else
+	{
+		JobRegistry.FailJob(JobId, TEXT("Project index failed or was cancelled before completion."));
+	}
+}
+
+void UMonolithIndexSubsystem::FailSubmittedAsyncJob(const FString& JobId, const FString& Error) const
+{
+	if (!JobId.IsEmpty())
+	{
+		FMonolithAsyncJobRegistry::Get().FailJob(JobId, Error);
+	}
+}
+
+#if WITH_DEV_AUTOMATION_TESTS
+void UMonolithIndexSubsystem::SetActiveAsyncJobForTests(const FString& JobId, const FString& IndexMode)
+{
+	BeginActiveAsyncJob(JobId, IndexMode, TEXT("Test async index job starting."));
+}
+
+void UMonolithIndexSubsystem::CompleteActiveAsyncJobForTests(bool bSuccess)
+{
+	FinishActiveAsyncJob(bSuccess);
+}
+#endif
 
 float UMonolithIndexSubsystem::GetProgress() const
 {
@@ -655,6 +786,16 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		return 1;
 	}
 
+	auto IsAsyncJobCancellationRequested = [this]() -> bool
+	{
+		if (!AsyncJobId.IsEmpty() && FMonolithAsyncJobRegistry::Get().IsCancelRequested(AsyncJobId))
+		{
+			bShouldStop = true;
+			return true;
+		}
+		return false;
+	};
+
 	DB->BeginTransaction();
 
 	int32 BatchSize = 100;
@@ -677,10 +818,14 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 	for (int32 i = 0; i < AllAssets.Num(); ++i)
 	{
-		if (bShouldStop) break;
+		if (bShouldStop || IsAsyncJobCancellationRequested()) break;
 
 		if (Owner->TaskNotification && Owner->TaskNotification->GetPromptAction() == EAsyncTaskNotificationPromptAction::Cancel)
 		{
+			if (!AsyncJobId.IsEmpty())
+			{
+				FMonolithAsyncJobRegistry::Get().RequestCancel(AsyncJobId);
+			}
 			bShouldStop = true;
 			break;
 		}
@@ -796,6 +941,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 			AsyncTask(ENamedThreads::GameThread, [this]()
 			{
+				Owner->UpdateActiveAsyncJobProgress(CurrentIndex.Load(), TotalAssets.Load(), TEXT("indexing_assets"));
 				Owner->OnProgress.Broadcast(CurrentIndex.Load(), TotalAssets.Load());
 			});
 		}
@@ -854,9 +1000,18 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 		for (int32 BatchStart = 0; BatchStart < TotalDeep && !bShouldStop; BatchStart += DeepBatchSize)
 		{
+			if (IsAsyncJobCancellationRequested())
+			{
+				break;
+			}
+
 			// Check for cancellation from notification
 			if (Owner->TaskNotification && Owner->TaskNotification->GetPromptAction() == EAsyncTaskNotificationPromptAction::Cancel)
 			{
+				if (!AsyncJobId.IsEmpty())
+				{
+					FMonolithAsyncJobRegistry::Get().RequestCancel(AsyncJobId);
+				}
 				bShouldStop = true;
 				break;
 			}
@@ -1004,6 +1159,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 			AsyncTask(ENamedThreads::GameThread, [this]()
 			{
+				Owner->UpdateActiveAsyncJobProgress(CurrentIndex.Load(), TotalAssets.Load(), TEXT("deep_indexing"));
 				Owner->OnProgress.Broadcast(CurrentIndex.Load(), TotalAssets.Load());
 			});
 
@@ -1089,8 +1245,17 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 	auto CheckCancellation = [this]() -> bool
 	{
 		if (bShouldStop) return true;
+		if (!AsyncJobId.IsEmpty() && FMonolithAsyncJobRegistry::Get().IsCancelRequested(AsyncJobId))
+		{
+			bShouldStop = true;
+			return true;
+		}
 		if (Owner->TaskNotification && Owner->TaskNotification->GetPromptAction() == EAsyncTaskNotificationPromptAction::Cancel)
 		{
+			if (!AsyncJobId.IsEmpty())
+			{
+				FMonolithAsyncJobRegistry::Get().RequestCancel(AsyncJobId);
+			}
 			bShouldStop = true;
 			return true;
 		}
@@ -1438,6 +1603,7 @@ void UMonolithIndexSubsystem::OnIndexingFinished(bool bSuccess)
 
 	OnComplete.Broadcast(bSuccess);
 	OnProgress.Clear();
+	FinishActiveAsyncJob(bSuccess);
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Indexing %s"),
 		bSuccess ? TEXT("completed successfully") : TEXT("failed or was cancelled"));
@@ -1490,9 +1656,26 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 
 void UMonolithIndexSubsystem::StartIncrementalIndex()
 {
+	StartIncrementalIndexInternal(FString());
+}
+
+bool UMonolithIndexSubsystem::StartIncrementalIndexInternal(const FString& JobId)
+{
 	check(IsInGameThread());
-	if (bIsIndexing) return;
+	if (bIsIndexing)
+	{
+		FailSubmittedAsyncJob(JobId, TEXT("Project indexing is already in progress."));
+		return false;
+	}
+
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		FailSubmittedAsyncJob(JobId, TEXT("Project index database is not open."));
+		return false;
+	}
+
 	bIsIndexing = true;
+	BeginActiveAsyncJob(JobId, TEXT("incremental"), TEXT("Incremental project index starting."));
 	UnregisterLiveCallbacks();
 
 	IndexedPlugins = GatherMarketplacePluginPaths();
@@ -1533,6 +1716,7 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 			}
 		}
 	});
+	UpdateActiveAsyncJobProgress(15.0, TEXT("scanning_assets"), TEXT("Scanned current Asset Registry package state."));
 
 	// PHASE 2: Build DB state
 	TMap<FString, FString> DBPathsAndHashes = Database->GetAllPathsAndHashes();
@@ -1637,6 +1821,32 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 		TEXT("Incremental delta: %d added, %d deleted, %d moved, %d modified, %d unchanged"),
 		TrueAdds.Num(), TrueDeletes.Num(), Moves.Num(), ModifiedPaths.Num(),
 		ExistingPaths.Num() - ModifiedPaths.Num());
+	UpdateActiveAsyncJobProgress(35.0, TEXT("computed_delta"), TEXT("Computed incremental project index delta."));
+
+	auto AbortIncrementalIndexIfCancelled = [this](const TCHAR* Reason, bool bRollbackTransaction) -> bool
+	{
+		if (!IsActiveAsyncJobCancellationRequested())
+		{
+			return false;
+		}
+
+		UE_LOG(LogMonolithIndex, Log, TEXT("Incremental index cancelled: %s"), Reason);
+		if (bRollbackTransaction)
+		{
+			Database->RollbackTransaction();
+		}
+		bIsIndexing = false;
+		RegisterLiveCallbacks();
+		OnComplete.Broadcast(false);
+		OnProgress.Clear();
+		FinishActiveAsyncJob(false);
+		return true;
+	};
+
+	if (AbortIncrementalIndexIfCancelled(TEXT("before applying deltas"), false))
+	{
+		return false;
+	}
 
 	// Early return if no changes
 	if (TrueDeletes.Num() == 0 && TrueAdds.Num() == 0 && Moves.Num() == 0 && ModifiedPaths.Num() == 0)
@@ -1644,7 +1854,10 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 		UE_LOG(LogMonolithIndex, Log, TEXT("No changes detected. Incremental index complete."));
 		bIsIndexing = false;
 		RegisterLiveCallbacks();
-		return;
+		OnComplete.Broadcast(true);
+		OnProgress.Clear();
+		FinishActiveAsyncJob(true);
+		return true;
 	}
 
 	// PHASE 6: Apply deltas
@@ -1653,6 +1866,10 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	// 6a: Deletions
 	for (FName Path : TrueDeletes)
 		Database->DeleteAssetByPath(Path.ToString());
+	if (AbortIncrementalIndexIfCancelled(TEXT("after deletion phase"), true))
+	{
+		return false;
+	}
 
 	// 6b: Moves
 	for (const auto& [OldPath, NewPath] : Moves)
@@ -1660,6 +1877,10 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 		Database->UpdateAssetPath(OldPath.ToString(), NewPath.ToString());
 		if (FIoHash* Hash = CurrentHashes.Find(NewPath))
 			Database->UpdateSavedHash(NewPath.ToString(), LexToString(*Hash));
+	}
+	if (AbortIncrementalIndexIfCancelled(TEXT("after move phase"), true))
+	{
+		return false;
 	}
 
 	// 6c: Build paths needing (re-)indexing
@@ -1735,15 +1956,30 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 			Database->InsertAsset(IndexedAsset);
 		}
 	}
+	if (AbortIncrementalIndexIfCancelled(TEXT("after metadata upsert phase"), true))
+	{
+		return false;
+	}
 
 	// PHASE 7: Deep-index
 	TSet<FString> PathStrings;
 	PathStrings.Reserve(PathsToIndex.Num());
 	for (FName Path : PathsToIndex) PathStrings.Add(Path.ToString());
+	if (AbortIncrementalIndexIfCancelled(TEXT("before deep indexing"), true))
+	{
+		return false;
+	}
 	ProcessDeepIndexQueue(PathStrings);
+	UpdateActiveAsyncJobProgress(75.0, TEXT("deep_indexing"), TEXT("Incremental deep indexing complete."));
+	if (AbortIncrementalIndexIfCancelled(TEXT("after deep indexing"), true))
+	{
+		return false;
+	}
 
 	// PHASE 8: Commit
+	UpdateActiveAsyncJobProgress(90.0, TEXT("committing"), TEXT("Committing incremental project index changes."));
 	Database->CommitTransaction();
+	FinishActiveAsyncJob(true);
 
 	// PHASE 9: Sentinels (stub — implemented in Task 6)
 	// TSet<FString> RemovedPathStrings;
@@ -1763,6 +1999,9 @@ void UMonolithIndexSubsystem::StartIncrementalIndex()
 	bIsIndexing = false;
 	RefreshProjectCrgCacheForChangedAssets(Database.Get(), CrgTouchedPaths, TEXT("Incremental project indexing complete"));
 	RegisterLiveCallbacks();
+	OnComplete.Broadcast(true);
+	OnProgress.Clear();
+	return true;
 }
 
 // ============================================================

@@ -56,6 +56,14 @@ public:
 	UFUNCTION()
 	void StartIncrementalIndex();
 
+	/** Trigger a full re-index and drive an existing async job row to a terminal state. */
+	UFUNCTION()
+	bool StartFullIndexWithAsyncJob(const FString& JobId);
+
+	/** Trigger an incremental catch-up index and drive an existing async job row to a terminal state. */
+	UFUNCTION()
+	bool StartIncrementalIndexWithAsyncJob(const FString& JobId);
+
 	/** Can we do an incremental index? (requires schema v2+ and a prior full index) */
 	UFUNCTION()
 	bool CanDoIncrementalIndex() const;
@@ -87,6 +95,11 @@ public:
 	FOnIndexingProgress OnProgress;
 	FOnIndexingComplete OnComplete;
 
+#if WITH_DEV_AUTOMATION_TESTS
+	void SetActiveAsyncJobForTests(const FString& JobId, const FString& IndexMode);
+	void CompleteActiveAsyncJobForTests(bool bSuccess);
+#endif
+
 private:
 	/** Background indexing task */
 	class FIndexingTask : public FRunnable
@@ -102,6 +115,7 @@ private:
 		TAtomic<int32> CurrentIndex{0};
 		TAtomic<int32> TotalAssets{0};
 		TArray<FIndexedPluginInfo> PluginsToIndex;
+		FString AsyncJobId;
 
 	private:
 		UMonolithIndexSubsystem* Owner;
@@ -110,6 +124,14 @@ private:
 	void OnIndexingFinished(bool bSuccess);
 	void OnAssetRegistryFilesLoaded();
 	void RegisterDefaultIndexers();
+	bool StartFullIndexInternal(const FString& JobId);
+	bool StartIncrementalIndexInternal(const FString& JobId);
+	void BeginActiveAsyncJob(const FString& JobId, const FString& IndexMode, const FString& Message);
+	bool IsActiveAsyncJobCancellationRequested() const;
+	void UpdateActiveAsyncJobProgress(double Percent, const FString& Stage, const FString& Message);
+	void UpdateActiveAsyncJobProgress(int32 Current, int32 Total, const FString& Stage);
+	void FinishActiveAsyncJob(bool bSuccess);
+	void FailSubmittedAsyncJob(const FString& JobId, const FString& Error) const;
 
 	/**
 	 * Resolve the deep indexer for an asset class: exact leaf-class-name match first, then an
@@ -176,6 +198,8 @@ private:
 	TUniquePtr<FRunnableThread> IndexingThread;
 	TUniquePtr<FIndexingTask> IndexingTaskPtr;
 	TAtomic<bool> bIsIndexing{false};
+	FString ActiveAsyncJobId;
+	FString ActiveAsyncJobMode;
 
 	FString IndexingStatusMessage;
 	TUniquePtr<FAsyncTaskNotification> TaskNotification;

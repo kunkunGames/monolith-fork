@@ -149,6 +149,8 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
+**Returns:** `status:"reindex_started"` plus a message when the indexer starts. With `UMonolithSettings::bEnableAsyncJobs=true`, also returns `job_id` and `poll_action:"monolith.get_job"`. Polling that job now reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
+
 ---
 
 ### `monolith.guide`

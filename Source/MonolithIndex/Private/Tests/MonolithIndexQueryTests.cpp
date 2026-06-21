@@ -1,7 +1,9 @@
 #include "Misc/AutomationTest.h"
 #include "Actions/ProjectFindByTypeAction.h"
+#include "MonolithAsyncJobRegistry.h"
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
+#include "MonolithIndexSubsystem.h"
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 #include "SQLiteDatabase.h"
@@ -63,6 +65,160 @@ bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Offset is clamped to 0"), RetOffset, 0);
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexAsyncJobReflectedStartFunctionsTest, "Monolith.IndexGuard.Project.AsyncJobReflectedStartFunctions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobReflectedStartFunctionsTest::RunTest(const FString& Parameters)
+{
+	UClass* IndexSubsystemClass = UMonolithIndexSubsystem::StaticClass();
+	TestNotNull(TEXT("Full async start function is reflected"),
+		IndexSubsystemClass->FindFunctionByName(TEXT("StartFullIndexWithAsyncJob")));
+	TestNotNull(TEXT("Incremental async start function is reflected"),
+		IndexSubsystemClass->FindFunctionByName(TEXT("StartIncrementalIndexWithAsyncJob")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexAsyncJobCompletesTest, "Monolith.IndexGuard.Project.AsyncJobCompletes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobCompletesTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	UMonolithIndexSubsystem* Subsystem = NewObject<UMonolithIndexSubsystem>();
+	TestNotNull(TEXT("Index subsystem test object created"), Subsystem);
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	const FString JobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	Subsystem->SetActiveAsyncJobForTests(JobId, TEXT("full"));
+	Subsystem->CompleteActiveAsyncJobForTests(true);
+
+	TSharedPtr<FJsonObject> Job = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Completed job status"), Job->GetStringField(TEXT("status")), TEXT("completed"));
+	TestEqual(TEXT("Completed job progress"), Job->GetObjectField(TEXT("progress"))->GetNumberField(TEXT("percent")), 100.0);
+	TestTrue(TEXT("Completed job has result"), Job->HasTypedField<EJson::Object>(TEXT("result")));
+	if (Job->HasTypedField<EJson::Object>(TEXT("result")))
+	{
+		TestEqual(TEXT("Result records full mode"), Job->GetObjectField(TEXT("result"))->GetStringField(TEXT("index_mode")), TEXT("full"));
+	}
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexAsyncJobFailsTest, "Monolith.IndexGuard.Project.AsyncJobFails", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobFailsTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	UMonolithIndexSubsystem* Subsystem = NewObject<UMonolithIndexSubsystem>();
+	TestNotNull(TEXT("Index subsystem test object created"), Subsystem);
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	const FString JobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	Subsystem->SetActiveAsyncJobForTests(JobId, TEXT("incremental"));
+	Subsystem->CompleteActiveAsyncJobForTests(false);
+
+	TSharedPtr<FJsonObject> Job = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Failed job status"), Job->GetStringField(TEXT("status")), TEXT("failed"));
+	TestTrue(TEXT("Failed job records error"), Job->HasTypedField<EJson::String>(TEXT("error")));
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexAsyncJobReflectedStartFailsWithoutDatabaseTest, "Monolith.IndexGuard.Project.AsyncJobReflectedStartFailsWithoutDatabase", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobReflectedStartFailsWithoutDatabaseTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	UMonolithIndexSubsystem* Subsystem = NewObject<UMonolithIndexSubsystem>();
+	TestNotNull(TEXT("Index subsystem test object created"), Subsystem);
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	UFunction* FullFunc = UMonolithIndexSubsystem::StaticClass()->FindFunctionByName(TEXT("StartFullIndexWithAsyncJob"));
+	TestNotNull(TEXT("Full async start function exists"), FullFunc);
+	if (!FullFunc)
+	{
+		Registry.ResetForTests();
+		return false;
+	}
+
+	struct FStartIndexWithAsyncJobParams
+	{
+		FString JobId;
+		bool ReturnValue = true;
+	};
+
+	const FString FullJobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	FStartIndexWithAsyncJobParams FullParams;
+	FullParams.JobId = FullJobId;
+	Subsystem->ProcessEvent(FullFunc, &FullParams);
+
+	TestFalse(TEXT("Full reflected start reports failure without an open database"), FullParams.ReturnValue);
+	TSharedPtr<FJsonObject> FullJob = Registry.GetJobJson(FullJobId);
+	TestEqual(TEXT("Full reflected start fails the job row"), FullJob->GetStringField(TEXT("status")), TEXT("failed"));
+
+	UFunction* IncrementalFunc = UMonolithIndexSubsystem::StaticClass()->FindFunctionByName(TEXT("StartIncrementalIndexWithAsyncJob"));
+	TestNotNull(TEXT("Incremental async start function exists"), IncrementalFunc);
+	if (!IncrementalFunc)
+	{
+		Registry.ResetForTests();
+		return false;
+	}
+
+	const FString IncrementalJobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	FStartIndexWithAsyncJobParams IncrementalParams;
+	IncrementalParams.JobId = IncrementalJobId;
+	Subsystem->ProcessEvent(IncrementalFunc, &IncrementalParams);
+
+	TestFalse(TEXT("Incremental reflected start reports failure without an open database"), IncrementalParams.ReturnValue);
+	TSharedPtr<FJsonObject> IncrementalJob = Registry.GetJobJson(IncrementalJobId);
+	TestEqual(TEXT("Incremental reflected start fails the job row"), IncrementalJob->GetStringField(TEXT("status")), TEXT("failed"));
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexAsyncJobDoesNotOverwriteCancelledTest, "Monolith.IndexGuard.Project.AsyncJobDoesNotOverwriteCancelled", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexAsyncJobDoesNotOverwriteCancelledTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	UMonolithIndexSubsystem* Subsystem = NewObject<UMonolithIndexSubsystem>();
+	TestNotNull(TEXT("Index subsystem test object created"), Subsystem);
+	if (!Subsystem)
+	{
+		return false;
+	}
+
+	const FString JobId = Registry.SubmitJob(TEXT("project"), TEXT("reindex"));
+	Subsystem->SetActiveAsyncJobForTests(JobId, TEXT("full"));
+	Registry.RequestCancel(JobId);
+	Subsystem->CompleteActiveAsyncJobForTests(true);
+
+	TSharedPtr<FJsonObject> Job = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Cancelled job stays cancelled after late success"), Job->GetStringField(TEXT("status")), TEXT("cancelled"));
+	TestFalse(TEXT("Cancelled job has no late success result"), Job->HasField(TEXT("result")));
+
+	Registry.ResetForTests();
 	return true;
 }
 

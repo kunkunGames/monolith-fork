@@ -1,6 +1,6 @@
 # ModelContextProtocol to Monolith ROI Survey
 
-Status: Draft
+Status: Verified
 Date: 2026-06-21
 Owner: Monolith
 Scope: UE 5.8 `D:\Engine\UE_5.8\Engine\Plugins\Experimental\ModelContextProtocol` compared against `D:\P4\game\Plugins\Monolith`
@@ -57,9 +57,9 @@ Useful UE evidence:
 
 | Area | UE behavior worth learning from | Current Monolith status | Remainder |
 |------|---------------------------------|-------------------------|-----------|
-| Async jobs | Tools can run asynchronously and be cancelled by request id. | `FMonolithAsyncJobRegistry`, `monolith.get_job`, `monolith.cancel_job`, and `monolith.reindex` job ids exist behind `bEnableAsyncJobs`; `ai.rebuild_zone_graph` job ids additionally require `bEnableZoneGraphRebuildJob`. Tests exist in `MonolithAsyncJobRegistryTests.cpp`, `MonolithAsyncJobActionsTests.cpp`, and `MonolithZoneGraphRebuildJobTests.cpp`. | Complete cooperative cancellation adoption in every long-running producer. Do not re-implement the registry. |
+| Async jobs | Tools can run asynchronously and be cancelled by request id. | `FMonolithAsyncJobRegistry`, `monolith.get_job`, `monolith.cancel_job`, and `monolith.reindex` job ids exist behind `bEnableAsyncJobs`; terminal rows are immutable after `Completed` / `Failed` / `Cancelled`. `monolith.reindex` now calls job-aware `UMonolithIndexSubsystem` entry points, so full/incremental/no-change indexing drives completed/failed/cancelled job state instead of remaining indefinitely `Running`. `ai.rebuild_zone_graph` job ids additionally require `bEnableZoneGraphRebuildJob` and now poll `IsCancelRequested(JobId)` after submit, before broadcast, and after broadcast. Tests exist in `MonolithAsyncJobRegistryTests.cpp`, `MonolithAsyncJobActionsTests.cpp`, `MonolithIndexQueryTests.cpp`, and `MonolithZoneGraphRebuildJobTests.cpp`. | Expand cooperative checkpoints to the next long-running producers. Do not re-implement the registry. |
 | Progress | UE streams `notifications/progress` over an open response. | `FMonolithProgressRegistry` and `monolith://progress/active` resource exist. Progress is poll-delivered because `GET /mcp` is single-shot SSE. | Add a real long-lived push transport before promising live notifications. |
-| Request cancellation | UE maps `notifications/cancelled` to active request cancellation. | `FMonolithCancellationRegistry` and `notifications/cancelled` handling exist; opt-in actions can poll cancellation state. | Bridge cancellation consistently into async jobs and long-running action checkpoints. |
+| Request cancellation | UE maps `notifications/cancelled` to active request cancellation. | `FMonolithCancellationRegistry` and `notifications/cancelled` handling exist; `FScopedMonolithCancellationRegistration` wraps request dispatch, and opt-in actions can poll request cancellation state. Current non-test producer adoption is still sparse; ZoneGraph uses job-level cancellation rather than request-id polling. | Add request-id polling to long synchronous actions, and connect request cancellation to job cancellation only where a request actually minted a durable job. |
 | Session lifecycle | UE enforces session/protocol headers and keeps active request state. | `FMonolithMcpSessionTracker` tracks redacted lifecycle state and gates sessions behind `bEnableMcpSessionMode`; `tools.listChanged` can be advertised with a revision. | Server-push `notifications/tools/list_changed` still waits on a push transport. |
 | Typed media | UE supports image/audio/resource-link/embedded-resource result blocks. | `FMonolithToolContentBlock`, `FMonolithActionResult::MediaBlocks`, gated typed media emission, and first adopter `imagegen.generate_image` exist. Only `image` and `audio` emit. | Add `resource_link` / embedded-resource blocks and more adopters where the bytes already exist. |
 | Resources | UE serves `resources/list` / `resources/read`, text, and blob. | `FMonolithResourceRegistry` supports `resources/list`, `resources/read`, bounded text, bounded blob, and `IMonolithResourceProvider`; `MonolithSource` has the first provider. | Add subscriptions/templates only after push transport and URI-lifetime policy are clear. |
@@ -74,14 +74,15 @@ Useful UE evidence:
 
 | Rank | Work | Why it is high ROI | Required boundary |
 |------|------|--------------------|-------------------|
-| P1 | End-to-end cooperative cancellation for long-running producers | Users notice cancel failures during expensive editor operations; Monolith already has both request cancellation and job cancellation primitives. | Producers must poll safe checkpoints and leave honest terminal job state. |
+| P1 | Expand async job producer contracts beyond reindex | `monolith.reindex` and ZoneGraph now have honest terminal semantics; the next visible gap is broader adoption across remaining long-running producers. | Producers must expose real completion/failure/cancellation signals or keep `Running` honestly; never fake `Completed` for unobserved work. |
+| P1 | Expand cooperative cancellation/progress checkpoints to remaining long-running producers | Users notice cancel failures during expensive editor operations; Monolith already has both request cancellation and job cancellation primitives. | Producers must poll safe checkpoints and leave honest terminal job state. |
 | P1 | Real server-push transport for progress and invalidation | Async jobs, progress registry, resources, and session tracker already exist; push transport unlocks server-originated `notifications/progress`, `notifications/tools/list_changed`, and future resource updates without broad domain work. | Must not fake live notifications through poll-only resources. Start with progress sink contract, per-request stream store, then opt-in SSE transport. |
 | P2 | Complete typed-media blocks beyond inline image/audio | UE proves `resource_link` and `embedded_resource`; Monolith already has media slots, resources, and first image adopter. | Keep emission gated and bounded; do not duplicate large payloads when a resource link is better. |
 | P2 | Resource templates/subscriptions/updated notifications | Resource registry and provider seam are present; standard MCP resource lifecycle remains incomplete. | Requires P1 push transport and explicit URI lifetime/invalidation policy first. |
 | P2 conditional | Finish optional `ToolsetRegistry` bridge | Useful for UE 5.8 source/dev interop; scaffold and flags already exist. | Public builds must stay free of hard `ToolsetRegistry` dependencies. |
 | P3 | Client config writer and hash-map polish | UE has usable examples, but Monolith already has onboarding/discovery/logging. | Do only if real onboarding or external-client evidence appears. |
 
-Implementation order inside P1: complete cancellation producer checkpoints first, then start the push-transport foundation (`progress sink contract -> per-request stream store -> opt-in SSE transport`).
+Implementation order inside P1: the reindex job completion/failure gap is closed; next extend cancellation/progress checkpoints to the next real long-running producers, then start the push-transport foundation (`progress sink contract -> per-request stream store -> opt-in SSE transport`).
 
 ### 4.1 P1 Push Transport
 
@@ -111,16 +112,19 @@ Current proof:
 |----------|---------|
 | `notifications/cancelled` reaches `FMonolithCancellationRegistry`. | Request-level transport exists. |
 | `monolith.cancel_job` calls `FMonolithAsyncJobRegistry::RequestCancel`. | Job-level cancellation exists. |
-| Current docs say neither path interrupts running Unreal work. | Producer checkpoint adoption is the remaining work. |
+| `FMonolithAsyncJobRegistry` records cancel requests on terminal rows without changing terminal status. | Late cancellation is observable but cannot corrupt completed/failed job state. |
+| `ai.rebuild_zone_graph` checks `IsCancelRequested(JobId)` after submit, before broadcast, and after broadcast. | The ZoneGraph async producer has current checkpoint coverage at the safe boundaries available in the synchronous broadcast path. |
+| `monolith.reindex` mints a job and the index subsystem now drives completion/failure/cancellation terminal state. | The first P1 async producer gap is closed; remaining work is broader producer adoption. |
+| Source grep shows no broad non-test use of `FMonolithCancellationRegistry::IsCancellationRequested` beyond dispatch registration. | Request-level cancellation still needs action-specific checkpoint adoption. |
 
 Implementation contract:
 
 | Producer class | Required work |
 |----------------|---------------|
-| `monolith.reindex` / index rebuilds | Check request/job cancellation before launching work and at known safe boundaries. |
-| Source/project graph export | Stop between external process stages or graph phases; leave terminal job state honest. |
-| ZoneGraph / Mass rebuild | Observe `IsCancelRequested(JobId)` before and after editor-side rebuild calls where possible. |
-| Generated media/model jobs | Short-circuit before provider/network calls and before import/save when cancellation was requested. |
+| `monolith.reindex` / index rebuilds | Implemented for `monolith.reindex`: job-aware reflected start functions drive `CompleteJob` / `FailJob`, progress updates, and job-cancellation checkpoints at full-index and incremental safe boundaries. Remaining work is broader request-id cancellation adoption. |
+| Source/project graph export | If promoted into async jobs, stop between external process stages or graph phases; leave terminal job state honest. |
+| ZoneGraph / Mass rebuild | Current cancellable job checkpoints are landed. Remaining work is a functional fixture in a `WITH_ZONEGRAPH=1` world proving the broadcast drives a full rebuild, tracked separately from cancellation. |
+| Generated media/model jobs | Short-circuit before provider/network calls and before import/save when request or job cancellation is available for that action. |
 
 ### 4.3 P2 Typed Media Completion
 
@@ -164,7 +168,7 @@ Implementation contract:
 
 ## 5. Verification Commands
 
-Commands run from `D:\P4\game` or `D:\P4\game\Plugins\Monolith`:
+Commands run from `D:\P4\game\Plugins\Monolith` unless a line explicitly prefixes the checkout root:
 
 ```powershell
 $root='D:\Engine\UE_5.8\Engine\Plugins\Experimental\ModelContextProtocol\Source'
@@ -181,4 +185,29 @@ rg -n "ToolsetBridge|ToolsetRegistry|ToolHash|HashMapping|ToolLibrary" Source Do
 git diff --check
 ```
 
-No runtime visual verification or Discord screenshot upload was required because this was a source/documentation survey, not gameplay, UI, VFX, material, animation, or asset-presentation work.
+Additional refresh checks run during the 2026-06-21 evening audit:
+
+```powershell
+rg -n "IsCancellationRequested|FScopedMonolithCancellationRegistration|FMonolithCancellationRegistry|IsCancelRequested\(" Source
+rg -n "CompleteJob|FailJob|SubmitJob|UpdateProgress|poll_action|job_id" Source\MonolithCore Source\MonolithAI Source\MonolithImageGen Source\MonolithModelGen
+rg -n "RegisterProvider|FMonolithSourceResourceProvider|monolith://source/file|ListResources|ReadResource" Source\MonolithSource\Private Source\MonolithSource\Public
+rg -n "MONOLITH_WITH_TOOLSET_REGISTRY_BRIDGE|bEnableToolsetRegistryBridge|ToolsetRegistry|toolset" Source\MonolithToolsetBridge Source\MonolithCore\Public\MonolithSettings.h Docs\specs\SPEC_MonolithToolsetBridge.md
+```
+
+## 6. 2026-06-21 Verification Results
+
+| Check | Result | Evidence |
+|-------|--------|----------|
+| Whitespace diff check | Passed | `git -C Plugins\Monolith diff --check` exited 0. Git also printed a line-ending warning for unrelated `Source/MonolithIndex/Private/Actions/ProjectExportAssetTextAction.cpp` because Git would normalize CRLF to LF on the next touch; no whitespace error was reported. |
+| UHT reflected signature check | Passed | Generated `MonolithIndexSubsystem.gen.cpp` contains `StartFullIndexWithAsyncJob` and `StartIncrementalIndexWithAsyncJob` params structs with `FString JobId` and `bool ReturnValue`, matching the Core `ProcessEvent` call shape. |
+| GoGameEditor UBT build | Passed | Engine root resolved through `BatchFiles\Script\ResolveUnrealEngine.ps1`; corrected PowerShell command used quoted `"-Project=$uproject"`. Latest UBT log reports `Target is up to date` and `Result: Succeeded`. |
+| Focused automation | Passed | Report `Saved\Automation\MonolithReindexAsyncJob_20260621-234339\index.json`: `succeeded=11`, `succeededWithWarnings=1`, `failed=0`, `notRun=0`, `inProcess=0`, `totalDuration=0.09831561148166656`. |
+| Expected warning review | Passed | The single warning is from `Monolith.IndexGuard.Project.AsyncJobReflectedStartFailsWithoutDatabase`: `LogMonolithIndex: Cannot start full index because ProjectIndex.db is not open`. This is the expected failure-path signal for proving job-aware reflected start returns failure and marks the submitted async job failed when the index database is unavailable. |
+| Runtime visual proof / Discord upload | N/A | This change affects C++ async job lifecycle contracts, automation tests, and documentation only. It does not alter gameplay, UI, VFX, animation, material, or asset presentation, so screenshot verification and `BatchFiles\Script\UploadScreenshotTestsToDiscord.bat` were not required. |
+
+Automation command:
+
+```powershell
+$tests = "Monolith.Core.AsyncJobRegistry+Monolith.Core.AsyncJobActions+Monolith.IndexGuard.Project.AsyncJobReflectedStartFunctions+Monolith.IndexGuard.Project.AsyncJobCompletes+Monolith.IndexGuard.Project.AsyncJobFails+Monolith.IndexGuard.Project.AsyncJobReflectedStartFailsWithoutDatabase+Monolith.IndexGuard.Project.AsyncJobDoesNotOverwriteCancelled"
+& "$engineRoot\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" $uproject -NullRHI -Unattended -NoSplash -NoSound -nop4 -NoSourceControl "-ExecCmds=Automation RunTests $tests; Quit" "-TestExit=Automation Test Queue Empty" "-ReportExportPath=D:\P4\game\Saved\Automation\MonolithReindexAsyncJob_20260621-234339" "-AbsLog=D:\P4\game\Saved\Automation\MonolithReindexAsyncJob_20260621-234339\Run.log" -log
+```

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Module | MonolithCore (actions), MonolithAI (producer) |
+| Module | MonolithCore (actions), MonolithIndex / MonolithAI (producers) |
 | Slice | P1b (PRD Spec 10 — UnrealMCP async-jobs port) |
 | Status | Implemented, dark by default |
 | Owner action gate | `UMonolithSettings::bEnableAsyncJobs`, `UMonolithSettings::bEnableZoneGraphRebuildJob` |
@@ -51,15 +51,29 @@ existing terminal status for a known terminal job, `not_found` otherwise).
 ### 3.1 `monolith.reindex` (gate: `bEnableAsyncJobs`)
 
 The existing `status:"reindex_started"` payload and message are preserved
-byte-for-byte (Contract Preservation §9). When the flag is on, the handler
-additionally calls `SubmitJob("project","reindex")`, seeds 0% progress, and adds
-two fields: `job_id` and `poll_action:"monolith.get_job"`.
+byte-for-byte (Contract Preservation §9) for legacy calls and async calls whose
+index start is accepted. When the flag is on, the handler additionally calls
+`SubmitJob("project","reindex")`, seeds 0% progress, and adds two fields:
+`job_id` and `poll_action:"monolith.get_job"`. If the job-aware index start
+returns `false`, the action response uses `status:"reindex_not_started"` and
+the submitted job row carries the failure details.
 
-The MonolithIndexSubsystem reindex call is fire-and-forget and exposes no
-completion delegate back into MonolithCore, so the job is **intentionally left
-in the `running` state**. The slice does NOT fake a `completed` terminal state
-(no-mask/no-fake rule). A `TODO(P1b-followup)` in `HandleReindex` marks the
-subscription point for when the index subsystem broadcasts completion/failure.
+When the flag is on, `HandleReindex` calls the job-aware reflected entry points
+on `UMonolithIndexSubsystem` (`StartFullIndexWithAsyncJob` /
+`StartIncrementalIndexWithAsyncJob`). The index subsystem owns the actual work,
+so it also drives the submitted row to an honest terminal state:
+
+| Condition | Job state | Result status |
+| --- | --- | --- |
+| Full or incremental indexing starts and finishes successfully | Completed | `completed` |
+| Incremental indexing finds no changes | Completed | `completed` |
+| The index database is unavailable or the worker fails to start | Failed | `failed` |
+| Indexing is already in progress | Failed | `failed` |
+| `monolith.cancel_job` is observed at an index checkpoint | Cancelled | `cancelled` |
+
+The handler does not synthesize terminal states in MonolithCore. If the
+job-aware reflected function is missing, the submitted row is failed and the
+handler returns `status:"function_not_found"` with `job_id` / `poll_action`.
 
 ### 3.2 `ai.rebuild_zone_graph` (gate: `bEnableAsyncJobs` + `bEnableZoneGraphRebuildJob`)
 
@@ -92,6 +106,11 @@ Honest terminal states only:
 | get_job disabled/missing param | `Monolith.Core.AsyncJobActions.GetJobDisabled` | disabled report; missing `job_id` is `ErrInvalidParams` |
 | get_job enabled | `Monolith.Core.AsyncJobActions.GetJobEnabled` | known job surfaced; unknown id is `not_found` not error |
 | cancel_job | `Monolith.Core.AsyncJobActions.CancelJob` | disabled report; enabled sets cancel flag and returns `cancelled` |
+| reindex reflected start functions | `Monolith.IndexGuard.Project.AsyncJobReflectedStartFunctions` | full and incremental job-aware start functions are visible to `ProcessEvent` |
+| reindex completes | `Monolith.IndexGuard.Project.AsyncJobCompletes` | index completion drives the registry row to `completed` with result metadata |
+| reindex fails | `Monolith.IndexGuard.Project.AsyncJobFails` | index failure drives the registry row to `failed` with an error |
+| reindex reflected start failure | `Monolith.IndexGuard.Project.AsyncJobReflectedStartFailsWithoutDatabase` | actual `ProcessEvent` calls return false and fail the row when the database is unavailable |
+| reindex does not overwrite cancelled | `Monolith.IndexGuard.Project.AsyncJobDoesNotOverwriteCancelled` | late completion after cancellation leaves the row `cancelled` |
 | rebuild async disabled | `Monolith.AI.ZoneGraphRebuildJob.AsyncJobsDisabled` | legacy `unavailable`; no `job_id`/`poll_action` |
 | rebuild producer disabled | `Monolith.AI.ZoneGraphRebuildJob.Disabled` | legacy `unavailable`; no `job_id`/`poll_action` |
 | rebuild enabled | `Monolith.AI.ZoneGraphRebuildJob.Enabled` | `job_id`+`poll_action` present; honest terminal state matches registry row |
@@ -100,6 +119,7 @@ Honest terminal states only:
 
 Test sources:
 `Plugins\Monolith\Source\MonolithCore\Private\Tests\MonolithAsyncJobActionsTests.cpp`,
+`Plugins\Monolith\Source\MonolithIndex\Private\Tests\MonolithIndexQueryTests.cpp`,
 `Plugins\Monolith\Source\MonolithAI\Private\Tests\MonolithZoneGraphRebuildJobTests.cpp`.
 
 ---

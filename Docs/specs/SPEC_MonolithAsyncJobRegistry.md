@@ -147,7 +147,7 @@ The registry never interrupts running Unreal work. `RequestCancel` only sets `bC
 
 ## 9. No-Mask / No-Fake Discipline
 
-Per the project no-mask rule, later caller slices must not fabricate terminal states. If an underlying system (for example `MonolithIndex`) exposes no completion delegate, the emitting action keeps the job in `Running` and records a TODO; it must not call `CompleteJob` to fake success. The registry itself never auto-completes, auto-fails, or back-fills missing data.
+Per the project no-mask rule, later caller slices must not fabricate terminal states. If an underlying system exposes no completion signal, the emitting action keeps the job in `Running` and records a TODO; it must not call `CompleteJob` to fake success. The registry itself never auto-completes, auto-fails, or back-fills missing data.
 
 ---
 
@@ -172,6 +172,6 @@ Automation tests live at `Source/MonolithCore/Private/Tests/MonolithAsyncJobRegi
 | Follow-up | Reason to defer | Gate |
 |-----------|-----------------|------|
 | `monolith.get_job` / `cancel_job` registration | Needs registry first; client polling surface. | `bEnableAsyncJobs` |
-| `source.trigger_reindex` job emission | Keep `reindex_started`, add `job_id` + `poll_action="monolith.get_job"`; stays `running` if no completion delegate. | `bEnableAsyncJobs` |
+| `monolith.reindex` job lifecycle | Implemented: keeps `reindex_started`, adds `job_id` + `poll_action="monolith.get_job"`, and MonolithIndex drives completed/failed/cancelled terminal state. | `bEnableAsyncJobs` |
 | `ai.rebuild_zone_graph` as a real job | Real rebuild/Broadcast must sit in a new `#if WITH_ZONEGRAPH` guard with a `GEditor` null-check. | `bEnableAsyncJobs` + `bEnableZoneGraphRebuildJob` |
 | Typed media job results | Image/audio content blocks stay dark by default. | `bEnableTypedMediaResults` |

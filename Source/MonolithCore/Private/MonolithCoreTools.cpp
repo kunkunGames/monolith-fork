@@ -1938,46 +1938,73 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 		}
 	}
 
-	UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
-	if (Func)
-	{
-		IndexSubsystem->ProcessEvent(Func, nullptr);
-		// Contract preservation (§9): the existing "reindex_started" status and
-		// message stay byte-identical for legacy callers; the async fields are
-		// purely additive and only appear when the feature flag is on.
-		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
-		Result->SetStringField(TEXT("message"),
-			FString::Printf(TEXT("%s triggered successfully."),
-				FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+	const FString TriggerLabel = FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index");
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	const bool bUseAsyncJob = Settings && Settings->bEnableAsyncJobs;
 
-		// P1b (PRD Spec 10): when async jobs are enabled, mint a job id and a
-		// poll_action so clients can watch progress via monolith.get_job. The
-		// MonolithIndexSubsystem reindex call above is fire-and-forget — it does
-		// NOT yet expose a completion delegate back into MonolithCore — so the
-		// job is left in the Running state on purpose. We must NEVER fake a
-		// "completed" terminal state for work whose outcome we cannot observe
-		// (no-mask/no-fake rule).
-		// TODO(P1b-followup): once MonolithIndexSubsystem broadcasts index
-		// completion/failure, subscribe here and drive the job to Completed/
-		// Failed via FMonolithAsyncJobRegistry::CompleteJob/FailJob. Until then
-		// the job stays Running and get_job reports honest in-flight progress.
-		const UMonolithSettings* Settings = UMonolithSettings::Get();
-		if (Settings && Settings->bEnableAsyncJobs)
+	if (bUseAsyncJob)
+	{
+		const FString JobFuncName = FuncName == TEXT("StartFullIndex")
+			? TEXT("StartFullIndexWithAsyncJob")
+			: TEXT("StartIncrementalIndexWithAsyncJob");
+		UFunction* JobFunc = IndexSubsystemClass->FindFunctionByName(*JobFuncName);
+		FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+		const FString JobId = JobRegistry.SubmitJob(TEXT("project"), TEXT("reindex"));
+
+		Result->SetStringField(TEXT("job_id"), JobId);
+		Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+
+		if (!JobFunc)
 		{
-			FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
-			const FString JobId = JobRegistry.SubmitJob(TEXT("project"), TEXT("reindex"));
-			JobRegistry.UpdateProgress(JobId, 0.0, TEXT("started"),
-				FString::Printf(TEXT("%s triggered; awaiting index-completion signal."),
-					FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
-			Result->SetStringField(TEXT("job_id"), JobId);
-			Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+			JobRegistry.FailJob(JobId, FString::Printf(TEXT("Function %s not found."), *JobFuncName));
+			Result->SetStringField(TEXT("status"), TEXT("function_not_found"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("Function %s not found."), *JobFuncName));
+			return FMonolithActionResult::Success(Result);
+		}
+
+		struct FStartIndexWithAsyncJobParams
+		{
+			FString JobId;
+			bool ReturnValue = false;
+		};
+
+		FStartIndexWithAsyncJobParams JobParams;
+		JobParams.JobId = JobId;
+		IndexSubsystem->ProcessEvent(JobFunc, &JobParams);
+
+		if (JobParams.ReturnValue)
+		{
+			Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("%s triggered successfully."), *TriggerLabel));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("status"), TEXT("reindex_not_started"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("%s did not start; poll job_id for failure details."), *TriggerLabel));
 		}
 	}
 	else
 	{
-		Result->SetStringField(TEXT("status"), TEXT("function_not_found"));
-		Result->SetStringField(TEXT("message"),
-			FString::Printf(TEXT("Function %s not found."), *FuncName));
+		UFunction* Func = IndexSubsystemClass->FindFunctionByName(*FuncName);
+		if (Func)
+		{
+			IndexSubsystem->ProcessEvent(Func, nullptr);
+			// Contract preservation (§9): the existing "reindex_started" status and
+			// message stay byte-identical for legacy callers; async fields only appear
+			// when the feature flag is on.
+			Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("%s triggered successfully."), *TriggerLabel));
+		}
+		else
+		{
+			Result->SetStringField(TEXT("status"), TEXT("function_not_found"));
+			Result->SetStringField(TEXT("message"),
+				FString::Printf(TEXT("Function %s not found."), *FuncName));
+		}
 	}
 
 	return FMonolithActionResult::Success(Result);
