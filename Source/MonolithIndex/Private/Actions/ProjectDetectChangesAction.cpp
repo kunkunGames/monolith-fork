@@ -68,10 +68,35 @@ FMonolithActionResult FProjectDetectChangesAction::Execute(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(TEXT("Index subsystem/database not available"));
 	}
 
+	int32 MaxResults = 200;
+	if (Params->HasField(TEXT("max_results")))
+	{
+		double ResultsValue = 0.0;
+		FString StringValue;
+		if (Params->TryGetNumberField(TEXT("max_results"), ResultsValue))
+		{
+			MaxResults = FMonolithIndexReview::ClampResults(static_cast<int32>(ResultsValue));
+		}
+		else if (Params->TryGetStringField(TEXT("max_results"), StringValue) && StringValue.IsNumeric())
+		{
+			MaxResults = FMonolithIndexReview::ClampResults(FCString::Atoi(*StringValue));
+		}
+		else
+		{
+			return FMonolithActionResult::Error(TEXT("'max_results' parameter must be a number or numeric string"), -32602);
+		}
+	}
+
+	FString DetailLevel = TEXT("minimal");
+	if (Params->HasField(TEXT("detail_level")) && !Params->TryGetStringField(TEXT("detail_level"), DetailLevel))
+	{
+		return FMonolithActionResult::Error(TEXT("'detail_level' parameter must be a string"), -32602);
+	}
+
 	return FMonolithActionResult::Success(FMonolithIndexReview::DetectChanges(*Db,
 		CollectChangedPaths(Params),
-		FMonolithIndexReview::PInt(Params, TEXT("max_results"), 200),
-		FMonolithIndexReview::PStr(Params, TEXT("detail_level"), TEXT("minimal"))));
+		MaxResults,
+		DetailLevel));
 }
 
 TSharedPtr<FJsonObject> FProjectDetectChangesAction::GetSchema()
