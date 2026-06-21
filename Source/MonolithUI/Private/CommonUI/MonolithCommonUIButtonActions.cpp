@@ -235,6 +235,22 @@ namespace MonolithCommonUIButton
 		return MonolithCommonUI::LoadWidgetForMutation(OutWbpPath, FName(*OutWidgetName), OutWbp, OutTarget);
 	}
 
+	static FMonolithActionResult CompileAndReturnApplied(UWidgetBlueprint* Wbp, const FString& WbpPath, const FString& WidgetName, const TArray<FString>& Applied)
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Wbp);
+		FKismetEditorUtilities::CompileBlueprint(Wbp);
+		Wbp->GetOutermost()->MarkPackageDirty();
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("wbp_path"), WbpPath);
+		Result->SetStringField(TEXT("widget_name"), WidgetName);
+		TArray<TSharedPtr<FJsonValue>> AppliedArr;
+		AppliedArr.Reserve(Applied.Num());
+		for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
+		Result->SetArrayField(TEXT("applied"), AppliedArr);
+		return FMonolithActionResult::Success(Result);
+	}
+
 	// ----- 2.B.2 configure_common_button ---------------------------------------
 
 	static FMonolithActionResult HandleConfigureCommonButton(const TSharedPtr<FJsonObject>& Params)
@@ -298,18 +314,7 @@ namespace MonolithCommonUIButton
 			Applied.Add(TEXT("disabled_reason"));
 		}
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Wbp);
-		FKismetEditorUtilities::CompileBlueprint(Wbp);
-		Wbp->GetOutermost()->MarkPackageDirty();
-
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("wbp_path"), WbpPath);
-		Result->SetStringField(TEXT("widget_name"), WidgetName);
-		TArray<TSharedPtr<FJsonValue>> AppliedArr;
-		AppliedArr.Reserve(Applied.Num());
-		for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
-		Result->SetArrayField(TEXT("applied"), AppliedArr);
-		return FMonolithActionResult::Success(Result);
+		return CompileAndReturnApplied(Wbp, WbpPath, WidgetName, Applied);
 	}
 
 	// ----- 2.B.1 convert_button_to_common --------------------------------------
@@ -731,18 +736,7 @@ namespace MonolithCommonUIButton
 			Applied.Add(TEXT("text_case"));
 		}
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Wbp);
-		FKismetEditorUtilities::CompileBlueprint(Wbp);
-		Wbp->GetOutermost()->MarkPackageDirty();
-
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("wbp_path"), WbpPath);
-		Result->SetStringField(TEXT("widget_name"), WidgetName);
-		TArray<TSharedPtr<FJsonValue>> AppliedArr;
-		AppliedArr.Reserve(Applied.Num());
-		for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
-		Result->SetArrayField(TEXT("applied"), AppliedArr);
-		return FMonolithActionResult::Success(Result);
+		return CompileAndReturnApplied(Wbp, WbpPath, WidgetName, Applied);
 	}
 
 	// ----- 2.B.9 configure_common_border ---------------------------------------
@@ -782,18 +776,7 @@ namespace MonolithCommonUIButton
 			}
 		}
 
-		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Wbp);
-		FKismetEditorUtilities::CompileBlueprint(Wbp);
-		Wbp->GetOutermost()->MarkPackageDirty();
-
-		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-		Result->SetStringField(TEXT("wbp_path"), WbpPath);
-		Result->SetStringField(TEXT("widget_name"), WidgetName);
-		TArray<TSharedPtr<FJsonValue>> AppliedArr;
-		AppliedArr.Reserve(Applied.Num());
-		for (const FString& A : Applied) AppliedArr.Add(MakeShared<FJsonValueString>(A));
-		Result->SetArrayField(TEXT("applied"), AppliedArr);
-		return FMonolithActionResult::Success(Result);
+		return CompileAndReturnApplied(Wbp, WbpPath, WidgetName, Applied);
 	}
 
 	// ----- Phase 2 Item #10 — apply_token_binding ------------------------------
