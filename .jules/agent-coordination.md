@@ -77,5 +77,6 @@ Only orchestration agents may update `AGENTS.md` and repository-wide coordinatio
 
 - **Single owner first:** before selecting work, identify the owner of the target file via sections 1-4. If you are not the owner and the work is not your named concern, stop without PR.
 - **Cross-agent branch check:** scan the full `git branch -r` list for semantic substring matches of your target module/area (3- and 4-segment branch names), plus `gh pr diff <PR> --name-only` for related open PRs. Same intended files anywhere = stop.
+- **Forbid branch name evasion:** never append numeric task IDs, UUIDs, or timestamp suffixes to branch names (e.g., `-17624609949312622604`). If your chosen branch name is taken, stop without PR instead of renaming the branch to bypass collision checks.
 - **Micro-edits on shared files:** shared coordination files (`AGENTS.md`, release scripts, count-bearing docs) are high-collision zones. NO-OP unless the edit is your specific duty and substantive.
 - **No-op is success:** when ownership is elsewhere, the queue already covers it, or no safe candidate exists, stop without creating a branch or PR.
