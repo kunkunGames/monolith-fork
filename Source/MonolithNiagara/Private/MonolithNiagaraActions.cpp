@@ -16688,6 +16688,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindNiagaraReferences(const
 	AR.GetReferencers(FName(*PackageName), Referencers);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(FMath::Min(Referencers.Num(), Limit));
 	for (const FName& Ref : Referencers)
 	{
 		if (Results.Num() >= Limit) break;
