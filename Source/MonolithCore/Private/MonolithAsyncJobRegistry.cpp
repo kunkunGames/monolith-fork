@@ -3,6 +3,16 @@
 #include "Dom/JsonValue.h"
 #include "Misc/Guid.h"
 
+namespace
+{
+	bool IsTerminalStatus(EMonolithAsyncJobStatus Status)
+	{
+		return Status == EMonolithAsyncJobStatus::Completed
+			|| Status == EMonolithAsyncJobStatus::Failed
+			|| Status == EMonolithAsyncJobStatus::Cancelled;
+	}
+}
+
 FMonolithAsyncJobRegistry& FMonolithAsyncJobRegistry::Get()
 {
 	static FMonolithAsyncJobRegistry Instance;
@@ -38,12 +48,13 @@ void FMonolithAsyncJobRegistry::UpdateProgress(const FString& JobId, double Perc
 		return;
 	}
 
-	// Progress only advances a job out of Pending/Running; terminal states are left untouched.
-	if (Row->Status == EMonolithAsyncJobStatus::Pending || Row->Status == EMonolithAsyncJobStatus::Running)
+	// Progress only advances Pending/Running jobs; terminal rows are immutable.
+	if (IsTerminalStatus(Row->Status))
 	{
-		Row->Status = EMonolithAsyncJobStatus::Running;
+		return;
 	}
 
+	Row->Status = EMonolithAsyncJobStatus::Running;
 	Row->ProgressPercent = FMath::Clamp(Percent, 0.0, 100.0);
 	Row->ProgressStage = Stage;
 	Row->ProgressMessage = Message;
@@ -59,6 +70,11 @@ void FMonolithAsyncJobRegistry::CompleteJob(const FString& JobId, const TSharedP
 		return;
 	}
 
+	if (IsTerminalStatus(Row->Status))
+	{
+		return;
+	}
+
 	Row->Status = EMonolithAsyncJobStatus::Completed;
 	Row->ProgressPercent = 100.0;
 	Row->Result = Result;
@@ -70,6 +86,11 @@ void FMonolithAsyncJobRegistry::FailJob(const FString& JobId, const FString& Err
 	FScopeLock Lock(&RegistryLock);
 	FJobRow* Row = RowsById.Find(JobId);
 	if (!Row)
+	{
+		return;
+	}
+
+	if (IsTerminalStatus(Row->Status))
 	{
 		return;
 	}

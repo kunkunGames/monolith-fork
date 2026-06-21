@@ -51,6 +51,11 @@ bool FMonolithAsyncJobRegistryLifecycleTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Result payload preserved"), (*CompletedResult)->GetIntegerField(TEXT("indexed")), 1234);
 	}
 
+	Registry.RequestCancel(JobId);
+	TSharedPtr<FJsonObject> CompletedAfterCancel = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Completed status stays terminal after cancel request"), CompletedAfterCancel->GetStringField(TEXT("status")), TEXT("completed"));
+	TestTrue(TEXT("Cancel flag is still recorded on terminal completed job"), Registry.IsCancelRequested(JobId));
+
 	Registry.ResetForTests();
 	return true;
 }
@@ -76,6 +81,13 @@ bool FMonolithAsyncJobRegistryFailAndErrorTest::RunTest(const FString& Parameter
 	Registry.UpdateProgress(JobId, 99.0, TEXT("late"), TEXT("ignored"));
 	TSharedPtr<FJsonObject> StillFailed = Registry.GetJobJson(JobId);
 	TestEqual(TEXT("Failed status is terminal"), StillFailed->GetStringField(TEXT("status")), TEXT("failed"));
+	const TSharedPtr<FJsonObject>* ProgressObj = nullptr;
+	if (StillFailed->TryGetObjectField(TEXT("progress"), ProgressObj) && ProgressObj)
+	{
+		TestEqual(TEXT("Failed progress percent is not overwritten"), (*ProgressObj)->GetNumberField(TEXT("percent")), 10.0);
+		TestEqual(TEXT("Failed progress stage is not overwritten"), (*ProgressObj)->GetStringField(TEXT("stage")), TEXT("rebuilding"));
+		TestEqual(TEXT("Failed progress message is not overwritten"), (*ProgressObj)->GetStringField(TEXT("message")), TEXT("started"));
+	}
 
 	Registry.ResetForTests();
 	return true;
@@ -99,6 +111,33 @@ bool FMonolithAsyncJobRegistryCancellationTest::RunTest(const FString& Parameter
 
 	TSharedPtr<FJsonObject> Cancelled = Registry.GetJobJson(JobId);
 	TestEqual(TEXT("Status uses double-l cancelled token"), Cancelled->GetStringField(TEXT("status")), TEXT("cancelled"));
+
+	// Cancelled is terminal: late producer updates must not mask the user's
+	// cancellation request with a fake completion or failure.
+	Registry.UpdateProgress(JobId, 90.0, TEXT("late"), TEXT("ignored"));
+	TSharedPtr<FJsonObject> StillCancelledAfterProgress = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Cancelled status ignores late progress"), StillCancelledAfterProgress->GetStringField(TEXT("status")), TEXT("cancelled"));
+	if (StillCancelledAfterProgress->HasTypedField<EJson::Object>(TEXT("progress")))
+	{
+		const TSharedPtr<FJsonObject>* ProgressObj = nullptr;
+		if (StillCancelledAfterProgress->TryGetObjectField(TEXT("progress"), ProgressObj) && ProgressObj)
+		{
+			TestEqual(TEXT("Cancelled progress percent is not overwritten"), (*ProgressObj)->GetNumberField(TEXT("percent")), 25.0);
+			TestEqual(TEXT("Cancelled progress stage is not overwritten"), (*ProgressObj)->GetStringField(TEXT("stage")), TEXT("building"));
+		}
+	}
+
+	TSharedPtr<FJsonObject> LateResult = MakeShared<FJsonObject>();
+	LateResult->SetBoolField(TEXT("should_not_attach"), true);
+	Registry.CompleteJob(JobId, LateResult);
+	TSharedPtr<FJsonObject> StillCancelledAfterComplete = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Cancelled status ignores late complete"), StillCancelledAfterComplete->GetStringField(TEXT("status")), TEXT("cancelled"));
+	TestFalse(TEXT("Late complete result is not attached"), StillCancelledAfterComplete->HasField(TEXT("result")));
+
+	Registry.FailJob(JobId, TEXT("late failure"));
+	TSharedPtr<FJsonObject> StillCancelledAfterFail = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Cancelled status ignores late fail"), StillCancelledAfterFail->GetStringField(TEXT("status")), TEXT("cancelled"));
+	TestFalse(TEXT("Late fail error is not attached"), StillCancelledAfterFail->HasField(TEXT("error")));
 
 	// Unknown id surfaces not_found and reports no cancellation.
 	TSharedPtr<FJsonObject> Unknown = Registry.GetJobJson(TEXT("00000000-0000-0000-0000-000000000000"));

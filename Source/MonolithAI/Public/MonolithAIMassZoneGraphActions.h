@@ -8,6 +8,14 @@ class FMonolithAIMassZoneGraphActions
 public:
 	static void RegisterActions(FMonolithToolRegistry& Registry);
 
+#if WITH_DEV_AUTOMATION_TESTS
+	using FRebuildZoneGraphJobHook = TFunction<void(const FString& JobId)>;
+
+	static void SetRebuildZoneGraphJobSubmittedHookForTests(FRebuildZoneGraphJobHook Hook);
+	static void SetRebuildZoneGraphBeforeBroadcastHookForTests(FRebuildZoneGraphJobHook Hook);
+	static void ClearRebuildZoneGraphTestHooks();
+#endif
+
 private:
 	static FMonolithActionResult ListMassSpawners(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult GetMassSpawner(const TSharedPtr<FJsonObject>& Params);

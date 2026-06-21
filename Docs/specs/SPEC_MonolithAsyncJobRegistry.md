@@ -69,9 +69,9 @@ SubmitJob ─────────────▶ Pending
 Rules:
 
 1. `SubmitJob` seeds a `Pending` row.
-2. `UpdateProgress` flips `Pending`/`Running` to `Running` and records progress. It never resurrects a terminal job (`Completed`/`Failed`/`Cancelled` ignore late progress).
-3. `CompleteJob` sets `Completed`, forces `progress.percent` to `100`, and attaches the optional result object.
-4. `FailJob` sets `Failed` and records the error string.
+2. `UpdateProgress` flips `Pending`/`Running` to `Running` and records progress. It never resurrects or mutates a terminal job (`Completed`/`Failed`/`Cancelled` ignore late progress).
+3. `CompleteJob` sets `Completed`, forces `progress.percent` to `100`, and attaches the optional result object only for a non-terminal row. It never overwrites `Failed` or `Cancelled`.
+4. `FailJob` sets `Failed` and records the error string only for a non-terminal row. It never overwrites `Completed` or `Cancelled`.
 5. `RequestCancel` always sets the cooperative `bCancelRequested` flag; it transitions only `Pending`/`Running` rows to `Cancelled`. Terminal rows keep their terminal status but still record the flag.
 6. All mutators no-op on an unknown job id (no row is created by a mutator other than `SubmitJob`).
 
@@ -97,9 +97,9 @@ Rules:
 |--------|-----------|----------|
 | `Get` | `static FMonolithAsyncJobRegistry& Get()` | Function-local static singleton. |
 | `SubmitJob` | `FString SubmitJob(const FString& Namespace, const FString& Action)` | Mints a job id, seeds `Pending`, returns the id. |
-| `UpdateProgress` | `void UpdateProgress(const FString& JobId, double Percent, const FString& Stage, const FString& Message)` | Flips to `Running`, clamps percent to `0..100`. |
-| `CompleteJob` | `void CompleteJob(const FString& JobId, const TSharedPtr<FJsonObject>& Result)` | Terminal `Completed`, percent `100`, optional result. |
-| `FailJob` | `void FailJob(const FString& JobId, const FString& Error)` | Terminal `Failed` with error string. |
+| `UpdateProgress` | `void UpdateProgress(const FString& JobId, double Percent, const FString& Stage, const FString& Message)` | Flips to `Running`, clamps percent to `0..100`; no-ops on terminal rows. |
+| `CompleteJob` | `void CompleteJob(const FString& JobId, const TSharedPtr<FJsonObject>& Result)` | Terminal `Completed`, percent `100`, optional result; no-ops on terminal rows. |
+| `FailJob` | `void FailJob(const FString& JobId, const FString& Error)` | Terminal `Failed` with error string; no-ops on terminal rows. |
 | `RequestCancel` | `void RequestCancel(const FString& JobId)` | Sets cooperative cancel flag; transitions non-terminal to `Cancelled`. |
 | `IsCancelRequested` | `bool IsCancelRequested(const FString& JobId) const` | Returns the cancel flag (`false` for unknown id). |
 | `GetJobJson` | `TSharedPtr<FJsonObject> GetJobJson(const FString& JobId) const` | Job JSON, or `{"status":"not_found"}` for unknown id. |
@@ -157,7 +157,7 @@ Per the project no-mask rule, later caller slices must not fabricate terminal st
 |------|-------------------|
 | Lifecycle | `submit -> progress -> complete` yields `pending -> running -> completed` with result attached and percent forced to 100. |
 | Fail / error | `FailJob` yields terminal `failed` with the error string; late progress does not resurrect it. |
-| Cancellation | `RequestCancel` sets the flag, yields `cancelled`, and an unknown id reports `not_found` and no cancel. |
+| Cancellation | `RequestCancel` sets the flag, yields `cancelled`, and an unknown id reports `not_found` and no cancel. Late progress, complete, and fail calls do not mutate the cancelled row. |
 | Bounded rows | Submitting 140 jobs leaves exactly 128; the oldest submissions are evicted and the newest is retained. |
 | Test hygiene | Each automation test calls `ResetForTests()` at start and end. |
 | Thread safety | All public mutators/readers take `RegistryLock`. |
@@ -173,5 +173,5 @@ Automation tests live at `Source/MonolithCore/Private/Tests/MonolithAsyncJobRegi
 |-----------|-----------------|------|
 | `monolith.get_job` / `cancel_job` registration | Needs registry first; client polling surface. | `bEnableAsyncJobs` |
 | `source.trigger_reindex` job emission | Keep `reindex_started`, add `job_id` + `poll_action="monolith.get_job"`; stays `running` if no completion delegate. | `bEnableAsyncJobs` |
-| `ai.rebuild_zone_graph` as a real job | Real rebuild/Broadcast must sit in a new `#if WITH_ZONEGRAPH` guard with a `GEditor` null-check. | `bEnableZoneGraphRebuildJob` |
+| `ai.rebuild_zone_graph` as a real job | Real rebuild/Broadcast must sit in a new `#if WITH_ZONEGRAPH` guard with a `GEditor` null-check. | `bEnableAsyncJobs` + `bEnableZoneGraphRebuildJob` |
 | Typed media job results | Image/audio content blocks stay dark by default. | `bEnableTypedMediaResults` |
