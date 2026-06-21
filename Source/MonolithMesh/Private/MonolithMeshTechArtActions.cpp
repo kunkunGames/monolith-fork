@@ -786,6 +786,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 
 	// Write all LODs back to the UStaticMesh
 	TArray<const FMeshDescription*> MeshDescPtrs;
+	MeshDescPtrs.Reserve(LodMeshDescs.Num());
 	for (const FMeshDescription& Desc : LodMeshDescs)
 	{
 		MeshDescPtrs.Add(&Desc);
@@ -809,6 +810,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 
 	// Build result
 	TArray<TSharedPtr<FJsonValue>> LodArray;
+	LodArray.Reserve(LodCount + 1);
 	for (int32 i = 0; i <= LodCount && i < LodTriCounts.Num(); ++i)
 	{
 		auto LodInfo = MakeShared<FJsonObject>();
@@ -1169,6 +1171,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeMaterialCostInRegion(c
 
 	// Build result
 	TArray<TSharedPtr<FJsonValue>> Hotspots;
+	Hotspots.Reserve(SortedEntries.Num());
 	for (const FMaterialCostEntry& Entry : SortedEntries)
 	{
 		auto HotObj = MakeShared<FJsonObject>();
@@ -1178,6 +1181,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeMaterialCostInRegion(c
 		HotObj->SetNumberField(TEXT("actor_usage_count"), Entry.UsedByActors.Num());
 
 		TArray<TSharedPtr<FJsonValue>> ActorArr;
+		ActorArr.Reserve(Entry.UsedByActors.Num());
 		for (const FString& AN : Entry.UsedByActors)
 		{
 			ActorArr.Add(MakeShared<FJsonValueString>(AN));
