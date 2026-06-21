@@ -3912,9 +3912,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleReorderEmitters(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEmitterProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString PropertyName = Params->GetStringField(TEXT("property"));
-	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString PropertyName;
+	if (Params->HasField(TEXT("property")) && !Params->TryGetStringField(TEXT("property"), PropertyName)) return FMonolithActionResult::Error(TEXT("Parameter 'property' must be a string"));
+	if (PropertyName.IsEmpty()) { if (Params->HasField(TEXT("property_name")) && !Params->TryGetStringField(TEXT("property_name"), PropertyName)) return FMonolithActionResult::Error(TEXT("Parameter 'property_name' must be a string")); }
+	if (PropertyName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'property'"));
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid())
 		return FMonolithActionResult::Error(TEXT("Missing required field: value"));
