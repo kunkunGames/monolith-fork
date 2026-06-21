@@ -233,7 +233,9 @@ namespace
 
 	void AddReplayRootStatusRows(TArray<TSharedPtr<FJsonValue>>& OutRows)
 	{
-		for (const FString& Root : GetReplaySearchRoots())
+		TArray<FString> SearchRoots = GetReplaySearchRoots();
+		OutRows.Reserve(OutRows.Num() + SearchRoots.Num());
+		for (const FString& Root : SearchRoots)
 		{
 			OutRows.Add(MakeShared<FJsonValueObject>(MakeReplayRootJson(Root)));
 		}
