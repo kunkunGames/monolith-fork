@@ -3,6 +3,7 @@
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshLightingActions.h"
 #include "MonolithMeshSpatialActions.h"
+#include "MonolithMeshSpatialRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
@@ -98,6 +99,23 @@ bool FMonolithParamGuardSceneLightingSuggestMalformedParamsTest::RunTest(const F
 	FMonolithActionResult SuggestResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("suggest_light_placement"), SuggestParams);
 	TestFalse(TEXT("suggest_light_placement rejects malformed max_lights parameter"), SuggestResult.bSuccess);
 	TestTrue(TEXT("suggest_light_placement reports the validation error"), SuggestResult.ErrorMessage.Contains(TEXT("max_lights")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneSpatialFilterMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.SpatialFilterRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneSpatialFilterMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshSpatialRegistry::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("query_rooms_by_filter action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("query_rooms_by_filter")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("floor_index"), TEXT("not_a_number"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("query_rooms_by_filter"), Params);
+	TestFalse(TEXT("query_rooms_by_filter rejects malformed floor_index parameter"), Result.bSuccess);
+	TestTrue(TEXT("query_rooms_by_filter reports the validation error"), Result.ErrorMessage.Contains(TEXT("floor_index")));
 
 	return true;
 }

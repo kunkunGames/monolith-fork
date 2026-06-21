@@ -1241,12 +1241,26 @@ FMonolithActionResult FMonolithMeshSpatialRegistry::QueryRoomsByFilter(const TSh
 	}
 
 	bool bHasFloorFilter = Params->HasField(TEXT("floor_index"));
-	int32 FilterFloor = bHasFloorFilter ? static_cast<int32>(Params->GetNumberField(TEXT("floor_index"))) : 0;
+	double FloorIndexDouble = 0.0;
+	if (bHasFloorFilter && !Params->TryGetNumberField(TEXT("floor_index"), FloorIndexDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: floor_index must be a number"));
+	}
+	int32 FilterFloor = bHasFloorFilter ? static_cast<int32>(FloorIndexDouble) : 0;
 
 	bool bHasMinArea = Params->HasField(TEXT("min_area"));
+	double MinArea = 0.0;
+	if (bHasMinArea && !Params->TryGetNumberField(TEXT("min_area"), MinArea))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: min_area must be a number"));
+	}
+
 	bool bHasMaxArea = Params->HasField(TEXT("max_area"));
-	double MinArea = bHasMinArea ? Params->GetNumberField(TEXT("min_area")) : 0.0;
-	double MaxArea = bHasMaxArea ? Params->GetNumberField(TEXT("max_area")) : 0.0;
+	double MaxArea = 0.0;
+	if (bHasMaxArea && !Params->TryGetNumberField(TEXT("max_area"), MaxArea))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: max_area must be a number"));
+	}
 
 	const TSharedPtr<FJsonObject>* TagsFilterPtr = nullptr;
 	bool bHasTagsFilter = Params->TryGetObjectField(TEXT("tags"), TagsFilterPtr) && TagsFilterPtr && (*TagsFilterPtr).IsValid();
