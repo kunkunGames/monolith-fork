@@ -17,33 +17,31 @@
 
 namespace
 {
-    FString ResolveBindingName(UMovieScene* MovieScene, const FMovieSceneBinding& Binding)
+    FString ResolveBindingName(UMovieScene* MovieScene, const FGuid& BindingGuid)
     {
         if (!MovieScene)
         {
             return FString();
         }
 
-        const FGuid& BindingGuid = Binding.GetObjectGuid();
-        for (int32 PossessableIndex = 0; PossessableIndex < MovieScene->GetPossessableCount(); ++PossessableIndex)
+        if (const FMovieScenePossessable* Possessable = MovieScene->FindPossessable(BindingGuid))
         {
-            const FMovieScenePossessable& Possessable = MovieScene->GetPossessable(PossessableIndex);
-            if (Possessable.GetGuid() == BindingGuid)
-            {
-                return Possessable.GetName();
-            }
+            return Possessable->GetName();
         }
-
-        for (int32 SpawnableIndex = 0; SpawnableIndex < MovieScene->GetSpawnableCount(); ++SpawnableIndex)
+        if (const FMovieSceneSpawnable* Spawnable = MovieScene->FindSpawnable(BindingGuid))
         {
-            const FMovieSceneSpawnable& Spawnable = MovieScene->GetSpawnable(SpawnableIndex);
-            if (Spawnable.GetGuid() == BindingGuid)
-            {
-                return Spawnable.GetName();
-            }
+            return Spawnable->GetName();
         }
+        return FString();
+    }
 
-        return BindingGuid.ToString(EGuidFormats::DigitsWithHyphensLower);
+    FString ResolveBindingName(UMovieScene* MovieScene, const FMovieSceneBinding& Binding)
+    {
+        const FGuid BindingGuid = Binding.GetObjectGuid();
+        const FString BindingName = ResolveBindingName(MovieScene, BindingGuid);
+        return BindingName.IsEmpty()
+            ? BindingGuid.ToString(EGuidFormats::DigitsWithHyphensLower)
+            : BindingName;
     }
 
     FGuid FindOrCreateWidgetAnimationBinding(UWidgetBlueprint* WBP, UWidgetAnimation* Animation, UMovieScene* MovieScene, UWidget* TargetWidget)
@@ -63,18 +61,19 @@ namespace
             }
         }
 
-        for (int32 PossessableIndex = 0; PossessableIndex < MovieScene->GetPossessableCount(); ++PossessableIndex)
+        const FString WidgetName = WidgetFName.ToString();
+        const UMovieScene* ConstMovieScene = MovieScene;
+        for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
         {
-            const FMovieScenePossessable& Possessable = MovieScene->GetPossessable(PossessableIndex);
-            if (Possessable.GetName() == WidgetFName.ToString())
+            if (ResolveBindingName(MovieScene, Binding.GetObjectGuid()) == WidgetName)
             {
-                FWidgetAnimationBinding Binding;
-                Binding.AnimationGuid = Possessable.GetGuid();
-                Binding.WidgetName = WidgetFName;
-                Binding.SlotWidgetName = NAME_None;
-                Binding.bIsRootWidget = (WBP->WidgetTree && WBP->WidgetTree->RootWidget == TargetWidget);
-                Animation->AnimationBindings.Add(Binding);
-                return Binding.AnimationGuid;
+                FWidgetAnimationBinding AnimationBinding;
+                AnimationBinding.AnimationGuid = Binding.GetObjectGuid();
+                AnimationBinding.WidgetName = WidgetFName;
+                AnimationBinding.SlotWidgetName = NAME_None;
+                AnimationBinding.bIsRootWidget = (WBP->WidgetTree && WBP->WidgetTree->RootWidget == TargetWidget);
+                Animation->AnimationBindings.Add(AnimationBinding);
+                return AnimationBinding.AnimationGuid;
             }
         }
 
@@ -984,23 +983,12 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleRemoveAnimation(const T
 
     // Find and remove the animation
     int32 FoundIndex = INDEX_NONE;
-    FGuid AnimGuid;
     for (int32 i = 0; i < WBP->Animations.Num(); ++i)
     {
         if (WBP->Animations[i] && WBP->Animations[i]->GetName() == AnimationName)
         {
             FoundIndex = i;
 
-            // Find the GUID from animation bindings to clean up
-            UMovieScene* MovieScene = WBP->Animations[i]->GetMovieScene();
-            if (MovieScene)
-            {
-                for (int32 p = 0; p < MovieScene->GetPossessableCount(); ++p)
-                {
-                    AnimGuid = MovieScene->GetPossessable(p).GetGuid();
-                    break; // We just need one to identify bindings
-                }
-            }
             break;
         }
     }

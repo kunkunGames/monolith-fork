@@ -78,7 +78,7 @@ namespace
 	UObject* FindSubObjectByFilter(UObject* Asset, const FString& Filter, TArray<FString>& OutCandidates)
 	{
 		TArray<UObject*> Inners;
-		GetObjectsWithOuter(Asset, Inners, /*bIncludeNestedObjects=*/true);
+		GetObjectsWithOuter(Asset, Inners, EGetObjectsFlags::IncludeNestedObjects);
 
 		const FString FilterLower = Filter.ToLower();
 		UObject* Match = nullptr;
