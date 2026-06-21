@@ -3,22 +3,22 @@ using System.IO;
 
 public class MonolithBABridge : ModuleRules
 {
-	private static bool HasPluginDir(string BaseDir, string PluginName)
+	private bool FindBlueprintAssistPlugin(string SearchDir)
 	{
-		if (!Directory.Exists(BaseDir))
+		if (!Directory.Exists(SearchDir))
 		{
 			return false;
 		}
 
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		if (File.Exists(Path.Combine(SearchDir, "BlueprintAssist", "BlueprintAssist.uplugin")))
 		{
 			return true;
 		}
 
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
+		string[] Dirs = Directory.Exists(SearchDir) ? Directory.GetDirectories(SearchDir, "BlueprintAssist_*", SearchOption.TopDirectoryOnly) : new string[0];
 		foreach (string Dir in Dirs)
 		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			if (File.Exists(Path.Combine(Dir, "BlueprintAssist.uplugin")))
 			{
 				return true;
 			}
@@ -47,7 +47,7 @@ public class MonolithBABridge : ModuleRules
 			{
 				string ProjectPluginsDir = Path.Combine(
 					Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasBlueprintAssist = HasPluginDir(ProjectPluginsDir, "BlueprintAssist");
+				bHasBlueprintAssist = FindBlueprintAssistPlugin(ProjectPluginsDir);
 			}
 
 			// 2. Check Engine Plugins/Marketplace/ folder (Fab/launcher install)
@@ -55,13 +55,13 @@ public class MonolithBABridge : ModuleRules
 			{
 				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				bHasBlueprintAssist = HasPluginDir(MarketplaceDir, "BlueprintAssist");
+				bHasBlueprintAssist = FindBlueprintAssistPlugin(MarketplaceDir);
 
 				// 3. Check Engine Plugins/ root (some installs go here)
 				if (!bHasBlueprintAssist)
 				{
 					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasBlueprintAssist = HasPluginDir(EnginePluginsDir, "BlueprintAssist");
+					bHasBlueprintAssist = FindBlueprintAssistPlugin(EnginePluginsDir);
 				}
 			}
 		}
