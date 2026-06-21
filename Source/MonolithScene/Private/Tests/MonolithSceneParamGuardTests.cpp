@@ -119,3 +119,23 @@ bool FMonolithParamGuardSceneSpatialFilterMalformedParamsTest::RunTest(const FSt
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardSceneAnalyzeLightTransitionsMalformedParamsTest, "Monolith.ParamGuard.MonolithScene.AnalyzeLightTransitionsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardSceneAnalyzeLightTransitionsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshLightingActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("analyze_light_transitions action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("analyze_light_transitions")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	// Provide an array but with less than 2 items
+	TArray<TSharedPtr<FJsonValue>> BadPoints;
+	BadPoints.Add(MakeShared<FJsonValueString>(TEXT("not_a_point")));
+	Params->SetArrayField(TEXT("path_points"), BadPoints);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("analyze_light_transitions"), Params);
+	TestFalse(TEXT("analyze_light_transitions rejects insufficient path_points parameter"), Result.bSuccess);
+	TestTrue(TEXT("analyze_light_transitions reports the validation error"), Result.ErrorMessage.Contains(TEXT("path_points")));
+
+	return true;
+}
