@@ -1160,7 +1160,13 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const
 	Params->TryGetStringField(TEXT("volume_name"), VolumeName);
 
 	double Radius = 0.0;
-	Params->TryGetNumberField(TEXT("radius"), Radius);
+	if (Params->TryGetNumberField(TEXT("radius"), Radius))
+	{
+		if (Radius > 50000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), Radius));
+		}
+	}
 
 	FVector Center(0, 0, 0);
 	MonolithMeshUtils::ParseVector(Params, TEXT("center"), Center);
