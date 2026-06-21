@@ -433,8 +433,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeSetBBValue(const T
 	UBlackboardComponent* BB = ResolveBBComponent(Params, Err);
 	if (!BB) return Err;
 
-	FString KeyName = Params->GetStringField(TEXT("key_name"));
-	if (KeyName.IsEmpty())
+	FString KeyName;
+	if (!Params->TryGetStringField(TEXT("key_name"), KeyName) || KeyName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'key_name'"));
 	}
@@ -471,15 +471,19 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeSetBBValue(const T
 	FString ValueStr;
 	if (Params->HasTypedField<EJson::String>(TEXT("value")))
 	{
-		ValueStr = Params->GetStringField(TEXT("value"));
+		Params->TryGetStringField(TEXT("value"), ValueStr);
 	}
 	else if (Params->HasTypedField<EJson::Number>(TEXT("value")))
 	{
-		ValueStr = FString::SanitizeFloat(Params->GetNumberField(TEXT("value")));
+		double DoubleVal = 0.0;
+		Params->TryGetNumberField(TEXT("value"), DoubleVal);
+		ValueStr = FString::SanitizeFloat(DoubleVal);
 	}
 	else if (Params->HasTypedField<EJson::Boolean>(TEXT("value")))
 	{
-		ValueStr = Params->GetBoolField(TEXT("value")) ? TEXT("true") : TEXT("false");
+		bool bBoolVal = false;
+		Params->TryGetBoolField(TEXT("value"), bBoolVal);
+		ValueStr = bBoolVal ? TEXT("true") : TEXT("false");
 	}
 	else
 	{
@@ -593,8 +597,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeClearBBValue(const
 	UBlackboardComponent* BB = ResolveBBComponent(Params, Err);
 	if (!BB) return Err;
 
-	FString KeyName = Params->GetStringField(TEXT("key_name"));
-	if (KeyName.IsEmpty())
+	FString KeyName;
+	if (!Params->TryGetStringField(TEXT("key_name"), KeyName) || KeyName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'key_name'"));
 	}
@@ -668,8 +672,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeStartBT(const TSha
 	if (!AIC) return Err;
 
 	UBehaviorTree* BT = nullptr;
-	FString BTPath = Params->GetStringField(TEXT("bt_path"));
-	if (!BTPath.IsEmpty())
+	FString BTPath;
+	if (Params->TryGetStringField(TEXT("bt_path"), BTPath) && !BTPath.IsEmpty())
 	{
 		BT = Cast<UBehaviorTree>(MonolithAI::ResolveAsset(UBehaviorTree::StaticClass(), BTPath));
 		if (!BT)
@@ -678,7 +682,11 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeStartBT(const TSha
 		}
 	}
 
-	FString RunMode = Params->GetStringField(TEXT("run_mode")).ToLower();
+	FString RunMode;
+	if (Params->TryGetStringField(TEXT("run_mode"), RunMode))
+	{
+		RunMode = RunMode.ToLower();
+	}
 	EBTExecutionMode::Type Mode = EBTExecutionMode::Looped;
 	if (RunMode == TEXT("single_run"))
 	{
@@ -870,7 +878,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeGetPerceivedActors
 		return FMonolithActionResult::Error(TEXT("AI controller has no Perception component"));
 	}
 
-	FString SenseFilter = Params->GetStringField(TEXT("sense_filter"));
+	FString SenseFilter;
+	Params->TryGetStringField(TEXT("sense_filter"), SenseFilter);
 	TSubclassOf<UAISense> SenseClass = nullptr;
 	if (!SenseFilter.IsEmpty())
 	{
@@ -942,8 +951,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeCheckPerception(co
 	FMonolithActionResult Err;
 
 	// Resolve observer
-	FString ObserverId = Params->GetStringField(TEXT("observer_actor"));
-	if (ObserverId.IsEmpty())
+	FString ObserverId;
+	if (!Params->TryGetStringField(TEXT("observer_actor"), ObserverId) || ObserverId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'observer_actor'"));
 	}
@@ -966,8 +975,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeCheckPerception(co
 	}
 
 	// Resolve target
-	FString TargetId = Params->GetStringField(TEXT("target_actor"));
-	if (TargetId.IsEmpty())
+	FString TargetId;
+	if (!Params->TryGetStringField(TEXT("target_actor"), TargetId) || TargetId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'target_actor'"));
 	}
@@ -1034,14 +1043,21 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeReportNoise(const 
 	const TSharedPtr<FJsonObject>* LocObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("location"), LocObj) && LocObj && (*LocObj).IsValid())
 	{
-		Location.X = (*LocObj)->GetNumberField(TEXT("x"));
-		Location.Y = (*LocObj)->GetNumberField(TEXT("y"));
-		Location.Z = (*LocObj)->GetNumberField(TEXT("z"));
+		double LocX = 0.0, LocY = 0.0, LocZ = 0.0;
+		if (!(*LocObj)->TryGetNumberField(TEXT("x"), LocX) ||
+			!(*LocObj)->TryGetNumberField(TEXT("y"), LocY) ||
+			!(*LocObj)->TryGetNumberField(TEXT("z"), LocZ))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed param 'location': {x,y,z} must be numbers"));
+		}
+		Location.X = LocX;
+		Location.Y = LocY;
+		Location.Z = LocZ;
 	}
 	else
 	{
-		FString LocationStr = Params->GetStringField(TEXT("location"));
-		if (LocationStr.IsEmpty())
+		FString LocationStr;
+		if (!Params->TryGetStringField(TEXT("location"), LocationStr) || LocationStr.IsEmpty())
 		{
 			return FMonolithActionResult::Error(TEXT("Missing required param 'location' — use {\"x\":N,\"y\":N,\"z\":N} or \"X,Y,Z\""));
 		}
@@ -1059,12 +1075,17 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeReportNoise(const 
 	float Loudness = 1.0f;
 	if (Params->HasField(TEXT("loudness")))
 	{
-		Loudness = static_cast<float>(Params->GetNumberField(TEXT("loudness")));
+		double TmpLoudness = 0.0;
+		if (!Params->TryGetNumberField(TEXT("loudness"), TmpLoudness))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed param 'loudness': must be a number"));
+		}
+		Loudness = static_cast<float>(TmpLoudness);
 	}
 
 	AActor* Instigator = nullptr;
-	FString InstigatorStr = Params->GetStringField(TEXT("instigator"));
-	if (!InstigatorStr.IsEmpty())
+	FString InstigatorStr;
+	if (Params->TryGetStringField(TEXT("instigator"), InstigatorStr) && !InstigatorStr.IsEmpty())
 	{
 		Instigator = MonolithAI::FindActorInPIE(InstigatorStr);
 		if (!Instigator)
@@ -1074,8 +1095,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeReportNoise(const 
 	}
 
 	FName NoiseTag = NAME_None;
-	FString TagStr = Params->GetStringField(TEXT("tag"));
-	if (!TagStr.IsEmpty())
+	FString TagStr;
+	if (Params->TryGetStringField(TEXT("tag"), TagStr) && !TagStr.IsEmpty())
 	{
 		NoiseTag = FName(*TagStr);
 	}
@@ -1187,8 +1208,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeSendSTEvent(const 
 	AActor* Actor = ResolveActorParam(Params, TEXT("actor"), Err);
 	if (!Actor) return Err;
 
-	FString EventTagStr = Params->GetStringField(TEXT("event_tag"));
-	if (EventTagStr.IsEmpty())
+	FString EventTagStr;
+	if (!Params->TryGetStringField(TEXT("event_tag"), EventTagStr) || EventTagStr.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'event_tag'"));
 	}
@@ -1258,13 +1279,16 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeFindSmartObjects(c
 	double Radius = 2000.0;
 	if (Params->HasField(TEXT("radius")))
 	{
-		Radius = Params->GetNumberField(TEXT("radius"));
+		if (!Params->TryGetNumberField(TEXT("radius"), Radius))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed param 'radius': must be a number"));
+		}
 	}
 
 	// Parse activity tags
 	FGameplayTagContainer ActivityTags;
-	FString ActivityTagsStr = Params->GetStringField(TEXT("activity_tags"));
-	if (!ActivityTagsStr.IsEmpty())
+	FString ActivityTagsStr;
+	if (Params->TryGetStringField(TEXT("activity_tags"), ActivityTagsStr) && !ActivityTagsStr.IsEmpty())
 	{
 		TArray<FString> TagParts;
 		ActivityTagsStr.ParseIntoArray(TagParts, TEXT(","));
@@ -1353,8 +1377,8 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeRunEQSQuery(const 
 	AActor* QuerierActor = ResolveActorParam(Params, TEXT("querier_actor"), Err);
 	if (!QuerierActor) return Err;
 
-	FString QueryPath = Params->GetStringField(TEXT("query_path"));
-	if (QueryPath.IsEmpty())
+	FString QueryPath;
+	if (!Params->TryGetStringField(TEXT("query_path"), QueryPath) || QueryPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'query_path'"));
 	}
@@ -1368,7 +1392,12 @@ FMonolithActionResult FMonolithAIRuntimeActions::HandleRuntimeRunEQSQuery(const 
 	int32 MaxResults = 10;
 	if (Params->HasField(TEXT("max_results")))
 	{
-		MaxResults = FMath::Max(1, FMath::RoundToInt32(Params->GetNumberField(TEXT("max_results"))));
+		double TmpMaxResults = 0.0;
+		if (!Params->TryGetNumberField(TEXT("max_results"), TmpMaxResults))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed param 'max_results': must be a number"));
+		}
+		MaxResults = FMath::Max(1, FMath::RoundToInt32(TmpMaxResults));
 	}
 
 	// Run instant query
