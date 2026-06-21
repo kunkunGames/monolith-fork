@@ -5,6 +5,7 @@
 #include "MonolithCrashBreadcrumb.h"
 #include "MonolithToolInvocationLogger.h"
 #include "MonolithToolProfileManager.h"
+#include "MonolithScriptExceptionScope.h"
 #include "HAL/PlatformMisc.h"
 #include "Dom/JsonValue.h"
 
@@ -1653,7 +1654,25 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	const double HandlerStartSeconds = FMonolithToolInvocationLogger::NowSeconds();
 	FScopedEnvironmentVar TraceEnv(TEXT("MONOLITH_TRACE_ID"), ActionTraceId);
 	FScopedEnvironmentVar ParentSpanEnv(TEXT("MONOLITH_PARENT_SPAN_ID"), ActionSpanId);
+
+	// Capture Blueprint/Kismet script exceptions raised during the handler. A handler that
+	// drives Blueprint/Kismet work can call RaiseScriptError (or hit access-none / array
+	// bounds) yet still return Success — the script error would otherwise be silently lost.
+	// Mirrors UE5.8 ToolsetRegistry FToolCallExceptionHandler. Pure-C++ handlers are
+	// unaffected (RaiseScriptError no-ops without an active script frame).
+	FMonolithScriptExceptionScope ScriptExceptionScope;
 	FMonolithActionResult ActionResult = HandlerCopy.Execute(EffectiveParams);
+	if (ActionResult.bSuccess && ScriptExceptionScope.HasError())
+	{
+		const FString ScriptError = ScriptExceptionScope.GetErrorString();
+		ActionResult = FMonolithActionResult::Error(
+			FString::Printf(TEXT("Action '%s:%s' returned success but raised a Blueprint script error: %s"),
+				*Namespace, *Action, *ScriptError),
+			FMonolithJsonUtils::ErrInternalError);
+		ActionResult.ErrorData = MakeShared<FJsonObject>();
+		ActionResult.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("blueprint_script_exception"));
+		ActionResult.ErrorData->SetStringField(TEXT("script_exception"), ScriptError);
+	}
 	SetPhaseMs(TEXT("handler_ms"), HandlerStartSeconds);
 	if (!ActionResult.bSuccess)
 	{
