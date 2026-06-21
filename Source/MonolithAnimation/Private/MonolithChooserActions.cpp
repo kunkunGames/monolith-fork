@@ -251,7 +251,9 @@ namespace
 			const FChooserPropertyBinding* Binding = static_cast<const FChooserPropertyBinding*>(BindingPtr);
 
 			TArray<TSharedPtr<FJsonValue>> ChainArr;
+			ChainArr.Reserve(Binding->PropertyBindingChain.Num());
 			TArray<FString> ChainStrs;
+			ChainStrs.Reserve(Binding->PropertyBindingChain.Num());
 			for (const FName& Link : Binding->PropertyBindingChain)
 			{
 				ChainArr.Add(MakeShared<FJsonValueString>(Link.ToString()));
@@ -405,6 +407,7 @@ FMonolithActionResult FMonolithChooserActions::HandleInspectChooser(const TShare
 
 	{
 		TArray<TSharedPtr<FJsonValue>> ColTypes;
+			ColTypes.Reserve(Table->ColumnsStructs.Num());
 		for (const FInstancedStruct& Col : Table->ColumnsStructs)
 		{
 			const UScriptStruct* SS = Col.GetScriptStruct();
@@ -421,6 +424,7 @@ FMonolithActionResult FMonolithChooserActions::HandleInspectChooser(const TShare
 		Params->TryGetBoolField(TEXT("include_cells"), bIncludeCells);
 
 		TArray<TSharedPtr<FJsonValue>> ColumnsArr;
+		ColumnsArr.Reserve(Table->ColumnsStructs.Num());
 		for (int32 c = 0; c < Table->ColumnsStructs.Num(); ++c)
 		{
 			const FInstancedStruct& Col = Table->ColumnsStructs[c];
@@ -451,6 +455,7 @@ FMonolithActionResult FMonolithChooserActions::HandleInspectChooser(const TShare
 
 	{
 		TArray<TSharedPtr<FJsonValue>> RefAssets;
+			RefAssets.Reserve(Table->ResultsStructs.Num());
 		for (int32 r = 0; r < Table->ResultsStructs.Num(); ++r)
 		{
 			bool bIsNull = false;
@@ -575,8 +580,10 @@ FMonolithActionResult FMonolithChooserActions::HandleDuplicateChooserTree(const 
 		UChooserTable* DupTable = nullptr;
 	};
 	TArray<FDupRecord> DupRecords;
+	DupRecords.Reserve(SourcesPtr->Num());
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(SourcesPtr->Num());
 	int32 Duplicated = 0;
 
 	// -----------------------------------------------------------------------
