@@ -3519,7 +3519,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 	}
 
 	// Resolve the asset. The path may be an AnimSequence, a BlendSpace, or an AnimBlueprint.
-	UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load asset: %s"), *AssetPath));
