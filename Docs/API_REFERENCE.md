@@ -1126,6 +1126,18 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catal
 
 ---
 
+## paper2d
+
+Optional Paper2D asset discovery. Read-only probes; does not load Paper2D modules or mutate assets.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_assets` | `package_path` (optional string), `limit` (optional integer) |
+| `get_asset` | `asset_path` (required string), `include_tags` (optional boolean), `tag_limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithPaper2D.md` for the deep dive.
+
 ## sprite
 
 Optional sprite asset production orchestration and validation actions.
