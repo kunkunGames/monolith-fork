@@ -30,6 +30,7 @@
 #include "Serialization/JsonWriter.h"
 
 #include "MonolithEditorActions.h"
+#include "MonolithJsonUtils.h"
 
 namespace MonolithFixHintsTests
 {
@@ -53,7 +54,7 @@ namespace MonolithFixHintsTests
 	static FString SerializeWithoutFixHint(const TSharedPtr<FJsonObject>& Obj)
 	{
 		TSharedPtr<FJsonObject> Copy = MakeShared<FJsonObject>();
-		for (const auto& Pair : Obj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Obj))
 		{
 			if (Pair.Key == TEXT("fix_hint")) { continue; }
 			Copy->SetField(Pair.Key, Pair.Value);

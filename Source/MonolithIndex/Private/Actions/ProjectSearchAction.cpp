@@ -57,9 +57,30 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		return FMonolithActionResult::Error(TEXT("Project index database not available"));
 	}
 
-	const FProjectSearchOptions Options = bIncludeContent
+	FProjectSearchOptions Options = bIncludeContent
 		? FProjectSearchOptions::ContentInclusive()
 		: FProjectSearchOptions::AssetNodeOnly();
+	// Q6 (PRD AssetSearchSemanticSearch): optional pushed-down scope filters.
+	Params->TryGetStringField(TEXT("asset_class"), Options.AssetClassFilter);
+	Params->TryGetStringField(TEXT("path_filter"), Options.PathFilter);
+	// PRD AssetSearchSemanticSearch residual: opt-in per-result RRF score breakdown.
+	if (Params->HasField(TEXT("explain")))
+	{
+		if (!Params->TryGetBoolField(TEXT("explain"), Options.bExplain))
+		{
+			return FMonolithActionResult::Error(TEXT("'explain' parameter must be a bool"), -32602);
+		}
+	}
+	// PRD AssetSearchSemanticSearch residual: opt-in min-should-match precision gate.
+	if (Params->HasField(TEXT("min_should_match_pct")))
+	{
+		double MsmValue = 0.0;
+		if (!Params->TryGetNumberField(TEXT("min_should_match_pct"), MsmValue))
+		{
+			return FMonolithActionResult::Error(TEXT("'min_should_match_pct' parameter must be a number"), -32602);
+		}
+		Options.MinShouldMatchPct = FMath::Clamp(static_cast<int32>(MsmValue), 0, 100);
+	}
 	TArray<FSearchResult> SearchResults = Subsystem->Search(Query, Limit, Options);
 
 	auto Result = MakeShared<FJsonObject>();
@@ -79,6 +100,21 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		Entry->SetStringField(TEXT("match_object_path"), SR.MatchObjectPath);
 		Entry->SetStringField(TEXT("match_value"), SR.MatchValue);
 		Entry->SetNumberField(TEXT("rank"), SR.Rank);
+		// score-explain (opt-in): why this result ranked where it did (RRF provenance).
+		if (Options.bExplain)
+		{
+			auto Breakdown = MakeShared<FJsonObject>();
+			Breakdown->SetNumberField(TEXT("contributing_hits"), SR.ContributingHits);
+			Breakdown->SetNumberField(TEXT("source_kind_count"), SR.ScoreBySource.Num());
+			Breakdown->SetNumberField(TEXT("best_rank"), SR.BestRank);
+			auto PerSource = MakeShared<FJsonObject>();
+			for (const TPair<FString, float>& Pair : SR.ScoreBySource)
+			{
+				PerSource->SetNumberField(Pair.Key, Pair.Value);
+			}
+			Breakdown->SetObjectField(TEXT("rrf_contributions"), PerSource);
+			Entry->SetObjectField(TEXT("score_breakdown"), Breakdown);
+		}
 		ResultsArr.Add(MakeShared<FJsonValueObject>(Entry));
 	}
 
@@ -97,5 +133,9 @@ TSharedPtr<FJsonObject> FProjectSearchAction::GetSchema()
 		.Required(TEXT("query"), TEXT("string"), TEXT("FTS search query (automatically escaped and tokenized for prefix matching). Search results are not writable schema."))
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to return"), TEXT("50"))
 		.Optional(TEXT("include_content"), TEXT("bool"), TEXT("Include variable/parameter/DataTable/actor/supplemental matches for discovery only"), TEXT("true"))
+		.Optional(TEXT("asset_class"), TEXT("string"), TEXT("Scope results to this exact asset class (e.g. 'Blueprint', 'WidgetBlueprint'). Empty = any"), TEXT(""))
+		.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Scope results to package paths containing this substring (e.g. '/Game/Combat'). Empty = any"), TEXT(""))
+		.Optional(TEXT("explain"), TEXT("bool"), TEXT("Attach a per-result score_breakdown (contributing_hits, source_kind_count, best_rank, per-source rrf_contributions) explaining the RRF rank"), TEXT("false"))
+		.Optional(TEXT("min_should_match_pct"), TEXT("integer"), TEXT("Precision gate: require at least ceil(token_count*pct/100) of the query tokens to match (exact, via FTS5 K-of-N subset expansion). 0 = off"), TEXT("0"))
 		.Build();
 }

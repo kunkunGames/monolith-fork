@@ -25,6 +25,7 @@
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "MonolithPackagePathValidator.h"
+#include "MonolithJsonUtils.h"
 
 namespace
 {
@@ -62,23 +63,18 @@ namespace
             return;
         }
 
-        TArray<FString> Keys;
-        Keys.Reserve(Object->Values.Num());
-        for (const auto& Pair : Object->Values)
-        {
-            Keys.Add(Pair.Key);
-        }
-        Keys.Sort();
+        TArray<TPair<FString, TSharedPtr<FJsonValue>>> Pairs = FMonolithJsonUtils::GetFields(Object);
+        Pairs.Sort([](const TPair<FString, TSharedPtr<FJsonValue>>& A, const TPair<FString, TSharedPtr<FJsonValue>>& B){ return A.Key < B.Key; });
 
         Out.Append(TEXT("{"));
-        for (int32 i = 0; i < Keys.Num(); ++i)
+        for (int32 i = 0; i < Pairs.Num(); ++i)
         {
             if (i > 0) Out.Append(TEXT(","));
             Out.Append(TEXT("\""));
-            Out.Append(Keys[i]);
+            Out.Append(Pairs[i].Key);
             Out.Append(TEXT("\":"));
 
-            const TSharedPtr<FJsonValue>& Field = Object->Values.FindChecked(Keys[i]);
+            const TSharedPtr<FJsonValue>& Field = Pairs[i].Value;
             AppendCanonical(Out, Field);
         }
         Out.Append(TEXT("}"));
@@ -400,7 +396,7 @@ UClass* FMonolithUIStyleService::CreateNewStyleAsset(
     UObject* CDO = BP->GeneratedClass->GetDefaultObject();
     if (CDO && Properties.IsValid())
     {
-        for (const auto& Pair : Properties->Values)
+        for (const auto& Pair : FMonolithJsonUtils::GetFields(Properties))
         {
             FProperty* P = FindFProperty<FProperty>(StyleClass, *Pair.Key);
             if (P)

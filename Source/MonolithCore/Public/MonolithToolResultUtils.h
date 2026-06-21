@@ -16,7 +16,8 @@ class MONOLITHCORE_API FMonolithToolResultUtils
 public:
 	static TSharedPtr<FJsonObject> BuildMcpToolResult(
 		const FMonolithActionResult& ActionResult,
-		bool bEnableStructuredContent);
+		bool bEnableStructuredContent,
+		bool bEnableTypedMedia = false);
 
 private:
 	static FString BuildErrorText(const FMonolithActionResult& ActionResult);

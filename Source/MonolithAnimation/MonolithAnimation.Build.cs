@@ -82,6 +82,8 @@ public class MonolithAnimation : ModuleRules
 			"PoseSearchEditor",    // UAnimGraphNode_MotionMatching (Wave 7 ABP graph wiring)
 			"AssetRegistry",
 			"BlendStackEditor",    // UAnimGraphNode_BlendStack_Base (Sprint 4 BoundGraph-node spawn fix)
+			"Slate",               // UE5.8: STableRow<FRetargetChainElement> widget instantiation
+			"SlateCore",           // UE5.8: SWidget/SCompoundWidget class-data registration (PrivateRegisterAttributes)
 		});
 
 		// --- Conditional: Chooser (UChooserTable authoring) ---

@@ -1,4 +1,5 @@
 #include "Indexers/GenericAssetIndexer.h"
+#include "Utility/MonolithSearchValueWriter.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/Texture2D.h"
@@ -85,6 +86,48 @@ bool FGenericAssetIndexer::IndexAsset(const FAssetData& AssetData, UObject* Load
 		{
 			Props->SetStringField(TEXT("recommended_sampler_type"),
 				SamplerEnum->GetNameStringByValue(static_cast<int64>(SamplerType)));
+		}
+
+		// PRD AssetSearchSemanticSearch (UE5.8): the texture metadata above lives only on the
+		// Metadata-node JSON blob (reachable via get_asset_details), so size/format/PoT are NOT
+		// FTS-discoverable by project.search. Mirror the high-value fields into asset_search_values
+		// (source_kind 'texture') so they are searchable, and add a derived power-of-two / exact
+		// dimensions audit signal. Powers the CLAUDE.md power-of-two / 1024x1024 / 128px-cell atlas
+		// audit: "find non_power_of_two textures", "which textures are 2048x2048", "find srgb mask
+		// textures", "which atlases use TC_Default compression". Reuses the already-proven accessors.
+		FMonolithSearchValueWriter TexSearch(DB);
+		if (TexSearch.IsEnabled())
+		{
+			const FString TexPath = Tex->GetPathName();
+			const FString TexName = Tex->GetName();
+			// Use the imported (authored) size, NOT GetSizeX()/GetSizeY(): the latter read the
+			// runtime PlatformData mip0, which is 0 in a headless -nullrhi indexing editor.
+			// GetImportedSize() returns the RHI-independent authored dimensions (Texture2D.h:40).
+			const FIntPoint ImportedSize = Tex->GetImportedSize();
+			const int32 SizeX = ImportedSize.X;
+			const int32 SizeY = ImportedSize.Y;
+			auto AddTex = [&TexSearch, AssetId, &TexName, &TexPath](const TCHAR* Field, const FString& Value, const TCHAR* Signal)
+			{
+				TexSearch.AddValue(AssetId, TEXT("texture"), TexName, TexPath, TEXT("Texture2D"),
+					Field, TexPath + TEXT(".") + Field, Value, Signal);
+			};
+			AddTex(TEXT("dimensions"), FString::Printf(TEXT("%dx%d"), SizeX, SizeY), TEXT("texture_size"));
+			AddTex(TEXT("width"), FString::FromInt(SizeX), TEXT("texture_size"));
+			AddTex(TEXT("height"), FString::FromInt(SizeY), TEXT("texture_size"));
+			// Guard SizeX/SizeY > 0: IsPowerOfTwo(0) is true, so a 0-size (un-imported) texture
+			// would otherwise mislabel as power_of_two — flag it as non_power_of_two instead.
+			AddTex(TEXT("power_of_two"),
+				(SizeX > 0 && SizeY > 0 && FMath::IsPowerOfTwo(SizeX) && FMath::IsPowerOfTwo(SizeY))
+					? TEXT("power_of_two") : TEXT("non_power_of_two"),
+				TEXT("texture_audit"));
+			AddTex(TEXT("compression_settings"), UEnum::GetValueAsString(Tex->CompressionSettings), TEXT("texture_format"));
+			AddTex(TEXT("lod_group"), UEnum::GetValueAsString(Tex->LODGroup), TEXT("texture_lod"));
+			AddTex(TEXT("srgb"), Tex->SRGB ? TEXT("srgb") : TEXT("linear"), TEXT("texture_audit"));
+#if WITH_EDITORONLY_DATA
+			// Authored source pixel format (RHI-independent; the runtime GetPixelFormat() is
+			// PF_Unknown in a headless -nullrhi indexer). e.g. "TSF_BGRA8".
+			AddTex(TEXT("source_format"), UEnum::GetValueAsString(Tex->Source.GetFormat()), TEXT("texture_format"));
+#endif
 		}
 	}
 	else if (USoundWave* Sound = Cast<USoundWave>(LoadedAsset))

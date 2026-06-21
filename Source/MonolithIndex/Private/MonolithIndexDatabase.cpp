@@ -437,7 +437,9 @@ bool FMonolithIndexDatabase::Open(const FString& InDbPath)
 	// Ensure hash index exists (safe for both fresh and migrated DBs)
 	ExecuteSQL(TEXT("CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(saved_hash);"));
 	WriteMeta(TEXT("asset_search_values_schema_version"), TEXT("1"));
-	WriteMeta(TEXT("asset_search_values_extractor_version"), TEXT("1"));
+	// Bumped to 2 for Q1 (PRD AssetSearchSemanticSearch): the asset_search_values extractor
+	// now also emits an 'identifier_split' CamelCase/snake sub-word row per asset name.
+	WriteMeta(TEXT("asset_search_values_extractor_version"), TEXT("2"));
 
 	UE_LOG(LogMonolithIndex, Log, TEXT("Index database opened: %s"), *DbPath);
 	return true;
@@ -1229,7 +1231,22 @@ bool FMonolithIndexDatabase::UpdateSavedHash(const FString& PackagePath, const F
 // FTS5 Full-text search
 // ============================================================
 
-FString FMonolithIndexDatabase::EscapeFTS(const FString& Query)
+// Number of K-combinations of N items, saturating to avoid overflow. Used to bound the
+// min-should-match OR-of-subsets MATCH expression so a many-token query cannot explode it.
+static int64 MonolithCombinationCount(int32 N, int32 K)
+{
+	if (K < 0 || K > N) { return 0; }
+	K = FMath::Min(K, N - K);
+	int64 Result = 1;
+	for (int32 i = 0; i < K; ++i)
+	{
+		Result = Result * (N - i) / (i + 1);
+		if (Result > 1000000) { return Result; }
+	}
+	return Result;
+}
+
+FString FMonolithIndexDatabase::EscapeFTS(const FString& Query, int32 MinShouldMatchPct)
 {
 	// Replace :: with space
 	FString Q = Query.Replace(TEXT("::"), TEXT(" "));
@@ -1258,13 +1275,75 @@ FString FMonolithIndexDatabase::EscapeFTS(const FString& Query)
 		return TEXT("\"\""); // Empty search string
 	}
 
-	FString Escaped;
-	for (int32 i = 0; i < Tokens.Num(); ++i)
+	// Prefix term for each token ("tok"* — case-insensitive prefix under unicode61).
+	TArray<FString> Prefix;
+	Prefix.Reserve(Tokens.Num());
+	for (const FString& Token : Tokens)
 	{
-		Escaped += FString::Printf(TEXT("\"%s\"*"), *Tokens[i]);
-		if (i < Tokens.Num() - 1)
+		Prefix.Add(FString::Printf(TEXT("\"%s\"*"), *Token));
+	}
+
+	// min-should-match (PRD AssetSearchSemanticSearch residual, opt-in). Require at least
+	// ceil(N*pct/100) of the N query tokens. Expressed NATIVELY in FTS5 as the OR of every
+	// K-token subset (each an implicit-AND prefix group): a document matches the OR iff it
+	// contains some full K-subset iff it has >= K distinct query tokens — provably exact under
+	// the porter/unicode61 tokenizer, with no C++ token reconstruction and no per-token
+	// re-query. Bounded: if the subset count would exceed 64 (many-token query) it collapses to
+	// require-all. pct==0 (default) skips this entirely and keeps the AND + Q3 behavior below.
+	if (MinShouldMatchPct > 0 && Tokens.Num() > 1)
+	{
+		const int32 N = Tokens.Num();
+		const int32 K = FMath::Clamp(FMath::DivideAndRoundUp(N * MinShouldMatchPct, 100), 1, N);
+
+		if (K <= 1)
 		{
-			Escaped += TEXT(" ");
+			// "at least 1 of N" — OR of all single tokens (broad recall).
+			return FString::Join(Prefix, TEXT(" OR "));
+		}
+		if (K == N || MonolithCombinationCount(N, K) > 64)
+		{
+			// "all N tokens" (or bounded fallback) — a single implicit-AND group, no Q3 widening.
+			return FString::Printf(TEXT("(%s)"), *FString::Join(Prefix, TEXT(" ")));
+		}
+
+		// General K-of-N: OR of all K-subsets, each an implicit-AND prefix group.
+		TArray<FString> Groups;
+		TArray<int32> Idx;
+		Idx.SetNum(K);
+		for (int32 i = 0; i < K; ++i) { Idx[i] = i; }
+		for (;;)
+		{
+			TArray<FString> Group;
+			Group.Reserve(K);
+			for (int32 i = 0; i < K; ++i) { Group.Add(Prefix[Idx[i]]); }
+			Groups.Add(FString::Printf(TEXT("(%s)"), *FString::Join(Group, TEXT(" "))));
+
+			// Advance to the next lexicographic K-combination of [0, N).
+			int32 p = K - 1;
+			while (p >= 0 && Idx[p] == N - K + p) { --p; }
+			if (p < 0) { break; }
+			++Idx[p];
+			for (int32 i = p + 1; i < K; ++i) { Idx[i] = Idx[i - 1] + 1; }
+		}
+		return FString::Join(Groups, TEXT(" OR "));
+	}
+
+	// pct == 0 (default): byte-identical AND-prefix expression + Q3 de-spaced streak fusion.
+	FString Escaped = FString::Join(Prefix, TEXT(" "));
+
+	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion. A spaced natural-
+	// language query ("health bar") should also match the fused CamelCase identifier it
+	// indexes as ("HealthBar"), which unicode61 stores as a single token. The AND-prefix
+	// expression above is kept byte-identical and OR-ed with the concatenated form, so
+	// results are a guaranteed superset (recall only rises). Bounded to avoid a
+	// pathological MATCH expression.
+	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
+	{
+		FString Concat;
+		for (const FString& Token : Tokens) { Concat += Token; }
+		if (Concat.Len() <= 64)
+		{
+			Escaped = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Escaped, *Concat);
 		}
 	}
 
@@ -1296,35 +1375,108 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
-	const FString FTSQuery = EscapeFTS(Query);
+	const FString FTSQuery = EscapeFTS(Query, Options.MinShouldMatchPct);
+
+	// Q4 (PRD AssetSearchSemanticSearch): RRF cross-table fusion. The 7 FTS tables produce
+	// bm25 on incomparable scales, so the old concat-and-sort-by-raw-bm25 let a 1-column
+	// table's score compete unfairly against a wide table's. Reciprocal Rank Fusion fuses
+	// by RANK POSITION (scale-independent): each asset accumulates SourceWeight/(K+rank)
+	// across the tables it matched in, dedup'd to one result per asset (package_path). The
+	// per-source weight encodes AssetSearch-style name-over-body priority. Tables are
+	// oversampled 3x so fusion sees candidate depth before truncation to the caller's limit.
+	const int32 OversampleLimit = FMath::Min(ClampedLimit * 3, 1000);
+	const float RRFConstant = 60.0f;
+	auto SourceWeightFor = [](const FString& Src) -> float
+	{
+		if (Src == TEXT("asset") || Src == TEXT("node")) return 3.0f;      // identity-bearing
+		if (Src == TEXT("supplemental_value")) return 1.0f;                 // catch-all values
+		return 2.0f;                                                        // variable/parameter/datatable_row/actor
+	};
+	// package_path -> fused result; the accumulated RRF score lives in FSearchResult::Rank
+	// (higher = better AFTER fusion), and the representative provenance is the first (i.e.
+	// highest-priority-table, best-rank) contribution seen for that asset.
+	TMap<FString, FSearchResult> Fused;
+
+	// Q6 (PRD AssetSearchSemanticSearch): optional pushed-down scope filters. asset_class is
+	// an exact indexed match (idx_assets_class); package_path is a substring LIKE on the
+	// UNIQUE-indexed path. Injected as indexed WHERE conditions INSIDE each per-table FTS
+	// query (not a C++ post-filter) so scoping stays correct beyond the oversample window.
+	FString ScopeClause;
+	if (!Options.AssetClassFilter.IsEmpty()) ScopeClause += TEXT(" AND a.asset_class = ?");
+	FString EscapedPath;
+	if (!Options.PathFilter.IsEmpty())
+	{
+		ScopeClause += TEXT(" AND a.package_path LIKE ? ESCAPE '\\'");
+		EscapedPath = FString::Printf(TEXT("%%%s%%"),
+			*Options.PathFilter.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_")));
+	}
 
 	auto AddMatches = [&](const FString& SQL, const FString& MatchSource)
 	{
+		FString FinalSQL = SQL;
+		if (!ScopeClause.IsEmpty())
+		{
+			// All 7 per-table queries share the "... MATCH ? ORDER BY ..." shape; inject the
+			// scope conditions immediately before ORDER BY.
+			FinalSQL.ReplaceInline(TEXT(" ORDER BY"), *(ScopeClause + TEXT(" ORDER BY")), ESearchCase::CaseSensitive);
+		}
 		FSQLitePreparedStatement Stmt;
-		if (!Stmt.Create(*Database, *SQL))
+		if (!Stmt.Create(*Database, *FinalSQL))
 		{
 			return;
 		}
-		Stmt.SetBindingValueByIndex(1, FTSQuery);
-		Stmt.SetBindingValueByIndex(2, static_cast<int64>(ClampedLimit));
+		int32 BindIdx = 1;
+		Stmt.SetBindingValueByIndex(BindIdx++, FTSQuery);
+		if (!Options.AssetClassFilter.IsEmpty()) Stmt.SetBindingValueByIndex(BindIdx++, Options.AssetClassFilter);
+		if (!EscapedPath.IsEmpty()) Stmt.SetBindingValueByIndex(BindIdx++, EscapedPath);
+		Stmt.SetBindingValueByIndex(BindIdx++, static_cast<int64>(OversampleLimit));
 
+		const float SourceWeight = SourceWeightFor(MatchSource);
+		int32 RankPos = 0;
 		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
+			const float Contribution = SourceWeight / (RRFConstant + static_cast<float>(RankPos));
+			const int32 ThisRankPos = RankPos;
+			++RankPos;
+
+			FString AssetPath;
+			Stmt.GetColumnValueByIndex(0, AssetPath);
+			if (FSearchResult* Existing = Fused.Find(AssetPath))
+			{
+				// Same asset matched again (another table or row): accumulate evidence,
+				// keep the first-seen (highest-priority) provenance.
+				Existing->Rank += Contribution;
+				// score-explain (opt-in): record this contributing hit's source/rank.
+				if (Options.bExplain)
+				{
+					Existing->ScoreBySource.FindOrAdd(MatchSource) += Contribution;
+					++Existing->ContributingHits;
+					Existing->BestRank = FMath::Min(Existing->BestRank, ThisRankPos);
+				}
+				continue;
+			}
+
 			FSearchResult R;
-			Stmt.GetColumnValueByIndex(0, R.AssetPath);
+			R.AssetPath = MoveTemp(AssetPath);
 			Stmt.GetColumnValueByIndex(1, R.AssetName);
 			Stmt.GetColumnValueByIndex(2, R.AssetClass);
 			Stmt.GetColumnValueByIndex(3, R.ModuleName);
 			Stmt.GetColumnValueByIndex(4, R.MatchContext);
-			double RankD = 0.0;
-			Stmt.GetColumnValueByIndex(5, RankD);
-			R.Rank = static_cast<float>(RankD);
+			// bm25 (col 5) is intentionally ignored — RRF ranks by position, not score.
 			R.MatchSource = MatchSource;
 			Stmt.GetColumnValueByIndex(6, R.MatchTable);
 			Stmt.GetColumnValueByIndex(7, R.MatchField);
 			Stmt.GetColumnValueByIndex(8, R.MatchObjectPath);
 			Stmt.GetColumnValueByIndex(9, R.MatchValue);
-			Results.Add(MoveTemp(R));
+			R.Rank = Contribution;
+			// score-explain (opt-in): seed the provenance for this asset's first contributing hit.
+			if (Options.bExplain)
+			{
+				R.ScoreBySource.FindOrAdd(MatchSource) += Contribution;
+				R.ContributingHits = 1;
+				R.BestRank = ThisRankPos;
+			}
+			Fused.Add(R.AssetPath, MoveTemp(R));
 		}
 	};
 
@@ -1396,8 +1548,10 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 			TEXT("supplemental_value"));
 	}
 
-	// Sort combined results by rank (lower = better in FTS5)
-	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank < B.Rank; });
+	// Q4: materialize the fused per-asset results and rank by accumulated RRF score
+	// (higher = better — the opposite direction of raw FTS5 bm25).
+	Fused.GenerateValueArray(Results);
+	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank > B.Rank; });
 
 	if (Results.Num() > ClampedLimit)
 	{

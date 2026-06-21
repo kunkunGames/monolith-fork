@@ -242,9 +242,9 @@ namespace
 			return;
 		}
 
-		for (const auto& Pair : Object->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Object))
 		{
-			const FString& FieldName = Pair.Key;
+			const FString FieldName = Pair.Key;
 			const TSharedPtr<FJsonValue>& Value = Pair.Value;
 			if (!Value.IsValid())
 			{

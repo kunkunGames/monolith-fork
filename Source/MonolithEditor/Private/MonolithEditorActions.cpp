@@ -8720,9 +8720,9 @@ namespace MonolithEditorNavHarness
 		{
 			return;
 		}
-		for (const auto& Pair : PropObj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(PropObj))
 		{
-			const FString& PropName = Pair.Key;
+			const FString PropName = Pair.Key;
 			const TSharedPtr<FJsonValue>& Value = Pair.Value;
 			FProperty* Prop = Actor->GetClass()->FindPropertyByName(FName(*PropName));
 			if (!Prop)

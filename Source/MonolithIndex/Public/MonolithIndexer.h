@@ -29,6 +29,14 @@ public:
 	/** Human-readable name for logging */
 	virtual FString GetName() const = 0;
 
+	/**
+	 * Monotonic version of THIS indexer's extraction logic. Bump when the rows this indexer
+	 * emits change shape/content (I2, PRD AssetSearchSemanticSearch). It folds into the
+	 * subsystem's indexer-fleet signature so a logic change forces a full reindex instead of
+	 * letting unchanged content-hashes skip the upgraded indexer and serve stale rows.
+	 */
+	virtual int32 GetIndexerVersion() const { return 1; }
+
 	/** Whether this is a sentinel indexer (does its own AR enumeration) */
 	virtual bool IsSentinel() const { return false; }
 

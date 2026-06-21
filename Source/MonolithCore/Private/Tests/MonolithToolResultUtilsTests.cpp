@@ -32,6 +32,42 @@ namespace
 		(*Obj)->TryGetStringField(TEXT("text"), Text);
 		return Text;
 	}
+
+	int32 ContentCount(const TSharedPtr<FJsonObject>& Result)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Content = nullptr;
+		if (!Result.IsValid() || !Result->TryGetArrayField(TEXT("content"), Content) || !Content)
+		{
+			return 0;
+		}
+		return Content->Num();
+	}
+
+	TSharedPtr<FJsonObject> ContentAt(const TSharedPtr<FJsonObject>& Result, int32 Index)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Content = nullptr;
+		if (!Result.IsValid() || !Result->TryGetArrayField(TEXT("content"), Content) || !Content || !Content->IsValidIndex(Index))
+		{
+			return nullptr;
+		}
+		const TSharedPtr<FJsonObject>* Obj = nullptr;
+		if (!(*Content)[Index].IsValid() || !(*Content)[Index]->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+		{
+			return nullptr;
+		}
+		return *Obj;
+	}
+
+	FMonolithActionResult MakeImageBlockResult()
+	{
+		FMonolithActionResult ActionResult = FMonolithActionResult::Success(MakeValueResult(1));
+		FMonolithToolContentBlock Block;
+		Block.Type = TEXT("image");
+		Block.MimeType = TEXT("image/png");
+		Block.Base64Data = TEXT("QUJD"); // "ABC"
+		ActionResult.MediaBlocks.Add(Block);
+		return ActionResult;
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultLegacyShapeTest,
@@ -161,6 +197,60 @@ bool FMonolithToolResultLegacyErrorDataTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Nested error_data keeps retryability"), (*ErrorDataObject)->GetStringField(TEXT("retryability")), TEXT("retry_with_validated_param_types_or_ranges"));
 	}
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultEmptyMediaByteIdenticalTest,
+	"Monolith.Core.ToolResults.EmptyMediaByteIdentical",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultEmptyMediaByteIdenticalTest::RunTest(const FString& Parameters)
+{
+	// Empty MediaBlocks must produce the same content regardless of the typed-media flag.
+	FMonolithActionResult ActionResult = FMonolithActionResult::Success(MakeValueResult(42));
+
+	TSharedPtr<FJsonObject> WithoutFlag = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false, false);
+	TSharedPtr<FJsonObject> WithFlag = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false, true);
+
+	TestEqual(TEXT("Empty media, flag off → single text block"), ContentCount(WithoutFlag), 1);
+	TestEqual(TEXT("Empty media, flag on → still single text block (byte-identical)"), ContentCount(WithFlag), 1);
+	TestTrue(TEXT("Text JSON preserved with flag off"), FirstTextContent(WithoutFlag).Contains(TEXT("\"value\":42")));
+	TestTrue(TEXT("Text JSON preserved with flag on"), FirstTextContent(WithFlag).Contains(TEXT("\"value\":42")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultMediaBlockGatingTest,
+	"Monolith.Core.ToolResults.MediaBlockGating",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultMediaBlockGatingTest::RunTest(const FString& Parameters)
+{
+	FMonolithActionResult ActionResult = MakeImageBlockResult();
+
+	// Flag OFF: media block suppressed → text block only.
+	TSharedPtr<FJsonObject> FlagOff = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false, false);
+	TestEqual(TEXT("Media block suppressed when flag off"), ContentCount(FlagOff), 1);
+	{
+		TSharedPtr<FJsonObject> First = ContentAt(FlagOff, 0);
+		TestTrue(TEXT("Only block is text when flag off"), First.IsValid() && First->GetStringField(TEXT("type")) == TEXT("text"));
+	}
+
+	// Flag ON: text block first, image block appended after.
+	TSharedPtr<FJsonObject> FlagOn = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false, true);
+	TestEqual(TEXT("Image block appended when flag on"), ContentCount(FlagOn), 2);
+	{
+		TSharedPtr<FJsonObject> First = ContentAt(FlagOn, 0);
+		TestTrue(TEXT("Text block stays first"), First.IsValid() && First->GetStringField(TEXT("type")) == TEXT("text"));
+
+		TSharedPtr<FJsonObject> Second = ContentAt(FlagOn, 1);
+		TestTrue(TEXT("Second block exists"), Second.IsValid());
+		if (Second.IsValid())
+		{
+			TestEqual(TEXT("Media block type is image"), Second->GetStringField(TEXT("type")), TEXT("image"));
+			TestEqual(TEXT("Media block carries mimeType"), Second->GetStringField(TEXT("mimeType")), TEXT("image/png"));
+			TestEqual(TEXT("Media block carries base64 data"), Second->GetStringField(TEXT("data")), TEXT("QUJD"));
+		}
+	}
 	return true;
 }
 

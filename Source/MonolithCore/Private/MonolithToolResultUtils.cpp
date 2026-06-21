@@ -21,7 +21,8 @@ namespace
 
 TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 	const FMonolithActionResult& ActionResult,
-	bool bEnableStructuredContent)
+	bool bEnableStructuredContent,
+	bool bEnableTypedMedia)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Content;
@@ -45,6 +46,25 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 		}
 		Content.Add(MakeShared<FJsonValueObject>(TextContent));
 		Result->SetBoolField(TEXT("isError"), false);
+
+		// Typed-media content blocks follow the text block (text stays first/always).
+		// Empty MediaBlocks or flag off → no additional blocks → byte-identical to before.
+		if (bEnableTypedMedia && ActionResult.MediaBlocks.Num() > 0)
+		{
+			for (const FMonolithToolContentBlock& Block : ActionResult.MediaBlocks)
+			{
+				// MCP content blocks restricted here to image|audio; resource_link is a TODO.
+				if (Block.Type != TEXT("image") && Block.Type != TEXT("audio"))
+				{
+					continue;
+				}
+				TSharedPtr<FJsonObject> MediaContent = MakeShared<FJsonObject>();
+				MediaContent->SetStringField(TEXT("type"), Block.Type);
+				MediaContent->SetStringField(TEXT("mimeType"), Block.MimeType);
+				MediaContent->SetStringField(TEXT("data"), Block.Base64Data);
+				Content.Add(MakeShared<FJsonValueObject>(MediaContent));
+			}
+		}
 
 		if (bEnableStructuredContent)
 		{
@@ -73,7 +93,7 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 		if (ActionResult.ErrorData.IsValid())
 		{
 			Result->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
-			for (const auto& Pair : ActionResult.ErrorData->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionResult.ErrorData))
 			{
 				Result->SetField(Pair.Key, Pair.Value);
 			}

@@ -162,7 +162,7 @@ FMonolithActionResult FMonolithBlueprintBuildActions::HandleBuildBlueprintFromSp
 				TSharedRef<FJsonObject> SubParams = MakeSubParams(AssetPath);
 
 				// Copy all fields from the variable spec
-				for (const auto& Pair : VarObj->Values)
+				for (const auto& Pair : FMonolithJsonUtils::GetFields(VarObj))
 				{
 					SubParams->SetField(Pair.Key, Pair.Value);
 				}

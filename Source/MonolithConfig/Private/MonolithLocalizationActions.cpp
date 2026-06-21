@@ -1,6 +1,7 @@
 #include "MonolithLocalizationActions.h"
 
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "AssetToolsModule.h"
@@ -1003,7 +1004,7 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 	TMap<FString, FString> MetadataToSet;
 	if (MetadataObject && MetadataObject->IsValid())
 	{
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*MetadataObject)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*MetadataObject))
 		{
 			FString MetadataValue;
 			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(MetadataValue))
@@ -1048,7 +1049,7 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 
 	Table->Modify();
 	FStringTableRef MutableTable = Table->GetMutableStringTable();
-	MutableTable->SetSourceString(TextKey, SourceString);
+	MutableTable->SetSourceString(TextKey, SourceString, FString());
 	for (const TPair<FString, FString>& Pair : MetadataToSet)
 	{
 		MutableTable->SetMetaData(TextKey, FName(*Pair.Key), Pair.Value);
@@ -1315,7 +1316,7 @@ FMonolithActionResult FMonolithLocalizationActions::ImportStringTableCsv(const T
 		for (const FStringTableCsvRow& Row : Rows)
 		{
 			const FTextKey TextKey(Row.Key);
-			MutableTable->SetSourceString(TextKey, Row.SourceString);
+			MutableTable->SetSourceString(TextKey, Row.SourceString, FString());
 			for (const TPair<FString, FString>& MetadataPair : Row.Metadata)
 			{
 				MutableTable->SetMetaData(TextKey, FName(*MetadataPair.Key), MetadataPair.Value);

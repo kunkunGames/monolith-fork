@@ -509,7 +509,7 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 
 	int32 LocalErrors = 0;
 	int32 Index = 0;
-	for (const auto& Pair : (*JsonObj)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*JsonObj))
 	{
 		// Allocate scratch key + value buffers, init them, ImportText key from the
 		// JSON object's STRING key, then dispatch the value through the inner walker.
@@ -523,7 +523,7 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 		{
 			FStringOutputDevice ErrText;
 			const TCHAR* Result = MapProp->KeyProp->ImportText_Direct(*Pair.Key, KeyTemp, Owner, PPF_None, &ErrText);
-			KeyWrite.ProposedValue = Pair.Key;
+			KeyWrite.ProposedValue = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 			KeyWrite.bOk = (Result != nullptr);
 			if (!KeyWrite.bOk)
 			{
@@ -636,11 +636,11 @@ void FMonolithReflectionWalker::WriteStruct(FStructProperty* StructProp, void* V
 		}
 
 		int32 LocalErrors = 0;
-		for (const auto& Pair : (*NestedObj)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedObj))
 		{
 			FBulkFillFieldWrite W;
 			W.Path = FString::Printf(TEXT("%s.%s"), *PathPrefix, *Pair.Key);
-			FProperty* InnerProp = FindPropertyForwarding(StructProp->Struct, Pair.Key);
+			FProperty* InnerProp = FindPropertyForwarding(StructProp->Struct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			if (!InnerProp)
 			{
 				W.bOk = false;
@@ -695,11 +695,11 @@ FDryRunReport FMonolithReflectionWalker::WriteTree(
 		return Report;
 	}
 
-	for (const auto& Pair : Tree->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Tree))
 	{
 		FBulkFillFieldWrite W;
-		W.Path = Pair.Key;
-		FProperty* Prop = FindPropertyForwarding(TopStruct, Pair.Key);
+		W.Path = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+		FProperty* Prop = FindPropertyForwarding(TopStruct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 		if (!Prop)
 		{
 			W.bOk = false;
@@ -708,7 +708,7 @@ FDryRunReport FMonolithReflectionWalker::WriteTree(
 			continue;
 		}
 		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Container);
-		DispatchByPropertyType(Prop, ValuePtr, Pair.Value, OwnerForCradle, Spec, Report, Pair.Key, W);
+		DispatchByPropertyType(Prop, ValuePtr, Pair.Value, OwnerForCradle, Spec, Report, FMonolithJsonUtils::FieldKeyToString(Pair.Key), W);
 		Report.FieldWrites.Add(W);
 	}
 
@@ -743,11 +743,11 @@ FDryRunReport FMonolithReflectionWalker::InspectTree(
 		return Report;
 	}
 
-	for (const auto& Pair : Tree->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Tree))
 	{
 		FBulkFillFieldWrite W;
-		W.Path = Pair.Key;
-		FProperty* Prop = FindPropertyForwarding(TopStruct, Pair.Key);
+		W.Path = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+		FProperty* Prop = FindPropertyForwarding(TopStruct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 		if (!Prop)
 		{
 			W.bOk = false;
@@ -760,7 +760,7 @@ FDryRunReport FMonolithReflectionWalker::InspectTree(
 		// against the scratch; destroy. The real container is never touched.
 		void* Scratch = FMemory::Malloc(Prop->GetSize(), Prop->GetMinAlignment());
 		Prop->InitializeValue(Scratch);
-		DispatchByPropertyType(Prop, Scratch, Pair.Value, nullptr, Spec, Report, Pair.Key, W);
+		DispatchByPropertyType(Prop, Scratch, Pair.Value, nullptr, Spec, Report, FMonolithJsonUtils::FieldKeyToString(Pair.Key), W);
 		Prop->DestroyValue(Scratch);
 		FMemory::Free(Scratch);
 

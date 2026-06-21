@@ -163,6 +163,15 @@
 			"Name": "Chooser",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "Paper2D",
+			"Enabled": true
+		},
+		{
+			"Name": "PaperZD",
+			"Enabled": true,
+			"Optional": true
 		}
 	],
 	"Modules": [

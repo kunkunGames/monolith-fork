@@ -4,6 +4,7 @@
 #include "MonolithResourceRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/Base64.h"
 
 namespace
 {
@@ -27,6 +28,22 @@ namespace
 			}
 		}
 		return false;
+	}
+
+	bool ByteArraysEqual(const TArray<uint8>& Actual, const TArray<uint8>& Expected)
+	{
+		if (Actual.Num() != Expected.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < Expected.Num(); ++Index)
+		{
+			if (Actual[Index] != Expected[Index])
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 }
 
@@ -206,6 +223,85 @@ bool FMonolithLiveResourcesTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("progress read succeeds"), Progress.bFound);
 	TestEqual(TEXT("progress mime is json"), Progress.MimeType, FString(TEXT("application/json")));
 	TestTrue(TEXT("progress content is a JSON object"), Progress.Text.StartsWith(TEXT("{")));
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithResourceRegistryBlobTest,
+	"Monolith.Core.Resources.RegistryBlobRoundTrip",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithResourceRegistryBlobTest::RunTest(const FString& Parameters)
+{
+	FMonolithResourceRegistry& Registry = FMonolithResourceRegistry::Get();
+	Registry.ResetForTests();
+
+	// Bytes that intentionally include a NUL and high bytes so a base64 round-trip,
+	// not a text round-trip, is exercised.
+	TArray<uint8> Payload = { 0x00, 0x01, 0x42, 0xFE, 0xFF, 0x10, 0x7F, 0x80 };
+
+	FMonolithResourceDescriptor Descriptor;
+	Descriptor.Uri = TEXT("monolith://test/blob");
+	Descriptor.Name = TEXT("Blob resource");
+	Descriptor.Description = TEXT("Resource registry blob round-trip payload");
+	Descriptor.MimeType = TEXT("application/octet-stream");
+
+	Registry.RegisterBlobResource(Descriptor, Payload);
+
+	// Listed like any other resource.
+	FMonolithResourceReadResult Read = Registry.ReadResource(TEXT("monolith://test/blob"));
+	TestTrue(TEXT("Blob read finds resource"), Read.bFound);
+	TestTrue(TEXT("Blob read is flagged binary"), Read.bBinary);
+	TestFalse(TEXT("Blob read is not truncated"), Read.bTruncated);
+	TestTrue(TEXT("Blob bytes survive read"), ByteArraysEqual(Read.BlobBytes, Payload));
+	TestEqual(TEXT("Blob mime type preserved"), Read.MimeType, TEXT("application/octet-stream"));
+
+	// Wire JSON emits a base64 "blob" field and no "text" field.
+	TSharedPtr<FJsonObject> Json = Registry.ReadResourceJson(TEXT("monolith://test/blob"));
+	TestTrue(TEXT("Blob JSON exists"), Json.IsValid());
+	if (Json.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Contents = nullptr;
+		TestTrue(TEXT("Blob JSON contents array exists"), Json->TryGetArrayField(TEXT("contents"), Contents));
+		if (Contents && Contents->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject>* Content = nullptr;
+			TestTrue(TEXT("Blob content is an object"), (*Contents)[0]->TryGetObject(Content));
+			if (Content && Content->IsValid())
+			{
+				FString EncodedBlob;
+				TestTrue(TEXT("Blob field is present"), (*Content)->TryGetStringField(TEXT("blob"), EncodedBlob));
+				TestFalse(TEXT("Text field is absent for blob"), (*Content)->HasField(TEXT("text")));
+
+				// Round-trip: decode the wire base64 back to the original bytes.
+				TArray<uint8> Decoded;
+				TestTrue(TEXT("Blob base64 decodes"), FBase64::Decode(EncodedBlob, Decoded));
+				TestTrue(TEXT("Decoded blob matches original payload"), ByteArraysEqual(Decoded, Payload));
+
+				bool bTruncatedField = true;
+				TestTrue(TEXT("Truncated field present"), (*Content)->TryGetBoolField(TEXT("truncated"), bTruncatedField));
+				TestFalse(TEXT("Truncated field is false"), bTruncatedField);
+			}
+		}
+		else
+		{
+			TestEqual(TEXT("Blob JSON has exactly one content item"), Contents ? Contents->Num() : 0, 1);
+		}
+	}
+
+	// A small MaxBytes cap truncates the stored blob.
+	FMonolithResourceDescriptor CappedDescriptor;
+	CappedDescriptor.Uri = TEXT("monolith://test/blob-capped");
+	CappedDescriptor.Name = TEXT("Capped blob");
+	CappedDescriptor.Description = TEXT("Resource registry blob truncation payload");
+	CappedDescriptor.MimeType = TEXT("application/octet-stream");
+	Registry.RegisterBlobResource(CappedDescriptor, Payload, 3);
+
+	FMonolithResourceReadResult Capped = Registry.ReadResource(TEXT("monolith://test/blob-capped"));
+	TestTrue(TEXT("Capped blob is found"), Capped.bFound);
+	TestTrue(TEXT("Capped blob marks truncation"), Capped.bTruncated);
+	TestEqual(TEXT("Capped blob byte count"), Capped.BlobBytes.Num(), 3);
 
 	Registry.ResetForTests();
 	return true;

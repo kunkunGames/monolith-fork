@@ -1,6 +1,9 @@
 #include "MonolithAIMassZoneGraphActions.h"
 
+#include "MonolithAsyncJobRegistry.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithSettings.h"
 #include "MonolithToolRegistry.h"
 
 #include "Components/ActorComponent.h"
@@ -12,6 +15,16 @@
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
 #include "Modules/ModuleManager.h"
+
+#if WITH_ZONEGRAPH
+// P1b (PRD Spec 10): broadcasting OnZoneGraphRequestRebuild is the only public,
+// supported editor entry point to drive a full ZoneGraph rebuild — the
+// UZoneGraphSubsystem::RebuildGraph / FZoneGraphBuilder::RequestRebuild paths are
+// protected. The subsystem subscribes to this delegate and runs the complete
+// orchestrated rebuild (stale-data cleanup, registration, missing-data spawn,
+// Builder.BuildAll) synchronously on the broadcast.
+#include "ZoneGraphDelegates.h"
+#endif
 
 namespace
 {
@@ -116,7 +129,7 @@ namespace
 			return Clone;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Source->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Source))
 		{
 			Clone->SetField(Pair.Key, Pair.Value);
 		}
@@ -513,7 +526,61 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::SetZoneShapeTags(const TS
 
 FMonolithActionResult FMonolithAIMassZoneGraphActions::RebuildZoneGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	return MakeUnavailable(TEXT("ai.rebuild_zone_graph"), Params, TEXT("ZoneGraph rebuild can be long-running and remains unavailable until progress reporting is added."));
+	// P1b (PRD Spec 10): gated behind UMonolithSettings::bEnableZoneGraphRebuildJob.
+	// Off preserves the byte-identical legacy "unavailable" report.
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!Settings || !Settings->bEnableZoneGraphRebuildJob)
+	{
+		return MakeUnavailable(TEXT("ai.rebuild_zone_graph"), Params, TEXT("ZoneGraph rebuild can be long-running and remains unavailable until progress reporting is added."));
+	}
+
+	// Mint a job up front so callers always get a pollable job_id (monolith.get_job)
+	// even on the failure paths below.
+	FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+	const FString JobId = JobRegistry.SubmitJob(TEXT("ai"), TEXT("rebuild_zone_graph"));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("action"), TEXT("ai.rebuild_zone_graph"));
+	Result->SetStringField(TEXT("job_id"), JobId);
+	Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+
+#if WITH_ZONEGRAPH
+	// GEditor is required: the ZoneGraph rebuild delegate is WITH_EDITOR-only and
+	// drives editor-world data. Refuse honestly (FailJob, no fake completion) when
+	// the editor is unavailable (e.g. a cooked/-game process).
+	if (!GEditor)
+	{
+		JobRegistry.FailJob(JobId, TEXT("GEditor is unavailable; ZoneGraph rebuild requires the editor."));
+		Result->SetStringField(TEXT("status"), TEXT("failed"));
+		Result->SetStringField(TEXT("reason"), TEXT("GEditor is unavailable; ZoneGraph rebuild requires the editor."));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	JobRegistry.UpdateProgress(JobId, 10.0, TEXT("rebuilding"), TEXT("Broadcasting OnZoneGraphRequestRebuild."));
+
+	// The subsystem's OnRequestRebuild handler runs RebuildGraph(true) synchronously
+	// on this broadcast, so when Broadcast() returns the rebuild has completed. There
+	// is no separate completion delegate to wait on, so reporting Completed here is
+	// honest rather than faked.
+	UE::ZoneGraphDelegates::OnZoneGraphRequestRebuild.Broadcast();
+
+	TSharedPtr<FJsonObject> JobResult = MakeShared<FJsonObject>();
+	JobResult->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
+	JobResult->SetStringField(TEXT("note"), TEXT("Synchronous editor ZoneGraph rebuild broadcast completed."));
+	JobRegistry.UpdateProgress(JobId, 100.0, TEXT("completed"), TEXT("ZoneGraph rebuild broadcast completed."));
+	JobRegistry.CompleteJob(JobId, JobResult);
+
+	Result->SetStringField(TEXT("status"), TEXT("completed"));
+	Result->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
+	return FMonolithActionResult::Success(Result);
+#else
+	// ZoneGraph compiled out of this build: the rebuild cannot run. Fail the job
+	// honestly instead of pretending it completed.
+	JobRegistry.FailJob(JobId, TEXT("ZoneGraph support is not compiled into this build (WITH_ZONEGRAPH=0)."));
+	Result->SetStringField(TEXT("status"), TEXT("failed"));
+	Result->SetStringField(TEXT("reason"), TEXT("ZoneGraph support is not compiled into this build (WITH_ZONEGRAPH=0)."));
+	return FMonolithActionResult::Success(Result);
+#endif // WITH_ZONEGRAPH
 }
 
 FMonolithActionResult FMonolithAIMassZoneGraphActions::ListZoneLaneProfiles(const TSharedPtr<FJsonObject>& Params)

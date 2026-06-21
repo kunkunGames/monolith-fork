@@ -1,6 +1,7 @@
 ﻿#include "MonolithAIStateTreeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 
 #if WITH_STATETREE
@@ -351,7 +352,7 @@ namespace
 		const UScriptStruct* StructType = Struct.GetScriptStruct();
 		uint8* Memory = Struct.GetMutableMemory();
 
-		for (const auto& Pair : Properties->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Properties))
 		{
 			FProperty* Prop = StructType->FindPropertyByName(*Pair.Key);
 			if (!Prop)
@@ -2746,7 +2747,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTExtension(const TS
 	TArray<FString> PropWarnings;
 	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj->IsValid())
 	{
-		for (const auto& Pair : (*PropsObj)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 		{
 			FProperty* Prop = NewExt->GetClass()->FindPropertyByName(*Pair.Key);
 			if (!Prop)

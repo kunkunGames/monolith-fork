@@ -74,13 +74,24 @@ public class MonolithIndex : ModuleRules
 			"BlueprintGraph",
 			"KismetCompiler",
 			"EditorSubsystem",
+			// C2 (PRD AssetSearchSemanticSearch): UMG-aware WidgetBlueprint indexer.
+			// UMG: UWidget::GetDisplayLabel, UWidgetBlueprintGeneratedClass::Bindings,
+			// FDelegateRuntimeBinding, FDynamicPropertyPath. UMGEditor: UWidgetBlueprint +
+			// UBaseWidgetBlueprint::GetAllSourceWidgets(). (UnrealEd already a dep.)
+			"UMG",
+			"UMGEditor",
+			// FCachedPropertyPath::ToString() in WidgetBlueprintIndexer (delegate-binding paths) lives in the
+			// PropertyPath runtime module; without it the indexer links with LNK2019.
+			"PropertyPath",
 			"AnimationCore",
 			"Niagara",
 			"GameplayTags",
 			"GameplayAbilities",
 			"EnhancedInput",
 			"Projects",
-			"CollectionManager"
+			"CollectionManager",
+			// PRD AssetSearchSemanticSearch UE5.8 #4: FPaper2DIndexer (UPaperFlipbook/UPaperSprite).
+			"Paper2D"
 		});
 
 		// --- Conditional: MetaSound (engine-shipped Runtime plugin) ---
@@ -100,6 +111,24 @@ public class MonolithIndex : ModuleRules
 		else
 		{
 			PublicDefinitions.Add("WITH_METASOUND=0");
+		}
+
+		// --- Conditional: PaperZD (project/marketplace plugin) ---
+		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence. PaperZD is a
+		// project plugin (GO.uproject Plugins[] -> Enabled:true in this checkout) but is not
+		// guaranteed in arbitrary Monolith checkouts, so a non-PaperZD project would otherwise
+		// hard-link the PaperZD module -> build break. When enabled, FPaperZDIndexer indexes
+		// UPaperZDAnimSequence_Flipbook (~1665) + UPaperZDAnimBP (~114); when absent it is gated
+		// out by WITH_PAPERZD in the indexer header/cpp and its registration.
+		bool bHasPaperZD = IsPluginEnabled(Target, "PaperZD");
+		if (bHasPaperZD)
+		{
+			PrivateDependencyModuleNames.Add("PaperZD");
+			PublicDefinitions.Add("WITH_PAPERZD=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_PAPERZD=0");
 		}
 	}
 }

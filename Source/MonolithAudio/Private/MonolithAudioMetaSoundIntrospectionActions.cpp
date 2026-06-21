@@ -1,4 +1,5 @@
 #include "MonolithAudioMetaSoundIntrospectionActions.h"
+#include "MonolithAudioActionUtils.h"
 
 #if WITH_METASOUND
 

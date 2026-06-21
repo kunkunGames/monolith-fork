@@ -2,6 +2,7 @@
 #include "MonolithImageGenSvgSourceActions.h"
 
 #include "MonolithAssetTextureIngestActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 
 #include "Dom/JsonObject.h"
@@ -2093,7 +2094,7 @@ namespace
 	static bool SaveSidecar(const FString& SidecarPath, const TSharedPtr<FJsonObject>& Result, FString& OutError)
 	{
 		TSharedPtr<FJsonObject> Sidecar = MakeShared<FJsonObject>();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Result->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Result))
 		{
 			if (Pair.Key != TEXT("svg_text"))
 			{
@@ -2635,7 +2636,7 @@ namespace
 #if WITH_METADATA
 		UPackage* Package = Texture->GetOutermost();
 		FMetaData& MetaData = Package->GetMetaData();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Provenance->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Provenance))
 		{
 			FString Value;
 			if (Pair.Value.IsValid())
@@ -3449,7 +3450,7 @@ namespace MonolithImageGen::SvgSource
 		}
 
 		TSharedPtr<FJsonObject> EffectiveParams = MakeShared<FJsonObject>();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Params->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
 			EffectiveParams->SetField(Pair.Key, Pair.Value);
 		}
@@ -3542,7 +3543,7 @@ namespace MonolithImageGen::SvgSource
 		}
 
 		TSharedPtr<FJsonObject> EffectiveParams = MakeShared<FJsonObject>();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Params->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
 			EffectiveParams->SetField(Pair.Key, Pair.Value);
 		}

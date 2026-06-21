@@ -31,6 +31,7 @@
 // race against the editor's DataTable mutation cradle.
 
 #include "MonolithUIBulkFillAdapter.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithBulkFillAdapterUtils.h"
 #include "MonolithBulkFillRegistry.h"
 #include "MonolithBulkFillTypes.h"
@@ -186,9 +187,9 @@ namespace MonolithUIBulkFillInternal
 		RowStruct->InitializeStruct(RowData);
 
 		int32 FieldErrors = 0;
-		for (const auto& FieldKV : RowObj->Values)
+		for (const auto& FieldKV : FMonolithJsonUtils::GetFields(RowObj))
 		{
-			const FString& FieldName = FieldKV.Key;
+			const FString FieldName = FMonolithJsonUtils::FieldKeyToString(FieldKV.Key);
 			FBulkFillFieldWrite FieldWrite;
 			FieldWrite.Path = FString::Printf(TEXT("rows[%s].%s"), *RowName, *FieldName);
 
@@ -326,7 +327,7 @@ namespace MonolithUIBulkFillInternal
 			DT->Modify();
 		}
 
-		for (const auto& RowKV : RowsObj->Values)
+		for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 		{
 			const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
 			TSharedPtr<FJsonObject> RowObj;
@@ -334,7 +335,7 @@ namespace MonolithUIBulkFillInternal
 			{
 				RowObj = *RowObjPtr;
 			}
-			WriteDataTableRow(DT, RowStruct, RowKV.Key, RowObj, Spec, Report);
+			WriteDataTableRow(DT, RowStruct, FMonolithJsonUtils::FieldKeyToString(RowKV.Key), RowObj, Spec, Report);
 		}
 
 		// Strict-mode rejects the whole batch.
@@ -409,7 +410,7 @@ namespace MonolithUIBulkFillInternal
 			DT->Modify();
 		}
 
-		for (const auto& RowKV : RowsObj->Values)
+		for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 		{
 			const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
 			TSharedPtr<FJsonObject> RowObj;
@@ -417,7 +418,7 @@ namespace MonolithUIBulkFillInternal
 			{
 				RowObj = *RowObjPtr;
 			}
-			WriteDataTableRow(DT, InputActionStruct, RowKV.Key, RowObj, Spec, Report);
+			WriteDataTableRow(DT, InputActionStruct, FMonolithJsonUtils::FieldKeyToString(RowKV.Key), RowObj, Spec, Report);
 		}
 
 		if (Spec.bStrict && Report.Errors > 0)
@@ -483,16 +484,17 @@ namespace MonolithUIBulkFillInternal
 			Widget->Modify();
 		}
 
-		for (const auto& KV : PropsObj->Values)
+		for (const auto& KV : FMonolithJsonUtils::GetFields(PropsObj))
 		{
+			const FString KeyStr = FMonolithJsonUtils::FieldKeyToString(KV.Key);
 			FBulkFillFieldWrite Write;
-			Write.Path = FString::Printf(TEXT("%s.%s"), *WidgetName, *KV.Key);
-			FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*KV.Key));
+			Write.Path = FString::Printf(TEXT("%s.%s"), *WidgetName, *KeyStr);
+			FProperty* Prop = Widget->GetClass()->FindPropertyByName(FName(*KeyStr));
 			if (!Prop)
 			{
 				Write.Reason = FString::Printf(
 					TEXT("widget '%s' (class %s) has no UPROPERTY '%s'"),
-					*WidgetName, *Widget->GetClass()->GetName(), *KV.Key);
+					*WidgetName, *Widget->GetClass()->GetName(), *KeyStr);
 				Write.bOk = false;
 				Report.FieldWrites.Add(Write);
 				Report.SilentDrops.Add(Write);
@@ -527,7 +529,7 @@ namespace MonolithUIBulkFillInternal
 			{
 				Write.Reason = FString::Printf(
 					TEXT("ImportText_Direct rejected value for property '%s' (type %s)"),
-					*KV.Key, *Prop->GetCPPType());
+					*KeyStr, *Prop->GetCPPType());
 				Write.bOk = false;
 				Report.FieldWrites.Add(Write);
 				Report.Errors++;

@@ -73,7 +73,7 @@ namespace
 			return nullptr;
 		}
 
-		TSharedPtr<FJsonValue>* Value = StatusRoot->Values.Find(FileName);
+		TSharedPtr<FJsonValue>* Value = StatusRoot->Values.Find(*FileName);
 		if (Value && Value->IsValid() && (*Value)->Type == EJson::Object)
 		{
 			return (*Value)->AsObject();

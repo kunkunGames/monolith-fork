@@ -4,8 +4,8 @@
 **Engine:** Unreal Engine 5.7+
 **Status:** Implemented first slice
 **Owner module:** MonolithCore
-**Scope:** Add a bounded, read-only MCP `resources/list` and `resources/read` surface backed by explicit Monolith resource providers.
-**Non-goals:** Arbitrary filesystem access, binary/blob resources, writable resources, subscriptions, resource templates, external network fetches, persistent caches.
+**Scope:** Add a bounded, read-only MCP `resources/list` and `resources/read` surface backed by explicit Monolith resource providers, including bounded binary/blob resources (P3a).
+**Non-goals:** Arbitrary filesystem access, writable resources, subscriptions, resource templates, external network fetches, persistent caches.
 
 ---
 
@@ -77,9 +77,14 @@ Add a `FMonolithResourceRegistry` singleton owned by MonolithCore.
 | `uri` | Stable `monolith://...` URI. Empty URI is rejected. |
 | `name` | Human-readable short name. |
 | `description` | Short description for client selection. |
-| `mimeType` | Defaults to `text/plain`; first slice should use `text/markdown` and `application/json` only when content is text. |
-| `provider` | Bound delegate/lambda that returns text from an explicit source. |
-| `max_chars` | Per-resource text cap, clamped to a safe upper bound. |
+| `mimeType` | Defaults to `text/plain`; text resources use `text/markdown`/`application/json`, blob resources use a binary mime type such as `application/octet-stream` or `image/png`. |
+| `kind` | `EMonolithResourceKind::Text` (default) or `Blob`. Text reads emit a `text` field; blob reads emit a base64 `blob` field. |
+| `provider` | Bound delegate/lambda that returns text from an explicit source. Text resources only. |
+| `max_chars` | Per-resource text cap, clamped to a safe upper bound. Text resources only. |
+| `blob_bytes` | Eagerly stored bytes for a blob resource, served verbatim and base64-encoded on read. Blob resources only. |
+| `max_bytes` | Per-resource blob byte cap, a **separate** cap from `max_chars`, clamped to a safe upper bound (16 MiB). Blob resources only. |
+
+Blob resources are registered through `RegisterBlobResource(descriptor, blob_bytes, max_bytes)`; text resources through `RegisterTextResource(descriptor, provider, max_chars)`.
 
 The first built-in provider set should expose stable documentation resources from tracked Monolith docs:
 
@@ -144,6 +149,26 @@ Rules:
 }
 ```
 
+`resources/read` success for a blob resource (P3a) emits `blob` instead of `text`:
+
+```json
+{
+  "contents": [
+    {
+      "uri": "monolith://test/blob",
+      "mimeType": "application/octet-stream",
+      "blob": "AAFC/v8Qf4A=",
+      "truncated": false
+    }
+  ]
+}
+```
+
+Rules:
+
+1. A content item carries exactly one payload field: `text` for text resources, `blob` (standard base64) for blob resources. Text-resource content is byte-identical to the text-only slice (no `blob` field is emitted when unused).
+2. `truncated=true` when stored bytes exceed `max_bytes` (blob) or text length exceeds `max_chars` (text); blob truncation drops trailing bytes before encoding.
+
 `resources/read` errors:
 
 | Case | Error |
@@ -159,18 +184,19 @@ Rules:
 1. The registry must never read arbitrary caller-provided filesystem paths.
 2. Providers must be explicit and registered by code.
 3. Responses must not expose absolute local paths, environment variables, API keys, auth headers, cookies, session ids, or bearer tokens.
-4. Content is bounded by `max_chars`; truncated reads set `truncated=true`.
-5. First slice is text-only. Binary/blob support needs a later media contract.
+4. Content is bounded by `max_chars` (text) or `max_bytes` (blob); truncated reads set `truncated=true`.
+5. Blob resources are explicitly registered byte arrays only; the registry never reads arbitrary binary files from caller-provided paths.
 
 ---
 
 ## 7. Implementation Notes
 
-1. `MonolithResourceRegistry.h/.cpp` owns descriptor registration, deterministic list pagination, bounded text read, and test reset hooks.
+1. `MonolithResourceRegistry.h/.cpp` owns descriptor registration, deterministic list pagination, bounded text and blob read, and test reset hooks.
 2. MonolithCore startup registers default docs resources only when `bEnableMcpResources=true`.
-3. `FMonolithHttpServer::HandleJsonRpc` handles `resources/list` and `resources/read` only when the resource feature is active.
-4. Server status reports configured, active, handler-registered, and restart-required state from real settings and registry data.
-5. `MonolithResourceRegistryTests.cpp` covers list/read, pagination, missing URI, missing resource, truncation, and default docs registration.
+3. `FMonolithHttpServer::HandleJsonRpc` handles `resources/list` and `resources/read` only when the resource feature is active. `HandleResourcesRead` delegates content-item serialization to `ReadResourceJson`, so the text/blob branch lives in exactly one place.
+4. `ReadResourceJson` emits a base64 `blob` field for blob resources (via `FBase64::Encode`) and a `text` field otherwise; both share the same `uri`/`mimeType`/`truncated` shape.
+5. Server status reports configured, active, handler-registered, and restart-required state from real settings and registry data.
+6. `MonolithResourceRegistryTests.cpp` covers list/read, pagination, missing URI, missing resource, text truncation, default docs registration, and a blob base64 round-trip plus blob truncation.
 
 ---
 
@@ -182,6 +208,8 @@ Rules:
 | Handler registration | With the flag true at startup, `resources/list` and `resources/read` are handled. |
 | Deterministic list | Multiple resources list in sorted URI order with correct `nextCursor` behavior. |
 | Bounded read | Long provider text is truncated and marks `truncated=true`. |
+| Blob round-trip | A registered blob reads back with `bBinary=true`, and the wire `blob` field base64-decodes to the original bytes with no `text` field. |
+| Blob bound | Stored bytes exceeding `max_bytes` are truncated and mark `truncated=true`. |
 | Error shape | Missing `uri` returns invalid params; unknown URI returns the resource-not-found code. |
 | Safety | Caller-provided filesystem paths are never read, and client errors do not expose absolute paths. |
 | Status accuracy | Server status reports configured/active/registered/restart-required accurately. |
@@ -194,5 +222,6 @@ Rules:
 |-----------|-----------------|
 | Resource templates | Needs URI template validation and parameter schema. |
 | Typed media content | Better paired with structured/typed tool result helpers. |
+| Default blob resource providers | P3a adds the blob registration/read path and tests; wiring concrete built-in blob resources (e.g. thumbnails) is a separate slice. |
 | ToolCall ledger resource provider | Depends on the ToolCall ledger implementation PR landing first. |
 | Subscriptions/change notifications | Requires MCP session/request state. |

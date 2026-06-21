@@ -1,5 +1,6 @@
 #include "MonolithAssetHygieneActions.h"
 
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -87,7 +88,7 @@ FMonolithActionResult FMonolithAssetHygieneActions::ValidateNamingConventions(co
 			FString Prefix;
 			if (Pair.Value->TryGetString(Prefix))
 			{
-				PrefixRules.Add(Pair.Key, Prefix);
+				PrefixRules.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key), Prefix);
 			}
 		}
 	}

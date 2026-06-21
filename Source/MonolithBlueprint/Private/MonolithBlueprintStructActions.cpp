@@ -659,9 +659,9 @@ static FString JsonValueToImportText(const TSharedPtr<FJsonValue>& JsonVal, cons
 
 static void PopulateDataTableRowFromJson(const UScriptStruct* RowStruct, uint8* RowData, const TSharedPtr<FJsonObject>& ValuesObj, TArray<FString>& OutSetFields, TArray<FString>& OutSkippedFields)
 {
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : ValuesObj->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(ValuesObj))
 	{
-		const FString& FieldName = Pair.Key;
+		const FString FieldName = Pair.Key;
 		FProperty* Prop = FindDataTableProperty(RowStruct, FieldName);
 		if (!Prop)
 		{
@@ -848,9 +848,9 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleAddDataTableRow(con
 	TArray<FString> SetFields;
 	TArray<FString> SkippedFields;
 
-	for (const auto& Pair : (*ValuesObj)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*ValuesObj))
 	{
-		const FString& FieldName = Pair.Key;
+		const FString FieldName = Pair.Key;
 		const TSharedPtr<FJsonValue>& JsonVal = Pair.Value;
 
 		// Find property by name — try exact, case-insensitive, then display name
@@ -1664,7 +1664,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	}
 
 	// Post-write cradle for the top-level fields the tree touched.
-	for (const auto& KV : Tree->Values)
+	for (const auto& KV : FMonolithJsonUtils::GetFields(Tree))
 	{
 		FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, KV.Key);
 		if (TopProp)
@@ -1699,7 +1699,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	if (bReadBackValues)
 	{
 		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
-		for (const auto& KV : Tree->Values)
+		for (const auto& KV : FMonolithJsonUtils::GetFields(Tree))
 		{
 			FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, KV.Key);
 			if (TopProp)

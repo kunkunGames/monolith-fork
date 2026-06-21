@@ -84,7 +84,7 @@ namespace MonolithDataTableInternal
 	static TSharedPtr<FJsonObject> ToCanonicalTree(const UScriptStruct* RowStruct, const TSharedPtr<FJsonObject>& FriendlyValues)
 	{
 		TSharedPtr<FJsonObject> Tree = MakeShared<FJsonObject>();
-		for (const auto& Pair : FriendlyValues->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(FriendlyValues))
 		{
 			if (FProperty* Prop = ResolveRowProperty(RowStruct, Pair.Key))
 			{

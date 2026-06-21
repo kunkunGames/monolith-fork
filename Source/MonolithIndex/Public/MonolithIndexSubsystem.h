@@ -110,6 +110,27 @@ private:
 	void OnIndexingFinished(bool bSuccess);
 	void OnAssetRegistryFilesLoaded();
 	void RegisterDefaultIndexers();
+
+	/**
+	 * Resolve the deep indexer for an asset class: exact leaf-class-name match first, then an
+	 * inheritance parent-walk (most-derived registered ancestor) when the leaf has no exact
+	 * indexer. The walk skips sentinel indexers and the shallow FGenericAssetIndexer, so a leaf
+	 * with no real deep indexer is never inheritance-upgraded. Routes UGo*DataAsset :
+	 * UPrimaryDataAsset (and any future subclass type) to FDataAssetIndexer via its ancestors.
+	 * Reads the AssetRegistry inheritance tree via GetAncestorClassNames; loads no UClass.
+	 * @param AssetRegistry  may be null (the parent-walk is skipped). Returns an invalid ptr if
+	 *                       neither the leaf nor any ancestor has a registered deep indexer.
+	 */
+	TSharedPtr<IMonolithIndexer> ResolveDeepIndexer(const FString& LeafClassName, const FTopLevelAssetPath& ClassPath, class IAssetRegistry* AssetRegistry) const;
+
+	/**
+	 * I2 (PRD AssetSearchSemanticSearch) — order-stable signature of the registered indexer fleet
+	 * (every indexer's GetName():GetIndexerVersion(), sorted). Stored in meta at full-index
+	 * completion and re-checked by CanDoIncrementalIndex(): a mismatch (any indexer's version
+	 * bumped) forces a full reindex so upgraded extraction logic cannot leave stale rows behind a
+	 * still-matching content hash.
+	 */
+	FString ComputeIndexerFleetSignature() const;
 	FString GetDatabasePath() const;
 	bool ShouldAutoIndex() const;
 

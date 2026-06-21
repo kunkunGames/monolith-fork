@@ -1,6 +1,7 @@
 ﻿#include "MonolithAIBehaviorTreeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 #include "Misc/Optional.h"
 
@@ -784,7 +785,7 @@ namespace
 	{
 		if (!Obj || !PropsObj.IsValid()) return;
 
-		for (const auto& Pair : PropsObj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 		{
 			FString Error;
 			if (!SetPropertyValue(Obj, Pair.Key, Pair.Value, BT, Error))

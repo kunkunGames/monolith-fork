@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HttpRouteHandle.h"
+#include "HttpServerConstants.h"
 #include "IHttpRouter.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
@@ -47,6 +48,30 @@ public:
 	// RequestedVersion when supported, otherwise returns the latest supported
 	// version (server-preferred, per the MCP version-mismatch rule). For testing.
 	static FString NegotiateProtocolVersion(const FString& RequestedVersion);
+
+	// P1c MCP session gate result. bReject=false means the request passes (or the
+	// session-mode flag is off — the legacy pass-through). When bReject=true,
+	// HttpCode/RpcCode/Message carry the rejection; the caller serializes a
+	// JSON-RPC error body with HttpCode and returns it as the whole HTTP response.
+	struct FSessionGateResult
+	{
+		bool bReject = false;
+		EHttpServerResponseCodes HttpCode = EHttpServerResponseCodes::Ok;
+		int32 RpcCode = 0;
+		FString Message;
+	};
+
+	// Evaluate the MCP Streamable HTTP session contract for one POST /mcp body.
+	// Pure (no server state) and static so it is unit-testable like IsAllowedOrigin.
+	// Returns bReject=false unconditionally when bSessionModeEnabled is false.
+	// Methods is the ordered list of JSON-RPC method names in the request body;
+	// bSessionKnown is whether the supplied session id matches an observed row.
+	static FSessionGateResult EvaluateSessionGate(
+		const TArray<FString>& Methods,
+		const FString& HeaderSessionId,
+		const FString& HeaderProtocolVersion,
+		bool bSessionKnown,
+		bool bSessionModeEnabled);
 
 private:
 	// --- Route Handlers ---

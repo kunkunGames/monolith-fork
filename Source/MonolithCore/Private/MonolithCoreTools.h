@@ -80,4 +80,12 @@ public:
 
 	/** monolith_test_notification — Trigger a harmless notification test */
 	static FMonolithActionResult HandleTestNotification(const TSharedPtr<FJsonObject>& Params);
+
+	// --- P1b: Async job polling (gated by UMonolithSettings::bEnableAsyncJobs) ---
+
+	/** monolith_get_job — Return one async job's status/progress/result from the registry */
+	static FMonolithActionResult HandleGetJob(const TSharedPtr<FJsonObject>& Params);
+
+	/** monolith_cancel_job — Request cooperative cancellation of an async job and return its row */
+	static FMonolithActionResult HandleCancelJob(const TSharedPtr<FJsonObject>& Params);
 };

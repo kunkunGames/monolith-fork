@@ -1,6 +1,8 @@
 #include "MonolithSourceModule.h"
 #include "MonolithSourceActions.h"
 #include "MonolithSourceContextActions.h"
+#include "MonolithSourceResourceProvider.h"
+#include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
@@ -13,11 +15,27 @@ void FMonolithSourceModule::StartupModule()
 
 	FMonolithSourceActions::RegisterAll();
 	FMonolithSourceContextActions::RegisterAll();
+
+	// Register the source-namespace MCP resource provider (P3b), reusing the existing
+	// bEnableMcpResources gate (no new flag). When resources are disabled the provider is
+	// never created and the resource registry is untouched.
+	if (GetDefault<UMonolithSettings>()->bEnableMcpResources)
+	{
+		SourceResourceProvider = MakeShared<FMonolithSourceResourceProvider>();
+		FMonolithResourceRegistry::Get().RegisterProvider(SourceResourceProvider.ToSharedRef());
+	}
+
 	UE_LOG(LogMonolith, Log, TEXT("Monolith - Source module loaded (source + bridge actions)"));
 }
 
 void FMonolithSourceModule::ShutdownModule()
 {
+	if (SourceResourceProvider.IsValid())
+	{
+		FMonolithResourceRegistry::Get().UnregisterProvider(SourceResourceProvider.ToSharedRef());
+		SourceResourceProvider.Reset();
+	}
+
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source"));
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("bridge"));
 }

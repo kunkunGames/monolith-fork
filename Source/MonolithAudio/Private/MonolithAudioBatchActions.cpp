@@ -831,9 +831,9 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchSetSoundWaveProperties(co
 		TArray<FString> PropertyErrors;
 		PropertyErrors.Reserve(Properties->Values.Num());
 
-		for (const auto& PropPair : Properties->Values)
+		for (const auto& PropPair : FMonolithJsonUtils::GetFields(Properties))
 		{
-			const FString& PropName = PropPair.Key;
+			const FString PropName = PropPair.Key;
 			const TSharedPtr<FJsonValue>& PropValue = PropPair.Value;
 
 			// Find the UPROPERTY via reflection — check USoundWave and parent classes

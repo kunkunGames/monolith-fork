@@ -302,7 +302,7 @@ bool FMonolithMeshPresetActions::ValidateTensionProfileJson(const TSharedPtr<FJs
 		TEXT("lighting_level"), TEXT("audio_reverb")
 	};
 
-	for (const auto& Pair : (*FactorsPtr)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*FactorsPtr))
 	{
 		const TSharedPtr<FJsonObject>* FactorObjPtr;
 		if (!Pair.Value->TryGetObject(FactorObjPtr) || !FactorObjPtr || !(*FactorObjPtr).IsValid())
@@ -964,7 +964,7 @@ FMonolithActionResult FMonolithMeshPresetActions::CreateTensionProfile(const TSh
 	auto ValidatedFactors = MakeShared<FJsonObject>();
 	float TotalWeight = 0.0f;
 
-	for (const auto& Pair : (*FactorsPtr)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*FactorsPtr))
 	{
 		if (!KnownFactors.Contains(Pair.Key))
 		{
@@ -1428,7 +1428,7 @@ FMonolithActionResult FMonolithMeshPresetActions::ImportGenrePreset(const TShare
 
 					// Update the name in the JSON
 					auto ItemCopy = MakeShared<FJsonObject>();
-					for (const auto& Pair : (*ItemObjPtr)->Values)
+					for (const auto& Pair : FMonolithJsonUtils::GetFields(*ItemObjPtr))
 					{
 						ItemCopy->SetField(Pair.Key, Pair.Value);
 					}

@@ -4,6 +4,19 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+/**
+ * Typed media content block for an MCP tool result (image/audio).
+ * Mirrors the MCP content-block shape: {type, mimeType, data(base64)}.
+ * Audience is optional MCP annotation metadata ("user"/"assistant"); empty = omitted.
+ */
+struct FMonolithToolContentBlock
+{
+	FString Type;        // "image" or "audio"
+	FString MimeType;    // e.g. "image/png", "audio/wav"
+	FString Base64Data;  // base64-encoded payload
+	FString Audience;    // optional MCP annotation; empty = omit
+};
+
 /** Result of an action execution */
 struct FMonolithActionResult
 {
@@ -19,6 +32,11 @@ struct FMonolithActionResult
 	TArray<FString> RelatedActions;
 	TArray<FString> Hints;
 	TSharedPtr<FJsonObject> ErrorData;
+
+	// Typed-media slot — empty by default → existing responses byte-identical.
+	// Populated only by handlers that opt into image/audio content blocks; emission
+	// is additionally gated by UMonolithSettings::bEnableTypedMediaResults at the call site.
+	TArray<FMonolithToolContentBlock> MediaBlocks;
 
 	static FMonolithActionResult Success(const TSharedPtr<FJsonObject>& InResult)
 	{

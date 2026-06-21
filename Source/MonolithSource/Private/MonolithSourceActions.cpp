@@ -1298,6 +1298,75 @@ FString FMonolithSourceActions::ReadFileLines(const FString& FilePath, int32 Sta
 	return Result;
 }
 
+FMonolithSourceActions::FResolveReadResult FMonolithSourceActions::ResolveAndReadFile(
+	FMonolithSourceDatabase* DB,
+	const FString& RequestedPath,
+	int32 RequestedStartLine,
+	int32 RequestedEndLine,
+	int32 DefaultWindow)
+{
+	FResolveReadResult Out;
+
+	if (!DB || !DB->IsOpen())
+	{
+		Out.ErrorClass = TEXT("db_unavailable");
+		return Out;
+	}
+	if (RequestedPath.IsEmpty())
+	{
+		Out.ErrorClass = TEXT("invalid_params");
+		return Out;
+	}
+
+	const int32 StartLine = FMath::Clamp(RequestedStartLine <= 0 ? 1 : RequestedStartLine, 1, 1000000);
+	int32 EndLine = FMath::Clamp(RequestedEndLine, 0, 1000000);
+
+	// Resolve path (mirrors HandleReadFile): absolute on-disk, then DB exact, then DB suffix.
+	FString ResolvedPath;
+	if (FPaths::FileExists(RequestedPath))
+	{
+		ResolvedPath = RequestedPath;
+	}
+	else
+	{
+		// Normalize separators to backslashes to match DB-stored paths.
+		FString NormalizedPath = RequestedPath;
+		NormalizedPath.ReplaceInline(TEXT("/"), TEXT("\\"));
+
+		TOptional<FMonolithSourceFile> F = DB->FindFileByPath(NormalizedPath);
+		if (!F.IsSet())
+		{
+			F = DB->FindFileBySuffix(NormalizedPath);
+		}
+		if (F.IsSet())
+		{
+			ResolvedPath = F->Path;
+		}
+	}
+
+	if (ResolvedPath.IsEmpty())
+	{
+		// Absolute on-disk paths are read directly above, so reaching here means a
+		// relative/engine-relative path resolved against EngineSource.db missed.
+		Out.ErrorClass = TEXT("coverage_miss");
+		return Out;
+	}
+
+	if (EndLine <= 0)
+	{
+		EndLine = StartLine + FMath::Max(1, DefaultWindow) - 1;
+	}
+
+	Out.bResolved = true;
+	Out.StartLine = StartLine;
+	Out.EndLine = EndLine;
+	// ShortPath() strips the local checkout/engine prefix: no absolute path leaks to callers
+	// or, downstream, to a resource-provider client.
+	Out.ShortPath = ShortPath(ResolvedPath);
+	Out.Text = ReadFileLines(ResolvedPath, StartLine, EndLine);
+	return Out;
+}
+
 bool FMonolithSourceActions::IsForwardDeclaration(const FString& FilePath, int32 LineStart, int32 LineEnd)
 {
 	if (LineEnd - LineStart > 1)
@@ -2571,41 +2640,15 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 		}
 	}
 
-	// Resolve path
-	FString ResolvedPath;
+	// Resolve + read through the shared hardened path (P3b) so this action and the
+	// monolith://source/file/{path} resource provider stay byte-for-byte consistent and
+	// never leak an absolute on-disk path.
+	const FResolveReadResult Resolved = ResolveAndReadFile(DB, Path, StartLine, EndLine, 200);
 
-	// Try as absolute first
-	if (FPaths::FileExists(Path))
-	{
-		ResolvedPath = Path;
-	}
-	else
-	{
-		// Normalize separators to backslashes to match DB-stored paths
-		FString NormalizedPath = Path;
-		NormalizedPath.ReplaceInline(TEXT("/"), TEXT("\\"));
-
-		// Try DB lookup by exact path
-		TOptional<FMonolithSourceFile> F = DB->FindFileByPath(NormalizedPath);
-		if (F.IsSet())
-		{
-			ResolvedPath = F->Path;
-		}
-		else
-		{
-			// Try suffix match (e.g. "Runtime\Engine\Classes\GameFramework\Actor.h")
-			F = DB->FindFileBySuffix(NormalizedPath);
-			if (F.IsSet())
-			{
-				ResolvedPath = F->Path;
-			}
-		}
-	}
-
-	if (ResolvedPath.IsEmpty())
+	if (!Resolved.bResolved)
 	{
 		// Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2).
-		// Absolute on-disk paths are read directly above, so reaching here means a
+		// Absolute on-disk paths are read directly, so reaching here means a
 		// relative/engine-relative path resolved against EngineSource.db missed.
 		// If the file exists on disk this is an index coverage gap; steer agents to
 		// an absolute path or a reindex rather than an editor.run_python fallback.
@@ -2621,15 +2664,8 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 			.WithRelatedActions({ TEXT("source.search_source"), TEXT("source.trigger_project_reindex"), TEXT("source.health") });
 	}
 
-	if (EndLine <= 0)
-	{
-		EndLine = StartLine + 199;
-	}
-
-	FString Header = FString::Printf(TEXT("--- %s (lines %d-%d) ---"), *ShortPath(ResolvedPath), StartLine, EndLine);
-	FString Source = ReadFileLines(ResolvedPath, StartLine, EndLine);
-
-	FString ResultText = Header + TEXT("\n") + Source;
+	FString Header = FString::Printf(TEXT("--- %s (lines %d-%d) ---"), *Resolved.ShortPath, Resolved.StartLine, Resolved.EndLine);
+	FString ResultText = Header + TEXT("\n") + Resolved.Text;
 
 	auto ResultObj = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> ContentArr;

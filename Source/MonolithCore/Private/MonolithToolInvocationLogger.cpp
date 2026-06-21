@@ -91,7 +91,7 @@ namespace
 		{
 			return Out;
 		}
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Obj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Obj))
 		{
 			if (IsSensitiveKey(Pair.Key))
 			{
@@ -547,7 +547,7 @@ namespace
 		}
 
 		TArray<FString> RemoveKeys;
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Obj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Obj))
 		{
 			if (Pair.Value.IsValid() && Pair.Value->Type == EJson::Object)
 			{
@@ -559,7 +559,7 @@ namespace
 			}
 			if (IsEmptyLogValue(Pair.Value))
 			{
-				RemoveKeys.Add(Pair.Key);
+				RemoveKeys.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			}
 		}
 		for (const FString& Key : RemoveKeys)
@@ -575,7 +575,7 @@ namespace
 			return;
 		}
 		TArray<FString> Keys;
-		Source->Values.GetKeys(Keys);
+		FMonolithJsonUtils::GetFieldNames(Source, Keys);
 		Keys.Sort();
 		if (Keys.Num() > 20)
 		{

@@ -3,6 +3,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
+#include "MonolithJsonUtils.h"
 
 #include "Engine/StaticMesh.h"
 #include "Dom/JsonObject.h"
@@ -242,7 +243,7 @@ namespace MonolithModelGen
 #if WITH_METADATA
 		UPackage* Package = Mesh->GetOutermost();
 		FMetaData& MetaData = Package->GetMetaData();
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Provenance->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Provenance))
 		{
 			FString Value;
 			if (Pair.Value.IsValid())

@@ -64,7 +64,7 @@ void ReadStringMap(const TSharedPtr<FJsonObject>& Obj, const FString& Field, TMa
 		return;
 	}
 
-	for (const auto& Pair : (*MapObj)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*MapObj))
 	{
 		FString Text;
 		if (Pair.Value.IsValid() && Pair.Value->TryGetString(Text))
@@ -244,6 +244,20 @@ FString FMonolithToolProfileManager::GetActiveProfileId()
 	return ActiveProfileId;
 }
 
+int64 FMonolithToolProfileManager::GetToolListRevision() const
+{
+	FScopeLock Scope(&Lock);
+	return ToolListRevision;
+}
+
+void FMonolithToolProfileManager::BumpToolListRevision_NoLock()
+{
+	// Monotonic; callers hold Lock. A change that affects the advertised tool
+	// surface (visibility or description) advances the revision so the MCP
+	// server can advertise tools.listChanged and track the list version.
+	++ToolListRevision;
+}
+
 bool FMonolithToolProfileManager::SetActiveProfile(const FString& ProfileId, FString& OutError)
 {
 	EnsureLoaded();
@@ -254,7 +268,12 @@ bool FMonolithToolProfileManager::SetActiveProfile(const FString& ProfileId, FSt
 		return false;
 	}
 	ActiveProfileId = ProfileId;
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 TArray<FMonolithToolProfile> FMonolithToolProfileManager::ListProfiles()
@@ -325,7 +344,12 @@ bool FMonolithToolProfileManager::UpsertProfile(const FMonolithToolProfile& Prof
 	}
 
 	Profiles.Add(Profile.Id, Profile);
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 bool FMonolithToolProfileManager::DeleteProfile(const FString& ProfileId, FString& OutError)
@@ -349,7 +373,12 @@ bool FMonolithToolProfileManager::DeleteProfile(const FString& ProfileId, FStrin
 		return false;
 	}
 	Profiles.Remove(ProfileId);
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 bool FMonolithToolProfileManager::SetActionEnabled(const FString& ProfileId, const FString& ActionId, bool bEnabled, FString& OutError)
@@ -394,7 +423,12 @@ bool FMonolithToolProfileManager::SetActionEnabled(const FString& ProfileId, con
 			Profile->DisabledActions.Add(ActionId);
 		}
 	}
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 bool FMonolithToolProfileManager::SetNamespaceEnabled(const FString& ProfileId, const FString& Namespace, bool bEnabled, FString& OutError)
@@ -435,7 +469,12 @@ bool FMonolithToolProfileManager::SetNamespaceEnabled(const FString& ProfileId, 
 			Profile->DisabledNamespaces.Add(Namespace);
 		}
 	}
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 bool FMonolithToolProfileManager::SetDescriptionOverride(const FString& ProfileId, const FString& ActionId, const FString& Description, FString& OutError)
@@ -462,7 +501,12 @@ bool FMonolithToolProfileManager::SetDescriptionOverride(const FString& ProfileI
 	{
 		Profile->DescriptionOverrides.Add(ActionId, Description);
 	}
-	return Save_NoLock(OutError);
+	if (!Save_NoLock(OutError))
+	{
+		return false;
+	}
+	BumpToolListRevision_NoLock();
+	return true;
 }
 
 bool FMonolithToolProfileManager::IsActionAllowed(const FString& Namespace, const FString& Action)

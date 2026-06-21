@@ -9,6 +9,7 @@
 #include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithToolInvocationLogger.h"
+#include "MonolithToolProfileManager.h"
 #include "MonolithToolResultUtils.h"
 #include "MonolithSettings.h"
 #include "HttpServerModule.h"
@@ -102,6 +103,23 @@ namespace
 		return TEXT("md5:") + FMD5::HashAnsiString(*RawSessionId);
 	}
 
+	// Returns true when the client's initialize params advertise the named
+	// capability group (e.g. "roots", "sampling", "elicitation"). Only the
+	// boolean presence is read; the capability object itself is never stored.
+	bool ClientAdvertisesCapability(const TSharedPtr<FJsonObject>& Params, const TCHAR* CapabilityKey)
+	{
+		if (!Params.IsValid())
+		{
+			return false;
+		}
+		const TSharedPtr<FJsonObject>* Capabilities = nullptr;
+		if (!Params->TryGetObjectField(TEXT("capabilities"), Capabilities) || !Capabilities || !(*Capabilities).IsValid())
+		{
+			return false;
+		}
+		return (*Capabilities)->HasField(CapabilityKey);
+	}
+
 	void ObserveMcpSessionIfEnabled(
 		const TSharedPtr<FJsonObject>& Request,
 		const FString& HeaderSessionId,
@@ -114,12 +132,35 @@ namespace
 		}
 
 		const FString Method = GetJsonRpcMethod(Request);
-		FMonolithMcpSessionTracker::Get().ObserveRequest(
+		const FString ProtocolVersion = GetJsonRpcProtocolVersion(Request, HeaderProtocolVersion);
+		FMonolithMcpSessionTracker& Tracker = FMonolithMcpSessionTracker::Get();
+
+		// Lifecycle routing (P1c): initialize / notifications/initialized advance
+		// the session lifecycle additively; everything else stays a plain observe.
+		if (Method == TEXT("initialize"))
+		{
+			const TSharedPtr<FJsonObject> Params = GetJsonRpcParams(Request);
+			Tracker.MarkInitialize(
+				HeaderSessionId,
+				ProtocolVersion,
+				ClientAdvertisesCapability(Params, TEXT("roots")),
+				ClientAdvertisesCapability(Params, TEXT("sampling")),
+				ClientAdvertisesCapability(Params, TEXT("elicitation")));
+			return;
+		}
+		if (Method == TEXT("notifications/initialized"))
+		{
+			Tracker.MarkInitialized(HeaderSessionId);
+			return;
+		}
+
+		Tracker.ObserveRequest(
 			HeaderSessionId,
-			GetJsonRpcProtocolVersion(Request, HeaderProtocolVersion),
+			ProtocolVersion,
 			Method,
 			GetJsonRpcToolName(Request, Method));
 	}
+
 }
 
 FMonolithHttpServer::FMonolithHttpServer()
@@ -386,6 +427,38 @@ bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const
 	const FString HeaderSessionId = FirstHeaderValue(Request, TEXT("MCP-Session-Id"));
 	const FString HeaderProtocolVersion = FirstHeaderValue(Request, TEXT("MCP-Protocol-Version"));
 	const FString HeaderTraceId = FirstHeaderValue(Request, TEXT("X-Monolith-Trace-Id"));
+
+	// P1c session gate — only active when bEnableMcpSessionMode is on; a pure
+	// pass-through to legacy behavior otherwise (EvaluateSessionGate returns
+	// bReject=false when the flag is off, leaving the per-request loop untouched).
+	{
+		const UMonolithSettings* GateSettings = UMonolithSettings::Get();
+		const bool bSessionModeEnabled = GateSettings && GateSettings->bEnableMcpSessionMode;
+		if (bSessionModeEnabled)
+		{
+			TArray<FString> Methods;
+			Methods.Reserve(Requests.Num());
+			for (const TSharedPtr<FJsonObject>& Req : Requests)
+			{
+				Methods.Add(GetJsonRpcMethod(Req));
+			}
+			const bool bSessionKnown = !HeaderSessionId.IsEmpty()
+				&& FMonolithMcpSessionTracker::Get().IsKnownSession(HeaderSessionId);
+
+			const FSessionGateResult Gate = EvaluateSessionGate(
+				Methods, HeaderSessionId, HeaderProtocolVersion, bSessionKnown, bSessionModeEnabled);
+			if (Gate.bReject)
+			{
+				TSharedPtr<FJsonObject> GateError = FMonolithJsonUtils::ErrorResponse(
+					nullptr, Gate.RpcCode, Gate.Message);
+				auto Response = MakeJsonResponse(FMonolithJsonUtils::Serialize(GateError), Gate.HttpCode);
+				AddCorsHeaders(*Response, Request);
+				OnComplete(MoveTemp(Response));
+				return true;
+			}
+		}
+	}
+
 	Responses.Reserve(Requests.Num());
 	for (const TSharedPtr<FJsonObject>& Req : Requests)
 	{
@@ -559,6 +632,96 @@ FString FMonolithHttpServer::NegotiateProtocolVersion(const FString& RequestedVe
 }
 
 // ============================================================================
+// MCP session gate (P1c)
+// ============================================================================
+
+FMonolithHttpServer::FSessionGateResult FMonolithHttpServer::EvaluateSessionGate(
+	const TArray<FString>& Methods,
+	const FString& HeaderSessionId,
+	const FString& HeaderProtocolVersion,
+	bool bSessionKnown,
+	bool bSessionModeEnabled)
+{
+	FSessionGateResult Result;
+
+	// Off => byte-identical legacy behavior: never reject.
+	if (!bSessionModeEnabled)
+	{
+		return Result;
+	}
+
+	// 1. An explicit but unsupported MCP-Protocol-Version is a malformed request
+	//    regardless of method (transport-level contract): InvalidRequest + 400.
+	if (!HeaderProtocolVersion.IsEmpty()
+		&& !GetSupportedProtocolVersions().Contains(HeaderProtocolVersion))
+	{
+		Result.bReject = true;
+		Result.HttpCode = EHttpServerResponseCodes::BadRequest;
+		Result.RpcCode = FMonolithJsonUtils::ErrInvalidRequest;
+		Result.Message = FString::Printf(
+			TEXT("Unsupported MCP-Protocol-Version: %s — server supports %s."),
+			*HeaderProtocolVersion,
+			*FString::Join(GetSupportedProtocolVersions(), TEXT(", ")));
+		return Result;
+	}
+
+	// Handshake methods establish or probe a session before the server knows its id. initialize is
+	// where the client's session id is first observed (MarkInitialize); notifications/initialized
+	// and ping are the follow-up/liveness steps. They are exempt from the session-id checks below.
+	auto IsHandshakeMethod = [](const FString& Method)
+	{
+		return Method == TEXT("initialize")
+			|| Method == TEXT("notifications/initialized")
+			|| Method == TEXT("ping");
+	};
+	bool bAllHandshake = Methods.Num() > 0;
+	for (const FString& Method : Methods)
+	{
+		if (!IsHandshakeMethod(Method))
+		{
+			bAllHandshake = false;
+			break;
+		}
+	}
+
+	// 2. A supplied session id that matches no observed row is unknown/expired: 404 — EXCEPT on a
+	//    pure handshake request. initialize carries the client-chosen id the server is about to
+	//    observe; rejecting it as "unknown" here (the gate runs before MarkInitialize) would make
+	//    establishing a session impossible.
+	if (!HeaderSessionId.IsEmpty() && !bSessionKnown && !bAllHandshake)
+	{
+		Result.bReject = true;
+		Result.HttpCode = EHttpServerResponseCodes::NotFound;
+		Result.RpcCode = FMonolithJsonUtils::ErrInvalidRequest;
+		Result.Message = TEXT("Unknown or expired MCP session — re-run initialize to establish a new session.");
+		return Result;
+	}
+
+	// 3. Post-initialize methods require a session id header; the handshake methods are exempt
+	//    because they are how a session id is first established.
+	if (HeaderSessionId.IsEmpty())
+	{
+		for (const FString& Method : Methods)
+		{
+			if (IsHandshakeMethod(Method))
+			{
+				continue;
+			}
+
+			Result.bReject = true;
+			Result.HttpCode = EHttpServerResponseCodes::BadRequest;
+			Result.RpcCode = FMonolithJsonUtils::ErrInvalidRequest;
+			Result.Message = FString::Printf(
+				TEXT("Missing MCP-Session-Id header for method '%s' — send the session id returned by initialize."),
+				*Method);
+			return Result;
+		}
+	}
+
+	return Result;
+}
+
+// ============================================================================
 // JSON-RPC 2.0 Processing
 // ============================================================================
 
@@ -692,12 +855,31 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleInitialize(const TSharedPtr<F
 	// Capabilities
 	TSharedPtr<FJsonObject> Capabilities = MakeShared<FJsonObject>();
 
-	// We support tools
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+
+	// We support tools. The tools.listChanged capability is advertised true only
+	// when session mode is on (P1c): the active tool profile can change which
+	// actions are visible, so the revision counter is meaningful and the server
+	// may later emit notifications/tools/list_changed. With the flag off this
+	// stays false — byte-identical legacy capabilities.
+	//
+	// NOTE: this advertises the capability and tracks the revision only. Actual
+	// notifications/tools/list_changed delivery is NOT implemented here because
+	// GET /mcp is a single-shot SSE response with no long-lived push channel;
+	// delivery awaits a real SSE transport. See SPEC_MonolithMcpSessionModeGate.
+	const bool bSessionModeOn = Settings && Settings->bEnableMcpSessionMode;
 	TSharedPtr<FJsonObject> ToolsCap = MakeShared<FJsonObject>();
-	ToolsCap->SetBoolField(TEXT("listChanged"), false);
+	ToolsCap->SetBoolField(TEXT("listChanged"), bSessionModeOn);
+	if (bSessionModeOn)
+	{
+		// Additive, non-standard hint so clients/operators can poll tools/list and
+		// detect a changed advertised surface without a server push. Lives under
+		// the tools capability so it never collides with a top-level MCP field.
+		ToolsCap->SetNumberField(TEXT("_monolith_tool_list_revision"),
+			static_cast<double>(FMonolithToolProfileManager::Get().GetToolListRevision()));
+	}
 	Capabilities->SetObjectField(TEXT("tools"), ToolsCap);
 
-	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (Settings
 		&& Settings->bEnableMcpResources
 		&& FMonolithResourceRegistry::Get().HasDefaultResourcesRegistered())
@@ -800,7 +982,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 						TEXT("type"), TEXT("description"), TEXT("default"),
 						TEXT("enum"), TEXT("minimum"), TEXT("maximum"),
 					};
-					for (const auto& SchemaEntry : ActionInfo.ParamSchema->Values)
+					for (const auto& SchemaEntry : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
 					{
 						// Root-level internal markers (keys prefixed with '_', e.g.
 						// _validate_types) are not parameters — skip them regardless
@@ -1055,7 +1237,13 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesRead(const TSharedPt
 			TEXT("Missing resource uri"));
 	}
 
-	FMonolithResourceReadResult Read = FMonolithResourceRegistry::Get().ReadResource(Uri);
+	FMonolithResourceRegistry& Registry = FMonolithResourceRegistry::Get();
+
+	// Resolve the resource exactly once: resources/read returns a JSON-RPC not-found error when the
+	// resource is missing, and reuses that same resolved result to build the success body. The
+	// text/blob content shape stays in one place (FMonolithResourceRegistry::ResultToContentsJson),
+	// and a provider/file-backed resource is read only once per request.
+	const FMonolithResourceReadResult Read = Registry.ReadResource(Uri);
 	if (!Read.bFound)
 	{
 		return FMonolithJsonUtils::ErrorResponse(
@@ -1064,15 +1252,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesRead(const TSharedPt
 			Read.Error);
 	}
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	TArray<TSharedPtr<FJsonValue>> Contents;
-	TSharedPtr<FJsonObject> Content = MakeShared<FJsonObject>();
-	Content->SetStringField(TEXT("uri"), Read.Uri);
-	Content->SetStringField(TEXT("mimeType"), Read.MimeType);
-	Content->SetStringField(TEXT("text"), Read.Text);
-	Content->SetBoolField(TEXT("truncated"), Read.bTruncated);
-	Contents.Add(MakeShared<FJsonValueObject>(Content));
-	Result->SetArrayField(TEXT("contents"), Contents);
+	TSharedPtr<FJsonObject> Result = FMonolithResourceRegistry::ResultToContentsJson(Read);
 	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
 }
 
@@ -1145,7 +1325,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// merged with a nested "params" object or a JSON-encoded "params" string. Mirrors
 		// the *_query branch so the dispatched handler sees a single flat params object.
 		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
-		for (const auto& Pair : Arguments->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Arguments))
 		{
 			if (Pair.Key != TEXT("namespace") && Pair.Key != TEXT("action") && Pair.Key != TEXT("params"))
 			{
@@ -1177,8 +1357,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		if (bHasNestedParams && NestedParams)
 		{
 			Arguments = MakeShared<FJsonObject>();
-			for (const auto& Pair : TopLevelExtras->Values) { Arguments->SetField(Pair.Key, Pair.Value); }
-			for (const auto& Pair : (*NestedParams)->Values) { Arguments->SetField(Pair.Key, Pair.Value); }
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(TopLevelExtras)) { Arguments->SetField(Pair.Key, Pair.Value); }
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedParams)) { Arguments->SetField(Pair.Key, Pair.Value); }
 		}
 		else
 		{
@@ -1198,7 +1378,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// top level alongside the tool-specific args. Normalise all shapes
 		// so the dispatched action handler sees a single flat params object.
 		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
-		for (const auto& Pair : Arguments->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Arguments))
 		{
 			if (Pair.Key != TEXT("params"))
 			{
@@ -1233,12 +1413,12 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		{
 			Arguments = MakeShared<FJsonObject>();
 			// Start with top-level extras (lower priority)
-			for (const auto& Pair : TopLevelExtras->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(TopLevelExtras))
 			{
 				Arguments->SetField(Pair.Key, Pair.Value);
 			}
 			// Overlay nested params (higher priority)
-			for (const auto& Pair : (*NestedParams)->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedParams))
 			{
 				Arguments->SetField(Pair.Key, Pair.Value);
 			}
@@ -1271,7 +1451,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// place optional params like members_only alongside "action" rather than
 		// nesting them inside "params".
 		TSharedPtr<FJsonObject> TopLevelExtras = MakeShared<FJsonObject>();
-		for (const auto& Pair : Arguments->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Arguments))
 		{
 			if (Pair.Key != TEXT("action") && Pair.Key != TEXT("params"))
 			{
@@ -1309,12 +1489,12 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		{
 			Arguments = MakeShared<FJsonObject>();
 			// Start with top-level extras (lower priority)
-			for (const auto& Pair : TopLevelExtras->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(TopLevelExtras))
 			{
 				Arguments->SetField(Pair.Key, Pair.Value);
 			}
 			// Overlay nested params (higher priority)
-			for (const auto& Pair : (*NestedParams)->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedParams))
 			{
 				Arguments->SetField(Pair.Key, Pair.Value);
 			}
@@ -1376,7 +1556,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(
 		ActionResult,
-		Settings && Settings->bEnableStructuredToolResults);
+		Settings && Settings->bEnableStructuredToolResults,
+		Settings && Settings->bEnableTypedMediaResults);
 
 	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
 }

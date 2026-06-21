@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
@@ -29,6 +29,41 @@ public:
 
 	/** Create a JSON array from a TArray of strings */
 	static TSharedRef<FJsonValueArray> StringArrayToJson(const TArray<FString>& Strings);
+
+	// ============================================================================
+	//  FJsonObject key access — single cohesion endpoint (UE 5.8 migration).
+	//
+	//  UE 5.8 changed FJsonObject::Values keys from FString to UE::FSharedString.
+	//  Every Monolith / Go module MUST read JSON-object keys through these helpers
+	//  instead of touching `Obj->Values` keys directly, so the engine key type is
+	//  known in exactly ONE place. If the engine key type changes again, only this
+	//  file changes — no module needs to be re-touched. For field *lookups* use the
+	//  engine's own FStringView API directly (Obj->TryGetField / Obj->HasField);
+	//  only key *enumeration* needs these helpers.
+	// ============================================================================
+
+	/** Convert a single FJsonObject key (UE::FSharedString in 5.8) to FString. */
+	static FString FieldKeyToString(const FJsonObject::FStringType& Key);
+
+	/**
+	 * Overload for callers that pass a plain FString key (e.g. iterating a TMap<FString, ...>
+	 * that is NOT an FJsonObject — Niagara/Animation input-parameter maps). In UE 5.8
+	 * FJsonObject::FStringType is UE::FSharedString, a type distinct from FString, so this
+	 * overload is unambiguous and lets non-JSON-key call sites reuse the same helper. Returns
+	 * the key unchanged.
+	 */
+	static FString FieldKeyToString(const FString& Key) { return Key; }
+
+	/** Append a JSON object's field names as FString. Replaces `Obj->Values.GetKeys(Out)`. */
+	static void GetFieldNames(const TSharedPtr<FJsonObject>& Obj, TArray<FString>& OutNames);
+
+	/** Return a JSON object's field names as FString. */
+	static TArray<FString> GetFieldNames(const TSharedPtr<FJsonObject>& Obj);
+
+	/** Return a JSON object's fields as (FString key, value) pairs.
+	 *  Drop-in replacement for `for (const auto& Pair : Obj->Values)` — the loop
+	 *  body keeps using Pair.Key (now FString) and Pair.Value unchanged. */
+	static TArray<TPair<FString, TSharedPtr<FJsonValue>>> GetFields(const TSharedPtr<FJsonObject>& Obj);
 
 	// --- JSON-RPC 2.0 Error Codes ---
 	static constexpr int32 ErrParseError = -32700;

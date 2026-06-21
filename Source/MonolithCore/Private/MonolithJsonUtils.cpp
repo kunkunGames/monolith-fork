@@ -91,6 +91,52 @@ TSharedRef<FJsonValueArray> FMonolithJsonUtils::StringArrayToJson(const TArray<F
 }
 
 // =============================================================================
+//  FJsonObject key access — single cohesion endpoint (UE 5.8 migration).
+//  UE 5.8 stores FJsonObject keys as UE::FSharedString (= TSharedString<TCHAR>);
+//  operator* yields a const TCHAR*, from which FString constructs directly. This
+//  is the ONLY place in Monolith/Go that knows that engine detail.
+// =============================================================================
+
+FString FMonolithJsonUtils::FieldKeyToString(const FJsonObject::FStringType& Key)
+{
+	return FString(*Key);
+}
+
+void FMonolithJsonUtils::GetFieldNames(const TSharedPtr<FJsonObject>& Obj, TArray<FString>& OutNames)
+{
+	OutNames.Reset();
+	if (Obj.IsValid())
+	{
+		OutNames.Reserve(Obj->Values.Num());
+		for (const auto& KV : Obj->Values)
+		{
+			OutNames.Add(FString(*KV.Key));
+		}
+	}
+}
+
+TArray<FString> FMonolithJsonUtils::GetFieldNames(const TSharedPtr<FJsonObject>& Obj)
+{
+	TArray<FString> Names;
+	GetFieldNames(Obj, Names);
+	return Names;
+}
+
+TArray<TPair<FString, TSharedPtr<FJsonValue>>> FMonolithJsonUtils::GetFields(const TSharedPtr<FJsonObject>& Obj)
+{
+	TArray<TPair<FString, TSharedPtr<FJsonValue>>> Fields;
+	if (Obj.IsValid())
+	{
+		Fields.Reserve(Obj->Values.Num());
+		for (const auto& KV : Obj->Values)
+		{
+			Fields.Emplace(FString(*KV.Key), KV.Value);
+		}
+	}
+	return Fields;
+}
+
+// =============================================================================
 //  Survivor B — Universal Response Shaping
 //
 //  Phase 1 of plan §3.B (Docs/plans/2026-05-27-mcp-llm-ergonomics.md).
@@ -198,7 +244,7 @@ namespace MonolithResponseShapingDetail
 
 		// Find all top-level array-of-objects keys (the candidate list payloads).
 		TArray<FString> ListPayloadKeys;
-		for (const auto& Pair : Response->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Response))
 		{
 			if (IsArrayOfObjects(Pair.Value))
 			{
@@ -247,7 +293,7 @@ namespace MonolithResponseShapingDetail
 			TSharedPtr<FJsonObject> RowObj = *RowObjPtr;
 
 			TArray<FString> ExistingKeys;
-			RowObj->Values.GetKeys(ExistingKeys);
+			FMonolithJsonUtils::GetFieldNames(RowObj, ExistingKeys);
 			for (const FString& K : ExistingKeys)
 			{
 				UnionKeys.Add(K);
@@ -418,7 +464,7 @@ namespace MonolithResponseShapingDetail
 		if (!bAnyPathResolved)
 		{
 			TArray<FString> TopLevelKeys;
-			Response->Values.GetKeys(TopLevelKeys);
+			FMonolithJsonUtils::GetFieldNames(Response, TopLevelKeys);
 			TopLevelKeys.Sort();
 			Warnings.Add(FString::Printf(
 				TEXT("_path_fields matched no paths; top-level keys available: [%s]"),
@@ -427,7 +473,7 @@ namespace MonolithResponseShapingDetail
 
 		// Swap Response contents with Built. Keep the same object handle.
 		Response->Values.Empty();
-		for (const auto& Pair : Built->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Built))
 		{
 			Response->SetField(Pair.Key, Pair.Value);
 		}
@@ -529,7 +575,7 @@ void ApplyResponseShaping(
 	if (bHasFields)
 	{
 		TArray<FString> Existing;
-		Response->Values.GetKeys(Existing);
+		FMonolithJsonUtils::GetFieldNames(Response, Existing);
 		for (const FString& K : Existing)
 		{
 			if (!FieldsSet.Contains(K))
@@ -568,7 +614,7 @@ void ApplyResponseShaping(
 	if (bCompact)
 	{
 		TArray<FString> Existing;
-		Response->Values.GetKeys(Existing);
+		FMonolithJsonUtils::GetFieldNames(Response, Existing);
 		for (const FString& K : Existing)
 		{
 			const TSharedPtr<FJsonValue> Val = Response->TryGetField(K);

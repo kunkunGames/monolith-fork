@@ -1,4 +1,5 @@
 #include "MonolithAudioSoundCueActions.h"
+#include "MonolithAudioActionUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h" // LogMonolith
@@ -1011,7 +1012,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::AddSoundCueNode(const TShar
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && PropsObj->IsValid())
 	{
-		for (const auto& Pair : (*PropsObj)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 		{
 			FString PropError;
 			if (!SetNodeProperty(NewNode, Pair.Key, Pair.Value, PropError))
@@ -1595,7 +1596,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 			const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 			if (NodeObj->TryGetObjectField(TEXT("properties"), PropsObj) && PropsObj && PropsObj->IsValid())
 			{
-				for (const auto& Pair : (*PropsObj)->Values)
+				for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 				{
 					FString PropError;
 					if (!SetNodeProperty(*FoundNode, Pair.Key, Pair.Value, PropError))

@@ -95,6 +95,41 @@ public:
 		const FString& ParentHeaderInclude, bool bParentNeedsObjectInitializer,
 		FString& OutHeaderText, FString& OutCppText);
 
+	// --- Shared source-file read (P3b) ---
+
+	/**
+	 * Outcome of ResolveAndReadFile. Carries ONLY checkout-relative / index-relative
+	 * presentation strings — never an absolute on-disk path — so the same hardened read
+	 * can back both the source.read_file action and the monolith://source/file/{path}
+	 * resource provider without leaking local filesystem layout to MCP clients.
+	 */
+	struct FResolveReadResult
+	{
+		bool bResolved = false;        // A DB-backed or on-disk file matched the requested path.
+		FString ShortPath;             // ShortPath()-form of the resolved file (no absolute prefix).
+		FString Text;                  // Line-numbered slice (ReadFileLines form). Empty when unresolved.
+		int32 StartLine = 1;           // Clamped start line actually used.
+		int32 EndLine = 0;             // Clamped/derived end line actually used.
+		FString ErrorClass;            // "" on success; e.g. "coverage_miss" when nothing resolved.
+	};
+
+	/**
+	 * Resolve a caller-supplied path against the engine source DB and read a bounded,
+	 * line-numbered slice. Resolution order mirrors HandleReadFile: absolute on-disk path,
+	 * then DB exact-path match, then DB suffix match. On a miss, bResolved=false and
+	 * ErrorClass="coverage_miss". DB must be open; pass the result of GetDB().
+	 *
+	 * RequestedStartLine<=0 defaults to 1. RequestedEndLine<=0 defaults to a bounded window
+	 * (StartLine + DefaultWindow - 1). The returned Text and ShortPath never contain an
+	 * absolute path, so a resource provider can surface them directly.
+	 */
+	static FResolveReadResult ResolveAndReadFile(
+		FMonolithSourceDatabase* DB,
+		const FString& RequestedPath,
+		int32 RequestedStartLine,
+		int32 RequestedEndLine,
+		int32 DefaultWindow = 200);
+
 private:
 	// Action handlers
 	static FMonolithActionResult HandleGetIncludePath(const TSharedPtr<FJsonObject>& Params);

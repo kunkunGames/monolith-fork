@@ -3,7 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithNiagaraActions.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardGetDIPropertiesTest, "Monolith.Niagara.ParamGuard.GetDIProperties", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardGetDIPropertiesTest, "Monolith.Niagara.ParamGuard.GetDIProperties", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardGetDIPropertiesTest::RunTest(const FString& Parameters)
 {
@@ -14,14 +14,14 @@ bool FMonolithNiagaraParamGuardGetDIPropertiesTest::RunTest(const FString& Param
 		Params->SetNumberField(TEXT("di_class"), 123); // Invalid type
 
 		FMonolithActionResult Result = Actions.HandleGetDIProperties(Params);
-		TestTrue(TEXT("GetDIProperties should fail with non-string di_class param"), Result.ResultType == FMonolithActionResult::Error);
+		TestFalse(TEXT("GetDIProperties should fail with non-string di_class param"), Result.bSuccess);
 	}
 
 	{
 		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
 
 		FMonolithActionResult Result = Actions.HandleGetDIProperties(Params);
-		TestTrue(TEXT("GetDIProperties should fail with missing di_class param"), Result.ResultType == FMonolithActionResult::Error);
+		TestFalse(TEXT("GetDIProperties should fail with missing di_class param"), Result.bSuccess);
 	}
 
 	return true;

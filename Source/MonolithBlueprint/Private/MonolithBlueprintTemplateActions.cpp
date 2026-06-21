@@ -65,7 +65,7 @@ namespace
 
 		if (UserParams.IsValid())
 		{
-			for (const auto& Pair : UserParams->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(UserParams))
 			{
 				if (Pair.Value->Type == EJson::String)
 				{

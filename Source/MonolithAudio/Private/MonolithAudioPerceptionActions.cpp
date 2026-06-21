@@ -1,4 +1,5 @@
 #include "MonolithAudioPerceptionActions.h"
+#include "MonolithAudioActionUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"

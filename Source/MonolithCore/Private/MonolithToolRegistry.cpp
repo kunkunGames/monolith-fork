@@ -257,9 +257,10 @@ namespace
 			return;
 		}
 
-		for (const auto& Pair : Schema->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Schema))
 		{
-			if (Pair.Key.StartsWith(TEXT("_")))
+			const FString PairKey = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+			if (PairKey.StartsWith(TEXT("_")))
 			{
 				continue;
 			}
@@ -272,13 +273,13 @@ namespace
 
 			bool bRequired = false;
 			(*ParamDef)->TryGetBoolField(TEXT("required"), bRequired);
-			TSharedPtr<FJsonValue> Row = MakeShared<FJsonValueObject>(BuildParamSummaryRow(Pair.Key, *ParamDef, bRequired));
+			TSharedPtr<FJsonValue> Row = MakeShared<FJsonValueObject>(BuildParamSummaryRow(PairKey, *ParamDef, bRequired));
 			if (bRequired)
 			{
 				OutRequired.Add(Row);
 				if (OutRequiredNames)
 				{
-					OutRequiredNames->Add(Pair.Key);
+					OutRequiredNames->Add(PairKey);
 				}
 			}
 			else
@@ -600,9 +601,9 @@ bool FMonolithParamSchema::ApplyAliases(
 		return true;
 	}
 
-	for (const auto& Pair : Schema->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Schema))
 	{
-		const FString& Canonical = Pair.Key;
+		const FString Canonical = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 
 		const TSharedPtr<FJsonObject>* ParamDef = nullptr;
 		if (!Pair.Value->TryGetObject(ParamDef) || !ParamDef)
@@ -666,9 +667,9 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	// Build the set of allowed keys: canonical names + their declared aliases.
 	TSet<FString> Allowed;
 	Allowed.Reserve(Schema->Values.Num());
-	for (const auto& Pair : Schema->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Schema))
 	{
-		Allowed.Add(Pair.Key);
+		Allowed.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 
 		const TSharedPtr<FJsonObject>* ParamDef = nullptr;
 		if (!Pair.Value->TryGetObject(ParamDef) || !ParamDef)
@@ -706,11 +707,12 @@ TArray<FString> FMonolithParamSchema::FindUnknownKeys(
 	Allowed.Add(TEXT("_row_fields"));
 	Allowed.Add(TEXT("_path_fields"));
 
-	for (const auto& Pair : Params->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 	{
-		if (!Allowed.Contains(Pair.Key))
+		const FString PairKey = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+		if (!Allowed.Contains(PairKey))
 		{
-			Unknown.Add(Pair.Key);
+			Unknown.Add(PairKey);
 		}
 	}
 
@@ -744,9 +746,10 @@ bool FMonolithParamSchema::ValidateTypedParams(
 		return true;
 	}
 
-	for (const auto& Pair : Schema->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Schema))
 	{
-		if (Pair.Key.StartsWith(TEXT("_")))
+		const FString PairKey = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+		if (PairKey.StartsWith(TEXT("_")))
 		{
 			continue;
 		}
@@ -757,7 +760,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 			continue;
 		}
 
-		TSharedPtr<FJsonValue> ParamValue = Params->TryGetField(Pair.Key);
+		TSharedPtr<FJsonValue> ParamValue = Params->TryGetField(PairKey);
 		if (!ParamValue.IsValid())
 		{
 			continue;
@@ -767,7 +770,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 		if ((*ParamDef)->TryGetStringField(TEXT("type"), TypeSpec)
 			&& !JsonValueMatchesSchemaTypes(ParamValue, TypeSpec))
 		{
-			OutErrors.Add(FString::Printf(TEXT("Invalid param '%s': expected %s."), *Pair.Key, *TypeSpec));
+			OutErrors.Add(FString::Printf(TEXT("Invalid param '%s': expected %s."), *PairKey, *TypeSpec));
 			continue;
 		}
 
@@ -791,7 +794,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 				{
 					OutErrors.Add(FString::Printf(
 						TEXT("Invalid param '%s': value '%s' must be one of [%s]."),
-						*Pair.Key,
+						*PairKey,
 						*ActualValue,
 						*FString::Join(AllowedValues, TEXT(", "))));
 				}
@@ -805,7 +808,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 		{
 			OutErrors.Add(FString::Printf(
 				TEXT("Invalid param '%s': value must be >= %s."),
-				*Pair.Key,
+				*PairKey,
 				*FString::SanitizeFloat(MinValue)));
 		}
 
@@ -814,7 +817,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 		{
 			OutErrors.Add(FString::Printf(
 				TEXT("Invalid param '%s': value must be <= %s."),
-				*Pair.Key,
+				*PairKey,
 				*FString::SanitizeFloat(MaxValue)));
 		}
 	}
@@ -978,9 +981,10 @@ TArray<TSharedPtr<FJsonValue>> FMonolithToolRegistry::BuildPlanningSignals(const
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		OptionalNames.Reserve(OptionalParams.Num());
-		for (const auto& Pair : ActionInfo.ParamSchema->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
 		{
-			if (Pair.Key.StartsWith(TEXT("_")))
+			const FString PairKey = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
+			if (PairKey.StartsWith(TEXT("_")))
 			{
 				continue;
 			}
@@ -994,7 +998,7 @@ TArray<TSharedPtr<FJsonValue>> FMonolithToolRegistry::BuildPlanningSignals(const
 				(*ParamDef)->TryGetBoolField(TEXT("required"), bRequired);
 				if (!bRequired)
 				{
-					OptionalNames.Add(Pair.Key);
+					OptionalNames.Add(PairKey);
 				}
 			}
 		}
@@ -1420,20 +1424,21 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		TArray<FString> Missing;
-		for (const auto& Pair : ActionInfo.ParamSchema->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
 		{
+			const FString PairKey = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 			const TSharedPtr<FJsonObject>* ParamDef = nullptr;
 			if (Pair.Value->TryGetObject(ParamDef) && ParamDef)
 			{
 				bool bRequired = false;
 				(*ParamDef)->TryGetBoolField(TEXT("required"), bRequired);
-				if (bRequired && !EffectiveParams->HasField(Pair.Key))
+				if (bRequired && !EffectiveParams->HasField(PairKey))
 				{
 					// Legacy wbp_path / asset_path aliasing: accept asset_path as substitute for wbp_path
 					// (only fires for schemas not migrated to K2 aliases).
-					if (Pair.Key == TEXT("wbp_path") && EffectiveParams->HasField(TEXT("asset_path")))
+					if (PairKey == TEXT("wbp_path") && EffectiveParams->HasField(TEXT("asset_path")))
 						continue;
-					Missing.Add(Pair.Key);
+					Missing.Add(PairKey);
 				}
 			}
 		}
@@ -1441,8 +1446,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		{
 			SetPhaseMs(TEXT("schema_ms"), SchemaStartSeconds);
 			TArray<FString> Provided;
-			Provided.Reserve(EffectiveParams->Values.Num());
-			for (const auto& P : EffectiveParams->Values) Provided.Add(P.Key);
+			FMonolithJsonUtils::GetFieldNames(EffectiveParams, Provided);
 
 			// CC-05: enrich the missing-param error with alias info so the agent
 			// can fix typos without round-trip schema fetches.
@@ -1515,7 +1519,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 	TArray<FString> PathParamWarnings;
 	if (ActionInfo.ParamSchema.IsValid())
 	{
-		for (const auto& SchemaPair : ActionInfo.ParamSchema->Values)
+		for (const auto& SchemaPair : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
 		{
 			const TSharedPtr<FJsonObject>* ParamDefPtr = nullptr;
 			if (!SchemaPair.Value->TryGetObject(ParamDefPtr) || !ParamDefPtr || !ParamDefPtr->IsValid())
@@ -1533,7 +1537,7 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				continue;
 			}
 
-			const FString& ParamName = SchemaPair.Key;
+			const FString ParamName = FMonolithJsonUtils::FieldKeyToString(SchemaPair.Key);
 			FString Value;
 			if (!EffectiveParams->TryGetStringField(ParamName, Value))
 			{

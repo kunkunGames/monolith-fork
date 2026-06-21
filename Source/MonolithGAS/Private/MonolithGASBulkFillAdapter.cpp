@@ -412,7 +412,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 	// resolves against `attribute_set` so the rename hazard surfaces in the report.
 	if (Spec.bDryRun)
 	{
-		for (const auto& RowKV : RowsObj->Values)
+		for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 		{
 			const FString& RowName = RowKV.Key;
 			const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
@@ -426,7 +426,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 				Report.Errors++;
 				continue;
 			}
-			for (const auto& CellKV : (*RowObjPtr)->Values)
+			for (const auto& CellKV : FMonolithJsonUtils::GetFields(*RowObjPtr))
 			{
 				WriteAttributeCell(DataTable, MetaStruct, SetClass, RowName, CellKV.Key, CellKV.Value, Spec, Report);
 			}
@@ -442,7 +442,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 		"Monolith GAS Bulk Fill"));
 	DataTable->Modify();
 
-	for (const auto& RowKV : RowsObj->Values)
+	for (const auto& RowKV : FMonolithJsonUtils::GetFields(RowsObj))
 	{
 		const FString& RowName = RowKV.Key;
 		const TSharedPtr<FJsonObject>* RowObjPtr = nullptr;
@@ -456,7 +456,7 @@ FDryRunReport FMonolithGASBulkFillAdapter::GasBulkFill(const FBulkFillSpec& Spec
 			Report.Errors++;
 			continue;
 		}
-		for (const auto& CellKV : (*RowObjPtr)->Values)
+		for (const auto& CellKV : FMonolithJsonUtils::GetFields(*RowObjPtr))
 		{
 			WriteAttributeCell(DataTable, MetaStruct, SetClass, RowName, CellKV.Key, CellKV.Value, Spec, Report);
 		}

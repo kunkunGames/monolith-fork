@@ -23,6 +23,7 @@
 #include "EdGraphNode_Comment.h"
 #include "EditorAssetLibrary.h"
 #include "MonolithPackagePathValidator.h"
+#include "MonolithJsonUtils.h"
 
 // ============================================================
 //  Tag container name -> CDO pointer mapping
@@ -2337,7 +2338,7 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleBuildAbilityFromSpec(con
 		const TSharedPtr<FJsonObject>* TagsObj;
 		if (Spec->TryGetObjectField(TEXT("tags"), TagsObj))
 		{
-			for (const auto& Pair : (*TagsObj)->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(*TagsObj))
 			{
 				const TArray<TSharedPtr<FJsonValue>>* TagArr;
 				if (Pair.Value->TryGetArray(TagArr) && TagArr->Num() > 0)
@@ -2569,7 +2570,7 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleDuplicateAbility(const T
 		{
 			// Build rename map
 			TMap<FString, FString> RenameMap;
-			for (const auto& Pair : (*RenameTagsObj)->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(*RenameTagsObj))
 			{
 				RenameMap.Add(Pair.Key, Pair.Value->AsString());
 			}

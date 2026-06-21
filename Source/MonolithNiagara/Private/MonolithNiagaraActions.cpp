@@ -4401,7 +4401,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputs(const TShar
 						{
 							// Check if curve data has any actual keys (not just empty arrays)
 							bool bHasKeys = false;
-							for (const auto& Field : CurveData->Values)
+							for (const auto& Field : FMonolithJsonUtils::GetFields(CurveData))
 							{
 								if (Field.Value->Type == EJson::Array && Field.Value->AsArray().Num() > 0)
 								{
@@ -5554,9 +5554,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 				TEXT("x"), TEXT("y"), TEXT("z"), TEXT("w")
 			};
 			bool bHadCurveFields = false;
-			for (const auto& Pair : DIConfig->Values)
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(DIConfig))
 			{
-				if (CurveFieldNames.Contains(Pair.Key)) { bHadCurveFields = true; break; }
+				if (CurveFieldNames.Contains(FMonolithJsonUtils::FieldKeyToString(Pair.Key))) { bHadCurveFields = true; break; }
 			}
 			if (bHadCurveFields)
 			{
@@ -5586,10 +5586,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 			TEXT("clear_before_non_iteration_stage")
 		};
 
-		for (auto& Pair : DIConfig->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(DIConfig))
 		{
-			if (bIsCurveDI && CurveKeys.Contains(Pair.Key)) continue;
-			if (bIsGridDI && GridKeys.Contains(Pair.Key)) continue;
+			if (bIsCurveDI && CurveKeys.Contains(FMonolithJsonUtils::FieldKeyToString(Pair.Key))) continue;
+			if (bIsGridDI && GridKeys.Contains(FMonolithJsonUtils::FieldKeyToString(Pair.Key))) continue;
 
 			FProperty* Prop = DIUClass->FindPropertyByName(FName(*Pair.Key));
 			if (!Prop) continue;
@@ -7270,9 +7270,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleBatchExecute(const TSharedP
 		SubParams->SetStringField(TEXT("system_path"), SystemPath);
 
 		// Copy all fields from Op to SubParams
-		for (auto& Pair : Op->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Op))
 		{
-			SubParams->SetField(Pair.Key, Pair.Value);
+			SubParams->SetField(FMonolithJsonUtils::FieldKeyToString(Pair.Key), Pair.Value);
 		}
 
 		FMonolithActionResult SubResult = FMonolithActionResult::Error(TEXT("Unknown op"));
@@ -9261,10 +9261,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 	TArray<FString> PropsSet;
 	TArray<FString> PropsNotFound;
 	TArray<TSharedPtr<FJsonValue>> PropsFailed;
-	for (auto& Pair : Properties->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Properties))
 	{
 		FProperty* Prop = DI->GetClass()->FindPropertyByName(FName(*Pair.Key));
-		if (!Prop) { PropsNotFound.Add(Pair.Key); continue; }
+		if (!Prop) { PropsNotFound.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key)); continue; }
 		void* Addr = Prop->ContainerPtrToValuePtr<void>(DI);
 
 		// Build value string — handle JSON arrays → UE array syntax, JSON objects → UE struct syntax
@@ -9296,11 +9296,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 				TSharedPtr<FJsonObject> Obj = Pair.Value->AsObject();
 				ValStr = TEXT("(");
 				bool bFirst = true;
-				for (auto& KV : Obj->Values)
+				for (const auto& KV : FMonolithJsonUtils::GetFields(Obj))
 				{
 					if (!bFirst) ValStr += TEXT(",");
 					bFirst = false;
-					ValStr += KV.Key + TEXT("=") + KV.Value->AsString();
+					ValStr += FMonolithJsonUtils::FieldKeyToString(KV.Key) + TEXT("=") + KV.Value->AsString();
 				}
 				ValStr += TEXT(")");
 			}
@@ -9312,12 +9312,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 
 		if (Prop->ImportText_Direct(*ValStr, Addr, DI, PPF_None))
 		{
-			PropsSet.Add(Pair.Key);
+			PropsSet.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 		}
 		else
 		{
 			TSharedRef<FJsonObject> FailEntry = MakeShared<FJsonObject>();
-			FailEntry->SetStringField(TEXT("property"), Pair.Key);
+			FailEntry->SetStringField(TEXT("property"), FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			FailEntry->SetStringField(TEXT("value"), ValStr);
 			FailEntry->SetStringField(TEXT("error"), FString::Printf(TEXT("ImportText_Direct failed for property '%s' with value '%s'"), *Pair.Key, *ValStr));
 			PropsFailed.Add(MakeShared<FJsonValueObject>(FailEntry));
@@ -10987,10 +10987,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 	const TSharedPtr<FJsonObject>* ShapeParamsObj = nullptr;
 	if (!NodeGuid.IsEmpty() && Params->TryGetObjectField(TEXT("params"), ShapeParamsObj) && ShapeParamsObj->IsValid())
 	{
-		for (const auto& Pair : (*ShapeParamsObj)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*ShapeParamsObj))
 		{
 			// Map friendly param names to module input display names
-			FString InputName = Pair.Key;
+			FString InputName = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 			if (InputName == TEXT("radius"))
 			{
 				if      (Shape == TEXT("cylinder")) InputName = TEXT("Cylinder Radius");
@@ -11017,7 +11017,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 
 			FMonolithActionResult SetResult = HandleSetModuleInputValue(SetParams);
 			if (SetResult.bSuccess)
-				ParamsSet.Add(Pair.Key);
+				ParamsSet.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			else
 				Warnings.Add(FString::Printf(TEXT("Failed to set param '%s': %s"), *Pair.Key, *SetResult.ErrorMessage));
 		}
@@ -13937,8 +13937,8 @@ static TSharedRef<FJsonObject> DiffJsonObjects(const TSharedPtr<FJsonObject>& A,
 	// Collect all keys from both
 	TSet<FString> AllKeys;
 	AllKeys.Reserve(A->Values.Num() + B->Values.Num());
-	for (auto& Pair : A->Values) AllKeys.Add(Pair.Key);
-	for (auto& Pair : B->Values) AllKeys.Add(Pair.Key);
+	for (const FString& K : FMonolithJsonUtils::GetFieldNames(A)) AllKeys.Add(K);
+	for (const FString& K : FMonolithJsonUtils::GetFieldNames(B)) AllKeys.Add(K);
 
 	TArray<TSharedPtr<FJsonValue>> Changes;
 	for (const FString& Key : AllKeys)
@@ -14802,12 +14802,12 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 				const TSharedPtr<FJsonObject>* PropsPtr = nullptr;
 				if (EO->TryGetObjectField(TEXT("properties"), PropsPtr) && PropsPtr->IsValid() && PropsPtr->Get() != nullptr)
 				{
-					for (auto& P : (*PropsPtr)->Values)
+					for (const auto& P : FMonolithJsonUtils::GetFields(*PropsPtr))
 				{
 					TSharedRef<FJsonObject> SP = MakeShared<FJsonObject>();
 					SP->SetStringField(TEXT("system_path"), SystemPath);
 					SP->SetStringField(TEXT("emitter"), EmitterId);
-					SP->SetStringField(TEXT("property"), P.Key);
+					SP->SetStringField(TEXT("property"), FMonolithJsonUtils::FieldKeyToString(P.Key));
 					SP->SetField(TEXT("value"), P.Value);
 					FMonolithActionResult EPR = HandleSetEmitterProperty(SP);
 					if (!EPR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_emitter_property[%s]: %s"), *P.Key, *EPR.ErrorMessage)); FailCount++; }
@@ -14845,13 +14845,13 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 						const TSharedPtr<FJsonObject>* InsPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("inputs"), InsPtr) && InsPtr->IsValid() && InsPtr->Get() != nullptr)
 						{
-							for (auto& IP : (*InsPtr)->Values)
+							for (const auto& IP : FMonolithJsonUtils::GetFields(*InsPtr))
 						{
 							TSharedRef<FJsonObject> SIP = MakeShared<FJsonObject>();
 							SIP->SetStringField(TEXT("system_path"), SystemPath);
 							SIP->SetStringField(TEXT("emitter"), EmitterId);
 							SIP->SetStringField(TEXT("module_node"), NodeGuid);
-							SIP->SetStringField(TEXT("input"), IP.Key);
+							SIP->SetStringField(TEXT("input"), FMonolithJsonUtils::FieldKeyToString(IP.Key));
 							SIP->SetField(TEXT("value"), IP.Value);
 							FMonolithActionResult SIVR = HandleSetModuleInputValue(SIP);
 							if (!SIVR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_module_input[%s]: %s"), *IP.Key, *SIVR.ErrorMessage)); FailCount++; }
@@ -14863,7 +14863,7 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 						const TSharedPtr<FJsonObject>* BindsPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("bindings"), BindsPtr) && BindsPtr->IsValid() && BindsPtr->Get() != nullptr)
 						{
-							for (auto& BP2 : (*BindsPtr)->Values)
+							for (const auto& BP2 : FMonolithJsonUtils::GetFields(*BindsPtr))
 						{
 							TSharedRef<FJsonObject> SBP = MakeShared<FJsonObject>();
 							SBP->SetStringField(TEXT("system_path"), SystemPath);
@@ -14882,13 +14882,13 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 						const TSharedPtr<FJsonObject>* SwitchesPtr = nullptr;
 						if (MO->TryGetObjectField(TEXT("static_switches"), SwitchesPtr) && SwitchesPtr->IsValid() && SwitchesPtr->Get() != nullptr)
 						{
-							for (auto& SW : (*SwitchesPtr)->Values)
+							for (const auto& SW : FMonolithJsonUtils::GetFields(*SwitchesPtr))
 						{
 							TSharedRef<FJsonObject> SSP = MakeShared<FJsonObject>();
 							SSP->SetStringField(TEXT("system_path"), SystemPath);
 							SSP->SetStringField(TEXT("emitter"), EmitterId);
 							SSP->SetStringField(TEXT("module_node"), NodeGuid);
-							SSP->SetStringField(TEXT("input"), SW.Key);
+							SSP->SetStringField(TEXT("input"), FMonolithJsonUtils::FieldKeyToString(SW.Key));
 							SSP->SetField(TEXT("value"), SW.Value);
 							FMonolithActionResult SSR = HandleSetStaticSwitchValue(SSP);
 							if (!SSR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_static_switch[%s]: %s"), *SW.Key, *SSR.ErrorMessage)); FailCount++; }
@@ -14933,13 +14933,13 @@ int32 FMonolithNiagaraActions::ApplySpecToSystem(UNiagaraSystem* System, const F
 						const TSharedPtr<FJsonObject>* RPropsPtr = nullptr;
 						if (RO->TryGetObjectField(TEXT("properties"), RPropsPtr) && RPropsPtr->IsValid() && RPropsPtr->Get() != nullptr)
 						{
-							for (auto& RP : (*RPropsPtr)->Values)
+							for (const auto& RP : FMonolithJsonUtils::GetFields(*RPropsPtr))
 						{
 							TSharedRef<FJsonObject> SRP = MakeShared<FJsonObject>();
 							SRP->SetStringField(TEXT("system_path"), SystemPath);
 							SRP->SetStringField(TEXT("emitter"), EmitterId);
 							SRP->SetNumberField(TEXT("renderer_index"), RIdx);
-							SRP->SetStringField(TEXT("property"), RP.Key);
+							SRP->SetStringField(TEXT("property"), FMonolithJsonUtils::FieldKeyToString(RP.Key));
 							SRP->SetField(TEXT("value"), RP.Value);
 							FMonolithActionResult SRPR = HandleSetRendererProperty(SRP);
 							if (!SRPR.bSuccess) { OutErrors.Add(FString::Printf(TEXT("set_renderer_property[%s]: %s"), *RP.Key, *SRPR.ErrorMessage)); FailCount++; }

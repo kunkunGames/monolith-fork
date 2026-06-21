@@ -62,7 +62,7 @@ void ReadDescriptionOverridesParam(const TSharedPtr<FJsonObject>& Params, FMonol
 	}
 
 	Profile.DescriptionOverrides.Empty();
-	for (const auto& Pair : (*Obj)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*Obj))
 	{
 		FString Text;
 		if (Pair.Value.IsValid() && Pair.Value->TryGetString(Text))

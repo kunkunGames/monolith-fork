@@ -26,6 +26,7 @@
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
@@ -69,7 +70,7 @@ namespace MonolithComboGraphBulkFillInternal
 	static FString FindTargetTypeKey(const TSharedPtr<FJsonObject>& Obj, const FString& Path)
 	{
 		if (!Obj.IsValid()) return FString();
-		for (const auto& KV : Obj->Values)
+		for (const auto& KV : FMonolithJsonUtils::GetFields(Obj))
 		{
 			if (KV.Key.Equals(TEXT("TargetType"), ESearchCase::IgnoreCase))
 			{

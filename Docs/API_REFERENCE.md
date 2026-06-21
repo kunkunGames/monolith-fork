@@ -163,6 +163,30 @@ Section-keyed editorial onboarding guide for your AI agent — an onboarding scr
 
 ---
 
+### `monolith.get_job`
+
+Return one async Monolith job's status, progress, and result by `job_id`. Read-only and idempotent. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default off). Long-running actions mint a `job_id` (e.g. `monolith.reindex` when the flag is on emits `job_id` + `poll_action="monolith.get_job"`).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `job_id` | string | **required** | Async job id returned by a long-running action |
+
+**Returns (flag on):** the registry row — `job_id`, `namespace`, `action`, `status` (`pending`/`running`/`completed`/`failed`/`cancelled`), `progress {percent, stage, message}`, optional `result` / `error`, `created_utc`, `updated_utc`. An expired/evicted/never-minted id returns `{status:"not_found"}`. **Returns (flag off):** `{status:"disabled", requested_job_id, reason}`.
+
+---
+
+### `monolith.cancel_job`
+
+Request cooperative cancellation of an async Monolith job by `job_id` and return its current row. A mutation (sets the cooperative cancel flag) but non-destructive and idempotent — the running action is expected to observe the flag and stop; the server never interrupts running work. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default off).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `job_id` | string | **required** | Async job id to request cancellation for |
+
+**Returns (flag on):** the post-request registry row (a non-terminal job flips to `cancelled`), or `{status:"not_found"}` for an unknown id. **Returns (flag off):** `{status:"disabled", requested_job_id, cancel_requested:false, reason}`.
+
+---
+
 ## blueprint
 
 Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, interfaces, timelines, comments, CDOs, spawn-time actor placement, and dataset read/edit (DataTable / CurveTable / StringTable round-trip + `seed_data_asset`). Count is approximate — query `monolith_discover("blueprint")` for the live figure.
@@ -805,6 +829,10 @@ Full-text search across all indexed project assets, nodes, variables, and parame
 | `query` | string | **required** | FTS search query (automatically escaped and tokenized for prefix matching) |
 | `limit` | integer | optional | Default: `50` |
 | `include_content` | boolean | optional | Include variable/parameter/DataTable/actor/supplemental matches for discovery only. Default: `true` |
+| `asset_class` | string | optional | Scope results to this exact asset class (e.g. `Blueprint`, `WidgetBlueprint`). Empty = any |
+| `path_filter` | string | optional | Scope results to package paths containing this substring (e.g. `/Game/Combat`). Empty = any |
+
+Results are ranked by bm25 column weighting (name >> body) fused across FTS tables via RRF, with a de-spaced CamelCase streak superset and an `identifier_split` supplemental value for CamelCase/snake token recall.
 
 ### `project.find_references`
 
@@ -2267,6 +2295,65 @@ Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols.
 |-----------|------|----------|-------------|
 | `asset_path` | string | optional | Project asset package path seed |
 | `symbol` | string | optional | Source symbol seed |
+
+## Public C++ Surface (MonolithCore)
+
+New public C++ symbols from the UnrealMCP-port slices. These are for sibling plugins / in-tree modules that produce async jobs, emit typed media, or contribute resource families. All are dark-by-default at the MCP wire level (flag-gated at the call site).
+
+### `FMonolithAsyncJobRegistry` — `Public/MonolithAsyncJobRegistry.h`
+
+Process-wide singleton bounded in-memory registry for long-running async jobs. Producers drive a job from `Pending` to a terminal state; the registry spawns no threads and persists nothing across restarts.
+
+| Member | Signature | Behavior |
+|--------|-----------|----------|
+| `Get` | `static FMonolithAsyncJobRegistry& Get()` | Singleton accessor. |
+| `SubmitJob` | `FString SubmitJob(const FString& Namespace, const FString& Action)` | Mints a lowercase-hyphen GUID job id, seeds a `Pending` row, returns the id. Evicts the oldest-`UpdatedUtc` row when the 128-row capacity is full. |
+| `UpdateProgress` | `void UpdateProgress(const FString& JobId, double Percent, const FString& Stage, const FString& Message)` | Advances a `Pending`/`Running` row to `Running`; clamps `Percent` to 0–100; never overwrites a terminal state. |
+| `CompleteJob` | `void CompleteJob(const FString& JobId, const TSharedPtr<FJsonObject>& Result)` | Marks `Completed`, percent 100, attaches optional result. |
+| `FailJob` | `void FailJob(const FString& JobId, const FString& Error)` | Marks `Failed`, records error string. |
+| `RequestCancel` | `void RequestCancel(const FString& JobId)` | Sets the **cooperative** cancel flag; flips a non-terminal row to `Cancelled`. Does NOT interrupt running work. |
+| `IsCancelRequested` | `bool IsCancelRequested(const FString& JobId) const` | True if cancellation was requested — running actions poll this. |
+| `GetJobJson` | `TSharedPtr<FJsonObject> GetJobJson(const FString& JobId) const` | Row JSON, or `{"status":"not_found"}`. |
+| `ListJobsJson` | `TSharedPtr<FJsonObject> ListJobsJson(int32 Limit) const` | Up to a clamped `1..1000` rows ordered by `UpdatedUtc` desc. |
+
+`EMonolithAsyncJobStatus`: `Pending`, `Running`, `Completed`, `Failed`, `Cancelled`. Thread-safe (single `FCriticalSection`).
+
+### `FMonolithToolContentBlock` — `Public/MonolithToolRegistry.h`
+
+Typed-media content block mirroring the MCP `{type, mimeType, data}` shape. `FMonolithActionResult` carries a `TArray<FMonolithToolContentBlock> MediaBlocks` slot (empty by default → existing responses byte-identical).
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `Type` | `FString` | `"image"` or `"audio"` (other types are skipped during emission). |
+| `MimeType` | `FString` | e.g. `"image/png"`, `"audio/wav"`. |
+| `Base64Data` | `FString` | base64-encoded payload. |
+| `Audience` | `FString` | optional MCP annotation (`"user"`/`"assistant"`); empty = omitted. |
+
+Emitted by `FMonolithToolResultUtils::BuildMcpToolResult(const FMonolithActionResult&, bool bEnableStructuredContent, bool bEnableTypedMedia=false)` only when `bEnableTypedMedia` is true (wired to `bEnableTypedMediaResults`) and `MediaBlocks` is non-empty; blocks follow the always-present text block.
+
+### `FMonolithResourceRegistry::RegisterBlobResource` — `Public/MonolithResourceRegistry.h`
+
+```cpp
+void RegisterBlobResource(
+    const FMonolithResourceDescriptor& Descriptor,
+    const TArray<uint8>& BlobBytes,
+    int32 MaxBytes = 1024 * 1024);
+```
+
+Registers a bounded binary/blob resource. Bytes are stored eagerly and served verbatim as a base64 `"blob"` field (instead of `"text"`); `MaxBytes` is a separate cap from text `MaxChars` and is clamped to a safe upper bound. Reads populate `FMonolithResourceReadResult::bBinary=true` + `BlobBytes`; text resources keep `bBinary=false` so their JSON is byte-identical to the text-only slice.
+
+### `IMonolithResourceProvider` — `Public/IMonolithResourceProvider.h`
+
+Per-namespace resource provider seam (P3b). A provider advertises a bounded URI family (e.g. `monolith://source/file/{path}`) and resolves concrete reads on demand. Registered by code via `FMonolithResourceRegistry::RegisterProvider` / `UnregisterProvider`; consulted only AFTER the static-descriptor and eager-blob branches miss, and invoked OUTSIDE the registry lock.
+
+| Method | Contract |
+|--------|----------|
+| `virtual void ListResources(TArray<FMonolithResourceDescriptor>& OutDescriptors) const` | Append ONE (or a few) stable TEMPLATE descriptors. MUST NOT perform an unbounded scan. |
+| `virtual bool ReadResource(const FString& Uri, FMonolithResourceReadResult& Out) const` | Return `true` only when the provider owns the URI scheme AND resolves a payload (populate `bFound`/`Uri`/`MimeType` + either `Text` or `BlobBytes`+`bBinary`). Return `false` for a URI it does not own so the registry tries the next provider. |
+
+Provider output is subject to the same safety rules as the registry (no absolute local paths, secrets, or env values; bounded content).
+
+---
 
 ## Cross-References
 

@@ -148,6 +148,20 @@ struct FProjectSearchOptions
 	bool bIncludeStructuredContent = false;
 	bool bIncludeSupplementalValues = false;
 
+	// Q6 (PRD AssetSearchSemanticSearch): optional pushed-down scope filters (empty = any).
+	FString AssetClassFilter; // exact match on assets.asset_class
+	FString PathFilter;       // substring LIKE on assets.package_path
+
+	// PRD AssetSearchSemanticSearch residual (score-explain): when true, each result carries a
+	// per-source RRF contribution breakdown (which tables/source_kinds drove the rank, the best
+	// rank position, and the per-source RRF score). Default false = zero overhead, identical output.
+	bool bExplain = false;
+
+	// PRD AssetSearchSemanticSearch residual (min-should-match): require at least
+	// ceil(N*pct/100) of the N query tokens, expressed natively in FTS5 as the OR of all
+	// K-token subsets. 0 (default) = off (AND + Q3 streak fusion, identical output).
+	int32 MinShouldMatchPct = 0;
+
 	static FProjectSearchOptions AssetNodeOnly()
 	{
 		return FProjectSearchOptions();
@@ -175,6 +189,12 @@ struct FSearchResult
 	FString MatchObjectPath;
 	FString MatchValue;
 	float Rank = 0.0f;
+
+	// Populated only when FProjectSearchOptions::bExplain — RRF score provenance accumulated
+	// across every contributing (table,row) hit for this asset. Empty/default on the normal path.
+	TMap<FString, float> ScoreBySource; // source_kind ("asset"/"node"/"variable"/...) -> summed RRF contribution
+	int32 ContributingHits = 0;         // total (table,row) hits fused into this result
+	int32 BestRank = MAX_int32;         // best (lowest) 0-based per-table rank position seen
 };
 
 /**
@@ -261,7 +281,9 @@ public:
 	bool DeleteAssetSearchValuesBySourceKind(const FString& SourceKind);
 
 	// --- FTS5 Search ---
-	static FString EscapeFTS(const FString& Query);
+	// MinShouldMatchPct>0 builds an exact "at least ceil(N*pct/100) of N tokens" FTS5 expression
+	// (OR of all K-token subsets); 0 (default) keeps the AND + Q3 streak-fusion behavior.
+	static FString EscapeFTS(const FString& Query, int32 MinShouldMatchPct = 0);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
 

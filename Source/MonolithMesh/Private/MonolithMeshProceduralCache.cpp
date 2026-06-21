@@ -1,5 +1,6 @@
 #include "MonolithMeshProceduralCache.h"
 
+#include "MonolithJsonUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonSerializer.h"
@@ -182,7 +183,7 @@ FString FMonolithMeshProceduralCache::SortedJsonSerialize(const TSharedPtr<FJson
 
 	// Extract keys and sort alphabetically
 	TArray<FString> Keys;
-	Obj->Values.GetKeys(Keys);
+	FMonolithJsonUtils::GetFieldNames(Obj, Keys);
 	Keys.Sort();
 
 	FString Result = TEXT("{");
@@ -199,7 +200,7 @@ FString FMonolithMeshProceduralCache::SortedJsonSerialize(const TSharedPtr<FJson
 		EscapedKey.ReplaceInline(TEXT("\""), TEXT("\\\""));
 		Result += TEXT("\"") + EscapedKey + TEXT("\":");
 
-		const TSharedPtr<FJsonValue>& Val = Obj->Values[Keys[i]];
+		const TSharedPtr<FJsonValue>& Val = Obj->Values[*Keys[i]];
 		Result += SerializeValue(Val);
 	}
 	Result += TEXT("}");
@@ -233,7 +234,7 @@ FString FMonolithMeshProceduralCache::ComputeHash(const FString& ActionName, con
 
 	if (Params.IsValid())
 	{
-		for (const auto& Pair : Params->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
 			if (!ExcludeKeys.Contains(Pair.Key))
 			{
@@ -330,7 +331,7 @@ void FMonolithMeshProceduralCache::Register(const FString& Hash, const FString& 
 	{
 		// Serialize the identity params (excluding transient keys) for the manifest
 		TSharedPtr<FJsonObject> IdentityParams = MakeShared<FJsonObject>();
-		for (const auto& Pair : Params->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
 			if (!ExcludeKeys.Contains(Pair.Key))
 			{
@@ -393,7 +394,7 @@ int32 FMonolithMeshProceduralCache::ValidateCache()
 
 	// Collect stale hashes first (can't modify while iterating)
 	TArray<FString> StaleHashes;
-	for (const auto& Pair : Entries->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Entries))
 	{
 		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
@@ -451,7 +452,7 @@ int32 FMonolithMeshProceduralCache::ClearCache(const FString& TypeFilter)
 
 	// Filter by type
 	TArray<FString> ToRemove;
-	for (const auto& Pair : Entries->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Entries))
 	{
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
 		{
@@ -499,7 +500,7 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::GetStats()
 
 	// Count by type
 	TMap<FString, int32> TypeCounts;
-	for (const auto& Pair : Entries->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Entries))
 	{
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
 		{
@@ -548,7 +549,7 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::ListEntries(const FString&
 	}
 
 	int32 Count = 0;
-	for (const auto& Pair : Entries->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Entries))
 	{
 		if (Count >= Limit)
 		{
@@ -579,7 +580,7 @@ TSharedPtr<FJsonObject> FMonolithMeshProceduralCache::ListEntries(const FString&
 		// Clone the entry and add the hash as a field
 		auto ListEntry = MakeShared<FJsonObject>();
 		ListEntry->SetStringField(TEXT("hash"), Pair.Key);
-		for (const auto& Field : Entry->Values)
+		for (const auto& Field : FMonolithJsonUtils::GetFields(Entry))
 		{
 			ListEntry->SetField(Field.Key, Field.Value);
 		}

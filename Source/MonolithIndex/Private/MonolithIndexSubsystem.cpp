@@ -2,6 +2,8 @@
 #include "MonolithIndexDatabase.h"
 #include "MonolithIndexReview.h"
 #include "MonolithSQLiteMaintenance.h"
+#include "MonolithSQLiteSearchText.h"
+#include "Utility/MonolithSearchValueWriter.h"
 #include "MonolithSettings.h"
 #include "MonolithMemoryHelper.h"
 #include "MonolithCompilerSafeDispatch.h"
@@ -19,8 +21,11 @@
 
 // Indexers
 #include "Indexers/BlueprintIndexer.h"
+#include "Indexers/WidgetBlueprintIndexer.h"
 #include "Indexers/MaterialIndexer.h"
 #include "Indexers/GenericAssetIndexer.h"
+#include "Indexers/Paper2DIndexer.h"
+#include "Indexers/PaperZDIndexer.h"
 #include "Indexers/DependencyIndexer.h"
 #include "Indexers/LevelIndexer.h"
 #include "Indexers/ConfigIndexer.h"
@@ -309,16 +314,97 @@ void UMonolithIndexSubsystem::RegisterIndexer(TSharedPtr<IMonolithIndexer> Index
 		*Indexer->GetName(), Indexer->GetSupportedClasses().Num());
 }
 
+TSharedPtr<IMonolithIndexer> UMonolithIndexSubsystem::ResolveDeepIndexer(
+	const FString& LeafClassName, const FTopLevelAssetPath& ClassPath, IAssetRegistry* AssetRegistry) const
+{
+	// 1) Exact leaf-class-name match — unchanged dispatch behavior.
+	if (const TSharedPtr<IMonolithIndexer>* Exact = ClassToIndexer.Find(LeafClassName))
+	{
+		if (Exact->IsValid())
+		{
+			return *Exact;
+		}
+	}
+
+	// 2) Inheritance parent-walk fallback. Runs ONLY on an exact miss, so every exact hit is
+	//    byte-for-byte unchanged. GetAncestorClassNames returns ancestors most-derived-first
+	//    from the AssetRegistry inheritance tree WITHOUT loading any UClass; we take the first
+	//    ancestor that has a registered NON-sentinel, non-generic indexer. This routes the
+	//    ~546 UGo*DataAsset : UPrimaryDataAsset types to FDataAssetIndexer via their
+	//    "PrimaryDataAsset"/"DataAsset" ancestors. Skipping FGenericAssetIndexer prevents a leaf
+	//    with no real deep indexer from being inheritance-upgraded into the shallow name-only
+	//    handler; skipping sentinels is a belt-and-suspenders invariant (their "__"-prefixed keys
+	//    can never equal a real class leaf name anyway).
+	if (AssetRegistry && ClassPath.IsValid())
+	{
+		TArray<FTopLevelAssetPath> Ancestors;
+		if (AssetRegistry->GetAncestorClassNames(ClassPath, Ancestors))
+		{
+			for (const FTopLevelAssetPath& Ancestor : Ancestors)
+			{
+				const FString AncestorLeaf = Ancestor.GetAssetName().ToString();
+				if (const TSharedPtr<IMonolithIndexer>* Found = ClassToIndexer.Find(AncestorLeaf))
+				{
+					if (Found->IsValid()
+						&& !(*Found)->IsSentinel()
+						&& (*Found)->GetName() != TEXT("GenericAssetIndexer"))
+					{
+						return *Found;
+					}
+				}
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+FString UMonolithIndexSubsystem::ComputeIndexerFleetSignature() const
+{
+	// Fold every registered indexer's name + version into an order-stable string (sorted, so the
+	// signature is independent of registration order). Bumping any IMonolithIndexer::GetIndexerVersion()
+	// changes this; CanDoIncrementalIndex() then refuses incremental and forces a full reindex.
+	TArray<FString> Parts;
+	Parts.Reserve(Indexers.Num());
+	for (const TSharedPtr<IMonolithIndexer>& Indexer : Indexers)
+	{
+		if (Indexer.IsValid())
+		{
+			Parts.Add(FString::Printf(TEXT("%s:%d"), *Indexer->GetName(), Indexer->GetIndexerVersion()));
+		}
+	}
+	Parts.Sort();
+	return FString::Join(Parts, TEXT("|"));
+}
+
 void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 {
 	const UMonolithSettings* Settings = GetDefault<UMonolithSettings>();
 
 	if (Settings->bIndexBlueprints)
+	{
 		RegisterIndexer(MakeShared<FBlueprintIndexer>());
+		// C2 (PRD AssetSearchSemanticSearch): WidgetBlueprint assets are routed to the
+		// UMG-aware indexer instead of the generic graph-only FBlueprintIndexer so widget
+		// tree labels/classes + FDelegateRuntimeBinding rows are indexed.
+		RegisterIndexer(MakeShared<FWidgetBlueprintIndexer>());
+	}
 	if (Settings->bIndexMaterials)
 		RegisterIndexer(MakeShared<FMaterialIndexer>());
 	if (Settings->bIndexGenericAssets)
+	{
 		RegisterIndexer(MakeShared<FGenericAssetIndexer>());
+		// PRD AssetSearchSemanticSearch UE5.8 #4: Paper2D (Flipbook/Sprite) — these fell to the
+		// shallow generic indexer; the dedicated indexer adds the flipbook frame graph + sprite
+		// atlas/material edges (Paper2D is ~70% of this project's assets).
+		RegisterIndexer(MakeShared<FPaper2DIndexer>());
+#if WITH_PAPERZD
+		// PaperZD 2D-animation assets (UPaperZDAnimSequence_Flipbook ~1665, UPaperZDAnimBP ~114)
+		// otherwise fall to name-only indexing; the dedicated indexer adds the animation summary
+		// (frames/fps/duration/category/source/notifies) and the AnimBP state-machine/source edges.
+		RegisterIndexer(MakeShared<FPaperZDIndexer>());
+#endif
+	}
 	if (Settings->bIndexDependencies)
 		RegisterIndexer(MakeShared<FDependencyIndexer>());
 	if (Settings->bIndexLevels)
@@ -660,11 +746,34 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 			continue;
 		}
 
-		// Queue assets that have deep indexers (Blueprint, Material, etc.)
-		TSharedPtr<IMonolithIndexer>* FoundIndexer = Owner->ClassToIndexer.Find(IndexedAsset.AssetClass);
-		if (FoundIndexer && FoundIndexer->IsValid())
+		// Q1 (PRD AssetSearchSemanticSearch): emit a CamelCase/snake sub-word split of the
+		// asset name as a supplemental search value so partial-identifier queries recall the
+		// asset ("fireball" -> BP_FireballProjectile). The splitter appends sub-tokens to the
+		// original, so exact/prefix hits still outrank sub-word hits. Tagged 'identifier_split'
+		// for provenance honesty (match_source stays truthful). Runs for EVERY asset (the main
+		// loop), independent of whether the asset has a per-type deep indexer.
 		{
-			DeepIndexQueue.Add({ AssetData, AssetId, *FoundIndexer });
+			const FString NameSplit = BuildMonolithSQLiteSearchText(IndexedAsset.AssetName);
+			if (!NameSplit.IsEmpty() && NameSplit != IndexedAsset.AssetName)
+			{
+				FMonolithSearchValueWriter SplitWriter(*DB);
+				SplitWriter.AddValue(AssetId, TEXT("identifier_split"), IndexedAsset.AssetName,
+					IndexedAsset.PackagePath, IndexedAsset.AssetClass, TEXT("name_split"),
+					TEXT("name_split"), NameSplit, FString());
+			}
+		}
+
+		// Queue assets that have deep indexers (Blueprint, Material, etc.). Exact leaf-class
+		// dispatch first; on a miss the resolver walks the parent class chain (most-derived
+		// first) to the first registered non-sentinel, non-generic ancestor indexer — e.g. the
+		// ~546 UGo*DataAsset : UPrimaryDataAsset types reach FDataAssetIndexer via their
+		// "PrimaryDataAsset" ancestor. Distribution stays keyed on the leaf class for honest
+		// per-type telemetry (e.g. "GoMonsterDataAsset: 83").
+		TSharedPtr<IMonolithIndexer> FoundIndexer = Owner->ResolveDeepIndexer(
+			IndexedAsset.AssetClass, AssetData.AssetClassPath, AssetRegistryPtr);
+		if (FoundIndexer.IsValid())
+		{
+			DeepIndexQueue.Add({ AssetData, AssetId, FoundIndexer });
 			QueuedClassDistribution.FindOrAdd(IndexedAsset.AssetClass)++;
 		}
 
@@ -1238,6 +1347,9 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		else
 		{
 			DB->WriteMeta(TEXT("last_full_index"), FDateTime::UtcNow().ToString());
+			// I2 (PRD AssetSearchSemanticSearch): stamp the indexer-fleet signature this full index
+			// was produced with, so a later indexer-version bump invalidates incremental.
+			DB->WriteMeta(TEXT("indexer_fleet_signature"), Owner->ComputeIndexerFleetSignature());
 			UE_LOG(LogMonolithIndex, Log, TEXT("Wrote last_full_index timestamp (%d assets indexed)"), Indexed);
 		}
 	}
@@ -1365,6 +1477,13 @@ bool UMonolithIndexSubsystem::CanDoIncrementalIndex() const
 		return false;
 	FString LastFullIndex = Database->ReadMeta(TEXT("last_full_index"));
 	if (LastFullIndex.IsEmpty())
+		return false;
+	// I2 (PRD AssetSearchSemanticSearch): if any registered indexer's version changed since the
+	// last full index, the stored rows may be stale (a logic change an unchanged content-hash
+	// would skip) — force a full reindex. Pre-I2 DBs have no stored signature, so the first launch
+	// after this ships re-baselines once.
+	const FString StoredFleetSignature = Database->ReadMeta(TEXT("indexer_fleet_signature"));
+	if (StoredFleetSignature != ComputeIndexerFleetSignature())
 		return false;
 	return true;
 }
@@ -1665,8 +1784,10 @@ void UMonolithIndexSubsystem::ProcessDeepIndexQueue(const TSet<FString>& PathsTo
 		for (const FAssetData& AssetData : Assets)
 		{
 			FString ClassName = AssetData.AssetClassPath.GetAssetName().ToString();
-			TSharedPtr<IMonolithIndexer>* Indexer = ClassToIndexer.Find(ClassName);
-			if (!Indexer) continue;
+			// Same exact-then-parent-walk resolution as the full pass, so incrementally
+			// re-indexed UGo*DataAsset assets reach FDataAssetIndexer via their ancestors.
+			TSharedPtr<IMonolithIndexer> Indexer = ResolveDeepIndexer(ClassName, AssetData.AssetClassPath, &AR);
+			if (!Indexer.IsValid()) continue;
 
 			int64 AssetId = Database->GetAssetId(PackagePath);
 			if (AssetId <= 0) continue;
@@ -1675,7 +1796,7 @@ void UMonolithIndexSubsystem::ProcessDeepIndexQueue(const TSet<FString>& PathsTo
 			UObject* LoadedAsset = AssetData.GetAsset();
 			if (!LoadedAsset) continue;
 
-			(*Indexer)->IndexAsset(AssetData, LoadedAsset, *Database, AssetId);
+			Indexer->IndexAsset(AssetData, LoadedAsset, *Database, AssetId);
 			++Indexed;
 		}
 	}

@@ -146,7 +146,7 @@ FDryRunReport FMonolithBlueprintBulkFillAdapter::BlueprintBulkFill(const FBulkFi
 	// looking at MonolithBlueprintEditCradle.h:30, ReparentTransientInstancedSubobjects
 	// takes a specific FProperty. For bulk_fill we iterate the top-level fields
 	// the tree touched and fire per-prop.
-	for (const auto& KV : Spec.Tree->Values)
+	for (const auto& KV : FMonolithJsonUtils::GetFields(Spec.Tree))
 	{
 		FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(TargetClass, KV.Key);
 		if (TopProp)

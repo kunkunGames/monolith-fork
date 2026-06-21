@@ -3,6 +3,7 @@
 
 #include "MonolithImageGenSvgSourceActions.h"
 #include "MonolithAssetTextureIngestActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
@@ -1830,8 +1831,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 #if WITH_METADATA
 		UPackage* Package = Texture->GetOutermost();
 		FMetaData& MetaData = Package->GetMetaData();
-		const TMap<FString, TSharedPtr<FJsonValue>>& Fields = Provenance->Values;
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Fields)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Provenance))
 		{
 			FString Value;
 			if (Pair.Value.IsValid())
@@ -2186,6 +2186,7 @@ void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("settings"), TEXT("object"), TEXT("Texture import settings compatible with asset.import_texture_from_bytes."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported texture package"), TEXT("true"))
 			.Optional(TEXT("save_source_png"), TEXT("bool"), TEXT("Save a postprocessed PNG source copy under <ProjectDir>/GeneratedImages using the generated asset's relative path. Defaults to save."))
+			.Optional(TEXT("attach_image_block"), TEXT("bool"), TEXT("Attach the generated PNG as a typed image content block on the tool result. Default false keeps the existing JSON-only contract; final emission also requires the server bEnableTypedMediaResults flag."), TEXT("false"))
 			.Build(),
 		TEXT("Image"));
 
@@ -2530,8 +2531,23 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImage(const TShare
 	TSharedPtr<FJsonObject> Provenance = ImageGenerationInternal::BuildProvenance(
 		Provider, Model, TEXT("local_deterministic"), Prompt, AspectRatio, TEXT("png"), PngBytes.Num());
 
-	return ImageGenerationInternal::ImportGeneratedBytes(
+	FMonolithActionResult ImportResult = ImageGenerationInternal::ImportGeneratedBytes(
 		Params, BytesB64, TEXT("png"), ImageGenerationInternal::PromptToAssetName(Prompt), Provenance);
+
+	// Optional typed-media block. Default false keeps the existing contract byte-identical;
+	// final emission is additionally gated by UMonolithSettings::bEnableTypedMediaResults at the HTTP layer.
+	bool bAttachImageBlock = false;
+	Params->TryGetBoolField(TEXT("attach_image_block"), bAttachImageBlock);
+	if (ImportResult.bSuccess && bAttachImageBlock)
+	{
+		FMonolithToolContentBlock Block;
+		Block.Type = TEXT("image");
+		Block.MimeType = TEXT("image/png");
+		Block.Base64Data = BytesB64;
+		ImportResult.MediaBlocks.Add(MoveTemp(Block));
+	}
+
+	return ImportResult;
 }
 
 FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const TSharedPtr<FJsonObject>& Params)

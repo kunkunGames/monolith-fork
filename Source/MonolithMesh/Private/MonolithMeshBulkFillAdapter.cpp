@@ -22,6 +22,7 @@
 #include "MonolithBulkFillTypes.h"
 #include "Reflection/MonolithReflectionWalker.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "ScopedTransaction.h"
@@ -71,7 +72,7 @@ namespace MonolithMeshBulkFillInternal
 		RowStruct->InitializeStruct(RowData);
 		int32 FieldErrors = 0;
 
-		for (const auto& FieldKV : RowObj->Values)
+		for (const auto& FieldKV : FMonolithJsonUtils::GetFields(RowObj))
 		{
 			FBulkFillFieldWrite FieldWrite;
 			FieldWrite.Path = FString::Printf(TEXT("rows[%s].%s"), *RowName, *FieldKV.Key);
@@ -175,7 +176,7 @@ namespace MonolithMeshBulkFillInternal
 			DT->Modify();
 		}
 
-		for (const auto& RowKV : (*RowsObj)->Values)
+		for (const auto& RowKV : FMonolithJsonUtils::GetFields(*RowsObj))
 		{
 			const TSharedPtr<FJsonObject>* RowSubObj = nullptr;
 			TSharedPtr<FJsonObject> RowObj;

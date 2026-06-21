@@ -8,6 +8,7 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 void FMonolithUIStylingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
@@ -506,7 +507,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetColorScheme(const TSha
     TArray<FString> SetNames;
     SetNames.Reserve((*ColorsObj)->Values.Num());
 
-    for (const auto& Pair : (*ColorsObj)->Values)
+    for (const auto& Pair : FMonolithJsonUtils::GetFields(*ColorsObj))
     {
         const EStyleColor* SlotColor = SlotMap.Find(Pair.Key);
         if (!SlotColor)

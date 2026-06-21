@@ -2823,7 +2823,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleBatchExecute(const TS
 		// Build sub-params: inject asset_path then copy all op fields
 		TSharedRef<FJsonObject> SubParams = MakeShared<FJsonObject>();
 		SubParams->SetStringField(TEXT("asset_path"), AssetPath);
-		for (auto& Pair : Op->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Op))
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
 		}
@@ -3445,7 +3445,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNodesBulk(const TS
 		{
 			SubParams->SetStringField(TEXT("graph_name"), SharedGraphName);
 		}
-		for (const auto& Pair : Entry->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Entry))
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
 		}
@@ -3584,7 +3584,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleConnectPinsBulk(const
 		{
 			SubParams->SetStringField(TEXT("graph_name"), SharedGraphName);
 		}
-		for (const auto& Pair : Entry->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Entry))
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
 		}
@@ -3688,7 +3688,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleSetPinDefaultsBulk(co
 		{
 			SubParams->SetStringField(TEXT("graph_name"), SharedGraphName);
 		}
-		for (const auto& Pair : Entry->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Entry))
 		{
 			SubParams->SetField(Pair.Key, Pair.Value);
 		}

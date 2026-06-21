@@ -1,4 +1,5 @@
 #include "MonolithCoreTools.h"
+#include "MonolithAsyncJobRegistry.h"
 #include "MonolithParamUtils.h"
 #include "MonolithGuideTool.h"
 #include "MonolithCoreModule.h"
@@ -200,7 +201,7 @@ static TArray<TSharedPtr<FJsonValue>> BuildPlanningPreconditionDetails(
 
 	if (ActionInfo.ParamSchema.IsValid())
 	{
-		for (const auto& Pair : ActionInfo.ParamSchema->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
 		{
 			if (Pair.Key.StartsWith(TEXT("_")))
 			{
@@ -319,7 +320,7 @@ static FString BuildFindSchemaText(const TSharedPtr<FJsonObject>& Schema)
 	}
 
 	TArray<FString> Parts;
-	for (const auto& Pair : Schema->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Schema))
 	{
 		Parts.Add(Pair.Key);
 
@@ -1066,6 +1067,41 @@ void FMonolithCoreTools::RegisterAll()
 			.Range(TEXT("limit"), 1, 1000)
 			.Build()
 	);
+
+	// --- P1b: Async job polling (PRD Spec 10). Always registered so the actions
+	// are discoverable; each handler early-returns a "disabled" report when
+	// UMonolithSettings::bEnableAsyncJobs is off (mirrors the list_mcp_sessions
+	// unavailable pattern). The producers (reindex, ai.rebuild_zone_graph) only
+	// mint jobs when their respective gate is on, so the registry stays empty by
+	// default and these read like list_mcp_sessions until the feature is enabled.
+	Registry.RegisterAction(
+		TEXT("monolith"), TEXT("get_job"),
+		TEXT("Return one async Monolith job's status, progress, and result by job_id. Reports disabled when async jobs are off."),
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleGetJob),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("job_id"), TEXT("string"), TEXT("Async job id returned by a long-running action such as monolith.reindex"))
+			.Build()
+	);
+	// Read-only + idempotent status read.
+	Registry.SetActionAnnotations(TEXT("monolith"), TEXT("get_job"),
+		/*bReadOnly=*/true, /*bDestructive=*/false, /*bIdempotent=*/true,
+		TEXT("Get async job status"));
+
+	Registry.RegisterAction(
+		TEXT("monolith"), TEXT("cancel_job"),
+		TEXT("Request cooperative cancellation of an async Monolith job by job_id and return its current row. Reports disabled when async jobs are off."),
+		FMonolithActionHandler::CreateStatic(&FMonolithCoreTools::HandleCancelJob),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("job_id"), TEXT("string"), TEXT("Async job id to request cancellation for"))
+			.Build()
+	);
+	// Mutation (sets the cooperative cancel flag); not destructive of on-disk
+	// state, and idempotent — repeating a cancel request leaves the flag set.
+	Registry.SetActionAnnotations(TEXT("monolith"), TEXT("cancel_job"),
+		/*bReadOnly=*/false, /*bDestructive=*/false, /*bIdempotent=*/true,
+		TEXT("Cancel async job"));
 
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("terminate_mcp_session"),
@@ -1906,10 +1942,36 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 	if (Func)
 	{
 		IndexSubsystem->ProcessEvent(Func, nullptr);
+		// Contract preservation (§9): the existing "reindex_started" status and
+		// message stay byte-identical for legacy callers; the async fields are
+		// purely additive and only appear when the feature flag is on.
 		Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
 		Result->SetStringField(TEXT("message"),
 			FString::Printf(TEXT("%s triggered successfully."),
 				FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+
+		// P1b (PRD Spec 10): when async jobs are enabled, mint a job id and a
+		// poll_action so clients can watch progress via monolith.get_job. The
+		// MonolithIndexSubsystem reindex call above is fire-and-forget — it does
+		// NOT yet expose a completion delegate back into MonolithCore — so the
+		// job is left in the Running state on purpose. We must NEVER fake a
+		// "completed" terminal state for work whose outcome we cannot observe
+		// (no-mask/no-fake rule).
+		// TODO(P1b-followup): once MonolithIndexSubsystem broadcasts index
+		// completion/failure, subscribe here and drive the job to Completed/
+		// Failed via FMonolithAsyncJobRegistry::CompleteJob/FailJob. Until then
+		// the job stays Running and get_job reports honest in-flight progress.
+		const UMonolithSettings* Settings = UMonolithSettings::Get();
+		if (Settings && Settings->bEnableAsyncJobs)
+		{
+			FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
+			const FString JobId = JobRegistry.SubmitJob(TEXT("project"), TEXT("reindex"));
+			JobRegistry.UpdateProgress(JobId, 0.0, TEXT("started"),
+				FString::Printf(TEXT("%s triggered; awaiting index-completion signal."),
+					FuncName == TEXT("StartFullIndex") ? TEXT("Full re-index") : TEXT("Incremental index")));
+			Result->SetStringField(TEXT("job_id"), JobId);
+			Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+		}
 	}
 	else
 	{
@@ -2331,6 +2393,63 @@ FMonolithActionResult FMonolithCoreTools::HandleListMcpSessions(const TSharedPtr
 	Result->SetNumberField(TEXT("session_count"), 0);
 	Result->SetArrayField(TEXT("sessions"), TArray<TSharedPtr<FJsonValue>>());
 	return FMonolithActionResult::Success(Result);
+}
+
+// --- P1b: Async job polling handlers (PRD Spec 10) ---------------------------
+// Both gate on UMonolithSettings::bEnableAsyncJobs. When the flag is off they
+// return a clear "disabled" report (mirroring the list_mcp_sessions/
+// terminate_mcp_session "unavailable" shape) instead of touching the registry,
+// so the actions stay discoverable but inert until the feature is enabled.
+
+FMonolithActionResult FMonolithCoreTools::HandleGetJob(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ErrMsg;
+	FString JobId;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("job_id"), JobId, ErrMsg))
+	{
+		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!Settings || !Settings->bEnableAsyncJobs)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("disabled"));
+		Result->SetStringField(TEXT("requested_job_id"), JobId);
+		Result->SetStringField(TEXT("reason"), TEXT("Async jobs are disabled. Enable UMonolithSettings::bEnableAsyncJobs to mint and poll long-running job ids."));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// GetJobJson returns {"status":"not_found"} for an unknown id, which is the
+	// honest answer for an expired/evicted/never-minted job.
+	return FMonolithActionResult::Success(FMonolithAsyncJobRegistry::Get().GetJobJson(JobId));
+}
+
+FMonolithActionResult FMonolithCoreTools::HandleCancelJob(const TSharedPtr<FJsonObject>& Params)
+{
+	FString ErrMsg;
+	FString JobId;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("job_id"), JobId, ErrMsg))
+	{
+		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
+	if (!Settings || !Settings->bEnableAsyncJobs)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("status"), TEXT("disabled"));
+		Result->SetStringField(TEXT("requested_job_id"), JobId);
+		Result->SetBoolField(TEXT("cancel_requested"), false);
+		Result->SetStringField(TEXT("reason"), TEXT("Async jobs are disabled. Enable UMonolithSettings::bEnableAsyncJobs before cancelling long-running jobs."));
+		return FMonolithActionResult::Success(Result);
+	}
+
+	// Cancellation is cooperative: set the flag, then return the (possibly
+	// not_found) job row so the caller sees the post-request state.
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.RequestCancel(JobId);
+	return FMonolithActionResult::Success(Registry.GetJobJson(JobId));
 }
 
 FMonolithActionResult FMonolithCoreTools::HandleTerminateMcpSession(const TSharedPtr<FJsonObject>& Params)

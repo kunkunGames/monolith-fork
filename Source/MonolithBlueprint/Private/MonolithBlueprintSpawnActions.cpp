@@ -13,6 +13,7 @@
 #include "UObject/UnrealType.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "MonolithJsonUtils.h"
 
 // ============================================================================
 // Local Helpers
@@ -84,9 +85,9 @@ void ApplyPropertiesToActor(
 		return;
 	}
 
-	for (const auto& Pair : PropsObj->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 	{
-		const FString& PropName = Pair.Key;
+		const FString PropName = Pair.Key;
 		const TSharedPtr<FJsonValue>& PropValue = Pair.Value;
 
 		FProperty* Prop = Actor->GetClass()->FindPropertyByName(FName(*PropName));

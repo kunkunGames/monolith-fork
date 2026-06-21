@@ -1,4 +1,5 @@
 #include "MonolithAudioAssetActions.h"
+#include "MonolithAudioActionUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
@@ -404,9 +405,9 @@ bool FMonolithAudioAssetActions::JsonToStruct(const TSharedPtr<FJsonObject>& Jso
 		return false;
 	}
 
-	for (const auto& Pair : Json->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(Json))
 	{
-		const FString& FieldName = Pair.Key;
+		const FString FieldName = Pair.Key;
 		const TSharedPtr<FJsonValue>& JsonVal = Pair.Value;
 
 		FProperty* Prop = StructDef->FindPropertyByName(FName(*FieldName));

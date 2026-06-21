@@ -2921,7 +2921,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	const TSharedPtr<FJsonObject>* ScalarParams = nullptr;
 	if (Params->TryGetObjectField(TEXT("scalar_parameters"), ScalarParams))
 	{
-		for (const auto& Pair : (*ScalarParams)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*ScalarParams))
 		{
 			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Number) continue;
 			float Value = static_cast<float>(Pair.Value->AsNumber());
@@ -2935,7 +2935,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	const TSharedPtr<FJsonObject>* VectorParams = nullptr;
 	if (Params->TryGetObjectField(TEXT("vector_parameters"), VectorParams))
 	{
-		for (const auto& Pair : (*VectorParams)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*VectorParams))
 		{
 			const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 			if (Pair.Value->TryGetObject(ColorObj))
@@ -2964,7 +2964,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	const TSharedPtr<FJsonObject>* TextureParams = nullptr;
 	if (Params->TryGetObjectField(TEXT("texture_parameters"), TextureParams))
 	{
-		for (const auto& Pair : (*TextureParams)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*TextureParams))
 		{
 			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::String) continue;
 			FString TexPath = Pair.Value->AsString();
@@ -2982,7 +2982,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	const TSharedPtr<FJsonObject>* SwitchParams = nullptr;
 	if (Params->TryGetObjectField(TEXT("static_switch_parameters"), SwitchParams))
 	{
-		for (const auto& Pair : (*SwitchParams)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*SwitchParams))
 		{
 			if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Boolean) continue;
 			bool bValue = Pair.Value->AsBool();
@@ -5969,7 +5969,7 @@ FMonolithActionResult FMonolithMaterialActions::ReplaceExpression(const TSharedP
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("new_properties"), PropsObj) && PropsObj)
 	{
-		for (const auto& Pair : (*PropsObj)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 		{
 			FProperty* Prop = NewExpr->GetClass()->FindPropertyByName(*Pair.Key);
 			if (Prop)
@@ -6568,7 +6568,7 @@ void FMonolithMaterialActions::BuildGraphFromSpec(
 			if (PropsObjPtr)
 			{
 				const TSharedPtr<FJsonObject>& PropsObj = *PropsObjPtr;
-				for (const auto& Pair : PropsObj->Values)
+				for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 				{
 					if (Pair.Key == TEXT("SamplerType"))
 					{
@@ -8965,10 +8965,10 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	TArray<FImportedTexture> ImportedTextures;
 	TArray<TSharedPtr<FJsonValue>> TextureErrors;
 
-	for (const auto& MapEntry : MapsObj->Values)
+	for (const auto& MapEntry : FMonolithJsonUtils::GetFields(MapsObj))
 	{
 		if (!MapEntry.Value.IsValid() || MapEntry.Value->Type != EJson::String) continue;
-		FString MapType = MapEntry.Key.ToLower();
+		FString MapType = FMonolithJsonUtils::FieldKeyToString(MapEntry.Key).ToLower();
 		FString DiskPath = MapEntry.Value->AsString();
 
 		if (DiskPath.IsEmpty())
@@ -9364,7 +9364,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	const TSharedPtr<FJsonObject>* ScalarOverrides = nullptr;
 	if (Params->TryGetObjectField(TEXT("scalar_overrides"), ScalarOverrides))
 	{
-		for (const auto& Pair : (*ScalarOverrides)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*ScalarOverrides))
 		{
 			FName ParamName(*Pair.Key);
 			FGuid* FoundGUID = ScalarParamGUIDs.Find(ParamName);
@@ -9386,7 +9386,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	const TSharedPtr<FJsonObject>* VectorOverrides = nullptr;
 	if (Params->TryGetObjectField(TEXT("vector_overrides"), VectorOverrides))
 	{
-		for (const auto& Pair : (*VectorOverrides)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*VectorOverrides))
 		{
 			FName ParamName(*Pair.Key);
 			const TSharedPtr<FJsonObject>* ColorObj = nullptr;
@@ -9427,7 +9427,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	const TSharedPtr<FJsonObject>* TextureOverrides = nullptr;
 	if (Params->TryGetObjectField(TEXT("texture_overrides"), TextureOverrides))
 	{
-		for (const auto& Pair : (*TextureOverrides)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*TextureOverrides))
 		{
 			FName ParamName(*Pair.Key);
 			FString TexPath = Pair.Value->AsString();
@@ -9456,7 +9456,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateFunctionInstance(const TSh
 	const TSharedPtr<FJsonObject>* SwitchOverrides = nullptr;
 	if (Params->TryGetObjectField(TEXT("static_switch_overrides"), SwitchOverrides))
 	{
-		for (const auto& Pair : (*SwitchOverrides)->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(*SwitchOverrides))
 		{
 			FName ParamName(*Pair.Key);
 			bool bValue = Pair.Value->AsBool();

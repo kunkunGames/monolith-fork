@@ -42,6 +42,16 @@ public:
 	FMonolithActionInfo ApplyDescriptionOverride(const FMonolithActionInfo& Info);
 	bool ValidateProfile(const FString& ProfileId, TArray<FString>& OutUnknownNamespaces, TArray<FString>& OutUnknownActions, FString& OutError);
 
+	/**
+	 * Monotonic revision of the advertised tool list. Bumped whenever a mutator
+	 * changes which actions/namespaces are visible or how they are described
+	 * (active profile, action/namespace enablement, description override,
+	 * upsert, delete). The MCP server reads this to advertise tools.listChanged
+	 * and to track the list revision for a future notifications/tools/list_changed
+	 * push. This manager stays MCP-agnostic — it owns only the counter.
+	 */
+	int64 GetToolListRevision() const;
+
 private:
 	FMonolithToolProfileManager() = default;
 
@@ -49,6 +59,7 @@ private:
 	void Load_NoLock();
 	bool Save_NoLock(FString& OutError) const;
 	void AddDefaultProfile_NoLock();
+	void BumpToolListRevision_NoLock();
 	static FString MakeActionId(const FString& Namespace, const FString& Action);
 	static bool IsProfileManagementAction(const FString& Namespace, const FString& Action);
 
@@ -56,4 +67,5 @@ private:
 	bool bLoaded = false;
 	FString ActiveProfileId = TEXT("default");
 	TMap<FString, FMonolithToolProfile> Profiles;
+	int64 ToolListRevision = 0;
 };

@@ -1,6 +1,7 @@
 #include "MonolithPieObjectActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithStructFieldResolver.h"
+#include "MonolithJsonUtils.h"
 
 #include "Editor.h"
 #include "Engine/Engine.h"
@@ -393,7 +394,7 @@ namespace
 			OutError = TEXT("internal: null struct/value/json in struct marshal");
 			return false;
 		}
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : Json->Values)
+		for (const auto& Field : FMonolithJsonUtils::GetFields(Json))
 		{
 			// Resolve the friendly field name within THIS struct to its internal property.
 			// (The shared MonolithStructField resolver needs a UObject container; a bare

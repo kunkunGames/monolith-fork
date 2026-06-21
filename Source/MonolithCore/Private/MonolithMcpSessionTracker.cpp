@@ -41,6 +41,69 @@ void FMonolithMcpSessionTracker::ObserveRequest(
 	Row->LastToolName = BoundedString(ToolName, 128);
 }
 
+void FMonolithMcpSessionTracker::MarkInitialize(
+	const FString& SessionId,
+	const FString& ProtocolVersion,
+	bool bClientSupportsRoots,
+	bool bClientSupportsSampling,
+	bool bClientSupportsElicitation)
+{
+	const FString SessionKey = MakeSessionKey(SessionId);
+	const FDateTime Now = FDateTime::UtcNow();
+
+	FScopeLock Lock(&TrackerLock);
+	EvictOldestIfNeeded(SessionKey);
+
+	FSessionRow* Row = RowsByKey.Find(SessionKey);
+	if (!Row)
+	{
+		FSessionRow NewRow;
+		NewRow.SessionKey = SessionKey;
+		NewRow.SessionIdRedacted = RedactSessionId(SessionId);
+		NewRow.FirstSeenUtc = Now;
+		NewRow.LastSeenUtc = Now;
+		Row = &RowsByKey.Add(SessionKey, MoveTemp(NewRow));
+	}
+
+	Row->LastSeenUtc = Now;
+	Row->Status = EMonolithMcpSessionStatus::Initializing;
+	if (!ProtocolVersion.IsEmpty())
+	{
+		Row->ProtocolVersion = BoundedString(ProtocolVersion, 64);
+	}
+	// Store only the redacted boolean presence of each capability group. The raw
+	// capability object, client name, and version string are deliberately never
+	// retained — same redaction stance as the rest of the observer.
+	Row->bClientSupportsRoots = bClientSupportsRoots;
+	Row->bClientSupportsSampling = bClientSupportsSampling;
+	Row->bClientSupportsElicitation = bClientSupportsElicitation;
+}
+
+void FMonolithMcpSessionTracker::MarkInitialized(const FString& SessionId)
+{
+	const FString SessionKey = MakeSessionKey(SessionId);
+	const FDateTime Now = FDateTime::UtcNow();
+
+	FScopeLock Lock(&TrackerLock);
+	FSessionRow* Row = RowsByKey.Find(SessionKey);
+	if (!Row)
+	{
+		// No-op on an unknown session: notifications/initialized never seeds a
+		// row by itself (the prior initialize is what creates the session).
+		return;
+	}
+
+	Row->LastSeenUtc = Now;
+	Row->Status = EMonolithMcpSessionStatus::Initialized;
+}
+
+bool FMonolithMcpSessionTracker::IsKnownSession(const FString& SessionId) const
+{
+	const FString SessionKey = MakeSessionKey(SessionId);
+	FScopeLock Lock(&TrackerLock);
+	return RowsByKey.Contains(SessionKey);
+}
+
 TSharedPtr<FJsonObject> FMonolithMcpSessionTracker::ListSessionsJson(int32 Limit) const
 {
 	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
@@ -143,6 +206,20 @@ FString FMonolithMcpSessionTracker::RedactSessionId(const FString& SessionId)
 	return Trimmed.Left(4) + TEXT("...") + Trimmed.Right(4);
 }
 
+const TCHAR* FMonolithMcpSessionTracker::StatusToken(EMonolithMcpSessionStatus Status)
+{
+	switch (Status)
+	{
+	case EMonolithMcpSessionStatus::Initializing:
+		return TEXT("initializing");
+	case EMonolithMcpSessionStatus::Initialized:
+		return TEXT("initialized");
+	case EMonolithMcpSessionStatus::Observed:
+	default:
+		return TEXT("observed");
+	}
+}
+
 TSharedPtr<FJsonObject> FMonolithMcpSessionTracker::RowToJson(const FSessionRow& Row)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
@@ -154,6 +231,15 @@ TSharedPtr<FJsonObject> FMonolithMcpSessionTracker::RowToJson(const FSessionRow&
 	Obj->SetStringField(TEXT("last_seen_utc"), Row.LastSeenUtc.ToIso8601());
 	Obj->SetStringField(TEXT("last_method"), Row.LastMethod);
 	Obj->SetStringField(TEXT("last_tool_name"), Row.LastToolName);
+
+	// P1c additive fields: lifecycle status plus redacted client-capability
+	// booleans. New keys only — existing keys above are byte-identical.
+	Obj->SetStringField(TEXT("lifecycle_status"), StatusToken(Row.Status));
+	TSharedPtr<FJsonObject> ClientCaps = MakeShared<FJsonObject>();
+	ClientCaps->SetBoolField(TEXT("roots"), Row.bClientSupportsRoots);
+	ClientCaps->SetBoolField(TEXT("sampling"), Row.bClientSupportsSampling);
+	ClientCaps->SetBoolField(TEXT("elicitation"), Row.bClientSupportsElicitation);
+	Obj->SetObjectField(TEXT("client_capabilities"), ClientCaps);
 	return Obj;
 }
 

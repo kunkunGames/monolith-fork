@@ -1,6 +1,7 @@
 ﻿#include "MonolithAIEQSActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 #include "EnvironmentQuery/EnvQuery.h"
 #include "EnvironmentQuery/EnvQueryOption.h"
@@ -236,7 +237,7 @@ namespace
 	{
 		if (!Obj || !PropsObj.IsValid()) return;
 
-		for (const auto& Pair : PropsObj->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 		{
 			FString Error;
 			if (!SetEQSPropertyValue(Obj, Pair.Key, Pair.Value, Error))
@@ -2454,11 +2455,11 @@ FMonolithActionResult FMonolithAIEQSActions::HandleCreateEQSFromTemplate(const T
 						if ((*GenObjPtr)->TryGetObjectField(TEXT("properties"), ExistingProps) && ExistingProps->IsValid())
 						{
 							MergedProps = MakeShared<FJsonObject>();
-							for (const auto& Pair : (*ExistingProps)->Values)
+							for (const auto& Pair : FMonolithJsonUtils::GetFields(*ExistingProps))
 							{
 								MergedProps->SetField(Pair.Key, Pair.Value);
 							}
-							for (const auto& Pair : (*OverrideProps)->Values)
+							for (const auto& Pair : FMonolithJsonUtils::GetFields(*OverrideProps))
 							{
 								MergedProps->SetField(Pair.Key, Pair.Value);
 							}

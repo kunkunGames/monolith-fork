@@ -80,6 +80,27 @@ public:
 			  ToolTip="Reserved feature flag for persistent MCP sessions, progress, and cancellation. Default off."))
 	bool bEnableMcpSessionMode = false;
 
+	/** Enables long-running async jobs: registers monolith.get_job and cancel_job and lets
+	 *  reindex emit a job_id for polling. Default off until the async job registry is wired in. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Sessions",
+		meta=(DisplayName="Enable Async Jobs",
+			  ToolTip="Reserved feature flag for long-running async jobs. Registers monolith.get_job and cancel_job and adds job_id polling to reindex. Default off."))
+	bool bEnableAsyncJobs = false;
+
+	/** Enables typed image/audio content blocks in tool results once typed media emission is
+	 *  implemented. Kept separate from bEnableStructuredToolResults so media stays dark by default. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Results",
+		meta=(DisplayName="Enable Typed Media Results",
+			  ToolTip="Reserved feature flag for typed image/audio content blocks in tool results. Default off until typed media emission is implemented."))
+	bool bEnableTypedMediaResults = false;
+
+	/** Enables ai.rebuild_zone_graph to run as a real async job that rebuilds and broadcasts the
+	 *  ZoneGraph. Off preserves the current Unavailable response. Requires WITH_ZONEGRAPH. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Sessions",
+		meta=(DisplayName="Enable ZoneGraph Rebuild Job",
+			  ToolTip="Reserved feature flag for running ai.rebuild_zone_graph as an async job. Default off preserves the current Unavailable response."))
+	bool bEnableZoneGraphRebuildJob = false;
+
 	/** Extends the current action audit into redacted ToolCall records and
 	 *  analysis actions once advanced recording is implemented. */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server|Audit",

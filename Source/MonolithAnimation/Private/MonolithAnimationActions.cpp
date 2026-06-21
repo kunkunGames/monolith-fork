@@ -4,6 +4,7 @@
 #include "MonolithParamSchema.h"
 #include "MonolithPropertyAccessReader.h"
 #include "MonolithAnimNodeBindingReader.h" // Gap 2 (function bindings) + Gap 12 (pin bindings) read helpers
+#include "MonolithJsonUtils.h"
 
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
@@ -9417,11 +9418,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 
 		// Build sub-params: copy all op fields (asset_path comes from op, not outer params)
 		TSharedRef<FJsonObject> SubParams = MakeShared<FJsonObject>();
-		for (auto& Pair : Op->Values)
+		for (const auto& Pair : FMonolithJsonUtils::GetFields(Op))
 		{
 			if (Pair.Key != TEXT("op"))
 			{
-				SubParams->SetField(Pair.Key, Pair.Value);
+				SubParams->SetField(FMonolithJsonUtils::FieldKeyToString(Pair.Key), Pair.Value);
 			}
 		}
 
@@ -10427,9 +10428,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyProperties(const
 	ResultArray.Reserve((*PropsPtr)->Values.Num());
 	bool bAnyFailed = false;
 
-	for (auto& Pair : (*PropsPtr)->Values)
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsPtr))
 	{
-		const FString& PropName = Pair.Key;
+		const FString PropName = Pair.Key;
 		FString ValueStr = Pair.Value->AsString();
 
 		TSharedPtr<FJsonObject> PropResult = MakeShared<FJsonObject>();

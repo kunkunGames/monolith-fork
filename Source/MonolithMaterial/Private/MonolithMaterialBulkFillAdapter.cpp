@@ -37,6 +37,7 @@
 // FMaterialParameterInfo arrives transitively from MaterialInstanceConstant.h;
 // project precedent at MonolithMaterialActions.cpp:27-onward uses the same include set.
 #include "Engine/Texture.h"
+#include "MonolithJsonUtils.h"
 
 #define LOCTEXT_NAMESPACE "MonolithMaterialBulkFillAdapter"
 
@@ -84,7 +85,7 @@ namespace MonolithMaterialBulkFillInternal
 		const TSharedPtr<FJsonObject>* ScalarsObj = nullptr;
 		if (Spec.Tree->TryGetObjectField(TEXT("scalars"), ScalarsObj) && ScalarsObj && (*ScalarsObj).IsValid())
 		{
-			for (const auto& KV : (*ScalarsObj)->Values)
+			for (const auto& KV : FMonolithJsonUtils::GetFields(*ScalarsObj))
 			{
 				if (LooksLikeLayeredParam(KV.Key))
 				{
@@ -115,7 +116,7 @@ namespace MonolithMaterialBulkFillInternal
 		const TSharedPtr<FJsonObject>* VectorsObj = nullptr;
 		if (Spec.Tree->TryGetObjectField(TEXT("vectors"), VectorsObj) && VectorsObj && (*VectorsObj).IsValid())
 		{
-			for (const auto& KV : (*VectorsObj)->Values)
+			for (const auto& KV : FMonolithJsonUtils::GetFields(*VectorsObj))
 			{
 				if (LooksLikeLayeredParam(KV.Key))
 				{
@@ -151,7 +152,7 @@ namespace MonolithMaterialBulkFillInternal
 		const TSharedPtr<FJsonObject>* TexturesObj = nullptr;
 		if (Spec.Tree->TryGetObjectField(TEXT("textures"), TexturesObj) && TexturesObj && (*TexturesObj).IsValid())
 		{
-			for (const auto& KV : (*TexturesObj)->Values)
+			for (const auto& KV : FMonolithJsonUtils::GetFields(*TexturesObj))
 			{
 				if (LooksLikeLayeredParam(KV.Key))
 				{
@@ -188,7 +189,7 @@ namespace MonolithMaterialBulkFillInternal
 		const TSharedPtr<FJsonObject>* SwitchesObj = nullptr;
 		if (Spec.Tree->TryGetObjectField(TEXT("switches"), SwitchesObj) && SwitchesObj && (*SwitchesObj).IsValid())
 		{
-			for (const auto& KV : (*SwitchesObj)->Values)
+			for (const auto& KV : FMonolithJsonUtils::GetFields(*SwitchesObj))
 			{
 				if (LooksLikeLayeredParam(KV.Key))
 				{

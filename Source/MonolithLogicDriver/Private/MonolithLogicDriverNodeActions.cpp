@@ -1,4 +1,5 @@
 #include "MonolithLogicDriverNodeActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #if WITH_LOGICDRIVER

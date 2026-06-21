@@ -1,5 +1,6 @@
 #include "MonolithControlRigWriteActions.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "ControlRigBlueprintLegacy.h"
@@ -9,7 +10,7 @@
 #include "RigVMModel/RigVMLink.h"
 #include "RigVMModel/RigVMController.h"
 #include "RigVMModel/RigVMClient.h"
-#include "RigVMAsset.h"
+#include "RigVMEditorAsset.h"
 #include "RigVMModel/Nodes/RigVMCollapseNode.h"
 #include "RigVMModel/Nodes/RigVMUnitNode.h"
 #include "Dom/JsonObject.h"
@@ -555,7 +556,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleAddControlRigNode(c
 	const TSharedPtr<FJsonObject>* PinDefaultsObj = nullptr;
 	if (Params->TryGetObjectField(TEXT("pin_defaults"), PinDefaultsObj) && PinDefaultsObj && (*PinDefaultsObj)->Values.Num() > 0)
 	{
-		for (const auto& KV : (*PinDefaultsObj)->Values)
+		for (const auto& KV : FMonolithJsonUtils::GetFields(*PinDefaultsObj))
 		{
 			FString PinPath = FString::Printf(TEXT("%s.%s"), *NewNode->GetName(), *KV.Key);
 			FString Value;
