@@ -614,6 +614,7 @@ TArray<UClass*> ResolveClassSpecifier(const FString& RawClassSpecifier)
 FString DescribeClassMatches(const TArray<UClass*>& Matches)
 {
 	TArray<FString> Paths;
+	Paths.Reserve(Matches.Num());
 	for (const UClass* Match : Matches)
 	{
 		if (Match)
