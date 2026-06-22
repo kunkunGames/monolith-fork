@@ -490,7 +490,9 @@ FMonolithActionResult FMonolithMeshQualityActions::AnalyzeTextureBudget(const TS
 
 	// Top textures
 	TArray<TSharedPtr<FJsonValue>> TopArr;
-	for (int32 i = 0; i < FMath::Min(TopCount, Textures.Num()); ++i)
+	const int32 ReturnTopCount = FMath::Min(TopCount, Textures.Num());
+	TopArr.Reserve(ReturnTopCount);
+	for (int32 i = 0; i < ReturnTopCount; ++i)
 	{
 		const FTextureInfo& Info = Textures[i];
 		auto TexObj = MakeShared<FJsonObject>();
