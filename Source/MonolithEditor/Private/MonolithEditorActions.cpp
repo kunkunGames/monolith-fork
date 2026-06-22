@@ -2866,7 +2866,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	else if (AssetType.Equals(TEXT("static_mesh"), ESearchCase::IgnoreCase))
 	{
 		// Load asset.
-		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *AssetPath);
+		UStaticMesh* Mesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(AssetPath);
 		if (!Mesh)
 		{
 			return FMonolithActionResult::Error(
@@ -2915,7 +2915,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 	}
 	else if (AssetType.Equals(TEXT("skeletal_mesh"), ESearchCase::IgnoreCase))
 	{
-		USkeletalMesh* SkelMesh = LoadObject<USkeletalMesh>(nullptr, *AssetPath);
+		USkeletalMesh* SkelMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(AssetPath);
 		if (!SkelMesh)
 		{
 			return FMonolithActionResult::Error(
@@ -2931,7 +2931,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureScenePreview(
 			Params->TryGetStringField(TEXT("animation_path"), AnimPath);
 			if (!AnimPath.IsEmpty())
 			{
-				AnimSeq = LoadObject<UAnimSequence>(nullptr, *AnimPath);
+				AnimSeq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AnimPath);
 				if (!AnimSeq)
 				{
 					return FMonolithActionResult::Error(
@@ -3547,7 +3547,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureAnimFrames(
 	FString MeshParam;
 	if (Params->TryGetStringField(TEXT("skeletal_mesh"), MeshParam) && !MeshParam.IsEmpty())
 	{
-		PreviewMesh = LoadObject<USkeletalMesh>(nullptr, *MeshParam);
+		PreviewMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(MeshParam);
 		if (!PreviewMesh)
 		{
 			return FMonolithActionResult::Error(
