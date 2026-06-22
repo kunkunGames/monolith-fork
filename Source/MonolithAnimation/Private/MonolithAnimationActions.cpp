@@ -10864,6 +10864,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetConstraintProperties(c
 	Root->SetStringField(TEXT("bone_2"), CT->DefaultInstance.ConstraintBone2.ToString());
 
 	TArray<TSharedPtr<FJsonValue>> ModArr;
+	ModArr.Reserve(ModifiedProps.Num());
 	for (const FString& P : ModifiedProps)
 	{
 		ModArr.Add(MakeShared<FJsonValueString>(P));
@@ -10999,6 +11000,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetRetargetChainBones(con
 	Root->SetStringField(TEXT("chain_name"), CurrentChainName.ToString());
 
 	TArray<TSharedPtr<FJsonValue>> ModArr;
+	ModArr.Reserve(ModifiedProps.Num());
 	for (const FString& P : ModifiedProps)
 	{
 		ModArr.Add(MakeShared<FJsonValueString>(P));
