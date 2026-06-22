@@ -1,30 +1,54 @@
 using UnrealBuildTool;
 using System.IO;
+using EpicGames.Core;
 
 public class MonolithLevelSequence : ModuleRules
 {
 
-	private static bool HasPluginDir(string BaseDir, string PluginName)
+	// Returns true iff `PluginName` is ENABLED for this target (not merely present on disk).
+	// Mirrors UnrealBuildTool Plugins.IsPluginEnabledForTarget (UE 5.7
+	// Engine/Source/Programs/UnrealBuildTool/System/Plugins.cs:693). Fixes issue #71:
+	// engine plugins ship-but-default-off (EnabledByDefault:false), so disk presence != enablement.
+	// Design + API citations: Docs/plans/2026-06-15-issue71-plugin-enablement-gating.md.
+	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
+	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
 	{
-		if (!Directory.Exists(BaseDir))
+		if (Target.ProjectFile == null)
 		{
-			return false;
+			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
 		}
 
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-		{
-			return true;
-		}
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
 
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
+		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		try
 		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
+			if (Project.Plugins != null)
 			{
-				return true;
+				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
+				{
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					{
+						return Ref.bEnabled
+							&& Ref.IsEnabledForPlatform(Target.Platform)
+							&& Ref.IsEnabledForTargetConfiguration(Target.Configuration)
+							&& Ref.IsEnabledForTarget(Target.Type);
+					}
+				}
 			}
 		}
+		catch (System.Exception)
+		{
+			return false;   // unreadable .uproject -> fail safe to OFF (never hard-link)
+		}
 
+		// 3. No .uproject entry -> falls to the .uplugin EnabledByDefault. ALL gated plugins here are
+		//    engine plugins with EnabledByDefault:false, so absence == disabled. Return false.
+		//    (If a future gated plugin were EnabledByDefault:true, this branch would need to read its
+		//    .uplugin; documented as a known limitation in the plan.)
 		return false;
 	}
 
@@ -58,31 +82,14 @@ public class MonolithLevelSequence : ModuleRules
 			"JsonUtilities"
 		});
 
-		bool bHasMovieRenderPipeline = false;
+		// --- Conditional: MovieRenderPipeline support ---
+		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence.
+		// MovieRenderPipeline ships under Engine/Plugins on every UE 5.7 install but is
+		// EnabledByDefault:false (and Optional:true in Monolith.uplugin); a source builder
+		// who hasn't enabled it would otherwise hard-link MovieRenderPipelineCore/Editor → 126.
+		// Release builds: MONOLITH_RELEASE_BUILD=1 still forces this OFF.
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-
-		if (!bReleaseBuild)
-		{
-			// 1. Check project Plugins/ folder
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasMovieRenderPipeline = HasPluginDir(ProjectPluginsDir, "MovieRenderPipeline");
-			}
-
-			// 2. Check Engine Plugins/ folder
-			if (!bHasMovieRenderPipeline)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-
-				bHasMovieRenderPipeline =
-					HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "MovieRenderPipeline")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Marketplace"), "MovieRenderPipeline")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "MovieScene"), "MovieRenderPipeline")
-					|| HasPluginDir(EnginePluginsDir, "MovieRenderPipeline");
-			}
-		}
+		bool bHasMovieRenderPipeline = !bReleaseBuild && IsPluginEnabled(Target, "MovieRenderPipeline");
 
 		PublicDefinitions.Add("WITH_MONOLITH_MRQ=" + (bHasMovieRenderPipeline ? "1" : "0"));
 
