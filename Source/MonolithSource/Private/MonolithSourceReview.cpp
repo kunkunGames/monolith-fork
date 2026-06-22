@@ -331,6 +331,7 @@ namespace
 		const TArray<FMonolithSourceInheritance> Parents = Db.GetParents(Sym.Id);
 
 		TSet<int64> CallerFiles;
+		CallerFiles.Reserve(Callers.Num());
 		for (const FMonolithSourceReference& R : Callers) CallerFiles.Add(R.FileId);
 		const bool bCrossesFiles = CallerFiles.Num() > 1;
 		FString SensitivityReason;
