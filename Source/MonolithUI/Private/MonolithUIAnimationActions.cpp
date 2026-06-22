@@ -44,6 +44,16 @@ namespace
             : BindingName;
     }
 
+    bool TryExtractKeyframeTime(const TSharedPtr<FJsonObject>& KfObj, double& OutTime, FMonolithActionResult& OutError)
+    {
+        if (!KfObj->TryGetNumberField(TEXT("time"), OutTime))
+        {
+            OutError = FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+            return false;
+        }
+        return true;
+    }
+
     FGuid FindOrCreateWidgetAnimationBinding(UWidgetBlueprint* WBP, UWidgetAnimation* Animation, UMovieScene* MovieScene, UWidget* TargetWidget)
     {
         if (!WBP || !Animation || !MovieScene || !TargetWidget)
@@ -537,9 +547,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                         const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                         double Time = 0.0;
-                        if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                        FMonolithActionResult ParamError;
+                        if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
                         {
-                            return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                            return ParamError;
                         }
                         double Value = 0.0;
                         if (!KfObj->TryGetNumberField(TEXT("value"), Value))
@@ -614,9 +625,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                            FMonolithActionResult ParamError;
+                            if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
                             {
-                                return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                                return ParamError;
                             }
                             double Value = Defaults[SubIdx];
                             const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);
@@ -689,9 +701,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            if (!KfObj->TryGetNumberField(TEXT("time"), Time))
+                            FMonolithActionResult ParamError;
+                            if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
                             {
-                                return FMonolithActionResult::Error(TEXT("keyframe.time must be a number"), -32602);
+                                return ParamError;
                             }
                             double Value = Defaults[SubIdx];
                             const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);
