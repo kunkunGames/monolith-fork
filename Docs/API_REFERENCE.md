@@ -26,6 +26,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 11 | INI config inspection and search |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
+| [collection](#collection) | 13 | Content Browser collection CRUD and manipulation |
 | [source](#source) | 12 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
@@ -815,6 +816,13 @@ DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. Resolve
 | `property` | string | **required** | Property name to mutate |
 | `value` | string | **required** | New value (ImportText format) |
 | `save_config` | boolean | optional | If true, calls SaveConfig() on the CDO to persist the change. Default: `false` |
+
+---
+
+## collection
+
+Content Browser collection CRUD, dynamic query management, and asset association. Backed by the CollectionManager module.
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithIndex.md` for the deep dive.
 
 ---
 
