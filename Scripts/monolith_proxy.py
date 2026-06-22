@@ -85,25 +85,9 @@ _REPEAT_LOG_WINDOW_SECONDS = 15.0
 # only includes editor logs, not arbitrary jsonl). If a crash collector pattern
 # elsewhere DOES sweep Saved/Logs/*, the user should add MonolithCalls.jsonl to
 # the exclusion list. Single-user local dev tool; no phone-home.
-CORE_QUERY_TOOLS = [
-    "blueprint_query",
-    "material_query",
-    "animation_query",
-    "niagara_query",
-    "editor_query",
-    "config_query",
-    "project_query",
-    "source_query",
-    "ui_query",
-    "mesh_query",
-    "gas_query",
-    "combograph_query",
-    "ai_query",
-    "logicdriver_query",
-    "audio_query",
-    "level_sequence_query",
-    "movie_render_query",
-]
+# Per-namespace *_query seed tools are no longer used — agents dispatch via
+# the single monolith_query tool. Kept empty for structural compatibility.
+CORE_QUERY_TOOLS = []
 
 
 def _log(msg: str) -> None:
