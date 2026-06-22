@@ -1121,6 +1121,7 @@ namespace MonolithUI::SpecActionsInternal
 
         // ---- Per-screen dispatch into FUISpecBuilder -------------------------
         TArray<TSharedPtr<FJsonValue>> ScreenResults;
+        ScreenResults.Reserve(Screens->Num());
         int32 TotalCreated = 0, TotalModified = 0, TotalRemoved = 0;
         bool bAllSucceeded = true;
 
