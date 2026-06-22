@@ -413,12 +413,12 @@ if (Test-Path $binDir) {
     $binStripCount = 0
     # Build a regex that matches any stripped module's binary.
     $stripModuleRegex = "(" + (($StrippedModules | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")"
-    # Exclude gitignored dot-directories (e.g. .claude) that may exist physically under
+    # Exclude gitignored dot-directories (e.g. .claude, .jules) that may exist physically under
     # Binaries/. git ls-files never tracks them, but the Binaries copy below walks the
     # physical directory -- without this guard such a directory and its contents could ship
     # in the public zip. No legitimate Binaries content lives under a dot-directory.
     Get-ChildItem $binDir -Recurse -File |
-        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and $_.FullName -notmatch '[\\/]\.claude[\\/]' } |
+        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and $_.FullName -notmatch '[\\/]\.[^\\/]+[\\/]' } |
         ForEach-Object {
             if ($_.Name -match "UnrealEditor-$stripModuleRegex\.") {
                 $binStripCount++
