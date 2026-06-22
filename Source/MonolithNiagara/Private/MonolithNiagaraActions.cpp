@@ -5005,6 +5005,78 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 	if (!JV.IsValid())
 		return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
+	FString ValStr;
+	if (JV->Type == EJson::Number) ValStr = FString::SanitizeFloat(JV->AsNumber());
+	else if (JV->Type == EJson::Boolean) ValStr = JV->AsBool() ? TEXT("true") : TEXT("false");
+	else if (JV->Type == EJson::String) ValStr = JV->AsString();
+	else if (JV->Type == EJson::Object)
+	{
+		TSharedPtr<FJsonObject> O = JV->AsObject();
+		if (O->HasField(TEXT("x")) && O->HasField(TEXT("y")))
+		{
+			// Vector types: vec2, vec3, vec4
+			double X = 0.0, Y = 0.0;
+			if (!O->TryGetNumberField(TEXT("x"), X) || !O->TryGetNumberField(TEXT("y"), Y))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'x' and 'y' must be numeric"));
+			}
+			double Z = 0.0;
+			O->TryGetNumberField(TEXT("z"), Z);
+			double W = 0.0;
+			O->TryGetNumberField(TEXT("w"), W);
+			if (O->HasField(TEXT("w"))) ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), X, Y, Z, W);
+			else if (O->HasField(TEXT("z"))) ValStr = FString::Printf(TEXT("%f,%f,%f"), X, Y, Z);
+			else ValStr = FString::Printf(TEXT("%f,%f"), X, Y);
+		}
+		else if (O->HasField(TEXT("r")) && O->HasField(TEXT("g")))
+		{
+			// Color type: LinearColor
+			double R2 = 0.0, G = 0.0, B = 0.0;
+			if (!O->TryGetNumberField(TEXT("r"), R2) || !O->TryGetNumberField(TEXT("g"), G) || !O->TryGetNumberField(TEXT("b"), B))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'r', 'g', 'b' must be numeric"));
+			}
+			double A = 1.0;
+			O->TryGetNumberField(TEXT("a"), A);
+			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), R2, G, B, A);
+		}
+		else if (O->HasField(TEXT("qx")) && O->HasField(TEXT("qy")) && O->HasField(TEXT("qz")) && O->HasField(TEXT("qw")))
+		{
+			// Quaternion type: quat
+			double QX = 0.0, QY = 0.0, QZ = 0.0, QW = 0.0;
+			if (!O->TryGetNumberField(TEXT("qx"), QX) || !O->TryGetNumberField(TEXT("qy"), QY) ||
+				!O->TryGetNumberField(TEXT("qz"), QZ) || !O->TryGetNumberField(TEXT("qw"), QW))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'qx', 'qy', 'qz', 'qw' must be numeric"));
+			}
+			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), QX, QY, QZ, QW);
+		}
+		else if (O->HasField(TEXT("m00")))
+		{
+			// Matrix type: 4x4 matrix (16 values)
+			// Format: m00,m01,m02,m03,m10,m11,m12,m13,m20,m21,m22,m23,m30,m31,m32,m33
+			double M00 = 0.0, M01 = 0.0, M02 = 0.0, M03 = 0.0;
+			double M10 = 0.0, M11 = 0.0, M12 = 0.0, M13 = 0.0;
+			double M20 = 0.0, M21 = 0.0, M22 = 0.0, M23 = 0.0;
+			double M30 = 0.0, M31 = 0.0, M32 = 0.0, M33 = 0.0;
+			if (!O->TryGetNumberField(TEXT("m00"), M00) || !O->TryGetNumberField(TEXT("m01"), M01) || !O->TryGetNumberField(TEXT("m02"), M02) || !O->TryGetNumberField(TEXT("m03"), M03) ||
+				!O->TryGetNumberField(TEXT("m10"), M10) || !O->TryGetNumberField(TEXT("m11"), M11) || !O->TryGetNumberField(TEXT("m12"), M12) || !O->TryGetNumberField(TEXT("m13"), M13) ||
+				!O->TryGetNumberField(TEXT("m20"), M20) || !O->TryGetNumberField(TEXT("m21"), M21) || !O->TryGetNumberField(TEXT("m22"), M22) || !O->TryGetNumberField(TEXT("m23"), M23) ||
+				!O->TryGetNumberField(TEXT("m30"), M30) || !O->TryGetNumberField(TEXT("m31"), M31) || !O->TryGetNumberField(TEXT("m32"), M32) || !O->TryGetNumberField(TEXT("m33"), M33))
+			{
+				return FMonolithActionResult::Error(TEXT("Matrix parameters must be numeric"));
+			}
+			ValStr = FString::Printf(TEXT("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f"),
+				M00, M01, M02, M03, M10, M11, M12, M13, M20, M21, M22, M23, M30, M31, M32, M33);
+		}
+		else
+		{
+			TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&ValStr);
+			FJsonSerializer::Serialize(O.ToSharedRef(), W);
+		}
+	}
+	else ValStr = JsonValueToString(JV);
+
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
 
@@ -5113,63 +5185,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 		TargetPin = &OverridePin;
 	}
 
-	FString ValStr;
-	if (JV->Type == EJson::Number) ValStr = FString::SanitizeFloat(JV->AsNumber());
-	else if (JV->Type == EJson::Boolean) ValStr = JV->AsBool() ? TEXT("true") : TEXT("false");
-	else if (JV->Type == EJson::String) ValStr = JV->AsString();
-	else if (JV->Type == EJson::Object)
-	{
-		TSharedPtr<FJsonObject> O = JV->AsObject();
-		if (O->HasField(TEXT("x")) && O->HasField(TEXT("y")))
-		{
-			// Vector types: vec2, vec3, vec4
-			double X = O->GetNumberField(TEXT("x")), Y = O->GetNumberField(TEXT("y"));
-			double Z = 0.0;
-			O->TryGetNumberField(TEXT("z"), Z);
-			double W = 0.0;
-			O->TryGetNumberField(TEXT("w"), W);
-			if (O->HasField(TEXT("w"))) ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), X, Y, Z, W);
-			else if (O->HasField(TEXT("z"))) ValStr = FString::Printf(TEXT("%f,%f,%f"), X, Y, Z);
-			else ValStr = FString::Printf(TEXT("%f,%f"), X, Y);
-		}
-		else if (O->HasField(TEXT("r")) && O->HasField(TEXT("g")))
-		{
-			// Color type: LinearColor
-			double R2 = O->GetNumberField(TEXT("r")), G = O->GetNumberField(TEXT("g"));
-			double B = O->GetNumberField(TEXT("b"));
-			double A = 1.0;
-			O->TryGetNumberField(TEXT("a"), A);
-			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), R2, G, B, A);
-		}
-		else if (O->HasField(TEXT("qx")) && O->HasField(TEXT("qy")) && O->HasField(TEXT("qz")) && O->HasField(TEXT("qw")))
-		{
-			// Quaternion type: quat
-			double QX = O->GetNumberField(TEXT("qx")), QY = O->GetNumberField(TEXT("qy"));
-			double QZ = O->GetNumberField(TEXT("qz")), QW = O->GetNumberField(TEXT("qw"));
-			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), QX, QY, QZ, QW);
-		}
-		else if (O->HasField(TEXT("m00")))
-		{
-			// Matrix type: 4x4 matrix (16 values)
-			// Format: m00,m01,m02,m03,m10,m11,m12,m13,m20,m21,m22,m23,m30,m31,m32,m33
-			double M00 = O->GetNumberField(TEXT("m00")), M01 = O->GetNumberField(TEXT("m01"));
-			double M02 = O->GetNumberField(TEXT("m02")), M03 = O->GetNumberField(TEXT("m03"));
-			double M10 = O->GetNumberField(TEXT("m10")), M11 = O->GetNumberField(TEXT("m11"));
-			double M12 = O->GetNumberField(TEXT("m12")), M13 = O->GetNumberField(TEXT("m13"));
-			double M20 = O->GetNumberField(TEXT("m20")), M21 = O->GetNumberField(TEXT("m21"));
-			double M22 = O->GetNumberField(TEXT("m22")), M23 = O->GetNumberField(TEXT("m23"));
-			double M30 = O->GetNumberField(TEXT("m30")), M31 = O->GetNumberField(TEXT("m31"));
-			double M32 = O->GetNumberField(TEXT("m32")), M33 = O->GetNumberField(TEXT("m33"));
-			ValStr = FString::Printf(TEXT("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f"),
-				M00, M01, M02, M03, M10, M11, M12, M13, M20, M21, M22, M23, M30, M31, M32, M33);
-		}
-		else
-		{
-			TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&ValStr);
-			FJsonSerializer::Serialize(O.ToSharedRef(), W);
-		}
-	}
-	else ValStr = JsonValueToString(JV);
+
 
 	TargetPin->DefaultValue = ValStr;
 	GEditor->EndTransaction();
