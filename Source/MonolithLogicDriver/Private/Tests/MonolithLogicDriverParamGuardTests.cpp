@@ -788,4 +788,71 @@ bool FMonolithParamGuardLogicDriverSetInitialStateRejectsMalformedParamsTest::Ru
 
 	return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRemoveNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RemoveNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRemoveNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("remove_node")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// Missing asset_path
+	TSharedPtr<FJsonObject> MissingAssetPathParams = MakeShared<FJsonObject>();
+	MissingAssetPathParams->SetStringField(TEXT("node_guid"), TEXT("test-guid"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("remove_node"), MissingAssetPathParams);
+	TestTrue(TEXT("remove_node rejects missing asset_path"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions asset_path"), Result1.ErrorMessage.Contains(TEXT("asset_path")));
+
+	// Missing node_guid
+	TSharedPtr<FJsonObject> MissingNodeGuidParams = MakeShared<FJsonObject>();
+	MissingNodeGuidParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("remove_node"), MissingNodeGuidParams);
+	TestTrue(TEXT("remove_node rejects missing node_guid"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions node_guid"), Result2.ErrorMessage.Contains(TEXT("node_guid")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRenameNodeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RenameNodeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRenameNodeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("rename_node")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// Missing asset_path
+	TSharedPtr<FJsonObject> MissingAssetPathParams = MakeShared<FJsonObject>();
+	MissingAssetPathParams->SetStringField(TEXT("node_guid"), TEXT("test-guid"));
+	MissingAssetPathParams->SetStringField(TEXT("new_name"), TEXT("NewName"));
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("rename_node"), MissingAssetPathParams);
+	TestTrue(TEXT("rename_node rejects missing asset_path"), !Result1.bSuccess);
+	TestTrue(TEXT("error mentions asset_path"), Result1.ErrorMessage.Contains(TEXT("asset_path")));
+
+	// Missing node_guid
+	TSharedPtr<FJsonObject> MissingNodeGuidParams = MakeShared<FJsonObject>();
+	MissingNodeGuidParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	MissingNodeGuidParams->SetStringField(TEXT("new_name"), TEXT("NewName"));
+
+	FMonolithActionResult Result2 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("rename_node"), MissingNodeGuidParams);
+	TestTrue(TEXT("rename_node rejects missing node_guid"), !Result2.bSuccess);
+	TestTrue(TEXT("error mentions node_guid"), Result2.ErrorMessage.Contains(TEXT("node_guid")));
+
+	// Missing new_name
+	TSharedPtr<FJsonObject> MissingNewNameParams = MakeShared<FJsonObject>();
+	MissingNewNameParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+	MissingNewNameParams->SetStringField(TEXT("node_guid"), TEXT("test-guid"));
+
+	FMonolithActionResult Result3 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("rename_node"), MissingNewNameParams);
+	TestTrue(TEXT("rename_node rejects missing new_name"), !Result3.bSuccess);
+	TestTrue(TEXT("error mentions new_name"), Result3.ErrorMessage.Contains(TEXT("new_name")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
