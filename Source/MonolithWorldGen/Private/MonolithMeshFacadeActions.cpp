@@ -1,6 +1,7 @@
 #if WITH_GEOMETRYSCRIPT
 
 #include "MonolithMeshFacadeActions.h"
+#include "MonolithWorldGenModule.h"
 #include "MonolithMeshProceduralActions.h"
 #include "MonolithMeshHandlePool.h"
 #include "MonolithToolRegistry.h"
@@ -542,7 +543,7 @@ void FMonolithMeshFacadeActions::CutOpeningsSelectionInset(UDynamicMesh* Mesh,
 		// triangles with unpredictable normals, or floating-point precision misses vertices.
 		if (FrontSel.GetNumSelected() == 0)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("CutOpeningsSelectionInset: Empty selection for opening — skipping (likely degenerate geometry from plane slice)"));
+			UE_LOG(LogMonolithWorldGen, Warning, TEXT("CutOpeningsSelectionInset: Empty selection for opening — skipping (likely degenerate geometry from plane slice)"));
 			return;
 		}
 

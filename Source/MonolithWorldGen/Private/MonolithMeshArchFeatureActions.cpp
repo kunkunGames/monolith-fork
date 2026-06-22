@@ -1,6 +1,7 @@
 #if WITH_GEOMETRYSCRIPT
 
 #include "MonolithMeshArchFeatureActions.h"
+#include "MonolithWorldGenModule.h"
 #include "MonolithMeshBuildingTypes.h"
 #include "MonolithMeshProceduralActions.h"
 #include "MonolithMeshHandlePool.h"
@@ -867,7 +868,7 @@ FMonolithActionResult FMonolithMeshArchFeatureActions::CreateFireEscape(const TS
 	const float StairAngleDeg = FMath::RadiansToDegrees(FMath::Atan2(ActualStepH, StepDepth));
 	if (StairAngleDeg > 50.0f)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Fire escape stair angle %.1f deg exceeds 45 deg IBC max. "
+		UE_LOG(LogMonolithWorldGen, Warning, TEXT("Fire escape stair angle %.1f deg exceeds 45 deg IBC max. "
 			"Consider increasing step_depth or decreasing step_rise."), StairAngleDeg);
 	}
 
