@@ -12431,20 +12431,22 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 
 	FString LeftMarkerName = TEXT("L_Foot");
 	FString RightMarkerName = TEXT("R_Foot");
-	Params->TryGetStringField(TEXT("left_marker_name"), LeftMarkerName);
-	Params->TryGetStringField(TEXT("right_marker_name"), RightMarkerName);
+	if (Params->HasField(TEXT("left_marker_name")) && !Params->TryGetStringField(TEXT("left_marker_name"), LeftMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'left_marker_name' must be a string"));
+	if (Params->HasField(TEXT("right_marker_name")) && !Params->TryGetStringField(TEXT("right_marker_name"), RightMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'right_marker_name' must be a string"));
 
 	int32 TrackIndex = 0;
 	{
 		double TmpTrack;
-		if (Params->TryGetNumberField(TEXT("track_index"), TmpTrack))
+		if (Params->HasField(TEXT("track_index")))
 		{
+			if (!Params->TryGetNumberField(TEXT("track_index"), TmpTrack))
+				return FMonolithActionResult::Error(TEXT("Parameter 'track_index' must be a number"));
 			TrackIndex = static_cast<int32>(TmpTrack);
 		}
 	}
 
 	FString Method = TEXT("auto");
-	Params->TryGetStringField(TEXT("method"), Method);
+	if (Params->HasField(TEXT("method")) && !Params->TryGetStringField(TEXT("method"), Method)) return FMonolithActionResult::Error(TEXT("Parameter 'method' must be a string"));
 	Method = Method.ToLower();
 	if (Method != TEXT("auto") && Method != TEXT("existing") && Method != TEXT("notifies")
 		&& Method != TEXT("contact") && Method != TEXT("phase") && Method != TEXT("footspeed"))
@@ -12454,27 +12456,42 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	}
 
 	bool bPhaseInvert = false;
-	Params->TryGetBoolField(TEXT("phase_invert"), bPhaseInvert);
+	if (Params->HasField(TEXT("phase_invert")) && !Params->TryGetBoolField(TEXT("phase_invert"), bPhaseInvert)) return FMonolithActionResult::Error(TEXT("Parameter 'phase_invert' must be a boolean"));
 
 	bool bClearExisting = true;
-	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
+	if (Params->HasField(TEXT("clear_existing")) && !Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting)) return FMonolithActionResult::Error(TEXT("Parameter 'clear_existing' must be a boolean"));
 
 	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun)) return FMonolithActionResult::Error(TEXT("Parameter 'dry_run' must be a boolean"));
 
 	// Thresholds (per-signal defaults; each individually overridable).
 	FFootSyncConfig Cfg;
 	{
 		const TSharedPtr<FJsonObject>* ThreshObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("thresholds"), ThreshObj) && ThreshObj)
+		if (Params->HasField(TEXT("thresholds")))
 		{
-			double V;
-			if ((*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V))       Cfg.ContactMid = static_cast<float>(V);
-			if ((*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V))       Cfg.ContactLow = static_cast<float>(V);
-			if ((*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V))   Cfg.SpeedThreshold = static_cast<float>(V);
-			if ((*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V))       Cfg.SampleRate = static_cast<float>(V);
-			if ((*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) Cfg.DebounceFraction = static_cast<float>(V);
-			if ((*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V))  Cfg.GroundThreshold = static_cast<float>(V);
+			if (!Params->TryGetObjectField(TEXT("thresholds"), ThreshObj)) return FMonolithActionResult::Error(TEXT("Parameter 'thresholds' must be an object"));
+			if (ThreshObj && *ThreshObj)
+			{
+				double V;
+				if ((*ThreshObj)->HasField(TEXT("contact_mid")) && !(*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'contact_mid' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V)) Cfg.ContactMid = static_cast<float>(V);
+
+				if ((*ThreshObj)->HasField(TEXT("contact_low")) && !(*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'contact_low' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V)) Cfg.ContactLow = static_cast<float>(V);
+
+				if ((*ThreshObj)->HasField(TEXT("speed_threshold")) && !(*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V))   return FMonolithActionResult::Error(TEXT("Parameter 'speed_threshold' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V)) Cfg.SpeedThreshold = static_cast<float>(V);
+
+				if ((*ThreshObj)->HasField(TEXT("sample_rate")) && !(*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V)) Cfg.SampleRate = static_cast<float>(V);
+
+				if ((*ThreshObj)->HasField(TEXT("debounce_fraction")) && !(*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) return FMonolithActionResult::Error(TEXT("Parameter 'debounce_fraction' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) Cfg.DebounceFraction = static_cast<float>(V);
+
+				if ((*ThreshObj)->HasField(TEXT("ground_threshold")) && !(*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V))  return FMonolithActionResult::Error(TEXT("Parameter 'ground_threshold' in thresholds must be a number"));
+				else if ((*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V)) Cfg.GroundThreshold = static_cast<float>(V);
+			}
 		}
 	}
 	if (Cfg.SampleRate <= 0.0f)
@@ -12487,10 +12504,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	FString NotifyRightPattern = TEXT("footstep right");
 	{
 		const TSharedPtr<FJsonObject>* PatObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("notify_track_patterns"), PatObj) && PatObj)
+		if (Params->HasField(TEXT("notify_track_patterns")))
 		{
-			(*PatObj)->TryGetStringField(TEXT("left"), NotifyLeftPattern);
-			(*PatObj)->TryGetStringField(TEXT("right"), NotifyRightPattern);
+			if (!Params->TryGetObjectField(TEXT("notify_track_patterns"), PatObj)) return FMonolithActionResult::Error(TEXT("Parameter 'notify_track_patterns' must be an object"));
+			if (PatObj && *PatObj)
+			{
+				if ((*PatObj)->HasField(TEXT("left")) && !(*PatObj)->TryGetStringField(TEXT("left"), NotifyLeftPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in notify_track_patterns must be a string"));
+				if ((*PatObj)->HasField(TEXT("right")) && !(*PatObj)->TryGetStringField(TEXT("right"), NotifyRightPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in notify_track_patterns must be a string"));
+			}
 		}
 	}
 
@@ -12498,10 +12519,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	FString ExplicitLeftBone, ExplicitRightBone;
 	{
 		const TSharedPtr<FJsonObject>* BonesObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("foot_bones"), BonesObj) && BonesObj)
+		if (Params->HasField(TEXT("foot_bones")))
 		{
-			(*BonesObj)->TryGetStringField(TEXT("left"), ExplicitLeftBone);
-			(*BonesObj)->TryGetStringField(TEXT("right"), ExplicitRightBone);
+			if (!Params->TryGetObjectField(TEXT("foot_bones"), BonesObj)) return FMonolithActionResult::Error(TEXT("Parameter 'foot_bones' must be an object"));
+			if (BonesObj && *BonesObj)
+			{
+				if ((*BonesObj)->HasField(TEXT("left")) && !(*BonesObj)->TryGetStringField(TEXT("left"), ExplicitLeftBone)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in foot_bones must be a string"));
+				if ((*BonesObj)->HasField(TEXT("right")) && !(*BonesObj)->TryGetStringField(TEXT("right"), ExplicitRightBone)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in foot_bones must be a string"));
+			}
 		}
 	}
 
