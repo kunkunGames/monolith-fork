@@ -46,6 +46,23 @@ private:
 	// in the AnimGraph with execute unconnected is pruned by the compiler -> null database -> A-pose).
 	static FMonolithActionResult HandleBindChooserDatabaseViaThreadSafe(const TSharedPtr<FJsonObject>& Params);
 
+	// bind_threadsafe_update_function (T1-L1): GENERALIZES the thread-safe function-graph surgery
+	// proven by HandleBindChooserDatabaseViaThreadSafe, swapping the reflective EvaluateChooser2 node
+	// for a UK2Node_CallFunction bound (SetFromFunction) to a resolved UFunction*. Creates/reuses a
+	// thread-safe FUNCTION graph (BlueprintThreadSafeUpdateAnimation context), wires FunctionEntry
+	// exec -> call node exec, optional Self -> object/self context pin, supplies a small fixed input
+	// arg set (literal pin defaults + self), stores the call's single result into a named var via a
+	// VariableSet, and (optionally) feeds an AnimGraph target node pin from a VariableGet of that var.
+	//
+	// v1a SCOPE: known-signature BP-library / member static call. The target UFunction is resolved via
+	// UClass::FindFunctionByName and MUST be a non-pure, thread-safe (BlueprintThreadSafe), Kismet-callable
+	// function with NO return-parameter properties (anim-graph rule) and a single non-exec result output.
+	// Unsupported signatures (pure, non-thread-safe, internal-use-only, return-param, multi-result, or an
+	// arg binding referencing a pin/type we cannot set) are REJECTED with a clear error rather than
+	// silently mis-wired. Arbitrary-signature generic arg binding (v1b) is a gated follow-on. This handler
+	// does NOT depend on the Chooser plugin and compiles regardless of WITH_CHOOSER.
+	static FMonolithActionResult HandleBindThreadsafeUpdateFunction(const TSharedPtr<FJsonObject>& Params);
+
 	// F11 — duplicate + reparent + dependency classification
 	static FMonolithActionResult HandleDuplicateReparentAndSanitize(const TSharedPtr<FJsonObject>& Params);
 

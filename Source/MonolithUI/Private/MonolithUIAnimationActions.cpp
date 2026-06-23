@@ -464,7 +464,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
 
     // Create the UMovieScene
     UMovieScene* MovieScene = NewObject<UMovieScene>(
-        NewAnim, FName(*(AnimationName + TEXT("_MovieScene"))), RF_Transactional);
+        NewAnim, NewAnim->GetFName(), RF_Transactional);
     NewAnim->MovieScene = MovieScene;
 
     // Configure tick resolution and display rate

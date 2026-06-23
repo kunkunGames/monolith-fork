@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.20.1 (Beta)
+**Version:** 0.20.3 (Beta)
 
 ---
 
@@ -62,7 +62,7 @@
 | `add_curve` | Add a float or transform curve to an animation sequence |
 | `remove_curve` | Remove a curve from an animation sequence |
 | `set_curve_keys` | Set keys on a float curve (replaces existing keys) |
-| `get_curve_keys` | Get all keys from a float curve |
+| `get_curve_keys` | Get all keys from a float curve. **(2026-06-16):** also reports a `monotonic` flag (whether the key values are non-decreasing/non-increasing across the curve — e.g. a baked `Distance` curve) and a `sign` flag, so a curve's shape can be checked without re-deriving it from the keys. |
 
 **BlendSpace Operations (7)**
 
@@ -72,7 +72,7 @@
 
 | Action | Description |
 |--------|-------------|
-| `get_blend_space_info` | Get blend space samples and axis settings |
+| `get_blend_space_info` | Get blend space samples and axis settings. **(2026-06-16):** also reports each sample's authored root-motion speed plus the `triangulation_baked` (`!FBlendSpaceData::IsEmpty()`) and `interpolate_using_grid` (`bInterpolateUsingGrid`) flags, so a blend space's bake/interpolation state is readable without a separate call. |
 | `add_blendspace_sample` | Add a sample to a blend space. Auto-bakes (`ResampleData` + dirty). |
 | `edit_blendspace_sample` | Edit sample position and optionally its animation. Auto-bakes (`ResampleData` + dirty). |
 | `delete_blendspace_sample` | Delete a sample by index. Auto-bakes (`ResampleData` + dirty). |
@@ -93,8 +93,8 @@
 | `get_nodes` | Animation nodes with optional class and graph_name filters. **`include_anim_graph` (bool, 2026-06-07):** when set, also traverses the main AnimGraph (default behavior covers function graphs only) and emits `LinkedTo` endpoints (default output reports connection counts only). Opt-in to preserve the existing output shape by default. **(2026-06-10):** each `UAnimGraphNode_Base` node also carries additive, compact `bindings` (function: `{initial_update/become_relevant/update}`) + `pin_bindings` (`[{pin, path}]`) objects, each omitted when empty. |
 | `get_anim_graph_choosers` | **(2026-06-07)** Walk an AnimBP's graphs (main AnimGraph + function graphs) for chooser-evaluating nodes (Evaluate-Chooser K2 nodes, resolved reflectively by class-name prefix). Reports `{ node_guid, node_title, chooser_asset, output_pin_links: [...] }` per node. Optional `recursive` expands each referenced chooser tree via the shared chooser-tree collector (the same walk `chooser::inspect_chooser recursive:true` uses). `WITH_CHOOSER` + editor-only. |
 | `get_anim_node_function_bindings` | **(2026-06-10)** Read the per-node On Initial Update / On Become Relevant / On Update function bindings (the public `FMemberReference` UPROPERTYs). Per slot: `{function_name, member_parent_class, is_self_context, thread_safe}`. Omit `node_id` to list every node with any function binding. `node_id` matches node name or NodeGuid. |
-| `set_anim_node_function_binding` | **(2026-06-10)** Bind/clear a function on a node's `binding` slot (`initial_update`/`become_relevant`/`update`). Mirrors the engine `ValidateFunctionRef`: prototype-signature check + thread-safe HARD REJECT (override `allow_non_thread_safe`). Empty `function_name` clears; `function_class` targets an external library class (default self-member on the AnimBP class). `recompile` default true. |
-| `get_anim_node_pin_bindings` | **(2026-06-10)** Read the per-pin property-access bindings in the node's `UAnimGraphNodeBinding_Base::PropertyBindings` map (unlinkable class reached via `FProperty` reflection; value struct `FAnimGraphNodePropertyBinding` is public). Per entry: `{pin, path, type, is_bound}`. Omit `node_id` to list every node with any pin binding. Degrades gracefully (empty list + `note`) on a non-`_Base` binding subclass or null binding object. |
+| `set_anim_node_function_binding` | **(2026-06-10)** Bind/clear a function on a node's `binding` slot (`initial_update`/`become_relevant`/`update`). Mirrors the engine `ValidateFunctionRef`: prototype-signature check + thread-safe HARD REJECT (override `allow_non_thread_safe`). Empty `function_name` clears; `function_class` targets an external library class (default self-member on the AnimBP class). `recompile` default true. **(2026-06-16):** the binding write now calls `RequestRefreshExtensions` so the recompile regenerates the anim-subsystem set for the changed binding — without it the changed binding left a null `NodeRelevancy` subsystem at runtime. |
+| `get_anim_node_pin_bindings` | **(2026-06-10)** Read the per-pin property-access bindings in the node's `UAnimGraphNodeBinding_Base::PropertyBindings` map (unlinkable class reached via `FProperty` reflection; value struct `FAnimGraphNodePropertyBinding` is public). Per entry: `{pin, path, type, is_bound}`. Omit `node_id` to list every node with any pin binding. Degrades gracefully (empty list + `note`) on a non-`_Base` binding subclass or null binding object. **(2026-06-16):** also emits wire-linked input pins — entries with `type:"Link"` carrying the source `node`/`pin` driving the input — so a property-access binding and a graph wire on the same node are both visible in one read. |
 | `set_anim_node_pin_binding` | **(2026-06-10)** Bind/clear a pin to a property-access `path` (string array). Replaces the entry in the reflected `PropertyBindings` map then calls `ReconstructNode()` (re-derives binding pin type via `OnReconstructNode` → `RecalculateBindingType`) before recompiling. Empty `path` clears via the node's public `RemoveBindings`. **Bootstraps the binding object when a node has none** (works on previously-unbound nodes — it no longer refuses a node with a null binding object, instead constructing a `UAnimGraphNodeBinding_Base` first). `recompile` default true. |
 
 **Montage Operations (8)**
@@ -148,7 +148,7 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 **Anim Modifiers (2)**
 | Action | Description |
 |--------|-------------|
-| `apply_anim_modifier` | Apply an animation modifier class to a sequence |
+| `apply_anim_modifier` | Apply an animation modifier class to a sequence. **(2026-06-16):** accepts a `properties` object (a reflective field set written onto the modifier instance before it runs) and a `persist` flag (register the modifier into the asset's `AnimationModifiers` stack so it re-applies on reimport, rather than a one-shot run). |
 | `list_anim_modifiers` | List animation modifiers applied to a sequence |
 
 **Sync Markers (5 — Sequence Properties + Sync Markers group)**
@@ -158,7 +158,7 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `add_sync_marker` | Add an authored sync marker (`marker_name`, `time`, `track_index`) |
 | `remove_sync_marker` | Remove sync markers by name (all with that name) or by index |
 | `rename_sync_marker` | Rename all sync markers with a given name to a new name |
-| `derive_foot_sync_markers` | **(2026-06-14)** Auto-derive left/right foot-plant sync markers from data already in the clip — no human eyeballing. Runs a 5-signal availability cascade (first signal that yields plants wins) and records which one fired via `source` + `confidence`: (1) **existing** authored markers (ground truth), (2) **footstep notifies** — foot side from the owning TRACK NAME (configurable case-insensitive `notify_track_patterns`; class-suffix then alternate-by-time fallbacks), (3) **contact_l/_r** float curves — mid-threshold rising edge + hysteresis re-arm + stride-period debounce (collapses heel-toe double-bumps), (4) **Phase** sawtooth curve — key extrema (+1=left, -1=right; `phase_invert` flips; 0..1-ramp heuristic fallback), (5) **footspeed** — component-space foot-bone speed minima, a native port of the engine `UFootstepAnimEventsModifier` FootBoneSpeed technique (single `GetAnimPoseAtTimeIntervals` eval, `GetBonePose` in World/component space, per-clip speed normalize, valley placement on the upward threshold crossing). Signal 5 is the universal fallback for clips with no markers/notifies/curves (poses/aim-offsets return empty + a `static pose, no plants` note). **Project-agnostic** — marker names (`left_marker_name`/`right_marker_name`, default `L_Foot`/`R_Foot`), `track_index`, foot bone names (`foot_bones`, else common-name auto-resolve `foot_l`/`ball_l`/`LeftFoot`/`L_Foot`), and `thresholds` (`contact_mid`/`contact_low`/`speed_threshold`/`sample_rate`/`debounce_fraction`/`ground_threshold`) are all overridable; no per-project modifier-config Blueprint is required. `method` (`auto`\|`existing`\|`notifies`\|`contact`\|`phase`\|`footspeed`) forces a single signal and errors cleanly if that signal is unavailable. `clear_existing` (default true) removes pre-existing same-named markers before writing for idempotency (skipped when `source=existing`). `dry_run` reports the derived `left`/`right` times without mutating. Output: `{asset_path, source, confidence, dry_run, left_marker_name, right_marker_name, track_index, cleared_existing, left:{count,times}, right:{count,times}, markers_written, foot_bones_used?, notes[]}`. |
+| `derive_foot_sync_markers` | **(2026-06-14)** Auto-derive left/right foot-plant sync markers from data already in the clip — no human eyeballing. Runs a 5-signal availability cascade (first signal that yields plants wins) and records which one fired via `source` + `confidence`: (1) **existing** authored markers (ground truth), (2) **footstep notifies** — foot side from the owning TRACK NAME (configurable case-insensitive `notify_track_patterns`; class-suffix then alternate-by-time fallbacks), (3) **contact_l/_r** float curves — mid-threshold rising edge + hysteresis re-arm + stride-period debounce (collapses heel-toe double-bumps), (4) **Phase** sawtooth curve — key extrema (+1=left, -1=right; `phase_invert` flips; 0..1-ramp heuristic fallback), (5) **footspeed** — component-space foot-bone speed minima, a native port of the engine `UFootstepAnimEventsModifier` FootBoneSpeed technique (single `GetAnimPoseAtTimeIntervals` eval, `GetBonePose` in World/component space, per-clip speed normalize, valley placement on the upward threshold crossing). Signal 5 is the universal fallback for clips with no markers/notifies/curves (poses/aim-offsets return empty + a `static pose, no plants` note). **Project-agnostic** — marker names (`left_marker_name`/`right_marker_name`, default `L_Foot`/`R_Foot`), `track_index`, foot bone names (`foot_bones`, else common-name auto-resolve `foot_l`/`ball_l`/`LeftFoot`/`L_Foot`), and `thresholds` (`contact_mid`/`contact_low`/`speed_threshold`/`sample_rate`/`debounce_fraction`/`ground_threshold`) are all overridable; no per-project modifier-config Blueprint is required. `method` (`auto`\|`existing`\|`notifies`\|`contact`\|`phase`\|`footspeed`\|`from_bones`) forces a single signal and errors cleanly if that signal is unavailable. **(2026-06-16) `from_bones` mode** derives foot plants directly from per-frame foot-bone height plus planar (horizontal) speed minima — a plant is placed where a foot bone is near its lowest point AND moving slowest in the ground plane — for clips with no markers/notifies/curves but a usable foot-bone track. `clear_existing` (default true) removes pre-existing same-named markers before writing for idempotency (skipped when `source=existing`). `dry_run` reports the derived `left`/`right` times without mutating. Output: `{asset_path, source, confidence, dry_run, left_marker_name, right_marker_name, track_index, cleared_existing, left:{count,times}, right:{count,times}, markers_written, foot_bones_used?, notes[]}`. |
 
 **Composites (3)**
 | Action | Description |
@@ -213,7 +213,7 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `get_ikrig_info` | Get IK Rig asset info: solvers, goals, retarget chains, and skeleton overview. Read-only. |
 | `add_ik_solver` | Add a solver to an IK Rig's solver stack, optionally setting a `root_bone` and `goals`. `solver_type` is resolved against the **live solver-struct table** (every native `FIKRigSolverBase` child), not a hardcoded reflected path: a friendly alias (`fullbodyik`/`fbik`, `limb`, `pole`, `bodymover`, `settransform`, `stretchlimb`, plus the `…solver`-suffixed spellings) maps to a canonical struct name, then resolution proceeds exact struct-name match (the leading-`F` C++ spelling is also accepted) → unique-substring fallback. An ambiguous input returns an error listing the candidate solvers; an unknown input returns the full available-solver list. The resolved `UScriptStruct*` is passed to the engine `UIKRigController::AddSolver`. `root_bone` sets the solver's start bone (meaningful for solvers that use one, e.g. Full Body IK). Returns the new `solver_index`, the resolved `solver_type`, the solver `label`, and `created_goals` / `skipped_goals`. |
 | `remove_ik_solver` | Remove a solver from the stack by index. Params: `asset_path` (required), `solver_index` (required int, 0-based). Validates the index against the current solver count and returns a clear out-of-range error when it falls outside `0..count-1`. Returns `removed_index` and `solver_count_after`. |
-| `get_retargeter_info` | Get IK Retargeter asset info: source/target rigs, preview meshes, and chain mappings. Read-only. |
+| `get_retargeter_info` | Get IK Retargeter asset info: source/target rigs, preview meshes, and chain mappings. **(2026-06-16):** also emits an `ops[]` array — per retarget op its type plus its reflected settings — so the op-stack state is readable alongside the chain mappings. Read-only. |
 | `set_retarget_chain_mapping` | Set chain mappings on an IK Retargeter via auto-map (`exact` / `fuzzy` / `clear`) or a manual `source_chain` / `target_chain` pair. |
 
 > **`add_ik_solver` solver resolution (this release).** The old path passed a hardcoded reflected struct path (`/Script/IKRig.FullBodyIKSolver`) that does not resolve in UE 5.7, so adding solvers — Full Body IK especially — failed. Solver resolution now enumerates the live `FIKRigSolverBase` struct table and matches `solver_type` deterministically (alias → exact struct name → unique-substring), so it tracks whatever solver structs the running engine registers. See Fixes below.
@@ -228,6 +228,41 @@ Wraps `USkeleton::CompatibleSkeletons` — the canonical UE5 mechanism that lets
 | `batch_retarget_animations` | Run a batch retarget of source animations onto the target skeleton through a configured `UIKRetargeter`, writing the retargeted sequences. When the retargeter was created without an op stack it is seeded as in `set_retargeter_rigs` before the run. |
 
 > **Op-stack seeding (2026-06-07).** A bare UE 5.7 `UIKRetargeter` carries no retarget operations, so an un-seeded retarget passes the source pose straight through and produces frozen output clips. `set_retargeter_rigs` and `batch_retarget_animations` therefore seed the canonical op stack (Pelvis / FKChains / RunIK / IKChains / RootMotion / CurveRemap) + `AutoMapChains` on creation. See Fixes below.
+
+**Retarget pose + op-stack tuning (8 — 2026-06-16)** — namespace `animation`. Author the IK Retargeter retarget pose and the per-chain / root / foot-lock op settings, plus per-bone `USkeleton` translation-retargeting modes, so a retarget can be dialed in rather than left at op-stack defaults. Tier 1 of the plan `Docs/plans/2026-06-16-animation-retargeting-mcp-actions.md`.
+
+| Action | Description |
+|--------|-------------|
+| `align_retarget_pose` | Auto-align an IK Retargeter's source or target retarget pose via the engine's AutoAlign pass plus SnapBoneToGround, so the source/target rest poses line up before chain retargeting. |
+| `get_retarget_pose` | Read an IK Retargeter retarget pose (source or target): per-bone local rotation/translation deltas relative to the rig reference pose. Read-only. |
+| `set_retarget_pose` | Edit an IK Retargeter retarget pose. `mode`: `from_reference` (reset to the rig reference pose) or `bone_deltas` (apply explicit per-bone rotation/translation offsets). The `from_animation` mode (sample a pose from a sequence) is deferred. |
+| `get_retarget_chain_settings` | Read a retarget chain's FK and IK op-stack settings (rotation/translation modes, IK blend, pole vector, etc.) from the retargeter's op stack. Read-only. |
+| `set_retarget_chain_settings` | Write a retarget chain's FK and IK op-stack settings reflectively (rotation/translation modes, IK blend, and the other per-chain op fields). |
+| `set_retarget_root_settings` | Set the Pelvis Motion op settings: vertical scale, floor (ground) constraint, and whether the root motion affects the IK goals. |
+| `enable_foot_ground_lock` | Configure the Speed Planting op's foot ground-lock on the named IK chains, so planted feet stay locked to the ground through the retarget. |
+| `set_bone_translation_retargeting` | Set per-bone `USkeleton` translation-retargeting modes (`Animation` / `Skeleton` / `AnimationScaled` / `AnimationRelative` / `OrientAndScale`). Accepts an explicit per-bone map or the `biped_locomotion` preset (root/pelvis animated, the rest skeleton-driven — the standard biped locomotion configuration). |
+| `get_bone_translation_retargeting` | Read the per-bone `USkeleton` translation-retargeting modes. Read-only companion to the setter. |
+
+**Locomotion authoring (3 — 2026-06-16)** — namespace `animation`. Read authored root-motion speed, bake the `Distance` curve a distance-matching locomotion graph reads, and wire a thread-safe AnimBP update call. Tier 1 of the same plan.
+
+| Action | Description |
+|--------|-------------|
+| `get_root_motion_speed` | Report a sequence's authored root-motion ground speed in cm/s (the distance the root travels per second of the clip). Emits an explicit "unknowable" signal for clips that are root-locked or carry no root motion, rather than reporting a misleading zero. Read-only. |
+| `bake_distance_curve` | Bake a `Distance` curve onto a sequence via the engine `DistanceCurveModifier` (the curve a distance-matching locomotion graph samples). Removes any existing same-named curve first, then persists the baked curve into the asset's modifier stack. |
+| `bind_threadsafe_update_function` | Wire a Blueprint-library static call into an AnimBP's `BlueprintThreadSafeUpdateAnimation` graph (v1a: known-signature binding). |
+
+**IK Rig bone settings (2 — 2026-06-16)** — namespace `animation`. Per-solver IK Rig bone settings, read and written reflectively (the fields are solver-specific). Tier 2 of the same plan.
+
+| Action | Description |
+|--------|-------------|
+| `set_ik_rig_bone_settings` | Set the per-solver bone settings (`UIKRigBoneSettings`-style fields) for a bone under a named solver on an IK Rig, written reflectively so solver-specific fields are addressable. |
+| `get_ik_rig_bone_settings` | Read a bone's per-solver settings on an IK Rig. Read-only companion to the setter. |
+
+**Inspection (1 — 2026-06-16)** — namespace `animation`. Tier 3 of the same plan.
+
+| Action | Description |
+|--------|-------------|
+| `get_animated_bone_transform` | Get the FK-composed transform of a bone at a given frame or time, in component space or world space. Read-only. |
 
 **ABP Write (5) — v0.14.3 PR #34 by @MaxenceEpitech**
 | Action | Description |

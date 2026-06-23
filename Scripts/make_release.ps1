@@ -1,21 +1,33 @@
 # Monolith Release Zip Builder
-# Creates a release zip with "Installed": true for Blueprint-only compatibility.
+# Creates per-engine release zips with "Installed": true for Blueprint-only compatibility.
 # Automatically builds with optional dependencies disabled (MONOLITH_RELEASE_BUILD=1).
 #
 # Usage: powershell -ExecutionPolicy Bypass -File Scripts\make_release.ps1 -Version "0.10.0"
 #
-# What it does:
+# What it does (per engine, UE5.7 in this project + UE5.8 in the FIVEPOINT8 project):
 #   1. Sets MONOLITH_RELEASE_BUILD=1 (forces BA/GBA optional deps OFF in Build.cs)
-#   2. Runs UBT to produce clean release binaries
-#   3. Packages tracked files + binaries into a zip with Installed=true
-#   4. Strips accidentally re-merged non-redistributable modules from source,
-#      binaries, and the uplugin module list
-#   5. Unsets env var (your next dev build auto-detects deps normally)
+#   2. Touches every Source/*/*.Build.cs (mtime bump) to force a clean recompile so the
+#      incremental release build cannot reuse stale dev .obj/DLLs (issue #71 mode 1)
+#   3. Runs that engine's UBT (-DisableUnity) to produce clean release binaries
+#   4. Runs the full-unity collision gate against that engine (issue #68 defense)
+#   5. Harvests that engine's Binaries/Win64, strips .pdb/.patch_*/sibling/.claude
+#   6. Packages tracked files (ONE shared git ls-files copy) + that engine's binaries into
+#      Monolith-v<X.Y.Z>-UE5.<minor>.zip with Installed=true
+#   7. Runs the mandatory dumpbin hard-link import smoke against that zip's DLLs
+#   8. Prints the per-engine SHA256 marker for the release notes
+#   Finally: copies the UE5.7 zip to Monolith-v<X.Y.Z>.zip (legacy bridge for old updaters)
+#   and prints the legacy Monolith-SHA256: marker (= the UE5.7 hash).
 #
 # Source users (GitHub clones) are unaffected -- Build.cs auto-detects at compile time.
 #
 # Non-redistributable sibling modules live outside this repo. The strip phase below
 # is defense-in-depth for accidental re-merges into Plugins/Monolith/.
+#
+# IMPORTANT: ALL editors (both this project and FIVEPOINT8) must be CLOSED -- UBT fails
+# with LIVE_CODING_BLOCKED otherwise. The FIVEPOINT8 Plugins/Monolith clone MUST be at the
+# same commit as this repo's HEAD (the script asserts this and aborts on mismatch), since
+# both zips ship the SAME tracked content (git ls-files from THIS repo) with only the
+# per-engine Binaries/Win64 set differing.
 
 param(
     [Parameter(Mandatory=$true)]
@@ -84,92 +96,211 @@ $StrippedModules = @(Get-ChildItem -Path $ProjectPluginsDir -Directory -ErrorAct
 if ($StrippedModules.Count -gt 0) {
     Write-Host "  [strip-list] Auto-discovered $($StrippedModules.Count) sibling plugin(s) to defend against: $($StrippedModules -join ', ')" -ForegroundColor DarkGray
 }
-if ($IsMacOS) {
-    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version-macOS.zip"
-} elseif ($IsLinux) {
-    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version-Linux.zip"
-} else {
-    $OutputZip = Join-Path $ProjectDir "Monolith-v$Version.zip"
-}
+
 $TempDir = Join-Path $env:TEMP "Monolith_Release_$Version"
 
-# Locate UBT dynamically
-$UBT = $env:UE_57_UBT
-if (-not $UBT) {
-    if ($env:UE_57) {
-        $UBT = Join-Path $env:UE_57 "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
-    } elseif ($env:UE_ROOT) {
-        $UBT = Join-Path $env:UE_ROOT "Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe"
+# --- Engine matrix -------------------------------------------------------------------
+# Two full per-engine release builds harvested from the SAME source commit. UE5.7 is
+# built here (the Monolith dev-master); UE5.8 is built in the FIVEPOINT8 project, whose
+# Plugins/Monolith is a clone of this repo pinned to the same HEAD. Each entry drives a
+# full build + collision gate + Binaries harvest + zip + import smoke.
+#
+# UBT is invoked directly (the exe, not Build.bat) -- the prior single-engine script did
+# the same, and the exe lives at the same relative path under every UE 5.x install.
+$LegacyZip = Join-Path $ProjectDir "Monolith-v$Version.zip"  # legacy bridge (= UE5.7 copy)
+
+# --- Non-Monolith prototyping plugins to temporarily DISABLE during each engine's release
+#     build. The dev-master project also hosts gameplay-prototyping siblings (HordeForge,
+#     OptimizedGASP) OUTSIDE Plugins/Monolith. The editor target compiles them too, so a
+#     -DisableUnity compile error in a sibling (e.g. HordeForge's unity-leak: a log category
+#     used without its declaring header) would abort the Monolith release -- which must NOT
+#     be hostage to sibling compile health. We disable these for the build, then restore the
+#     EXACT original .uproject bytes (see Disable-ProjectPlugins / the build wrapper).
+#     FIVEPOINT8 does not contain these, so the toggle is a harmless no-op there.
+$ExcludeProjectPlugins = @('HordeForge', 'OptimizedGASP')
+
+$EngineMatrix = @(
+    [PSCustomObject]@{
+        Tag        = "UE5.7"                               # asset/marker engine tag
+        UBT        = 'C:\Program Files (x86)\UE_5.7\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
+        Target     = "MonolithEditor"
+        ProjectDir = $ProjectDir                            # this Monolith dev-master
+        UProject   = (Join-Path $ProjectDir "Monolith.uproject")
+        PluginDir  = $PluginDir                             # this repo's Plugins/Monolith
+        Zip        = (Join-Path $ProjectDir "Monolith-v$Version-UE5.7.zip")
+        IsLegacy   = $true                                  # this zip seeds the legacy bridge
+    },
+    [PSCustomObject]@{
+        Tag        = "UE5.8"
+        UBT        = 'C:\Program Files (x86)\UE_5.8\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe'
+        Target     = "FIVEPOINT8Editor"
+        ProjectDir = 'D:\Unreal Projects\FIVEPOINT8'
+        UProject   = 'D:\Unreal Projects\FIVEPOINT8\FIVEPOINT8.uproject'
+        PluginDir  = 'D:\Unreal Projects\FIVEPOINT8\Plugins\Monolith'  # the UE5.8 clone (Binaries source)
+        Zip        = (Join-Path $ProjectDir "Monolith-v$Version-UE5.8.zip")
+        IsLegacy   = $false
+    }
+)
+
+Write-Host "Building Monolith v$Version release zips (per engine: $(( $EngineMatrix | ForEach-Object { $_.Tag }) -join ', '))..." -ForegroundColor Cyan
+
+# --- Preflight: validate every engine in the matrix BEFORE doing any work --------------
+# Fail fast (and TOGETHER) if any engine's toolchain, project, or clone is wrong. A
+# half-built release (one engine's zip present, the other missing/aborted) is worse than
+# none -- so we assert all preconditions up front.
+foreach ($eng in $EngineMatrix) {
+    if (-not (Test-Path $eng.UBT)) {
+        throw "[$($eng.Tag)] UnrealBuildTool.exe not found at $($eng.UBT). Is UE $($eng.Tag) installed?"
+    }
+    if (-not (Test-Path $eng.UProject)) {
+        throw "[$($eng.Tag)] .uproject not found at $($eng.UProject)."
+    }
+    if (-not (Test-Path (Join-Path $eng.PluginDir "Monolith.uplugin"))) {
+        throw "[$($eng.Tag)] Monolith.uplugin not found under $($eng.PluginDir). Is the clone present?"
     }
 }
 
-$UProject = Join-Path $ProjectDir "Leviathan.uproject"
-
-Write-Host "Building Monolith v$Version release zip..." -ForegroundColor Cyan
-
-# --- Step 1: Build with optional deps disabled ---
-if (-not $SkipBuild) {
-    if (-not $UBT -or -not (Test-Path $UBT)) {
-        Write-Host "    [FAIL] UnrealBuildTool not found. Set UE_57, UE_ROOT, or UE_57_UBT environment variable." -ForegroundColor Red
+# The FIVEPOINT8 clone MUST be at the same commit as this repo's HEAD, else the two zips
+# would ship content that does not match -- the tracked content copy comes from THIS repo
+# but the UE5.8 Binaries come from the clone, so a commit skew = mismatched ship.
+$ThisHead = (& git -C $PluginDir rev-parse HEAD).Trim()
+foreach ($eng in $EngineMatrix) {
+    if ($eng.PluginDir -eq $PluginDir) { continue }  # this repo IS the reference
+    $cloneHead = (& git -C $eng.PluginDir rev-parse HEAD).Trim()
+    if ($cloneHead -ne $ThisHead) {
+        Write-Host "`n  [FAIL] [$($eng.Tag)] clone HEAD does not match this repo's HEAD." -ForegroundColor Red
+        Write-Host "    this repo ($PluginDir): $ThisHead" -ForegroundColor Red
+        Write-Host "    clone ($($eng.PluginDir)): $cloneHead" -ForegroundColor Red
+        Write-Host "`n  Both zips ship the SAME tracked content from this repo but per-engine binaries" -ForegroundColor Red
+        Write-Host "  from each clone. Check out $ThisHead in the $($eng.Tag) clone, then re-run." -ForegroundColor Red
         exit 1
     }
+    Write-Host "  [precheck] $($eng.Tag) clone at $cloneHead (matches this repo)" -ForegroundColor DarkGray
+}
 
-    Write-Host "`n  [1/4] Building release binaries (optional deps OFF)..." -ForegroundColor Yellow
+# =====================================================================================
+# Per-engine functions. Each is engine-parameterised so the UE5.7 and UE5.8 passes run
+# the IDENTICAL gate logic against their own toolchain/binaries.
+# =====================================================================================
+
+# Touch every Source/*/*.Build.cs so the incremental release build cannot reuse stale dev
+# .obj/DLLs compiled with WITH_*=1 (issue #71 mode 1). mtime-only: clean-tree-safe.
+function Invoke-TouchBuildCs {
+    param([string]$EnginePluginDir, [string]$Tag)
+    $srcDir = Join-Path $EnginePluginDir "Source"
+    $now = Get-Date
+    $touched = 0
+    Get-ChildItem -Path $srcDir -Recurse -Filter "*.Build.cs" -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.LastWriteTime = $now; $touched++ }
+    Write-Host "    [$Tag] Touched $touched Build.cs file(s) to force clean recompile (anti stale-obj)" -ForegroundColor DarkGray
+}
+
+# Force every plugin in $ExcludeProjectPlugins to Enabled:false in the given .uproject so
+# the editor target does NOT compile those non-Monolith prototyping siblings during the
+# release build. They are EnabledByDefault and may not be listed in the Plugins array, so
+# we ADD an explicit disabled entry; if already listed, we set Enabled:false on it. A
+# disabled entry for a plugin that does not exist under the project is harmless, so we add
+# unconditionally (FIVEPOINT8 has none of these -> the entries are inert there). The caller
+# is responsible for restoring the EXACT original bytes afterward (byte-exact backup).
+function Disable-ProjectPlugins {
+    param([string]$UProjectPath, [string[]]$PluginNames, [string]$Tag)
+
+    if (-not $PluginNames -or $PluginNames.Count -eq 0) { return }
+
+    $json = Get-Content $UProjectPath -Raw | ConvertFrom-Json
+    # Ensure a Plugins array exists (PSCustomObject from ConvertFrom-Json may lack it).
+    if (-not ($json.PSObject.Properties.Name -contains 'Plugins') -or $null -eq $json.Plugins) {
+        $json | Add-Member -NotePropertyName 'Plugins' -NotePropertyValue @() -Force
+    }
+    # Normalize to a mutable list of entries.
+    $plugins = @($json.Plugins)
+    foreach ($name in $PluginNames) {
+        $existing = $plugins | Where-Object { $_.Name -eq $name } | Select-Object -First 1
+        if ($existing) {
+            $existing.Enabled = $false
+        } else {
+            $plugins += [PSCustomObject]@{ Name = $name; Enabled = $false }
+        }
+    }
+    $json.Plugins = $plugins
+    # Re-serialize. The original bytes are restored from the backup later regardless, so
+    # exact formatting here does not matter -- only that UBT reads valid JSON.
+    $out = $json | ConvertTo-Json -Depth 50
+    Set-Content -Path $UProjectPath -Value $out -Encoding utf8
+    Write-Host "    [$Tag] Temporarily disabled project plugin(s) for build: $($PluginNames -join ', ')" -ForegroundColor DarkGray
+}
+
+# Step 1 + 1a for ONE engine: release build (-DisableUnity) then the full-unity collision
+# gate. Both run with MONOLITH_RELEASE_BUILD=1. Any failure throws (aborts whole release).
+function Invoke-EngineBuild {
+    param([PSCustomObject]$Engine)
+
+    $Tag = $Engine.Tag
+    $UBT = $Engine.UBT
+
+    # Disable the non-Monolith prototyping siblings (HordeForge/OptimizedGASP) for BOTH the
+    # -DisableUnity build and the full-unity gate below -- the editor target compiles them
+    # and a sibling compile error must not abort the Monolith release. We snapshot the EXACT
+    # original .uproject bytes FIRST and restore them in the finally that wraps the whole
+    # build body, so a build/gate failure can never leave the project's .uproject mutated.
+    $UProjectBackup = [System.IO.File]::ReadAllBytes($Engine.UProject)
+    try {
+        Disable-ProjectPlugins -UProjectPath $Engine.UProject -PluginNames $ExcludeProjectPlugins -Tag $Tag
+
+    # --- Step 1: Build with optional deps disabled ---
+    Write-Host "`n  [$Tag 1/4] Building release binaries (optional deps OFF)..." -ForegroundColor Yellow
+
+    # Anti stale-obj: force a clean recompile in THIS engine's plugin tree first.
+    Invoke-TouchBuildCs -EnginePluginDir $Engine.PluginDir -Tag $Tag
 
     # Set env var so Build.cs files skip optional dependency detection
     $env:MONOLITH_RELEASE_BUILD = "1"
-    Write-Host "    MONOLITH_RELEASE_BUILD=1 (BA/GBA/ComboGraph forced off)" -ForegroundColor DarkGray
+    Write-Host "    [$Tag] MONOLITH_RELEASE_BUILD=1 (BA/GBA/ComboGraph forced off)" -ForegroundColor DarkGray
 
     try {
         # Non-unity build catches missing includes and unity-only symbol collisions
         # before they reach public releases (feedback_non_unity_build_releases.md).
-        & $UBT MonolithEditor Win64 Development "-Project=$UProject" -waitmutex -DisableUnity
+        & $UBT $Engine.Target Win64 Development "-Project=$($Engine.UProject)" -waitmutex -DisableUnity
         if ($LASTEXITCODE -ne 0) {
-            throw "UBT failed with exit code $LASTEXITCODE. Is the editor closed?"
+            throw "[$Tag] UBT failed with exit code $LASTEXITCODE. Is the editor closed?"
         }
-        Write-Host "    Build succeeded" -ForegroundColor Green
+        Write-Host "    [$Tag] Build succeeded" -ForegroundColor Green
     }
     finally {
         # Always unset -- even if build fails, don't poison future dev builds
         Remove-Item Env:\MONOLITH_RELEASE_BUILD -ErrorAction SilentlyContinue
-        Write-Host "    MONOLITH_RELEASE_BUILD unset" -ForegroundColor DarkGray
+        Write-Host "    [$Tag] MONOLITH_RELEASE_BUILD unset" -ForegroundColor DarkGray
     }
-} else {
-    Write-Host "`n  [1/4] Skipping build (-SkipBuild flag)" -ForegroundColor DarkGray
-    Write-Host "    WARNING: Ensure you built with MONOLITH_RELEASE_BUILD=1" -ForegroundColor Red
-}
 
-# --- Step 1a: Full-unity collision gate (issue #68 defense) ---
-# The -DisableUnity build above compiles every .cpp as its own translation unit.
-# That catches missing includes but is STRUCTURALLY BLIND to duplicate file-local
-# symbols: anonymous-namespace functions or file-static functions/vars sharing a
-# name across two+ .cpp files in one module. With no concatenation they never
-# collide, so -DisableUnity cannot see them. That is exactly how issue #68 shipped.
-#
-# End users build with DEFAULT adaptive unity. On a fresh clone the adaptive
-# working set is empty, so everything concatenates (effectively full unity) and
-# they hit the collision on first compile. To catch this class against the EXACT
-# release configuration, we run a SECOND pass under FORCED full unity.
-#
-# We force full unity by temporarily flipping bUseAdaptiveUnityBuild=false in the
-# UBT BuildConfiguration.xml, then ALWAYS restore the original (back it up first,
-# restore in finally). We do NOT pass -DisableUnity here -- we WANT concatenation.
-# We do NOT pass -Clean: flipping the adaptive flag already invalidates the
-# makefile so UBT rebuilds the affected unity blobs, and a clean would wipe the
-# precompiled Plugins/RLPlugin/Binaries/Win64/UnrealEditor-RLPlugin.dll (requiring
-# a dv restore afterward).
-#
-# A whole-project full-unity build also surfaces the host project's own latent
-# collisions. Those are NOT Monolith's concern -- we filter the captured log to
-# Plugins\Monolith\ paths only. Only Monolith-path collision errors ship-block.
-if (-not $SkipBuild) {
-    Write-Host "`n  [1a] Full-unity collision gate (issue #68 defense)..." -ForegroundColor Yellow
+    # --- Step 1a: Full-unity collision gate (issue #68 defense) ---
+    # The -DisableUnity build above compiles every .cpp as its own translation unit.
+    # That catches missing includes but is STRUCTURALLY BLIND to duplicate file-local
+    # symbols: anonymous-namespace functions or file-static functions/vars sharing a
+    # name across two+ .cpp files in one module. With no concatenation they never
+    # collide, so -DisableUnity cannot see them. That is exactly how issue #68 shipped.
+    #
+    # End users build with DEFAULT adaptive unity. On a fresh clone the adaptive
+    # working set is empty, so everything concatenates (effectively full unity) and
+    # they hit the collision on first compile. To catch this class against the EXACT
+    # release configuration, we run a SECOND pass under FORCED full unity.
+    #
+    # We force full unity by temporarily flipping bUseAdaptiveUnityBuild=false in the
+    # UBT BuildConfiguration.xml, then ALWAYS restore the original (back it up first,
+    # restore in finally). We do NOT pass -DisableUnity here -- we WANT concatenation.
+    # We do NOT pass -Clean: flipping the adaptive flag already invalidates the
+    # makefile so UBT rebuilds the affected unity blobs, and a clean would wipe the
+    # precompiled host-project binaries (requiring a dev restore afterward).
+    #
+    # A whole-project full-unity build also surfaces the host project's own latent
+    # collisions. Those are NOT Monolith's concern -- we filter the captured log to
+    # Plugins\Monolith\ paths only. Only Monolith-path collision errors ship-block.
+    Write-Host "`n  [$Tag 1a] Full-unity collision gate (issue #68 defense)..." -ForegroundColor Yellow
 
     $BuildConfigDir = Join-Path $env:APPDATA "Unreal Engine\UnrealBuildTool"
     $BuildConfigXml = Join-Path $BuildConfigDir "BuildConfiguration.xml"
     $BuildConfigBackup = "$BuildConfigXml.monolith-release-bak"
     $HadBuildConfig = Test-Path $BuildConfigXml
-    $UnityLog = Join-Path $env:TEMP "Monolith_FullUnity_$Version.log"
+    $UnityLog = Join-Path $env:TEMP "Monolith_FullUnity_${Version}_$Tag.log"
 
     # Collision error codes that full-unity concatenation surfaces but -DisableUnity
     # cannot: redefinition / multiple-definition / ambiguous-overload classes.
@@ -182,7 +313,7 @@ if (-not $SkipBuild) {
     $CollisionCodes = @("C2084", "C2011", "C2086", "C2027", "C2374", "C2668")
 
     $env:MONOLITH_RELEASE_BUILD = "1"
-    Write-Host "    MONOLITH_RELEASE_BUILD=1 (release config)" -ForegroundColor DarkGray
+    Write-Host "    [$Tag] MONOLITH_RELEASE_BUILD=1 (release config)" -ForegroundColor DarkGray
 
     try {
         # Back up the existing BuildConfiguration.xml (if any) so we can restore it
@@ -192,7 +323,7 @@ if (-not $SkipBuild) {
         }
         if ($HadBuildConfig) {
             Copy-Item $BuildConfigXml $BuildConfigBackup -Force
-            Write-Host "    Backed up existing BuildConfiguration.xml" -ForegroundColor DarkGray
+            Write-Host "    [$Tag] Backed up existing BuildConfiguration.xml" -ForegroundColor DarkGray
         }
 
         $ForceUnityXml = @"
@@ -204,14 +335,14 @@ if (-not $SkipBuild) {
 </Configuration>
 "@
         Set-Content -Path $BuildConfigXml -Value $ForceUnityXml -Encoding utf8
-        Write-Host "    Forced bUseAdaptiveUnityBuild=false (full unity)" -ForegroundColor DarkGray
-        Write-Host "    Building (no -DisableUnity, no -Clean -- RLPlugin hazard)..." -ForegroundColor DarkGray
+        Write-Host "    [$Tag] Forced bUseAdaptiveUnityBuild=false (full unity)" -ForegroundColor DarkGray
+        Write-Host "    [$Tag] Building (no -DisableUnity, no -Clean -- host-binary hazard)..." -ForegroundColor DarkGray
 
         # Capture the full UBT output so we can scan it for Monolith-path collisions.
         # We do NOT throw on a non-zero UBT exit here directly -- a collision is
         # itself a non-zero exit, and we want the filtered diagnostic, not a bare
         # "exit code" message. The collision scan below is the real ship-gate.
-        & $UBT MonolithEditor Win64 Development "-Project=$UProject" -waitmutex 2>&1 |
+        & $UBT $Engine.Target Win64 Development "-Project=$($Engine.UProject)" -waitmutex 2>&1 |
             Tee-Object -FilePath $UnityLog | Out-Null
         $unityExit = $LASTEXITCODE
 
@@ -225,25 +356,25 @@ if (-not $SkipBuild) {
         })
 
         if ($monolithCollisions.Count -gt 0) {
-            Write-Host "`n  [FAIL] Full-unity gate found $($monolithCollisions.Count) Monolith-path collision error(s):" -ForegroundColor Red
+            Write-Host "`n  [FAIL] [$Tag] Full-unity gate found $($monolithCollisions.Count) Monolith-path collision error(s):" -ForegroundColor Red
             $monolithCollisions | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
             Write-Host "`n  This is the issue #68 failure mode: duplicate file-local symbols" -ForegroundColor Red
             Write-Host "  (anonymous-namespace or file-static names shared across .cpp files in" -ForegroundColor Red
             Write-Host "  one module) that -DisableUnity cannot see. End users build with adaptive" -ForegroundColor Red
             Write-Host "  unity and hit this on a fresh clone. Rename or hoist the colliding symbols" -ForegroundColor Red
             Write-Host "  before shipping. Refusing to publish v$Version." -ForegroundColor Red
-            throw "Full-unity collision gate failed: $($monolithCollisions.Count) Monolith-path collision(s)."
+            throw "[$Tag] Full-unity collision gate failed: $($monolithCollisions.Count) Monolith-path collision(s)."
         }
 
         # No Monolith-path collisions. If UBT still failed, surface that -- a release
         # build that does not compile under full unity is not shippable either.
         if ($unityExit -ne 0) {
-            Write-Host "`n  [FAIL] Full-unity build exited $unityExit (no Monolith-path collisions, but build failed)." -ForegroundColor Red
+            Write-Host "`n  [FAIL] [$Tag] Full-unity build exited $unityExit (no Monolith-path collisions, but build failed)." -ForegroundColor Red
             Write-Host "    See full log: $UnityLog" -ForegroundColor Yellow
-            throw "Full-unity build failed with exit code $unityExit. Is the editor closed? See $UnityLog."
+            throw "[$Tag] Full-unity build failed with exit code $unityExit. Is the editor closed? See $UnityLog."
         }
 
-        Write-Host "    Full-unity gate passed (no Monolith-path collisions)" -ForegroundColor Green
+        Write-Host "    [$Tag] Full-unity gate passed (no Monolith-path collisions)" -ForegroundColor Green
     }
     finally {
         # ALWAYS restore the BuildConfiguration.xml to its original state, even on
@@ -252,29 +383,213 @@ if (-not $SkipBuild) {
             if (Test-Path $BuildConfigBackup) {
                 Copy-Item $BuildConfigBackup $BuildConfigXml -Force
                 Remove-Item $BuildConfigBackup -Force -ErrorAction SilentlyContinue
-                Write-Host "    Restored original BuildConfiguration.xml" -ForegroundColor DarkGray
+                Write-Host "    [$Tag] Restored original BuildConfiguration.xml" -ForegroundColor DarkGray
             }
         } else {
             # There was no BuildConfiguration.xml before -- remove the one we wrote.
             Remove-Item $BuildConfigXml -Force -ErrorAction SilentlyContinue
-            Write-Host "    Removed temporary BuildConfiguration.xml (none existed before)" -ForegroundColor DarkGray
+            Write-Host "    [$Tag] Removed temporary BuildConfiguration.xml (none existed before)" -ForegroundColor DarkGray
         }
         Remove-Item Env:\MONOLITH_RELEASE_BUILD -ErrorAction SilentlyContinue
         Remove-Item $UnityLog -Force -ErrorAction SilentlyContinue
-        Write-Host "    MONOLITH_RELEASE_BUILD unset" -ForegroundColor DarkGray
+        Write-Host "    [$Tag] MONOLITH_RELEASE_BUILD unset" -ForegroundColor DarkGray
     }
-} else {
-    Write-Host "`n  [1a] Skipping full-unity collision gate (-SkipBuild flag)" -ForegroundColor DarkGray
+    }
+    finally {
+        # Restore the EXACT original .uproject bytes (byte-for-byte), regardless of build or
+        # gate outcome -- so a failure (or success) never leaves the project's .uproject with
+        # the temporary plugin-disable edits. WriteAllBytes overwrites with the verbatim
+        # snapshot taken before any mutation, so formatting/encoding is preserved exactly.
+        [System.IO.File]::WriteAllBytes($Engine.UProject, $UProjectBackup)
+        Write-Host "    [$Tag] Restored original .uproject (byte-exact)" -ForegroundColor DarkGray
+    }
 }
 
-# --- Step 1b: Build the offline CLI fresh + hard-gate offline parity ---
+# Harvest ONE engine's Binaries/Win64 into the staged content (already populated with the
+# shared tracked files), patch the .uplugin, and zip to that engine's per-engine zip path.
+# The tracked content is identical across engines -- only the Binaries differ -- so we copy
+# the shared $TempDir into a per-engine scratch dir, drop in this engine's binaries, then
+# zip. Returns nothing; throws on failure.
+function Invoke-EnginePackage {
+    param([PSCustomObject]$Engine, [string]$SharedContentDir)
+
+    $Tag = $Engine.Tag
+    Write-Host "`n  [$Tag pkg] Packaging $($Engine.Zip | Split-Path -Leaf)..." -ForegroundColor Yellow
+
+    # Per-engine scratch: a fresh copy of the shared tracked content. We do NOT mutate the
+    # shared dir so the next engine reuses it untouched.
+    $StageDir = Join-Path $env:TEMP "Monolith_Release_${Version}_$Tag"
+    if (Test-Path $StageDir) { Remove-Item $StageDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $StageDir | Out-Null
+    Copy-Item -Path (Join-Path $SharedContentDir '*') -Destination $StageDir -Recurse -Force
+
+    # --- Copy this engine's binaries (gitignored but needed for Blueprint-only users) ---
+    # FLAT normal layout under Binaries\Win64 -- NOT engine subfolders. The Binaries source
+    # is THIS engine's plugin clone's Binaries\Win64 (UE5.8 binaries come from the FIVEPOINT8
+    # clone). We copy the ENTIRE Win64 dir (UnrealEditor-*.dll + the required
+    # UnrealEditor.modules manifest, which is per-engine and tells UE where to load each
+    # plugin module) but skip .pdb / .patch_* / .claude as everywhere else, and skip stripped
+    # sibling DLLs. The engine-agnostic top-level offline tools (Binaries\monolith_query.exe,
+    # monolith_proxy.exe) are NOT under Win64 and were already staged into the shared content
+    # from THIS repo's freshly-built, parity-verified exe -- so the UE5.8 clone's possibly-
+    # stale offline exe never overwrites the verified one.
+    $binWin64 = Join-Path $Engine.PluginDir "Binaries\Win64"
+    if (Test-Path $binWin64) {
+        $destWin64 = Join-Path $StageDir "Binaries\Win64"
+        if (-not (Test-Path $destWin64)) { New-Item -ItemType Directory -Path $destWin64 -Force | Out-Null }
+        $binCount = 0
+        $binStripCount = 0
+        # Build a regex that matches any stripped module's binary.
+        $stripModuleRegex = "(" + (($StrippedModules | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")"
+        # Exclude gitignored dot-directories (e.g. .claude) that may exist physically under
+        # Binaries/. git ls-files never tracks them, but the Binaries copy below walks the
+        # physical directory -- without this guard such a directory and its contents could
+        # ship in the public zip. No legitimate Binaries content lives under a dot-directory.
+        Get-ChildItem $binWin64 -Recurse -File |
+            Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and $_.FullName -notmatch '[\\/]\.claude[\\/]' } |
+            ForEach-Object {
+                if ($StrippedModules.Count -gt 0 -and $_.Name -match "UnrealEditor-$stripModuleRegex\.") {
+                    $binStripCount++
+                    return
+                }
+                $rel = $_.FullName.Substring($binWin64.Length)
+                $dest = Join-Path $destWin64 $rel
+                $destParent = Split-Path -Parent $dest
+                if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
+                Copy-Item $_.FullName -Destination $dest -Force
+                $binCount++
+            }
+        Write-Host "    [$Tag] $binCount Win64 binary file(s) included (no .pdb, no .patch_*, $binStripCount stripped)" -ForegroundColor Green
+    } else {
+        Write-Host "    [$Tag] WARNING: No Binaries\Win64 found at $binWin64 - Blueprint-only users will need to compile" -ForegroundColor Red
+    }
+
+    # --- Patch the .uplugin: Installed=true + strip sibling module entries ---
+    # NOTE: we intentionally do NOT add an EngineVersion key. Per-engine zips are
+    # distinguished by their asset name (-UE5.7 / -UE5.8) and the updater selects on that;
+    # pinning EngineVersion in the .uplugin would block source users on adjacent patches.
+    $upluginPath = Join-Path $StageDir "Monolith.uplugin"
+    $content = Get-Content $upluginPath -Raw
+    $content = $content -replace '"Installed":\s*false', '"Installed": true'
+
+    # Strip non-redistributable module entries from the "Modules" array.
+    $upluginStrips = 0
+    foreach ($mod in $StrippedModules) {
+        # Match the module object + its trailing comma (if present). Do NOT consume the
+        # leading comma -- that belongs to the previous entry and must stay. If the stripped
+        # module was the LAST array entry (no trailing comma), the previous entry's trailing
+        # comma is orphaned; the ",]" cleanup below catches that.
+        $escMod = [regex]::Escape($mod)
+        $pattern = "(?s)\{\s*""Name"":\s*""$escMod"".*?\}\s*,?\s*"
+        $before = $content.Length
+        $content = [regex]::Replace($content, $pattern, "")
+        if ($content.Length -ne $before) { $upluginStrips++ }
+    }
+    # Strip any trailing comma immediately before a closing array bracket.
+    $content = $content -replace ',(\s*\])', '$1'
+    Set-Content $upluginPath $content -NoNewline
+    Write-Host "    [$Tag] Installed=true set in .uplugin, $upluginStrips module entries stripped (no EngineVersion key)" -ForegroundColor Green
+
+    # --- Create the per-engine zip ---
+    if (Test-Path $Engine.Zip) { Remove-Item $Engine.Zip -Force }
+    Compress-Archive -Path "$StageDir\*" -DestinationPath $Engine.Zip -Force
+
+    # Clean this engine's scratch
+    Remove-Item $StageDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    $fileSize = [math]::Round((Get-Item $Engine.Zip).Length / 1MB, 1)
+    Write-Host "    [$Tag] Zip built: $($Engine.Zip) (${fileSize}MB)" -ForegroundColor Green
+}
+
+# Run the mandatory dumpbin hard-link import smoke against ONE engine's zip. Returns the
+# lowercased SHA256 of the smoked zip (pinned to the verified bytes). Throws/exits on a
+# sentinel leak or (unless -AllowUnverifiedImports) on a missing dumpbin.
+function Invoke-EngineSmoke {
+    param([PSCustomObject]$Engine, [string]$DumpbinPath, [string[]]$Sentinels)
+
+    $Tag = $Engine.Tag
+    Write-Host "`n  [$Tag smoke] Post-build hard-link smoke (issue #30 defense)..." -ForegroundColor Yellow
+
+    if (-not $DumpbinPath) {
+        if ($AllowUnverifiedImports) {
+            Write-Host "    [$Tag] [WARN] dumpbin.exe not found AND -AllowUnverifiedImports set." -ForegroundColor Yellow
+            Write-Host "    [$Tag] [WARN] Hard-link import smoke SKIPPED -- this zip is NOT shippable." -ForegroundColor Yellow
+            Write-Host "    [$Tag] [WARN] Imports are UNVERIFIED. Do NOT publish this build (issue #71 risk)." -ForegroundColor Yellow
+            return $null  # caller treats null as 'unverified' (no pinned hash)
+        } else {
+            Write-Host "`n  [FAIL] dumpbin.exe not found -- cannot run the mandatory hard-link import smoke." -ForegroundColor Red
+            Write-Host "  Install Visual Studio Build Tools (provides dumpbin.exe) and re-run." -ForegroundColor Red
+            Write-Host "  Shipping without this check is how issue #71 (MassSpawner/ZoneGraph hard-link) escaped." -ForegroundColor Red
+            Write-Host "  Bypass ONLY for a non-shippable local test zip: re-run with -AllowUnverifiedImports." -ForegroundColor Red
+            exit 1
+        }
+    }
+
+    # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
+    # (not the dev binaries we may have overwritten before zipping).
+    $SmokeDir = Join-Path $env:TEMP "Monolith_Release_${Version}_${Tag}_Smoke"
+    if (Test-Path $SmokeDir) { Remove-Item $SmokeDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $SmokeDir | Out-Null
+    Expand-Archive -Path $Engine.Zip -DestinationPath $SmokeDir -Force
+
+    $MonolithDlls = @(Get-ChildItem -Path $SmokeDir -Recurse -Filter "UnrealEditor-Monolith*.dll")
+    $LeakingDlls = @()
+    foreach ($dllItem in $MonolithDlls) {
+        $imports = & $DumpbinPath /imports $dllItem.FullName 2>$null | Out-String
+        foreach ($sentinel in $Sentinels) {
+            # Match "UnrealEditor-<Sentinel>.dll" in the import table
+            if ($imports -match "UnrealEditor-$([regex]::Escape($sentinel))\.dll") {
+                $LeakingDlls += [PSCustomObject]@{ Dll = $dllItem.Name; Sentinel = $sentinel }
+            }
+        }
+    }
+
+    # Cleanup smoke dir regardless of outcome
+    Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    if ($LeakingDlls.Count -gt 0) {
+        Write-Host "`n  [FAIL] [$Tag] Hard-link smoke found $($LeakingDlls.Count) sentinel import(s) in shipped DLLs:" -ForegroundColor Red
+        $LeakingDlls | ForEach-Object {
+            Write-Host "    $($_.Dll) imports UnrealEditor-$($_.Sentinel).dll" -ForegroundColor Red
+        }
+        Write-Host "`n  This is the issue #30 failure mode. The Build.cs for the affected module" -ForegroundColor Red
+        Write-Host "  is not honouring MONOLITH_RELEASE_BUILD=1. Fix the Build.cs probe before shipping." -ForegroundColor Red
+        Write-Host "`n  Refusing to publish v$Version. Delete $($Engine.Zip) after fixing Build.cs and re-run." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "    [$Tag] No sentinel imports found in $($MonolithDlls.Count) Monolith DLLs (clean)" -ForegroundColor Green
+
+    # Pin the verified bytes by hash so the printed SHA can be asserted to come from THIS
+    # smoked artifact and not a post-smoke manual re-zip.
+    return (Get-FileHash -Algorithm SHA256 -Path $Engine.Zip).Hash.ToLower()
+}
+
+# =====================================================================================
+# Shared, engine-agnostic prep (runs ONCE): offline CLI build + parity gate, then the
+# shared tracked-content copy. Both zips ship the SAME tracked content.
+# =====================================================================================
+
+# --- Build both engines BEFORE packaging so a build/gate failure on EITHER engine aborts
+#     the whole release with no zip produced (no partial release). ---
+if (-not $SkipBuild) {
+    foreach ($eng in $EngineMatrix) {
+        Invoke-EngineBuild -Engine $eng
+    }
+} else {
+    Write-Host "`n  [build] Skipping ALL engine builds (-SkipBuild flag)" -ForegroundColor DarkGray
+    Write-Host "    WARNING: Ensure each engine's binaries were built with MONOLITH_RELEASE_BUILD=1" -ForegroundColor Red
+}
+
+# --- Offline CLI build + parity gate (engine-agnostic; tracked source, runs ONCE) ---
 # The offline tool Binaries/monolith_query.exe is built from tracked source
 # Tools/MonolithQuery/monolith_query.cpp via a standalone cl.exe build (NOT UBT).
 # Binaries/ is gitignored, so without this step the release would ship whatever
 # stale exe happened to sit on disk. Rebuild it here so the shipped exe matches
 # the shipped source, then hard-gate the exe-vs-py parity guard. A drifted exe
 # must never ship -- both the build failure and a parity FAIL abort the release.
-Write-Host "`n  [1b] Building offline CLI fresh + parity gate..." -ForegroundColor Yellow
+# This exe is identical for both engines (it is not an engine binary), so the freshly
+# built exe under THIS repo's Binaries/ is staged into the shared content copy below.
+Write-Host "`n  [offline] Building offline CLI fresh + parity gate..." -ForegroundColor Yellow
 
 $ToolDir = Join-Path $PluginDir "Tools\MonolithQuery"
 $ToolBuildBat = Join-Path $ToolDir "build.bat"
@@ -298,7 +613,7 @@ if (-not (Test-Path $VcVars)) {
 
 # Run vcvars64.bat then build.bat in a single cmd session so cl.exe is in PATH.
 # build.bat copies the freshly built exe to Plugins/Monolith/Binaries/ (the same
-# Binaries dir the copy step below picks up), so the exe is staged before [3/4].
+# Binaries dir the copy step below picks up), so the exe is staged before packaging.
 Write-Host "    Using VS at $VsInstallPath" -ForegroundColor DarkGray
 # Three robustness measures, learned the hard way during the v0.18.0 release:
 #   1. Prepend the VS *Installer* dir to PATH. vcvars64.bat calls 'vswhere' by bare
@@ -350,8 +665,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "    Offline parity guard PASSED" -ForegroundColor Green
 
-# --- Step 2: Copy tracked files ---
-Write-Host "`n  [2/4] Copying tracked files..." -ForegroundColor Yellow
+# --- Shared tracked-content copy (ONCE) ---
+# Both per-engine zips ship the IDENTICAL tracked content from THIS repo (git ls-files);
+# only the per-engine Binaries/Win64 differs. So copy the tracked files once into $TempDir
+# and reuse it for every engine's package step.
+Write-Host "`n  [content] Copying tracked files (shared across engines)..." -ForegroundColor Yellow
 
 if (Test-Path $TempDir) { Remove-Item $TempDir -Recurse -Force }
 New-Item -ItemType Directory -Path $TempDir | Out-Null
@@ -374,14 +692,6 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     if ($keep -and $path -like "Docs/testing/*") {
         $keep = $false
     }
-    # Strip internal planning and spec folders (Docs/plans/, CRG/, PRD/, Plans/)
-    if ($keep -and ($path -like "Docs/plans/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Plans/*")) {
-        $keep = $false
-    }
-    # Enforce release ZIP hygiene: explicitly exclude build/local folders even if accidentally tracked
-    if ($keep -and ($path -like "Intermediate/*" -or $path -like "Saved/*" -or $path -like ".git/*" -or $path -eq ".git" -or $path -like ".github/*" -or $path -eq ".github" -or $path -like ".claude/*" -or $path -eq ".claude" -or $path -like ".jules/*" -or $path -eq ".jules" -or $path -like ".vscode/*" -or $path -like ".vs/*" -or $path -like ".idea/*" -or $path -like ".clangd/*" -or $path -eq ".clangd" -or $path -like ".pytest_cache/*" -or $path -eq ".pytest_cache" -or $path -like ".ruff_cache/*" -or $path -eq ".ruff_cache" -or $path -like ".mypy_cache/*" -or $path -eq ".mypy_cache" -or $path -like ".venv/*" -or $path -eq ".venv" -or $path -like ".code-review-graph/*" -or $path -eq ".code-review-graph" -or $path -like ".cache/*" -or $path -eq ".cache" -or $path -like ".antigravitycli/*" -or $path -eq ".antigravitycli" -or $path -like "PRD/*" -or $path -eq "PRD" -or $path -like "CRG/*" -or $path -eq "CRG" -or $path -like "Plans/*" -or $path -eq "Plans" -or $path -like "Docs/plans/*" -or $path -eq "Docs/plans" -or $path -like "Docs/research/*" -or $path -eq "Docs/research" -or $path -like "TrainingMemory/*" -or $path -eq "TrainingMemory" -or $path -like "Logs/*" -or $path -eq "Logs" -or $path -like "logs/*" -or $path -eq "logs")) {
-        $keep = $false
-    }
     # Strip internal-only Docs that the project tracks in git but should not ship.
     # MISSING_FEATURES.md is the empirical gap log fed from real project work;
     # downstream consumers do not need it.
@@ -402,96 +712,32 @@ foreach ($file in $trackedFiles) {
 Pop-Location
 Write-Host "    $($trackedFiles.Count) files copied ($strippedSourceCount stripped: $($StrippedModules -join ', '))" -ForegroundColor Green
 
-# --- Step 3: Copy binaries (gitignored but needed for Blueprint-only users) ---
-Write-Host "`n  [3/4] Copying binaries..." -ForegroundColor Yellow
-
-$binDir = Join-Path $PluginDir "Binaries"
-if (Test-Path $binDir) {
-    $destBin = Join-Path $TempDir "Binaries"
-    New-Item -ItemType Directory -Path $destBin -Force | Out-Null
-    $binCount = 0
-    $binStripCount = 0
-    # Build a regex that matches any stripped module's binary.
-    $stripModuleRegex = "(" + (($StrippedModules | ForEach-Object { [regex]::Escape($_) }) -join "|") + ")"
-    # Exclude gitignored dot-directories (e.g. .claude, .jules) that may exist physically under
-    # Binaries/. git ls-files never tracks them, but the Binaries copy below walks the
-    # physical directory -- without this guard such a directory and its contents could ship
-    # in the public zip. No legitimate Binaries content lives under a dot-directory.
-    Get-ChildItem $binDir -Recurse -File |
-        Where-Object { $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and $_.FullName -notmatch '[\\/]\.[^\\/]+[\\/]' } |
+# Stage the freshly built offline CLI exe + its sibling tools into the shared content's
+# Binaries dir. These are engine-agnostic and live at the TOP LEVEL of THIS repo's
+# Binaries/ (Binaries\monolith_query.exe, Binaries\monolith_proxy.exe). We copy ONLY the
+# top-level files here (NOT -Recurse) so we never touch Binaries\Win64 -- the per-engine
+# UnrealEditor-*.dll set AND the per-engine UnrealEditor.modules manifest are added under
+# Win64 in each package step (Invoke-EnginePackage), so they correctly differ per engine.
+# Skip .pdb / .patch_* / .claude as everywhere else.
+$sharedBinSrc = Join-Path $PluginDir "Binaries"
+if (Test-Path $sharedBinSrc) {
+    $sharedBinDest = Join-Path $TempDir "Binaries"
+    if (-not (Test-Path $sharedBinDest)) { New-Item -ItemType Directory -Path $sharedBinDest -Force | Out-Null }
+    Get-ChildItem $sharedBinSrc -File |
+        Where-Object {
+            $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and
+            $_.FullName -notmatch '[\\/]\.claude[\\/]'
+        } |
         ForEach-Object {
-            if ($_.Name -match "UnrealEditor-$stripModuleRegex\.") {
-                $binStripCount++
-                return
-            }
-            $rel = $_.FullName.Substring($binDir.Length)
-            $dest = Join-Path $destBin $rel
-            $destParent = Split-Path -Parent $dest
-            if (-not (Test-Path $destParent)) { New-Item -ItemType Directory -Path $destParent -Force | Out-Null }
-            Copy-Item $_.FullName -Destination $dest -Force
-            $binCount++
+            Copy-Item $_.FullName -Destination (Join-Path $sharedBinDest $_.Name) -Force
         }
-    Write-Host "    $binCount binary files included (no .pdb, no .patch_*, $binStripCount stripped: $($StrippedModules -join ', '))" -ForegroundColor Green
-} else {
-    Write-Host "    WARNING: No Binaries/ found - Blueprint-only users will need to compile" -ForegroundColor Red
+    Write-Host "    Shared engine-agnostic Binaries (top-level offline tools) staged" -ForegroundColor DarkGray
 }
 
-# --- Step 4: Patch and package ---
-Write-Host "`n  [4/4] Packaging..." -ForegroundColor Yellow
-
-# Set Installed=true for Blueprint-only users
-$upluginPath = Join-Path $TempDir "Monolith.uplugin"
-$content = Get-Content $upluginPath -Raw
-$content = $content -replace '"Installed":\s*false', '"Installed": true'
-
-# Strip non-redistributable module entries from the "Modules" array.
-# Matches an optional preceding comma, the module object block, and its trailing comma (if present).
-$upluginStrips = 0
-foreach ($mod in $StrippedModules) {
-    # Match the module object + its trailing comma (if present). Do NOT consume the leading
-    # comma -- that belongs to the previous entry and must stay. If the stripped module was
-    # the LAST array entry (no trailing comma), the previous entry's trailing comma is
-    # orphaned; the ",]" cleanup below catches that.
-    $escMod = [regex]::Escape($mod)
-    $pattern = "(?s)\{\s*""Name"":\s*""$escMod"".*?\}\s*,?\s*"
-    $before = $content.Length
-    $content = [regex]::Replace($content, $pattern, "")
-    if ($content.Length -ne $before) { $upluginStrips++ }
-}
-
-# Strip any trailing comma immediately before a closing array bracket.
-$content = $content -replace ',(\s*\])', '$1'
-
-Set-Content $upluginPath $content -NoNewline
-Write-Host "    Installed=true set in .uplugin, $upluginStrips module entries stripped" -ForegroundColor Green
-
-# Create zip
-if (Test-Path $OutputZip) { Remove-Item $OutputZip -Force }
-Compress-Archive -Path "$TempDir\*" -DestinationPath $OutputZip -Force
-
-# Clean temp
-Remove-Item $TempDir -Recurse -Force
-
-$fileSize = [math]::Round((Get-Item $OutputZip).Length / 1MB, 1)
-Write-Host "`nRelease complete: $OutputZip" -ForegroundColor Green
-Write-Host "Size: ${fileSize}MB" -ForegroundColor Green
-Write-Host "`nVerify: optional deps should be OFF in the binaries." -ForegroundColor Cyan
-Write-Host "  WITH_BLUEPRINT_ASSIST=0, WITH_GBA=0, WITH_COMMONUI=0" -ForegroundColor Cyan
-Write-Host "  WITH_COMBOGRAPH=0, WITH_LOGICDRIVER=0, WITH_METASOUND=0" -ForegroundColor Cyan
-Write-Host "  WITH_GAMEPLAYABILITIES=0" -ForegroundColor Cyan
-Write-Host "  WITH_MASSENTITY=0, WITH_ZONEGRAPH=0" -ForegroundColor Cyan
-Write-Host "  WITH_STATETREE=0, WITH_SMARTOBJECTS=0   (after F22 lands)" -ForegroundColor Cyan
-Write-Host "  Your next editor build will auto-detect deps normally." -ForegroundColor DarkGray
-
-# --- Step 5: Post-build hard-link smoke (defense against issue #30) ---
-# Issue #30 (v0.14.0): MonolithMesh.dll hard-linked GeometryScriptingCore.dll because
-# MonolithMesh.Build.cs missed the MONOLITH_RELEASE_BUILD=1 bypass on its GeometryScripting
-# probe. End-user editors failed to load Monolith with "missing import" errors.
-#
-# This step dumps the import table of every UnrealEditor-Monolith*.dll in the release zip
-# and refuses if any imports a sentinel module -- a module from a non-default-enabled UE
-# plugin that should NEVER appear in a release-built Monolith binary.
-Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -ForegroundColor Yellow
+# =====================================================================================
+# Sentinel list + drift assertion (engine-agnostic; the SAME optional-gated modules apply
+# to both engines), then locate dumpbin once, then package + smoke EACH engine.
+# =====================================================================================
 
 # Sentinel modules: their presence in a Monolith DLL's imports = build-time gate failure.
 # Add new sentinels when adding new optional plugin integrations.
@@ -500,13 +746,7 @@ Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -Foregr
 # dep in Monolith.uplugin (no Optional flag), so the engine auto-enables it on
 # Monolith install and guarantees load order. MonolithGAS + MonolithIndex
 # hard-link GameplayAbilities and that's functionally safe under this contract.
-# Migration to optional + WITH_GAMEPLAYABILITIES gate planned for v0.14.8
-# alongside the StructUtils-cleanup follow-up.
 #
-# External optional widget runtime sentinel: MonolithUI must stay decoupled from
-# provider plugins. Exact public dependency sentinels below catch accidental hard
-# DLL imports before the public zip ships; downstream providers should extend
-# this list in their own release wrappers.
 # Each entry is the EXACT module-name string a Build.cs adds under an optional gate.
 # The smoke matches "UnrealEditor-<entry>.dll" in a shipped DLL's import table, so a
 # casing/name mismatch here means a real leak slips past (issue #71: MassSpawner was
@@ -516,7 +756,7 @@ Write-Host "`n  [5/5] Post-build hard-link smoke (issue #30 defense)..." -Foregr
 # is the source of truth -- if it FAILs, add the missing name HERE (and keep it sorted
 # by source module for review sanity).
 $LeakSentinels = @(
-    # MonolithMesh / MonolithWorldGen -- GeometryScripting (delay-loaded but still gated)
+    # MonolithMesh -- GeometryScripting (delay-loaded but still gated)
     "GeometryScriptingCore", "GeometryFramework", "GeometryCore",
     # MonolithUI -- CommonUI
     "CommonUI", "CommonInput",
@@ -552,7 +792,7 @@ $LeakSentinels = @(
 # optional/release-gated block (if (bHas...) / if (!bReleaseBuild...)). When you add a new
 # optional dep to ANY Build.cs, add its module string(s) HERE and to $LeakSentinels above.
 $OptionalModuleUnion = @(
-    "GeometryScriptingCore", "GeometryFramework", "GeometryCore",   # MonolithMesh / MonolithWorldGen
+    "GeometryScriptingCore", "GeometryFramework", "GeometryCore",   # MonolithMesh
     "CommonUI", "CommonInput",                                       # MonolithUI
     "BlueprintAssist",                                               # MonolithBABridge
     "GameplayBehaviorsModule", "MassEntity", "MassSpawner",          # MonolithAI
@@ -588,19 +828,20 @@ if ($MissingSentinels.Count -gt 0) {
 # release -- it produces a NON-shippable test zip on a machine without VS Build Tools).
 $Dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 if (-not $Dumpbin) {
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path $vswhere) {
-        $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-        if ($installPath) {
-            $vsBase = Join-Path $installPath "VC\Tools\MSVC"
-            if (Test-Path $vsBase) {
-                $candidate = Get-ChildItem -Path $vsBase -Directory -ErrorAction SilentlyContinue |
-                    Sort-Object Name -Descending |
-                    ForEach-Object { Join-Path $_.FullName "bin\HostX64\x64\dumpbin.exe" } |
-                    Where-Object { Test-Path $_ } |
-                    Select-Object -First 1
-                if ($candidate) { $Dumpbin = $candidate }
-            }
+    $VSCommonPaths = @(
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC",
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC",
+        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC",
+        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC"
+    )
+    foreach ($vsBase in $VSCommonPaths) {
+        if (Test-Path $vsBase) {
+            $candidate = Get-ChildItem -Path $vsBase -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName "bin\HostX64\x64\dumpbin.exe" } |
+                Where-Object { Test-Path $_ } |
+                Select-Object -First 1
+            if ($candidate) { $Dumpbin = $candidate; break }
         }
     }
 }
@@ -608,108 +849,110 @@ if (-not $Dumpbin) {
 # Fallback: ask vswhere.exe (ships with every VS 2017+ installer) to locate dumpbin.exe
 # anywhere a VS instance is installed -- covers non-2022 / non-default-edition layouts.
 if (-not $Dumpbin) {
-    $VSWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path $VSWhere) {
-        $vswhereHit = & $VSWhere -latest -find "**\dumpbin.exe" 2>$null | Select-Object -First 1
+    $VSWhere2 = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $VSWhere2) {
+        $vswhereHit = & $VSWhere2 -latest -find "**\dumpbin.exe" 2>$null | Select-Object -First 1
         if ($vswhereHit -and (Test-Path $vswhereHit)) { $Dumpbin = $vswhereHit }
     }
 }
 
-if (-not $Dumpbin) {
-    if ($AllowUnverifiedImports) {
-        Write-Host "    [WARN] dumpbin.exe not found AND -AllowUnverifiedImports set." -ForegroundColor Yellow
-        Write-Host "    [WARN] Hard-link import smoke SKIPPED -- this zip is NOT shippable." -ForegroundColor Yellow
-        Write-Host "    [WARN] Imports are UNVERIFIED. Do NOT publish this build (issue #71 risk)." -ForegroundColor Yellow
+# =====================================================================================
+# Package + smoke EACH engine. Collect per-engine pinned hashes for the SHA markers.
+# Any smoke failure exits inside Invoke-EngineSmoke (no partial release).
+# =====================================================================================
+$EngineHashes = @{}   # Tag -> lowercased SHA256 of the smoked zip
+$LegacyHash = $null
+
+foreach ($eng in $EngineMatrix) {
+    Invoke-EnginePackage -Engine $eng -SharedContentDir $TempDir
+    $pinned = Invoke-EngineSmoke -Engine $eng -DumpbinPath $Dumpbin -Sentinels $LeakSentinels
+    $EngineHashes[$eng.Tag] = $pinned
+}
+
+# --- Legacy bridge: copy the UE5.7 zip to Monolith-v<X.Y.Z>.zip so pre-cross-engine
+#     auto-updaters (which fetch the first plain .zip and read the legacy SHA marker)
+#     still get a valid, smoked artifact. ---
+$LegacyEngine = $EngineMatrix | Where-Object { $_.IsLegacy } | Select-Object -First 1
+if ($LegacyEngine) {
+    if (Test-Path $LegacyZip) { Remove-Item $LegacyZip -Force }
+    Copy-Item $LegacyEngine.Zip -Destination $LegacyZip -Force
+    # The legacy zip is a byte-for-byte copy of the smoked UE5.7 zip, so its hash equals
+    # the UE5.7 pinned hash. Recompute to be explicit (and to detect a copy that failed).
+    $LegacyHash = (Get-FileHash -Algorithm SHA256 -Path $LegacyZip).Hash.ToLower()
+    if ($EngineHashes[$LegacyEngine.Tag] -and $LegacyHash -ne $EngineHashes[$LegacyEngine.Tag]) {
+        Write-Host "`n  [FAIL] Legacy bridge zip hash does not match the smoked UE5.7 zip." -ForegroundColor Red
+        Write-Host "    UE5.7 smoked: $($EngineHashes[$LegacyEngine.Tag])" -ForegroundColor Red
+        Write-Host "    legacy copy:  $LegacyHash" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "`n  [legacy] Bridge zip written: $LegacyZip (= UE5.7 copy)" -ForegroundColor Green
+}
+
+# --- Cleanup shared temp ---
+Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+# =====================================================================================
+# SHA256 markers for release notes (Issue #38 + per-engine contract). The updater anchors
+# on the EXACT markers: "Monolith-SHA256-UE5.7:" / "Monolith-SHA256-UE5.8:" for engine-
+# tagged assets, and the legacy "Monolith-SHA256:" (= UE5.7 hash) for old updaters.
+# =====================================================================================
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Cyan
+Write-Host "Release complete: per-engine zips + legacy bridge" -ForegroundColor Green
+foreach ($eng in $EngineMatrix) {
+    $h = $EngineHashes[$eng.Tag]
+    $sizeMb = [math]::Round((Get-Item $eng.Zip).Length / 1MB, 1)
+    Write-Host "  $($eng.Zip | Split-Path -Leaf)  (${sizeMb}MB)" -ForegroundColor Green
+    if ($h) {
+        Write-Host "    SHA256: $h (imports verified)" -ForegroundColor DarkGray
     } else {
-        Write-Host "`n  [FAIL] dumpbin.exe not found -- cannot run the mandatory hard-link import smoke." -ForegroundColor Red
-        Write-Host "  Install Visual Studio Build Tools (provides dumpbin.exe) and re-run." -ForegroundColor Red
-        Write-Host "  Shipping without this check is how issue #71 (MassSpawner/ZoneGraph hard-link) escaped." -ForegroundColor Red
-        Write-Host "  Bypass ONLY for a non-shippable local test zip: re-run with -AllowUnverifiedImports." -ForegroundColor Red
-        exit 1
+        Write-Host "    SHA256: UNVERIFIED (smoke bypassed -- NOT shippable)" -ForegroundColor Yellow
     }
-} else {
-    # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
-    # (not the dev binaries we may have overwritten before zipping).
-    $SmokeDir = Join-Path $env:TEMP "Monolith_Release_${Version}_Smoke"
-    if (Test-Path $SmokeDir) { Remove-Item $SmokeDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $SmokeDir | Out-Null
-    Expand-Archive -Path $OutputZip -DestinationPath $SmokeDir -Force
-
-    $MonolithDlls = @(Get-ChildItem -Path $SmokeDir -Recurse -Filter "UnrealEditor-Monolith*.dll")
-    $LeakingDlls = @()
-    foreach ($dllItem in $MonolithDlls) {
-        $imports = & $Dumpbin /imports $dllItem.FullName 2>$null | Out-String
-        foreach ($sentinel in $LeakSentinels) {
-            # Match "UnrealEditor-<Sentinel>.dll" in the import table
-            if ($imports -match "UnrealEditor-$([regex]::Escape($sentinel))\.dll") {
-                $LeakingDlls += [PSCustomObject]@{
-                    Dll      = $dllItem.Name
-                    Sentinel = $sentinel
-                }
-            }
-        }
-    }
-
-    # Cleanup smoke dir regardless of outcome
-    Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
-
-    if ($LeakingDlls.Count -gt 0) {
-        Write-Host "`n  [FAIL] Hard-link smoke found $($LeakingDlls.Count) sentinel import(s) in shipped DLLs:" -ForegroundColor Red
-        $LeakingDlls | ForEach-Object {
-            Write-Host "    $($_.Dll) imports UnrealEditor-$($_.Sentinel).dll" -ForegroundColor Red
-        }
-        Write-Host "`n  This is the issue #30 failure mode. The Build.cs for the affected module" -ForegroundColor Red
-        Write-Host "  is not honouring MONOLITH_RELEASE_BUILD=1. Fix the Build.cs probe before shipping." -ForegroundColor Red
-        Write-Host "`n  Refusing to publish v$Version. Delete $OutputZip after fixing Build.cs and re-run." -ForegroundColor Red
-        exit 1
-    }
-    Write-Host "    No sentinel imports found in $($MonolithDlls.Count) Monolith DLLs (clean)" -ForegroundColor Green
-
-    # Record the exact zip the smoke just inspected, pinned by hash, so the SHA256
-    # printed for the release notes can be asserted to come from THIS smoked artifact
-    # and not a post-smoke manual re-zip (issue #71 risk: SHA of an unverified rebuild).
-    $SmokedZipPath = $OutputZip
-    $SmokedZipHash = (Get-FileHash -Algorithm SHA256 -Path $OutputZip).Hash.ToLower()
 }
-
-# --- SHA256 hash for release notes (Issue #38) ---
-# Marker token is `Monolith-SHA256:` (not bare `SHA256:`) so the auto-updater's
-# regex never collides with prose mentions of the word SHA256 elsewhere in the
-# release body. The parser anchors on this exact sentinel.
-if (Test-Path $OutputZip) {
-    $Hash = (Get-FileHash -Algorithm SHA256 -Path $OutputZip).Hash.ToLower()
-
-    # Pin the published hash to the smoked bytes. The hard-link smoke above inspected
-    # the DLLs inside $OutputZip; if the zip was replaced/re-built after the smoke (e.g.
-    # a manual re-zip), this hash would describe UNVERIFIED bytes -- exactly the gap that
-    # let issue #71 ship. Assert the file the smoke checked is the file we are hashing.
-    # ($SmokedZipHash is unset only when the smoke was bypassed via -AllowUnverifiedImports,
-    # in which case we already warned loudly that the zip is not shippable.)
-    if ($SmokedZipHash) {
-        if ($Hash -ne $SmokedZipHash -or $OutputZip -ne $SmokedZipPath) {
-            Write-Host "`n  [FAIL] Zip changed after the hard-link smoke ran." -ForegroundColor Red
-            Write-Host "  Smoked: $SmokedZipPath ($SmokedZipHash)" -ForegroundColor Red
-            Write-Host "  Hashing now: $OutputZip ($Hash)" -ForegroundColor Red
-            Write-Host "  The release-notes SHA must describe the SMOKED bytes. Re-run the full" -ForegroundColor Red
-            Write-Host "  release so the smoke and the published hash see the same artifact." -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "    SHA256 pinned to the smoked zip (imports verified)" -ForegroundColor Green
-    }
-    Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Cyan
-    Write-Host "SHA256: $Hash" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Paste this exact line into the GitHub Release notes body (include all platform markers if multi-platform):" -ForegroundColor Yellow
-    Write-Host ""
-    $MarkerPrefix = if ($IsMacOS) { "Monolith-macOS-SHA256" } elseif ($IsLinux) { "Monolith-Linux-SHA256" } else { "Monolith-SHA256" }
-    Write-Host "  ${MarkerPrefix}: $Hash" -ForegroundColor White
-    Write-Host ""
-    Write-Host "The auto-updater parses this exact marker and fails safe (refusing" -ForegroundColor Yellow
-    Write-Host "to install) if the downloaded zip's hash does not match. If the marker"        -ForegroundColor Yellow
-    Write-Host "is missing entirely, it logs a warning and proceeds without checking."         -ForegroundColor Yellow
-    Write-Host "Do not rename or"                                                              -ForegroundColor Yellow
-    Write-Host "reformat the marker -- the prefix and a single space before the"   -ForegroundColor Yellow
-    Write-Host "hex string are required."                                          -ForegroundColor Yellow
-    Write-Host "================================================================" -ForegroundColor Cyan
+if ($LegacyHash) {
+    Write-Host "  $($LegacyZip | Split-Path -Leaf)  (legacy bridge = UE5.7 copy)" -ForegroundColor Green
 }
+Write-Host ""
+Write-Host "Paste these EXACT lines into the GitHub Release notes body:" -ForegroundColor Yellow
+Write-Host ""
+foreach ($eng in $EngineMatrix) {
+    $h = $EngineHashes[$eng.Tag]
+    if ($h) {
+        Write-Host "  Monolith-SHA256-$($eng.Tag): $h" -ForegroundColor White
+    } else {
+        Write-Host "  Monolith-SHA256-$($eng.Tag): <UNVERIFIED -- re-run without -AllowUnverifiedImports>" -ForegroundColor Yellow
+    }
+}
+if ($LegacyHash) {
+    Write-Host "  Monolith-SHA256: $LegacyHash" -ForegroundColor White
+}
+Write-Host ""
+Write-Host "The auto-updater parses these exact markers and refuses to install if the" -ForegroundColor Yellow
+Write-Host "downloaded zip's hash does not match. Engine-tagged assets (-UE5.7 / -UE5.8)" -ForegroundColor Yellow
+Write-Host "require the matching Monolith-SHA256-<tag>: marker; the legacy Monolith-SHA256:" -ForegroundColor Yellow
+Write-Host "marker (= the UE5.7 hash) serves pre-cross-engine updaters. Do not rename or" -ForegroundColor Yellow
+Write-Host "reformat the markers -- the prefix and a single space before the hex are required." -ForegroundColor Yellow
+Write-Host "================================================================" -ForegroundColor Cyan
+
+# =====================================================================================
+# Dev-state restore reminder. The release builds left RELEASE-STRIPPED binaries on disk in
+# BOTH projects (optional deps OFF). Each project's next editor launch would run stripped
+# DLLs until a dev rebuild restores them. We do NOT auto-rebuild here (heavy + needs the
+# editor closed in both); print the EXACT commands instead.
+# =====================================================================================
+Write-Host ""
+Write-Host "================================================================" -ForegroundColor Magenta
+Write-Host "RESTORE DEV BINARIES BEFORE RESUMING WORK (both projects)" -ForegroundColor Magenta
+Write-Host "The release builds stripped optional deps (WITH_*=0) and left release DLLs on" -ForegroundColor Yellow
+Write-Host "disk in BOTH projects. Rebuild WITHOUT MONOLITH_RELEASE_BUILD to restore them." -ForegroundColor Yellow
+Write-Host "Touch a Build.cs first so UBT regenerates the makefile (it does not track the" -ForegroundColor Yellow
+Write-Host "MONOLITH_RELEASE_BUILD env var and will otherwise report 'up to date')." -ForegroundColor Yellow
+Write-Host ""
+foreach ($eng in $EngineMatrix) {
+    Write-Host "  # $($eng.Tag) dev restore:" -ForegroundColor Cyan
+    Write-Host "  Get-ChildItem '$($eng.PluginDir)\Source' -Recurse -Filter *.Build.cs | ForEach-Object { `$_.LastWriteTime = Get-Date }" -ForegroundColor White
+    Write-Host "  & '$($eng.UBT)' $($eng.Target) Win64 Development `"-Project=$($eng.UProject)`" -waitmutex" -ForegroundColor White
+    Write-Host ""
+}
+Write-Host "(Ensure MONOLITH_RELEASE_BUILD is NOT set in your env when you run these.)" -ForegroundColor Yellow
+Write-Host "================================================================" -ForegroundColor Magenta

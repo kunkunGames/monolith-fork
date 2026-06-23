@@ -1,5 +1,6 @@
 #include "MonolithMeshQualityActions.h"
 #include "MonolithMeshUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithMeshAnalysis.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"

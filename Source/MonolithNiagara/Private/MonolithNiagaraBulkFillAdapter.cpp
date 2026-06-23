@@ -239,7 +239,7 @@ namespace MonolithNiagaraBulkFillInternal
 					return MakeResolveFailureReport(FString::Printf(
 						TEXT("niagara adapter: parameter '%s' looks like a GPU-sim param — "
 						     "WISHLIST: GPU emitter introspection one-way"),
-						*KV.Key));
+						*MonolithKeyToString(KV.Key)));
 				}
 			}
 		}

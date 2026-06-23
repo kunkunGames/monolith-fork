@@ -511,6 +511,19 @@ void FMonolithAbpGraphSurgeryActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("anim_graph_name"), TEXT("string"), TEXT("Graph containing the Motion Matching node. Default: AnimGraph"), TEXT("AnimGraph"))
 			.Build());
 
+	// --- bind_threadsafe_update_function (T1-L1) ---
+	Registry.RegisterAction(TEXT("animation"), TEXT("bind_threadsafe_update_function"),
+		TEXT("Insert a thread-safe BP-function CALL into an ABP's thread-safe FUNCTION graph (the surgery proven by bind_chooser_database_via_threadsafe, generalized from EvaluateChooser2 to a generic UK2Node_CallFunction). Resolves function.class+function.name to a UFunction*, asserts it is non-pure, BlueprintThreadSafe, Kismet-callable, has no return-param and a single non-exec result, then: creates/reuses a Thread-Safe function graph, wires FunctionEntry exec -> call exec, optionally feeds the call's self/object-context pin from a Self node, applies a small fixed arg_bindings set (pin -> literal default, or pin -> self), stores the call result into result_target.var via a VariableSet, and (optionally) feeds an AnimGraph target node pin via a VariableGet of that var. v1a SCOPE = known-signature BP-library/member static; unsupported signatures are rejected with a clear error (no silent mis-wire). Independent of the Chooser plugin."),
+		FMonolithActionHandler::CreateStatic(&HandleBindThreadsafeUpdateFunction),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("abp_path"), TEXT("Animation Blueprint asset path"))
+			.Required(TEXT("function"), TEXT("object"), TEXT("{class:'<UClass path or short name, e.g. /Script/AnimGraphRuntime.KismetAnimationLibrary or KismetMathLibrary>', name:'<UFunction name>'} — must resolve to a non-pure, BlueprintThreadSafe, Kismet-callable function with no return parameter"))
+			.Optional(TEXT("arg_bindings"), TEXT("array"), TEXT("Optional [{pin:'<input pin name>', value:'<literal default>'} | {pin:'<object/self input pin name>', self:true}] — small fixed arg set. Unsupported bindings (unknown pin, non-literal-settable type) error rather than mis-wire. v1b arbitrary-signature binding is a gated follow-on."))
+			.Required(TEXT("result_target"), TEXT("object"), TEXT("{var:'<self variable to store the call result into; created-elsewhere, must already exist>', node:'<optional AnimGraph node UObject name>', pin:'<optional input pin on that node>'} — the call's single non-exec result is stored into var via a VariableSet; if node+pin given an AnimGraph VariableGet feeds that pin"))
+			.Optional(TEXT("function_name"), TEXT("string"), TEXT("Thread-safe function graph to author the call into (created if absent). Default: ThreadSafeUpdateFunction"), TEXT("ThreadSafeUpdateFunction"))
+			.Optional(TEXT("anim_graph_name"), TEXT("string"), TEXT("Graph containing the result target node. Default: AnimGraph"), TEXT("AnimGraph"))
+			.Build());
+
 	// --- duplicate_reparent_and_sanitize ---
 	Registry.RegisterAction(TEXT("animation"), TEXT("duplicate_reparent_and_sanitize"),
 		TEXT("Duplicate an ABP, reparent it to new_parent_class, then walk every graph and classify casts / variable-gets / function-calls / Evaluate-Chooser nodes against the new parent's reflected surface. Each finding is labelled safe / requires_guard / requires_rebuild / remove_for_smoke. dry_run (default true) reports only."),
@@ -1794,3 +1807,485 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindChooserDatabase
 }
 
 #endif // WITH_CHOOSER
+
+
+// ===========================================================================
+//  T1-L1 — bind_threadsafe_update_function
+//
+//  GENERALIZES HandleBindChooserDatabaseViaThreadSafe. Reuses the SAME thread-safe
+//  function-graph surgery (CreateNewGraph/AddFunctionGraph, EntryNode->MetaData.bThreadSafe,
+//  FunctionEntry exec -> node exec, Self -> context, node.Result -> VariableSet,
+//  AnimGraph VariableGet -> target pin), but swaps the reflective UK2Node_EvaluateChooser2
+//  spawn for a UK2Node_CallFunction bound via SetFromFunction(UFunction*).
+//
+//  NOT gated on WITH_CHOOSER: UK2Node_CallFunction is always available. The helper
+//  functions (ResolveGraphByName / FindNodeByNameBP / FindPinByNameDir) live in the
+//  always-compiled anonymous namespace at the top of this file.
+// ===========================================================================
+
+namespace
+{
+
+/**
+ * Resolve a UClass from a /Script path, a BlueprintGeneratedClass path, or a bare short name.
+ * Mirrors the established Monolith resolution order: TryFindTypeSlow (path or short name) ->
+ * LoadClass (forces the owning module/asset to load) -> FindObject. Returns nullptr if unresolved.
+ */
+UClass* ResolveClassFlexible(const FString& ClassNameOrPath)
+{
+	if (ClassNameOrPath.IsEmpty()) return nullptr;
+
+	// TryFindTypeSlow handles both a fully-qualified /Script/...Class path and a bare short name.
+	if (UClass* Found = UClass::TryFindTypeSlow<UClass>(ClassNameOrPath))
+	{
+		return Found;
+	}
+	// Path form may need the owning module/package loaded first.
+	if (ClassNameOrPath.Contains(TEXT(".")) || ClassNameOrPath.Contains(TEXT("/")))
+	{
+		if (UClass* Loaded = LoadClass<UObject>(nullptr, *ClassNameOrPath))
+		{
+			return Loaded;
+		}
+		if (UClass* Obj = FindObject<UClass>(nullptr, *ClassNameOrPath))
+		{
+			return Obj;
+		}
+	}
+	return nullptr;
+}
+
+/**
+ * v1a thread-safe-call guard. Mirrors UAnimGraphNode_CallFunction::ValidateFunction (AnimGraph,
+ * AnimGraphNode_CallFunction.cpp:235-274) plus AreFunctionParamsValid: a function dropped into a
+ * thread-safe anim-graph function call MUST be non-pure, BlueprintThreadSafe, Kismet-callable, not
+ * internal-use-only, and carry NO return-parameter property. Returns false + a precise reason for
+ * any rejection so unsupported signatures are reported, never silently mis-wired.
+ */
+bool ValidateThreadSafeCallTarget(const UFunction* Fn, FString& OutError)
+{
+	if (!Fn)
+	{
+		OutError = TEXT("function could not be resolved");
+		return false;
+	}
+	if (!UEdGraphSchema_K2::CanUserKismetCallFunction(Fn))
+	{
+		OutError = FString::Printf(TEXT("function '%s' is not user-callable from a Blueprint (not BlueprintCallable / not Kismet-callable)"), *Fn->GetName());
+		return false;
+	}
+	if (Fn->HasAnyFunctionFlags(FUNC_BlueprintPure))
+	{
+		OutError = FString::Printf(TEXT("function '%s' is BlueprintPure — pure functions have no exec pins and cannot be exec-driven in a thread-safe function graph (v1a requires an exec-callable function)"), *Fn->GetName());
+		return false;
+	}
+	if (!FBlueprintEditorUtils::HasFunctionBlueprintThreadSafeMetaData(Fn))
+	{
+		OutError = FString::Printf(TEXT("function '%s' is not marked BlueprintThreadSafe — it cannot be called from BlueprintThreadSafeUpdateAnimation / a thread-safe function graph"), *Fn->GetName());
+		return false;
+	}
+	if (Fn->HasMetaData(FBlueprintMetadata::MD_BlueprintInternalUseOnly))
+	{
+		OutError = FString::Printf(TEXT("function '%s' is BlueprintInternalUseOnly and cannot be wired by the user"), *Fn->GetName());
+		return false;
+	}
+	// Anim-graph rule (AreFunctionParamsValid): return parameters are not processable in the anim graph.
+	for (TFieldIterator<FProperty> It(Fn); It; ++It)
+	{
+		if (It->HasAnyPropertyFlags(CPF_ReturnParm))
+		{
+			OutError = FString::Printf(TEXT("function '%s' has a C++ return parameter — anim-graph thread-safe calls do not allow return params (use an out-param / output-pin signature)"), *Fn->GetName());
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdateFunction(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
+
+	// function = { class, name }
+	const TSharedPtr<FJsonObject>* FuncObjPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("function"), FuncObjPtr) || !FuncObjPtr || !FuncObjPtr->IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("function is required and must be an object { class, name }"));
+	}
+	const TSharedPtr<FJsonObject>& FuncObj = *FuncObjPtr;
+	FString FuncClassName, FuncMethodName;
+	FuncObj->TryGetStringField(TEXT("class"), FuncClassName);
+	FuncObj->TryGetStringField(TEXT("name"), FuncMethodName);
+	if (FuncClassName.IsEmpty() || FuncMethodName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("function.class and function.name are both required"));
+	}
+
+	// result_target = { var, [node], [pin] }
+	const TSharedPtr<FJsonObject>* ResultObjPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("result_target"), ResultObjPtr) || !ResultObjPtr || !ResultObjPtr->IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("result_target is required and must be an object { var, [node], [pin] }"));
+	}
+	const TSharedPtr<FJsonObject>& ResultObj = *ResultObjPtr;
+	FString ResultVar, TargetNodeRef, TargetPinName;
+	ResultObj->TryGetStringField(TEXT("var"), ResultVar);
+	ResultObj->TryGetStringField(TEXT("node"), TargetNodeRef);
+	ResultObj->TryGetStringField(TEXT("pin"), TargetPinName);
+	if (ResultVar.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("result_target.var is required (the self variable to store the call result into; it must already exist on the ABP)"));
+	}
+
+	FString FuncGraphName = Params->HasField(TEXT("function_name")) ? Params->GetStringField(TEXT("function_name")) : TEXT("ThreadSafeUpdateFunction");
+	if (FuncGraphName.IsEmpty()) FuncGraphName = TEXT("ThreadSafeUpdateFunction");
+	FString AnimGraphName = Params->HasField(TEXT("anim_graph_name")) ? Params->GetStringField(TEXT("anim_graph_name")) : TEXT("AnimGraph");
+	if (AnimGraphName.IsEmpty()) AnimGraphName = TEXT("AnimGraph");
+
+	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
+	if (!ABP)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Animation Blueprint not found: %s"), *AbpPath));
+	}
+
+	// --- 0) Resolve + validate the target UFunction (v1a known-signature guard). ---
+	UClass* FuncClass = ResolveClassFlexible(FuncClassName);
+	if (!FuncClass)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Could not resolve function class '%s' (tried path + short-name resolution). Provide a /Script/<Module>.<Class> path or a loaded class short name."), *FuncClassName));
+	}
+	UFunction* TargetFn = FuncClass->FindFunctionByName(FName(*FuncMethodName));
+	if (!TargetFn)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Function '%s' not found on class '%s'."), *FuncMethodName, *FuncClass->GetName()));
+	}
+	FString GuardError;
+	if (!ValidateThreadSafeCallTarget(TargetFn, GuardError))
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Unsupported function signature for a thread-safe call: %s"), *GuardError));
+	}
+
+	// --- 1) Ensure the thread-safe FUNCTION graph exists. (Reused verbatim from the chooser path.) ---
+	UEdGraph* FuncGraph = nullptr;
+	for (UEdGraph* G : ABP->FunctionGraphs)
+	{
+		if (G && G->GetName() == FuncGraphName) { FuncGraph = G; break; }
+	}
+	bool bFuncCreated = false;
+	if (!FuncGraph)
+	{
+		FuncGraph = FBlueprintEditorUtils::CreateNewGraph(
+			ABP, FName(*FuncGraphName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
+		if (!FuncGraph)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create function graph: %s"), *FuncGraphName));
+		}
+		FBlueprintEditorUtils::AddFunctionGraph<UClass>(ABP, FuncGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/(UClass*)nullptr);
+		bFuncCreated = true;
+	}
+
+	UK2Node_FunctionEntry* EntryNode = nullptr;
+	for (UEdGraphNode* Node : FuncGraph->Nodes)
+	{
+		EntryNode = Cast<UK2Node_FunctionEntry>(Node);
+		if (EntryNode) break;
+	}
+	if (!EntryNode)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("No function entry node in graph '%s'"), *FuncGraphName));
+	}
+	EntryNode->Modify();
+	EntryNode->MetaData.bThreadSafe = true;
+
+	// --- 2) Spawn the UK2Node_CallFunction and bind it via SetFromFunction (DIVERGENCE from chooser:
+	//        the reflective EvaluateChooser2 spawn is replaced by a standard CallFunction node). ---
+	UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(FuncGraph);
+	FuncGraph->AddNode(CallNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	CallNode->CreateNewGuid();
+	CallNode->NodePosX = 300;
+	CallNode->NodePosY = 0;
+	CallNode->SetFromFunction(TargetFn);
+	CallNode->AllocateDefaultPins();
+
+	const UEdGraphSchema* Schema = FuncGraph->GetSchema();
+	if (!Schema) return FMonolithActionResult::Error(TEXT("Function graph has no schema"));
+
+	// --- 3) Wire FunctionEntry exec -> call node exec input. ---
+	int32 Wired = 0;
+	UEdGraphPin* EntryThen = FindPinByNameDir(EntryNode, UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* CallExecIn = FindPinByNameDir(CallNode, UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	if (EntryThen && CallExecIn && Schema->TryCreateConnection(EntryThen, CallExecIn)) ++Wired;
+
+	// --- 4) Self-context: if the call has a 'self' target pin (member function), feed it from a Self node
+	//        so the call runs against the AnimInstance. BP-library statics expose no self pin (skipped). ---
+	FString ContextPinName;
+	bool bSelfWired = false;
+	UEdGraphPin* SelfTargetPin = CallNode->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+	if (SelfTargetPin && SelfTargetPin->LinkedTo.Num() == 0)
+	{
+		UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(FuncGraph);
+		FuncGraph->AddNode(SelfNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+		SelfNode->CreateNewGuid();
+		SelfNode->NodePosX = 100;
+		SelfNode->NodePosY = 150;
+		SelfNode->AllocateDefaultPins();
+		UEdGraphPin* SelfOut = nullptr;
+		for (UEdGraphPin* P : SelfNode->Pins)
+		{
+			if (P && P->Direction == EGPD_Output) { SelfOut = P; break; }
+		}
+		if (SelfOut)
+		{
+			const FPinConnectionResponse Resp = Schema->CanCreateConnection(SelfOut, SelfTargetPin);
+			if (Resp.Response != CONNECT_RESPONSE_DISALLOW && Schema->TryCreateConnection(SelfOut, SelfTargetPin))
+			{
+				bSelfWired = true;
+				ContextPinName = SelfTargetPin->PinName.ToString();
+				++Wired;
+			}
+		}
+	}
+
+	// --- 5) Apply the small fixed v1a arg_bindings set. {pin, value} sets a literal default;
+	//        {pin, self:true} wires a Self node into an object/self input pin. Anything we cannot set
+	//        (unknown pin, exec/output pin, non-literal-settable type) is REJECTED, not mis-wired. ---
+	TArray<TSharedPtr<FJsonValue>> AppliedBindings;
+	const TArray<TSharedPtr<FJsonValue>>* ArgBindings = nullptr;
+	if (Params->TryGetArrayField(TEXT("arg_bindings"), ArgBindings) && ArgBindings)
+	{
+		for (const TSharedPtr<FJsonValue>& V : *ArgBindings)
+		{
+			const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
+			if (!V->TryGetObject(EntryPtr) || !EntryPtr)
+			{
+				return FMonolithActionResult::Error(TEXT("each arg_bindings entry must be an object { pin, value } or { pin, self }"));
+			}
+			const TSharedPtr<FJsonObject>& Entry = *EntryPtr;
+			FString PinName;
+			Entry->TryGetStringField(TEXT("pin"), PinName);
+			if (PinName.IsEmpty())
+			{
+				return FMonolithActionResult::Error(TEXT("arg_bindings entry missing required 'pin'"));
+			}
+			UEdGraphPin* InPin = FindPinByNameDir(CallNode, FName(*PinName), EGPD_Input);
+			if (!InPin)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("arg_bindings pin '%s' is not an input pin on the call node '%s' — reject rather than mis-wire"), *PinName, *FuncMethodName));
+			}
+			if (InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("arg_bindings pin '%s' is an exec pin — only data input pins are bindable"), *PinName));
+			}
+
+			bool bWantSelf = false;
+			Entry->TryGetBoolField(TEXT("self"), bWantSelf);
+			if (bWantSelf)
+			{
+				if (InPin->PinType.PinCategory != UEdGraphSchema_K2::PC_Object &&
+					InPin->PinType.PinCategory != UEdGraphSchema_K2::PC_Interface)
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("arg_bindings pin '%s' has self:true but is not an object/interface pin — cannot wire Self"), *PinName));
+				}
+				UK2Node_Self* ArgSelf = NewObject<UK2Node_Self>(FuncGraph);
+				FuncGraph->AddNode(ArgSelf, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+				ArgSelf->CreateNewGuid();
+				ArgSelf->NodePosX = 100;
+				ArgSelf->NodePosY = 300;
+				ArgSelf->AllocateDefaultPins();
+				UEdGraphPin* ArgSelfOut = nullptr;
+				for (UEdGraphPin* P : ArgSelf->Pins)
+				{
+					if (P && P->Direction == EGPD_Output) { ArgSelfOut = P; break; }
+				}
+				if (!ArgSelfOut || !Schema->TryCreateConnection(ArgSelfOut, InPin))
+				{
+					return FMonolithActionResult::Error(FString::Printf(TEXT("failed to wire Self into arg pin '%s'"), *PinName));
+				}
+				++Wired;
+			}
+			else
+			{
+				FString LiteralValue;
+				if (!Entry->TryGetStringField(TEXT("value"), LiteralValue))
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("arg_bindings pin '%s' has neither a 'value' literal nor 'self:true' — v1a binds literal defaults or self only"), *PinName));
+				}
+				// Literal default: only settable on a non-object data pin (object pins need a wire, not a default).
+				if (InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Object ||
+					InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface ||
+					InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("arg_bindings pin '%s' is an object/struct pin; v1a sets literal defaults only on scalar/string/enum pins (object inputs require a wire — use self:true or defer to v1b)"), *PinName));
+				}
+				Schema->TrySetDefaultValue(*InPin, LiteralValue);
+				if (InPin->DefaultValue != LiteralValue && InPin->DefaultTextValue.ToString() != LiteralValue)
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("arg_bindings literal '%s' was rejected by pin '%s' (incompatible value for its type) — rejecting rather than mis-wiring"), *LiteralValue, *PinName));
+				}
+			}
+
+			TSharedPtr<FJsonObject> AppliedEntry = MakeShared<FJsonObject>();
+			AppliedEntry->SetStringField(TEXT("pin"), PinName);
+			AppliedEntry->SetStringField(TEXT("mode"), bWantSelf ? TEXT("self") : TEXT("literal"));
+			AppliedBindings.Add(MakeShared<FJsonValueObject>(AppliedEntry));
+		}
+	}
+
+	// --- 6) Locate the call's single non-exec result OUTPUT pin. v1a requires exactly one. ---
+	UEdGraphPin* ResultPin = nullptr;
+	int32 OutputDataPins = 0;
+	for (UEdGraphPin* P : CallNode->Pins)
+	{
+		if (!P || P->Direction != EGPD_Output) continue;
+		if (P->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec) continue;
+		++OutputDataPins;
+		if (!ResultPin) ResultPin = P;
+	}
+	if (OutputDataPins == 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("function '%s' has no non-exec output pin to route into result_target.var — v1a requires a single result output"), *FuncMethodName));
+	}
+	if (OutputDataPins > 1)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("function '%s' has %d output pins; v1a supports a single result output only (multi-output binding is a v1b follow-on)"), *FuncMethodName, OutputDataPins));
+	}
+
+	// --- 7) VariableSet of result_target.var; wire call.Result -> set value, call exec out -> set exec in.
+	//        (Reused verbatim from the chooser path.) ---
+	UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(FuncGraph);
+	SetNode->VariableReference.SetSelfMember(FName(*ResultVar));
+	FuncGraph->AddNode(SetNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	SetNode->CreateNewGuid();
+	SetNode->NodePosX = 600;
+	SetNode->NodePosY = 0;
+	SetNode->AllocateDefaultPins();
+
+	UEdGraphPin* SetValuePin = FindPinByNameDir(SetNode, FName(*ResultVar), EGPD_Input);
+	if (!SetValuePin)
+	{
+		for (UEdGraphPin* P : SetNode->Pins)
+		{
+			if (P && P->Direction == EGPD_Input && P->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+			{ SetValuePin = P; break; }
+		}
+	}
+	if (!SetValuePin)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("VariableSet for '%s' has no value input pin — does the variable exist on the ABP?"), *ResultVar));
+	}
+	bool bResultWired = false;
+	{
+		const FPinConnectionResponse Resp = Schema->CanCreateConnection(ResultPin, SetValuePin);
+		if (Resp.Response == CONNECT_RESPONSE_DISALLOW)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("call result pin (type '%s') is incompatible with variable '%s': %s — reject rather than mis-wire"),
+				*ResultPin->PinType.PinCategory.ToString(), *ResultVar, *Resp.Message.ToString()));
+		}
+		bResultWired = Schema->TryCreateConnection(ResultPin, SetValuePin);
+		if (bResultWired) ++Wired;
+	}
+	UEdGraphPin* CallExecOut = FindPinByNameDir(CallNode, UEdGraphSchema_K2::PN_Then, EGPD_Output);
+	UEdGraphPin* SetExecIn = FindPinByNameDir(SetNode, UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+	if (CallExecOut && SetExecIn && Schema->TryCreateConnection(CallExecOut, SetExecIn)) ++Wired;
+
+	// --- 8) Optional AnimGraph side: feed result_target.node's input pin from a VariableGet of the var.
+	//        (Reused verbatim from the chooser path; skipped when node/pin omitted.) ---
+	bool bTargetWired = false;
+	FString TargetWireError;
+	FString ResolvedTargetNode, ResolvedTargetPin;
+	if (!TargetNodeRef.IsEmpty() && !TargetPinName.IsEmpty())
+	{
+		FString GraphErr;
+		UEdGraph* AnimGraph = ResolveGraphByName(ABP, AnimGraphName, GraphErr);
+		if (!AnimGraph)
+		{
+			return FMonolithActionResult::Error(GraphErr);
+		}
+		UEdGraphNode* TargetNode = FindNodeByNameBP(ABP, TargetNodeRef, AnimGraph);
+		if (!TargetNode)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("result_target.node '%s' not found in graph '%s'"), *TargetNodeRef, *AnimGraphName));
+		}
+		UEdGraphPin* TargetPin = FindPinByNameDir(TargetNode, FName(*TargetPinName), EGPD_Input);
+		if (!TargetPin)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("result_target.pin '%s' is not an input pin on node '%s'"), *TargetPinName, *TargetNodeRef));
+		}
+
+		UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(AnimGraph);
+		GetNode->VariableReference.SetSelfMember(FName(*ResultVar));
+		AnimGraph->AddNode(GetNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+		GetNode->CreateNewGuid();
+		GetNode->NodePosX = TargetNode->NodePosX - 250;
+		GetNode->NodePosY = TargetNode->NodePosY;
+		GetNode->AllocateDefaultPins();
+
+		UEdGraphPin* GetValuePin = FindPinByNameDir(GetNode, FName(*ResultVar), EGPD_Output);
+		if (!GetValuePin)
+		{
+			for (UEdGraphPin* P : GetNode->Pins)
+			{
+				if (P && P->Direction == EGPD_Output && P->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+				{ GetValuePin = P; break; }
+			}
+		}
+		const UEdGraphSchema* AnimSchema = AnimGraph->GetSchema();
+		if (GetValuePin && AnimSchema)
+		{
+			const FPinConnectionResponse Resp = AnimSchema->CanCreateConnection(GetValuePin, TargetPin);
+			if (Resp.Response != CONNECT_RESPONSE_DISALLOW)
+			{
+				bTargetWired = AnimSchema->TryCreateConnection(GetValuePin, TargetPin);
+				if (bTargetWired) ++Wired;
+			}
+			else
+			{
+				TargetWireError = Resp.Message.ToString();
+			}
+		}
+		ResolvedTargetNode = TargetNode->GetName();
+		ResolvedTargetPin = TargetPin->PinName.ToString();
+	}
+
+	FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ABP);
+	ABP->MarkPackageDirty();
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("abp_path"), AbpPath);
+	Root->SetStringField(TEXT("function_name"), FuncGraphName);
+	Root->SetBoolField(TEXT("function_created"), bFuncCreated);
+	Root->SetBoolField(TEXT("function_thread_safe"), EntryNode->MetaData.bThreadSafe);
+	Root->SetStringField(TEXT("resolved_function"), TargetFn->GetPathName());
+	Root->SetStringField(TEXT("call_node"), CallNode->GetName());
+	Root->SetBoolField(TEXT("self_context_wired"), bSelfWired);
+	if (!ContextPinName.IsEmpty()) Root->SetStringField(TEXT("context_pin"), ContextPinName);
+	Root->SetArrayField(TEXT("arg_bindings_applied"), AppliedBindings);
+	Root->SetStringField(TEXT("set_node"), SetNode->GetName());
+	Root->SetStringField(TEXT("result_pin"), ResultPin->PinName.ToString());
+	Root->SetStringField(TEXT("selected_result_var"), ResultVar);
+	Root->SetBoolField(TEXT("result_wired_to_var"), bResultWired);
+	if (!ResolvedTargetNode.IsEmpty())
+	{
+		Root->SetStringField(TEXT("target_node"), ResolvedTargetNode);
+		Root->SetStringField(TEXT("target_pin"), ResolvedTargetPin);
+		Root->SetBoolField(TEXT("target_pin_wired"), bTargetWired);
+		if (!TargetWireError.IsEmpty()) Root->SetStringField(TEXT("target_wire_error"), TargetWireError);
+	}
+	Root->SetNumberField(TEXT("connections_made"), Wired);
+	Root->SetBoolField(TEXT("saved"), false);
+	return FMonolithActionResult::Success(Root);
+}

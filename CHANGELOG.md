@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Optional-plugin detection no longer false-positives on plugins sharing a name prefix** (e.g. `BlueprintRetarget` was wrongly detected as BlueprintAssist, hard-linking an absent module and breaking the user's build). Tightened the disk-presence globs in MonolithBABridge/MonolithGAS/MonolithLogicDriver/MonolithComboGraph from truncated prefixes (`Blueprin*`, `Gameplaya*`, `LogicDri*`, `ComboGra*`) to full plugin names (`BlueprintAssist*`, `GameplayAbilities*`, `LogicDriver*`, `ComboGraph*`); the trailing `*` still matches versioned install folders. Reported by @k-s-s (#66).
+
+## [0.20.3] - 2026-06-20
+
 ### Added
 
 - **MCP progress reporting (`FMonolithProgressRegistry` + `monolith://progress/active`)** — Adds a thread-safe per-`progressToken` progress registry. Each `tools/call` carrying a `_meta.progressToken` is RAII-registered for the duration of dispatch, and an opt-in long-running action reports progress via `FMonolithProgressRegistry::Get().Report(token, progress, total, message)`. The latest in-flight progress is exposed read-only through the new `monolith://progress/active` live resource (poll-delivered via `resources/read`). **Transport limitation:** real-time server→client `notifications/progress` *streaming* is not delivered by the embedded UE HTTP server, which does not support long-lived SSE connections (`HandleGetMcp` returns a single event and closes); poll-via-resource is the working delivery today, and a push transport (held-open SSE / the stdio proxy) is a follow-up. Covered by the `Monolith.Core.Progress.Registry` automation test. (UnrealMCP gap spec M4)

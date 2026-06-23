@@ -41,12 +41,15 @@
 #include "Animation/AnimCurveCompressionSettings.h"
 #include "Animation/AnimInstance.h"
 #include "AnimationModifier.h"
+#include "AnimationModifiersAssetUserData.h" // apply_anim_modifier persist path (T1-L3 ALT) — stack-register via AddAnimationModifierOfClass
 #include "Rig/IKRigDefinition.h"
 #include "Rig/IKRigSkeleton.h"
 #include "Rig/Solvers/IKRigSolverBase.h" // FIKRigSolverBase::StaticStruct() for add_ik_solver struct enumeration
+#include "JsonObjectConverter.h" // T2-1 get_ikrig_info: reflective solver/bone/goal settings struct -> JSON
 #include "RigEditor/IKRigController.h"
 #include "UObject/UObjectIterator.h"     // TObjectIterator<UStruct> — enumerate live IKRig solver-struct table
 #include "Retargeter/IKRetargeter.h"
+#include "Retargeter/IKRetargetOps.h" // FIKRetargetOpBase / FIKRetargetOpSettingsBase — get_retargeter_info ops[] reflective read
 #include "Retargeter/IKRetargetChainMapping.h"
 #include "RetargetEditor/IKRetargeterController.h"
 #include "RetargetEditor/IKRetargetBatchOperation.h" // batch_retarget_animations — RunRetarget + FIKRetargetBatchOperationContext
@@ -556,6 +559,17 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Skeleton or SkeletalMesh asset path"))
 			.Optional(TEXT("bone_names"), TEXT("array"), TEXT("Specific bone names to query (default: all bones)"), TEXT("[]"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("get_animated_bone_transform"),
+		TEXT("Evaluate one bone's FK-composed transform on an AnimSequence at a specific frame or time (extends get_bone_ref_pose's bind-pose compose to an animated frame). "
+			 "Provide exactly one of frame (integer) / time (seconds); frame wins if both given. space: component (default) or world both return FAnimPose World space (root-relative, root motion folded in); local returns parent-relative."),
+		FMonolithActionHandler::CreateStatic(&HandleGetAnimatedBoneTransform),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
+			.Required(TEXT("bone_name"), TEXT("string"), TEXT("Bone to evaluate"))
+			.Optional(TEXT("frame"), TEXT("integer"), TEXT("Frame index to evaluate at (mutually exclusive with time; takes precedence if both supplied)"))
+			.Optional(TEXT("time"), TEXT("number"), TEXT("Time in seconds to evaluate at (used when frame is absent)"))
+			.Optional(TEXT("space"), TEXT("string"), TEXT("component (default) / world (both = FAnimPose World/component space) or local (parent-relative)"), TEXT("component"))
+			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("get_abp_info"),
 		TEXT("Get animation blueprint overview (skeleton, graphs, state machines, variables, interfaces)"),
 		FMonolithActionHandler::CreateStatic(&HandleGetAbpInfo),
@@ -751,11 +765,13 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 
 	// Wave 7 — Anim Modifiers + Composites
 	Registry.RegisterAction(TEXT("animation"), TEXT("apply_anim_modifier"),
-		TEXT("Apply an animation modifier class to a sequence"),
+		TEXT("Apply an animation modifier class to a sequence. Optionally set modifier properties reflectively and persist the modifier into the asset's AnimationModifiers stack so it survives save/reload."),
 		FMonolithActionHandler::CreateStatic(&HandleApplyAnimModifier),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Required(TEXT("modifier_class"), TEXT("string"), TEXT("Modifier class name (e.g. UAnimationModifier_CreateCurve)"))
+			.Optional(TEXT("properties"), TEXT("object"), TEXT("Map of modifier property name -> value to set reflectively before apply (enum values accept the enumerator name)"))
+			.Optional(TEXT("persist"), TEXT("bool"), TEXT("If true, register the modifier in the asset's AnimationModifiers user-data stack (survives save/reload). Default false = transient apply only."), TEXT("false"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("list_anim_modifiers"),
 		TEXT("List animation modifiers applied to a sequence"),
@@ -1137,15 +1153,17 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("New marker name"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("derive_foot_sync_markers"),
-		TEXT("Auto-derive left/right foot-plant sync markers on an AnimSequence from data already in the clip, via a 5-signal availability cascade (first available wins): existing markers -> footstep notifies -> contact_l/_r curves -> Phase curve extrema -> component-space foot-bone speed minima (native port of the engine FootstepAnimEventsModifier FootBoneSpeed technique). Project-agnostic: all names/bones/thresholds are overridable. Honours dry_run."),
+		TEXT("Auto-derive left/right foot-plant sync markers on an AnimSequence from data already in the clip, via a 5-signal availability cascade (first available wins): existing markers -> footstep notifies -> contact_l/_r curves -> Phase curve extrema -> component-space foot-bone speed minima (native port of the engine FootstepAnimEventsModifier FootBoneSpeed technique). An explicit method=from_bones mode (source='bones') derives plants from per-frame foot-bone vertical position + planar-speed minima. Project-agnostic: all names/bones/thresholds are overridable. Honours dry_run."),
 		FMonolithActionHandler::CreateStatic(&HandleDeriveFootSyncMarkers),
 		FParamSchemaBuilder()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("AnimSequence asset path"))
 			.Optional(TEXT("left_marker_name"), TEXT("string"), TEXT("Marker name written for left foot plants (default L_Foot)"), TEXT("L_Foot"))
 			.Optional(TEXT("right_marker_name"), TEXT("string"), TEXT("Marker name written for right foot plants (default R_Foot)"), TEXT("R_Foot"))
 			.Optional(TEXT("track_index"), TEXT("integer"), TEXT("Sync-marker track index (default 0)"), TEXT("0"))
-			.Optional(TEXT("method"), TEXT("string"), TEXT("auto|existing|notifies|contact|phase|footspeed (default auto). Non-auto forces a single signal and errors cleanly if that signal is unavailable."), TEXT("auto"))
-			.Optional(TEXT("foot_bones"), TEXT("object"), TEXT("{left, right} foot bone names for the footspeed signal. If omitted, common names are auto-resolved against the skeleton."))
+			.Optional(TEXT("method"), TEXT("string"), TEXT("auto|existing|notifies|contact|phase|footspeed|from_bones (default auto). Non-auto forces a single signal and errors cleanly if that signal is unavailable. from_bones = planar-speed-minima + ground-height plant detection from foot bones (reports source='bones')."), TEXT("auto"))
+			.Optional(TEXT("foot_bones"), TEXT("object"), TEXT("{left, right} foot bone names for the footspeed / from_bones signals. If omitted, common names are auto-resolved against the skeleton."))
+			.Optional(TEXT("speed_threshold"), TEXT("number"), TEXT("Top-level alias for thresholds.speed_threshold (planar-speed valley threshold, used by from_bones). Overrides the thresholds-object value."))
+			.Optional(TEXT("ground_height_threshold"), TEXT("number"), TEXT("Top-level alias for thresholds.ground_threshold (cm above the lowest observed foot Z within which a planar-speed valley counts as a ground contact; from_bones mode)."))
 			.Optional(TEXT("thresholds"), TEXT("object"), TEXT("{contact_mid, contact_low, speed_threshold, sample_rate, debounce_fraction, ground_threshold} — all optional, per-signal defaults applied."))
 			.Optional(TEXT("notify_track_patterns"), TEXT("object"), TEXT("{left, right} case-insensitive substring patterns used to classify footstep-notify foot side by track name (defaults 'footstep left'/'footstep right')."))
 			.Optional(TEXT("phase_invert"), TEXT("boolean"), TEXT("Flip L/R polarity of the Phase signal (default false; +1=left)"), TEXT("false"))
@@ -3166,6 +3184,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendSpaceInfo(const T
 	Root->SetObjectField(TEXT("axis_x"), MakeAxisObj(BS->GetBlendParameter(0)));
 	Root->SetObjectField(TEXT("axis_y"), MakeAxisObj(BS->GetBlendParameter(1)));
 
+	// Interpolation structure (T3-5 companion). interpolate_using_grid = the authored
+	// "Interpolate using grid" flag; triangulation_baked = whether the runtime
+	// triangulation/grid structure has actually been built (empty until ResampleData).
+	Root->SetBoolField(TEXT("interpolate_using_grid"), BS->bInterpolateUsingGrid);
+	Root->SetBoolField(TEXT("triangulation_baked"), !BS->GetBlendSpaceData().IsEmpty());
+
 	// Samples
 	const TArray<FBlendSample>& Samples = BS->GetBlendSamples();
 	TArray<TSharedPtr<FJsonValue>> SamplesArr;
@@ -3180,6 +3204,44 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBlendSpaceInfo(const T
 		SampleObj->SetNumberField(TEXT("x"), Sample.SampleValue.X);
 		SampleObj->SetNumberField(TEXT("y"), Sample.SampleValue.Y);
 		SampleObj->SetNumberField(TEXT("rate_scale"), Sample.RateScale);
+
+		// Authored root-motion speed (cm/s) — distance the root travels over the clip
+		// divided by play length, scaled by RateScale. Root-locked clips (root motion
+		// disabled) cannot report a speed: emit the explicit "unknowable" signal rather
+		// than a misleading 0 (gotcha 6). Planar (XY) distance only — vertical motion is
+		// not locomotion speed.
+		if (UAnimSequence* SampleSeq = Sample.Animation)
+		{
+			const float PlayLength = SampleSeq->GetPlayLength();
+			if (!SampleSeq->HasRootMotion())
+			{
+				SampleObj->SetBoolField(TEXT("root_motion_speed_known"), false);
+				SampleObj->SetStringField(TEXT("root_motion_speed_note"),
+					TEXT("root motion disabled (root-locked) — authored speed is unknowable"));
+			}
+			else if (PlayLength <= KINDA_SMALL_NUMBER)
+			{
+				SampleObj->SetBoolField(TEXT("root_motion_speed_known"), false);
+				SampleObj->SetStringField(TEXT("root_motion_speed_note"),
+					TEXT("zero-length clip — speed is undefined"));
+			}
+			else
+			{
+				const FTransform RootDelta = SampleSeq->ExtractRootMotionFromRange(
+					0.0, static_cast<double>(PlayLength), FAnimExtractContext());
+				const FVector T = RootDelta.GetTranslation();
+				const float PlanarDist = FVector(T.X, T.Y, 0.0).Size();
+				const float RateScale = (Sample.RateScale != 0.0f) ? Sample.RateScale : 1.0f;
+				SampleObj->SetBoolField(TEXT("root_motion_speed_known"), true);
+				SampleObj->SetNumberField(TEXT("root_motion_speed_cms"),
+					(PlanarDist / PlayLength) * RateScale);
+			}
+		}
+		else
+		{
+			SampleObj->SetBoolField(TEXT("root_motion_speed_known"), false);
+		}
+
 		SamplesArr.Add(MakeShared<FJsonValueObject>(SampleObj));
 	}
 	Root->SetArrayField(TEXT("samples"), SamplesArr);
@@ -3404,6 +3466,160 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneRefPose(const TSha
 	}
 
 	Root->SetArrayField(TEXT("bones"), BonesArr);
+	return FMonolithActionResult::Success(Root);
+}
+
+// T3-2: evaluate ONE bone's transform on an animation at a specific frame/time.
+// Extends the get_bone_ref_pose FK-compose idea from the BIND pose to an ANIMATED
+// frame: where get_bone_ref_pose walks the reference skeleton, this evaluates the
+// sequence's animated pose via UAnimPoseExtensions (which performs the FK compose
+// internally) and returns the requested bone's transform.
+//
+// Inputs: asset_path (AnimSequence), bone_name, exactly one of {frame:int, time:sec}
+// (frame wins if both present), space ("component"|"world", default "component").
+// EAnimPoseSpaces has only Local and World — FAnimPose's World space IS component
+// space (root-relative, no actor placement). We therefore map both "component" and
+// "world" to EAnimPoseSpaces::World here (a clip has no world/actor context) and echo
+// the requested space; "local" is also accepted and maps to EAnimPoseSpaces::Local
+// (parent-relative), matching get_bone_ref_pose's `local` field.
+FMonolithActionResult FMonolithAnimationActions::HandleGetAnimatedBoneTransform(const TSharedPtr<FJsonObject>& Params)
+{
+	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	const FString BoneName  = Params->GetStringField(TEXT("bone_name"));
+
+	if (BoneName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("bone_name is required"));
+	}
+
+	UAnimSequence* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequence>(AssetPath);
+	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimSequence not found: %s"), *AssetPath));
+
+	// Validate the bone exists on the sequence's skeleton up front (clearer error than
+	// a silent identity transform from GetBonePose).
+	const FName BoneFName(*BoneName);
+	if (USkeleton* Skeleton = Seq->GetSkeleton())
+	{
+		if (Skeleton->GetReferenceSkeleton().FindBoneIndex(BoneFName) == INDEX_NONE)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Bone '%s' not found in skeleton of %s"), *BoneName, *AssetPath));
+		}
+	}
+
+	// Space param: component (default) / world both map to FAnimPose World space; local
+	// maps to Local (parent-relative).
+	FString SpaceStr = TEXT("component");
+	Params->TryGetStringField(TEXT("space"), SpaceStr);
+	const FString SpaceLower = SpaceStr.ToLower();
+	EAnimPoseSpaces PoseSpace = EAnimPoseSpaces::World;
+	if (SpaceLower == TEXT("local"))
+	{
+		PoseSpace = EAnimPoseSpaces::Local;
+	}
+	else if (SpaceLower != TEXT("component") && SpaceLower != TEXT("world"))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid space '%s'. Expected one of: component, world, local."), *SpaceStr));
+	}
+
+	// frame OR time — frame takes precedence when both supplied.
+	const IAnimationDataModel* DataModel = Seq->GetDataModel();
+	const int32 NumFrames = DataModel ? DataModel->GetNumberOfFrames() : 0;
+	const float PlayLength = Seq->GetPlayLength();
+
+	// Eval options mirror the footspeed signal path (raw data, root motion folded into
+	// the pose so World/component transforms include locomotion).
+	FAnimPoseEvaluationOptions EvalOptions;
+	EvalOptions.EvaluationType = EAnimDataEvalType::Raw;
+	EvalOptions.bShouldRetarget = true;
+	EvalOptions.bExtractRootMotion = false;
+	EvalOptions.bIncorporateRootMotionIntoPose = true;
+	EvalOptions.OptionalSkeletalMesh = nullptr;
+	EvalOptions.bRetrieveAdditiveAsFullPose = true;
+	EvalOptions.bEvaluateCurves = false;
+
+	FAnimPose Pose;
+	bool bUsedFrame = false;
+	int32 ResolvedFrame = INDEX_NONE;
+	float ResolvedTime = 0.0f;
+
+	double FrameNum = 0.0;
+	double TimeSec = 0.0;
+	const bool bHasFrame = Params->TryGetNumberField(TEXT("frame"), FrameNum);
+	const bool bHasTime  = Params->TryGetNumberField(TEXT("time"), TimeSec);
+
+	if (!bHasFrame && !bHasTime)
+	{
+		return FMonolithActionResult::Error(TEXT("Provide one of: frame (integer) or time (seconds)"));
+	}
+
+	if (bHasFrame)
+	{
+		ResolvedFrame = static_cast<int32>(FrameNum);
+		if (NumFrames > 0 && (ResolvedFrame < 0 || ResolvedFrame > NumFrames))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("frame %d out of range [0, %d] for %s"), ResolvedFrame, NumFrames, *AssetPath));
+		}
+		UAnimPoseExtensions::GetAnimPoseAtFrame(Seq, ResolvedFrame, EvalOptions, Pose);
+		bUsedFrame = true;
+	}
+	else
+	{
+		ResolvedTime = static_cast<float>(TimeSec);
+		if (ResolvedTime < 0.0f || ResolvedTime > PlayLength)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("time %.4f out of range [0, %.4f] for %s"), ResolvedTime, PlayLength, *AssetPath));
+		}
+		UAnimPoseExtensions::GetAnimPoseAtTime(Seq, static_cast<double>(ResolvedTime), EvalOptions, Pose);
+	}
+
+	if (!Pose.IsValid())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to evaluate a valid pose on %s (the sequence may have no bone data)"), *AssetPath));
+	}
+
+	const FTransform BoneXform = UAnimPoseExtensions::GetBonePose(Pose, BoneFName, PoseSpace);
+
+	auto WriteVec = [](const FVector& V) {
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("x"), V.X);
+		O->SetNumberField(TEXT("y"), V.Y);
+		O->SetNumberField(TEXT("z"), V.Z);
+		return O;
+	};
+	auto WriteRot = [](const FRotator& R) {
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetNumberField(TEXT("pitch"), R.Pitch);
+		O->SetNumberField(TEXT("yaw"), R.Yaw);
+		O->SetNumberField(TEXT("roll"), R.Roll);
+		return O;
+	};
+
+	TSharedPtr<FJsonObject> XformObj = MakeShared<FJsonObject>();
+	XformObj->SetObjectField(TEXT("location"), WriteVec(BoneXform.GetLocation()));
+	XformObj->SetObjectField(TEXT("rotation"), WriteRot(BoneXform.GetRotation().Rotator()));
+	XformObj->SetObjectField(TEXT("scale"), WriteVec(BoneXform.GetScale3D()));
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("bone_name"), BoneName);
+	Root->SetStringField(TEXT("space"), (PoseSpace == EAnimPoseSpaces::Local) ? TEXT("local") : SpaceLower);
+	Root->SetNumberField(TEXT("num_frames"), NumFrames);
+	Root->SetNumberField(TEXT("play_length"), PlayLength);
+	Root->SetBoolField(TEXT("queried_by_frame"), bUsedFrame);
+	if (bUsedFrame)
+	{
+		Root->SetNumberField(TEXT("frame"), ResolvedFrame);
+	}
+	else
+	{
+		Root->SetNumberField(TEXT("time"), ResolvedTime);
+	}
+	Root->SetObjectField(TEXT("transform"), XformObj);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -3877,10 +4093,77 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetCurveKeys(const TShare
 		KeysArray.Add(MakeShared<FJsonValueObject>(KeyObj));
 	}
 
+	// --- T3-4: monotonic + sign summary flags over the key VALUES (in time order). ---
+	// monotonic: "increasing" (non-decreasing), "decreasing" (non-increasing), "constant"
+	//   (all equal), "none" (mixed) or "empty"/"single" for degenerate key counts.
+	// sign: "positive" (all > 0), "negative" (all < 0), "zero" (all == 0),
+	//   "non_negative" (>= 0 with at least one 0), "non_positive" (<= 0 with at least one 0),
+	//   "mixed" (both signs present), or "empty". Keys are already authored in time order
+	//   (FRichCurve stores keys time-sorted); no re-sort needed.
+	FString Monotonic;
+	FString Sign;
+	if (Keys.Num() == 0)
+	{
+		Monotonic = TEXT("empty");
+		Sign = TEXT("empty");
+	}
+	else
+	{
+		bool bNonDecreasing = true;
+		bool bNonIncreasing = true;
+		bool bAnyPositive = false;
+		bool bAnyNegative = false;
+		bool bAnyZero = false;
+		for (int32 i = 0; i < Keys.Num(); ++i)
+		{
+			const float V = Keys[i].Value;
+			if (V > 0.0f)      bAnyPositive = true;
+			else if (V < 0.0f) bAnyNegative = true;
+			else               bAnyZero = true;
+
+			if (i > 0)
+			{
+				const float Prev = Keys[i - 1].Value;
+				if (V < Prev) bNonDecreasing = false;
+				if (V > Prev) bNonIncreasing = false;
+			}
+		}
+
+		if (Keys.Num() == 1)
+		{
+			Monotonic = TEXT("single");
+		}
+		else if (bNonDecreasing && bNonIncreasing)
+		{
+			Monotonic = TEXT("constant");
+		}
+		else if (bNonDecreasing)
+		{
+			Monotonic = TEXT("increasing");
+		}
+		else if (bNonIncreasing)
+		{
+			Monotonic = TEXT("decreasing");
+		}
+		else
+		{
+			Monotonic = TEXT("none");
+		}
+
+		if (bAnyPositive && bAnyNegative)       Sign = TEXT("mixed");
+		else if (bAnyPositive && bAnyZero)       Sign = TEXT("non_negative");
+		else if (bAnyNegative && bAnyZero)       Sign = TEXT("non_positive");
+		else if (bAnyPositive)                   Sign = TEXT("positive");
+		else if (bAnyNegative)                   Sign = TEXT("negative");
+		else                                     Sign = TEXT("zero");
+	}
+
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("curve_name"), CurveName);
 	Root->SetNumberField(TEXT("num_keys"), Keys.Num());
 	Root->SetArrayField(TEXT("keys"), KeysArray);
+	Root->SetStringField(TEXT("monotonic"), Monotonic);
+	Root->SetStringField(TEXT("sign"), Sign);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -4584,18 +4867,174 @@ FMonolithActionResult FMonolithAnimationActions::HandleApplyAnimModifier(const T
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Class '%s' is not a UAnimationModifier subclass"), *ModifierClass));
 	}
 
-	UAnimationModifier* Modifier = NewObject<UAnimationModifier>(GetTransientPackage(), ModifierUClass);
-	if (!Modifier)
-	{
-		return FMonolithActionResult::Error(TEXT("Failed to create modifier instance"));
-	}
+	// Optional reflective property set + persistence (T1-L3 ALT path).
+	const TSharedPtr<FJsonObject>* PropertiesObj = nullptr;
+	const bool bHasProperties = Params->TryGetObjectField(TEXT("properties"), PropertiesObj)
+		&& PropertiesObj && PropertiesObj->IsValid();
+	bool bPersist = false;
+	Params->TryGetBoolField(TEXT("persist"), bPersist);
 
-	Modifier->ApplyToAnimationSequence(Seq);
-	Seq->MarkPackageDirty();
+	// Helper: set each requested property on a modifier instance via reflection.
+	// Returns the count successfully applied; collects unresolved keys for the echo.
+	auto ApplyProperties = [](UAnimationModifier* Mod, const TSharedPtr<FJsonObject>& Props,
+		TArray<TSharedPtr<FJsonValue>>& OutUnresolved) -> int32
+	{
+		int32 Applied = 0;
+		for (const auto& Pair : Props->Values)
+		{
+			const FString PairKeyStr = MonolithKeyToString(Pair.Key);
+			FProperty* Prop = Mod->GetClass()->FindPropertyByName(FName(*PairKeyStr));
+			if (!Prop || !Pair.Value.IsValid())
+			{
+				OutUnresolved.Add(MakeShared<FJsonValueString>(PairKeyStr));
+				continue;
+			}
+			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Mod);
+			bool bSet = false;
+			if (FBoolProperty* BoolP = CastField<FBoolProperty>(Prop))
+			{
+				BoolP->SetPropertyValue(ValuePtr, Pair.Value->AsBool()); bSet = true;
+			}
+			else if (FNumericProperty* NumP = CastField<FNumericProperty>(Prop))
+			{
+				// Enum-backed numeric: accept the enumerator NAME (string) — gotcha 3,
+				// never trust raw int order for EDistanceCurve_Axis-style enums.
+				if (UEnum* Enum = NumP->GetIntPropertyEnum())
+				{
+					FString EnumStr; double EnumNum = 0.0;
+					if (Pair.Value->TryGetString(EnumStr))
+					{
+						const int64 Val = Enum->GetValueByNameString(EnumStr);
+						if (Val != INDEX_NONE) { NumP->SetIntPropertyValue(ValuePtr, Val); bSet = true; }
+					}
+					else if (Pair.Value->TryGetNumber(EnumNum))
+					{
+						NumP->SetIntPropertyValue(ValuePtr, static_cast<int64>(EnumNum)); bSet = true;
+					}
+				}
+				else if (NumP->IsFloatingPoint())
+				{
+					NumP->SetFloatingPointPropertyValue(ValuePtr, Pair.Value->AsNumber()); bSet = true;
+				}
+				else
+				{
+					NumP->SetIntPropertyValue(ValuePtr, static_cast<int64>(Pair.Value->AsNumber())); bSet = true;
+				}
+			}
+			else if (FEnumProperty* EnumP = CastField<FEnumProperty>(Prop))
+			{
+				UEnum* Enum = EnumP->GetEnum();
+				FString EnumStr;
+				if (Enum && Pair.Value->TryGetString(EnumStr))
+				{
+					const int64 Val = Enum->GetValueByNameString(EnumStr);
+					if (Val != INDEX_NONE)
+					{
+						EnumP->GetUnderlyingProperty()->SetIntPropertyValue(ValuePtr, Val); bSet = true;
+					}
+				}
+			}
+			else if (FStrProperty* StrP = CastField<FStrProperty>(Prop))
+			{
+				StrP->SetPropertyValue(ValuePtr, Pair.Value->AsString()); bSet = true;
+			}
+			else if (FNameProperty* NameP = CastField<FNameProperty>(Prop))
+			{
+				NameP->SetPropertyValue(ValuePtr, FName(*Pair.Value->AsString())); bSet = true;
+			}
+			else
+			{
+				// Fallback: import the JSON value as text (covers structs / arrays).
+				FString AsText;
+				if (Pair.Value->TryGetString(AsText) &&
+					Prop->ImportText_Direct(*AsText, ValuePtr, Mod, PPF_None) != nullptr)
+				{
+					bSet = true;
+				}
+			}
+
+			if (bSet) ++Applied;
+			else OutUnresolved.Add(MakeShared<FJsonValueString>(PairKeyStr));
+		}
+		return Applied;
+	};
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetStringField(TEXT("modifier_class"), ModifierUClass->GetName());
+	TArray<TSharedPtr<FJsonValue>> Unresolved;
+	int32 AppliedProps = 0;
+
+	if (bPersist)
+	{
+		// PERSIST PATH (gotcha 7 MUST-PROVE): register the modifier in the
+		// AnimationModifiersAssetUserData stack (the same stack list_anim_modifiers
+		// reads) so it survives save/reload, THEN set properties + apply. The public
+		// static creates + registers the instance and the owning user-data object.
+		if (!UAnimationModifiersAssetUserData::AddAnimationModifierOfClass(Seq, ModifierUClass))
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to register modifier in the AnimationModifiers stack"));
+		}
+
+		// Recover the freshly-registered instance: locate the user-data object on the
+		// sequence and take the last instance of the requested class (it was Add()ed last).
+		UAnimationModifier* Registered = nullptr;
+		if (const TArray<UAssetUserData*>* UserDataArray = Seq->GetAssetUserDataArray())
+		{
+			for (UAssetUserData* UserData : *UserDataArray)
+			{
+				UAnimationModifiersAssetUserData* ModData = Cast<UAnimationModifiersAssetUserData>(UserData);
+				if (!ModData) continue;
+				const TArray<UAnimationModifier*>& Instances = ModData->GetAnimationModifierInstances();
+				for (int32 i = Instances.Num() - 1; i >= 0; --i)
+				{
+					if (Instances[i] && Instances[i]->GetClass() == ModifierUClass)
+					{
+						Registered = Instances[i];
+						break;
+					}
+				}
+				if (Registered) break;
+			}
+		}
+
+		if (!Registered)
+		{
+			return FMonolithActionResult::Error(TEXT("Modifier registered but could not be recovered from the stack for apply"));
+		}
+
+		if (bHasProperties)
+		{
+			Registered->Modify();
+			AppliedProps = ApplyProperties(Registered, *PropertiesObj, Unresolved);
+		}
+		Registered->ApplyToAnimationSequence(Seq);
+		Root->SetBoolField(TEXT("persisted"), true);
+		Root->SetStringField(TEXT("modifier_name"), Registered->GetName());
+	}
+	else
+	{
+		// LEGACY (default) PATH — transient instance, non-persistent. Backward-compatible.
+		UAnimationModifier* Modifier = NewObject<UAnimationModifier>(GetTransientPackage(), ModifierUClass);
+		if (!Modifier)
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to create modifier instance"));
+		}
+		if (bHasProperties)
+		{
+			AppliedProps = ApplyProperties(Modifier, *PropertiesObj, Unresolved);
+		}
+		Modifier->ApplyToAnimationSequence(Seq);
+		Root->SetBoolField(TEXT("persisted"), false);
+	}
+
+	Seq->MarkPackageDirty();
+
+	if (bHasProperties)
+	{
+		Root->SetNumberField(TEXT("properties_applied"), AppliedProps);
+		if (Unresolved.Num() > 0) Root->SetArrayField(TEXT("properties_unresolved"), Unresolved);
+	}
 	Root->SetStringField(TEXT("status"), TEXT("applied"));
 	return FMonolithActionResult::Success(Root);
 }
@@ -5406,10 +5845,54 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetIKRigInfo(const TShare
 		}
 		SolverObj->SetStringField(TEXT("type"), TypeName);
 		SolverObj->SetStringField(TEXT("label"), C->GetSolverUniqueName(i));
+
+		// --- T2-1: reflective per-solver settings dump (solver-agnostic). ---
+		// Each solver is a FIKRigSolverBase-derived USTRUCT stored in the FInstancedStruct
+		// stack; its concrete UScriptStruct carries the solver's own settings PLUS any
+		// per-bone / per-goal settings arrays (e.g. AllBoneSettings on FullBodyIK). One
+		// UStructToJsonObject over the whole struct surfaces all of them reflectively,
+		// regardless of solver type. The settings are read-only here; const GetMemory() is
+		// sufficient. Degrades to an omitted "settings" field on any drift, never errors.
+		if (SolverStructs.IsValidIndex(i))
+		{
+			const UScriptStruct* SolverStruct = SolverStructs[i].GetScriptStruct();
+			const uint8* SolverMemory = SolverStructs[i].GetMemory();
+			if (SolverStruct && SolverMemory)
+			{
+				TSharedRef<FJsonObject> SettingsJson = MakeShared<FJsonObject>();
+				if (FJsonObjectConverter::UStructToJsonObject(SolverStruct, SolverMemory, SettingsJson, 0, 0))
+				{
+					SolverObj->SetObjectField(TEXT("settings"), SettingsJson);
+				}
+			}
+		}
 		SolversArr.Add(MakeShared<FJsonValueObject>(SolverObj));
 	}
 	Root->SetArrayField(TEXT("solvers"), SolversArr);
 	Root->SetNumberField(TEXT("solver_count"), NumSolvers);
+
+	// --- T2-1: per-bone settings summary (which bones carry solver settings / are excluded). ---
+	// Walks the live skeleton bone list and reports, per bone, whether it has settings in
+	// any solver (DoesBoneHaveSettings) and whether it is excluded from all solvers
+	// (GetBoneExcluded). The concrete per-solver field values live in each solver's
+	// reflective "settings" dump above; this is the cross-solver bone-level index.
+	TArray<TSharedPtr<FJsonValue>> BoneSettingsArr;
+	for (const FName& BoneName : Skel.BoneNames)
+	{
+		const bool bHasSettings = C->DoesBoneHaveSettings(BoneName);
+		const bool bExcluded = C->GetBoneExcluded(BoneName);
+		if (!bHasSettings && !bExcluded)
+		{
+			continue; // only surface bones that deviate from the default (clean payload)
+		}
+		TSharedPtr<FJsonObject> BoneObj = MakeShared<FJsonObject>();
+		BoneObj->SetStringField(TEXT("bone"), BoneName.ToString());
+		BoneObj->SetBoolField(TEXT("has_settings"), bHasSettings);
+		BoneObj->SetBoolField(TEXT("excluded"), bExcluded);
+		BoneSettingsArr.Add(MakeShared<FJsonValueObject>(BoneObj));
+	}
+	Root->SetArrayField(TEXT("bone_settings"), BoneSettingsArr);
+	Root->SetNumberField(TEXT("bone_settings_count"), BoneSettingsArr.Num());
 
 	// Goals
 	TArray<TSharedPtr<FJsonValue>> GoalsArr;
@@ -5679,6 +6162,87 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveIKSolver(const TSha
 	return FMonolithActionResult::Success(Root);
 }
 
+// ---------------------------------------------------------------------------
+// Retarget op-settings reflective reader (T1-R3 read companion for get_retargeter_info)
+// ---------------------------------------------------------------------------
+//
+// The IK Retargeter op stack stores its settings as op-specific UStructs
+// (FIKRetarget*OpSettings, all deriving FIKRetargetOpSettingsBase). These structs
+// carry no UFunctions and differ per op type, so we surface them generically by
+// walking the concrete UScriptStruct's UPROPERTYs. This is READ-ONLY: we never
+// mutate the settings, so the by-value SetSettings copy-mutate-set discipline
+// (gotcha 5) is not in play here.
+//
+// Leaf properties are serialised with ExportTextItem_Direct (the same path the
+// engine uses for clipboard / config text), which round-trips every numeric /
+// enum / name / string type. Nested structs recurse; arrays/maps/sets fall back
+// to the exported text form (keeps the dump compact + always-valid JSON).
+namespace MonolithRetargetOpReader
+{
+	TSharedPtr<FJsonObject> StructToJson(const UScriptStruct* Struct, const void* Data);
+
+	static TSharedPtr<FJsonValue> PropertyToJson(const FProperty* Prop, const void* ValuePtr)
+	{
+		if (const FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+		{
+			return MakeShared<FJsonValueBoolean>(BoolProp->GetPropertyValue(ValuePtr));
+		}
+		if (const FNumericProperty* NumProp = CastField<FNumericProperty>(Prop))
+		{
+			// Enum-backed numerics surface as their enumerator name (gotcha 3: never
+			// trust raw int order — EFKChainRotationMode has non-sequential values).
+			if (UEnum* Enum = NumProp->GetIntPropertyEnum())
+			{
+				const int64 EnumVal = NumProp->GetSignedIntPropertyValue(ValuePtr);
+				return MakeShared<FJsonValueString>(Enum->GetNameStringByValue(EnumVal));
+			}
+			if (NumProp->IsFloatingPoint())
+			{
+				return MakeShared<FJsonValueNumber>(NumProp->GetFloatingPointPropertyValue(ValuePtr));
+			}
+			return MakeShared<FJsonValueNumber>(static_cast<double>(NumProp->GetSignedIntPropertyValue(ValuePtr)));
+		}
+		if (const FEnumProperty* EnumProp = CastField<FEnumProperty>(Prop))
+		{
+			UEnum* Enum = EnumProp->GetEnum();
+			const int64 EnumVal = EnumProp->GetUnderlyingProperty()->GetSignedIntPropertyValue(ValuePtr);
+			return MakeShared<FJsonValueString>(Enum ? Enum->GetNameStringByValue(EnumVal)
+												   : FString::FromInt(static_cast<int32>(EnumVal)));
+		}
+		if (const FStrProperty* StrProp = CastField<FStrProperty>(Prop))
+		{
+			return MakeShared<FJsonValueString>(StrProp->GetPropertyValue(ValuePtr));
+		}
+		if (const FNameProperty* NameProp = CastField<FNameProperty>(Prop))
+		{
+			return MakeShared<FJsonValueString>(NameProp->GetPropertyValue(ValuePtr).ToString());
+		}
+		if (const FStructProperty* StructProp = CastField<FStructProperty>(Prop))
+		{
+			return MakeShared<FJsonValueObject>(StructToJson(StructProp->Struct, ValuePtr));
+		}
+		// Arrays / maps / sets / objects: export to text (compact, always valid).
+		FString Exported;
+		Prop->ExportTextItem_Direct(Exported, ValuePtr, /*DefaultValue=*/nullptr,
+			/*Parent=*/nullptr, PPF_None, /*ExportRootScope=*/nullptr);
+		return MakeShared<FJsonValueString>(Exported);
+	}
+
+	TSharedPtr<FJsonObject> StructToJson(const UScriptStruct* Struct, const void* Data)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (!Struct || !Data) return Obj;
+		for (TFieldIterator<FProperty> It(Struct); It; ++It)
+		{
+			const FProperty* Prop = *It;
+			if (!Prop) continue;
+			const void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Data);
+			Obj->SetField(Prop->GetName(), PropertyToJson(Prop, ValuePtr));
+		}
+		return Obj;
+	}
+}
+
 FMonolithActionResult FMonolithAnimationActions::HandleGetRetargeterInfo(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
@@ -5707,6 +6271,44 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetRetargeterInfo(const T
 	// Op count
 	const int32 NumOps = C->GetNumRetargetOps();
 	Root->SetNumberField(TEXT("retarget_op_count"), NumOps);
+
+	// Op stack (T1-R3 read companion). For each op in the stack emit its index,
+	// name, type (op struct name), enabled flag, and a reflective dump of the op's
+	// settings struct. The op is reached via GetRetargetOpByIndex(i); its own struct
+	// type comes from GetType() and the live settings struct from GetSettingsConst()
+	// + GetSettingsType(). This is purely read-only — gotcha 5 (op settings returned
+	// by-value on write) does not apply here because we only read the live settings,
+	// never copy-mutate-set.
+	TArray<TSharedPtr<FJsonValue>> OpsArr;
+	for (int32 OpIdx = 0; OpIdx < NumOps; ++OpIdx)
+	{
+		TSharedPtr<FJsonObject> OpObj = MakeShared<FJsonObject>();
+		OpObj->SetNumberField(TEXT("index"), OpIdx);
+		OpObj->SetStringField(TEXT("name"), C->GetOpName(OpIdx).ToString());
+		OpObj->SetBoolField(TEXT("enabled"), C->GetRetargetOpEnabled(OpIdx));
+
+		if (const FIKRetargetOpBase* Op = C->GetRetargetOpByIndex(OpIdx))
+		{
+			const UScriptStruct* OpStruct = Op->GetType();
+			OpObj->SetStringField(TEXT("type"), OpStruct ? OpStruct->GetName() : TEXT("Unknown"));
+
+			const UScriptStruct* SettingsStruct = Op->GetSettingsType();
+			const FIKRetargetOpSettingsBase* OpSettings = Op->GetSettingsConst();
+			if (SettingsStruct && OpSettings)
+			{
+				OpObj->SetStringField(TEXT("settings_type"), SettingsStruct->GetName());
+				OpObj->SetObjectField(TEXT("settings"),
+					MonolithRetargetOpReader::StructToJson(SettingsStruct,
+						reinterpret_cast<const void*>(OpSettings)));
+			}
+		}
+		else
+		{
+			OpObj->SetStringField(TEXT("type"), TEXT("Unknown"));
+		}
+		OpsArr.Add(MakeShared<FJsonValueObject>(OpObj));
+	}
+	Root->SetArrayField(TEXT("ops"), OpsArr);
 
 	// Chain mappings — iterate all target chains and query per-chain source
 	TArray<TSharedPtr<FJsonValue>> MappingsArr;
@@ -9420,7 +10022,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchExecute(const TShare
 		TSharedRef<FJsonObject> SubParams = MakeShared<FJsonObject>();
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(Op))
 		{
-			if (Pair.Key != TEXT("op"))
+			const FString OpFieldKey = MonolithKeyToString(Pair.Key);
+			if (OpFieldKey != TEXT("op"))
 			{
 				SubParams->SetField(FMonolithJsonUtils::FieldKeyToString(Pair.Key), Pair.Value);
 			}
@@ -11831,6 +12434,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodeFunctionBindin
 
 	FBlueprintEditorUtils::MarkBlueprintAsModified(ABP);
 
+	// Queue an extension refresh so the next compile regenerates the anim subsystem
+	// set for the changed binding. Become-relevant / initial-update functions depend on
+	// FAnimSubsystemInstance_NodeRelevancy; without this the subsystem is omitted from the
+	// generated class and a bound dispatcher hits a null subsystem at runtime. Covers both
+	// the bind and clear branches (clearing may drop the last node needing the extension).
+	ABP->RequestRefreshExtensions();
+
 	bool bCompiled = false;
 	if (bRecompile)
 	{
@@ -11871,7 +12481,39 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodePinBindings(co
 		TArray<TSharedPtr<FJsonValue>> Entries;
 		FString Note;
 		MonolithAnimNodeBindingReader::ReadPinBindings(AnimNode, Entries, Note);
+
+		// --- T3-1: ALSO emit WIRE-LINKED input pins (graph-edge bindings). ---
+		// The reader above surfaces only PROPERTY/FUNCTION bindings (the node's
+		// PropertyBindings map). A pin can instead be driven by a graph wire from an
+		// upstream node's output pin; those carry no PropertyBindings entry. For each
+		// INPUT pin with at least one link, emit a { pin, type:"Link", source_node_id,
+		// source_pin } entry alongside the property-bound entries. Property-bound and
+		// wire-linked are mutually exclusive per pin in practice (a bound pin is hidden),
+		// so this is additive — existing property-bound output is untouched.
+		int32 LinkCount = 0;
+		for (UEdGraphPin* Pin : AnimNode->Pins)
+		{
+			if (!Pin || Pin->Direction != EGPD_Input || Pin->LinkedTo.Num() == 0)
+			{
+				continue;
+			}
+			for (UEdGraphPin* SourcePin : Pin->LinkedTo)
+			{
+				if (!SourcePin) continue;
+				UEdGraphNode* SourceNode = SourcePin->GetOwningNodeUnchecked();
+
+				TSharedPtr<FJsonObject> LinkEntry = MakeShared<FJsonObject>();
+				LinkEntry->SetStringField(TEXT("pin"), Pin->PinName.ToString());
+				LinkEntry->SetStringField(TEXT("type"), TEXT("Link"));
+				LinkEntry->SetStringField(TEXT("source_node_id"), SourceNode ? SourceNode->GetName() : FString());
+				LinkEntry->SetStringField(TEXT("source_pin"), SourcePin->PinName.ToString());
+				Entries.Add(MakeShared<FJsonValueObject>(LinkEntry));
+				++LinkCount;
+			}
+		}
+
 		NodeObj->SetArrayField(TEXT("pin_bindings"), Entries);
+		NodeObj->SetNumberField(TEXT("linked_pin_count"), LinkCount);
 		if (!Note.IsEmpty()) NodeObj->SetStringField(TEXT("note"), Note);
 		return NodeObj;
 	};
@@ -11901,7 +12543,26 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodePinBindings(co
 				if (!AnimNode) continue;
 				TArray<TSharedPtr<FJsonValue>> Probe;
 				FString ProbeNote;
-				if (MonolithAnimNodeBindingReader::ReadPinBindings(AnimNode, Probe, ProbeNote) > 0)
+				const bool bHasPropertyBinding =
+					MonolithAnimNodeBindingReader::ReadPinBindings(AnimNode, Probe, ProbeNote) > 0;
+
+				// T3-1: also include nodes that carry ONLY wire-linked input pins (no
+				// property binding). The reader probe above misses those; check for any
+				// linked input pin so the all-nodes sweep surfaces graph-edge bindings too.
+				bool bHasLinkedInput = false;
+				if (!bHasPropertyBinding)
+				{
+					for (UEdGraphPin* Pin : AnimNode->Pins)
+					{
+						if (Pin && Pin->Direction == EGPD_Input && Pin->LinkedTo.Num() > 0)
+						{
+							bHasLinkedInput = true;
+							break;
+						}
+					}
+				}
+
+				if (bHasPropertyBinding || bHasLinkedInput)
 				{
 					NodesArr.Add(MakeShared<FJsonValueObject>(EmitNode(AnimNode, Graph)));
 				}
@@ -12406,6 +13067,126 @@ static void DetectFootSpeedPlants(const UAnimSequence* Seq, const FName& FootBon
 	}
 }
 
+// T2-2: planar-speed-minima + ground-height plant detection (from_bones mode).
+// Distinct from DetectFootSpeedPlants (signal 5), which uses full 3D speed valleys.
+// from_bones isolates the GROUND CONTACT specifically by requiring BOTH (a) a planar
+// (XY) speed minimum below threshold AND (b) the foot's vertical (Z) position within
+// GroundThreshold of the lowest observed Z for that foot. This rejects the swing-apex
+// pause (low 3D speed but airborne) that pure-speed detection can mis-fire on.
+// Mirrors the DetectFootSpeedPlants eval setup (single GetAnimPoseAtTimeIntervals call,
+// World-space bone transforms, root motion folded in).
+static void DetectBonePlants(const UAnimSequence* Seq, const FName& FootBone,
+	const FFootSyncConfig& Cfg, TArray<float>& OutTimes)
+{
+	OutTimes.Reset();
+	if (!Seq || FootBone.IsNone() || Cfg.SampleRate <= 0.0f)
+	{
+		return;
+	}
+
+	const float PlayLength = Seq->GetPlayLength();
+	if (PlayLength <= 0.0f)
+	{
+		return;
+	}
+
+	const float Step = 1.0f / Cfg.SampleRate;
+	const int32 NumSamples = FMath::TruncToInt(PlayLength / Step);
+	if (NumSamples < 3)
+	{
+		return;
+	}
+
+	TArray<double> Times;
+	Times.Reserve(NumSamples + 1);
+	for (int32 i = 0; i <= NumSamples; ++i)
+	{
+		Times.Add(static_cast<double>(FMath::Clamp(static_cast<float>(i) * Step, 0.0f, PlayLength)));
+	}
+
+	FAnimPoseEvaluationOptions EvalOptions;
+	EvalOptions.EvaluationType = EAnimDataEvalType::Raw;
+	EvalOptions.bShouldRetarget = true;
+	EvalOptions.bExtractRootMotion = false;
+	EvalOptions.bIncorporateRootMotionIntoPose = true;
+	EvalOptions.OptionalSkeletalMesh = nullptr;
+	EvalOptions.bRetrieveAdditiveAsFullPose = true;
+	EvalOptions.bEvaluateCurves = false;
+
+	TArray<FAnimPose> Poses;
+	UAnimPoseExtensions::GetAnimPoseAtTimeIntervals(Seq, Times, EvalOptions, Poses);
+	if (Poses.Num() < NumSamples + 1)
+	{
+		return;
+	}
+
+	// Pass 1: per-sample PLANAR speed (XY only) + per-sample Z; track ground level.
+	TArray<float> PlanarSpeeds;
+	TArray<float> FootZ;
+	PlanarSpeeds.SetNumZeroed(NumSamples);
+	FootZ.SetNumZeroed(NumSamples);
+	float MinSpeed = FLT_MAX, MaxSpeed = 0.0f, GroundLevel = FLT_MAX;
+	for (int32 i = 0; i < NumSamples; ++i)
+	{
+		const FTransform& Cur = UAnimPoseExtensions::GetBonePose(Poses[i], FootBone, EAnimPoseSpaces::World);
+		const FTransform& Next = UAnimPoseExtensions::GetBonePose(Poses[i + 1], FootBone, EAnimPoseSpaces::World);
+		const FVector CurLoc = Cur.GetLocation();
+		const FVector NextLoc = Next.GetLocation();
+		const double PlanarDist = FVector2D(NextLoc.X - CurLoc.X, NextLoc.Y - CurLoc.Y).Size();
+		const float Speed = static_cast<float>(PlanarDist / Step);
+		PlanarSpeeds[i] = Speed;
+		FootZ[i] = static_cast<float>(CurLoc.Z);
+		MinSpeed = FMath::Min(MinSpeed, Speed);
+		MaxSpeed = FMath::Max(MaxSpeed, Speed);
+		GroundLevel = FMath::Min(GroundLevel, static_cast<float>(CurLoc.Z));
+	}
+
+	const float SpeedRange = MaxSpeed - MinSpeed;
+	if (FMath::IsNearlyZero(SpeedRange))
+	{
+		return; // no planar motion -> no plants
+	}
+
+	// Pass 2: planar-speed valley detection gated by ground proximity. Place a plant on
+	// the upward crossing back through threshold, back-dated to the in-stance valley time,
+	// only if the foot was within GroundThreshold of GroundLevel at the valley.
+	float PrevNorm = (PlanarSpeeds[0] - MinSpeed) / SpeedRange;
+	float TimeAtMin = FLT_MAX;
+	float MinBelow = FLT_MAX;
+	int32 ValleyIdx = INDEX_NONE;
+	for (int32 i = 1; i < NumSamples; ++i)
+	{
+		const float Norm = (PlanarSpeeds[i] - MinSpeed) / SpeedRange;
+		const float SampleTime = FMath::Min(static_cast<float>(i) * Step, PlayLength);
+
+		if (Norm < Cfg.SpeedThreshold && i > 1)
+		{
+			if (Norm < MinBelow)
+			{
+				TimeAtMin = SampleTime;
+				MinBelow = Norm;
+				ValleyIdx = i;
+			}
+		}
+
+		const bool bUpwardCross = (PrevNorm < Cfg.SpeedThreshold && Norm >= Cfg.SpeedThreshold);
+		if (bUpwardCross && i > 1 && TimeAtMin < FLT_MAX && ValleyIdx != INDEX_NONE)
+		{
+			// Ground-height gate: the foot must be near the floor at the valley to count
+			// as a plant (rejects airborne swing-apex pauses).
+			const bool bNearGround = (FootZ[ValleyIdx] - GroundLevel) <= Cfg.GroundThreshold;
+			if (bNearGround)
+			{
+				OutTimes.Add(TimeAtMin);
+			}
+			TimeAtMin = FLT_MAX;
+			MinBelow = FLT_MAX;
+			ValleyIdx = INDEX_NONE;
+		}
+		PrevNorm = Norm;
+	}
+}
+
 // Auto-resolve a foot bone for one side against the skeleton's bone list.
 // Returns NAME_None if none of the candidates is present.
 static FName ResolveFootBone(const FReferenceSkeleton& RefSkel, const TArray<FName>& Candidates)
@@ -12449,10 +13230,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	if (Params->HasField(TEXT("method")) && !Params->TryGetStringField(TEXT("method"), Method)) return FMonolithActionResult::Error(TEXT("Parameter 'method' must be a string"));
 	Method = Method.ToLower();
 	if (Method != TEXT("auto") && Method != TEXT("existing") && Method != TEXT("notifies")
-		&& Method != TEXT("contact") && Method != TEXT("phase") && Method != TEXT("footspeed"))
+		&& Method != TEXT("contact") && Method != TEXT("phase") && Method != TEXT("footspeed")
+		&& Method != TEXT("from_bones"))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Invalid method '%s'. Expected one of: auto, existing, notifies, contact, phase, footspeed."), *Method));
+			TEXT("Invalid method '%s'. Expected one of: auto, existing, notifies, contact, phase, footspeed, from_bones."), *Method));
 	}
 
 	bool bPhaseInvert = false;
@@ -12493,6 +13275,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V)) Cfg.GroundThreshold = static_cast<float>(V);
 			}
 		}
+	}
+	// T2-2 (from_bones): convenience top-level aliases for the two levers this mode keys
+	// on — speed_threshold (planar-speed valley) and ground_height_threshold (cm above the
+	// lowest observed foot Z). They override the thresholds-object values when supplied, so
+	// callers can pass them directly without nesting under `thresholds`.
+	{
+		double V;
+		if (Params->TryGetNumberField(TEXT("speed_threshold"), V))        Cfg.SpeedThreshold = static_cast<float>(V);
+		if (Params->TryGetNumberField(TEXT("ground_height_threshold"), V)) Cfg.GroundThreshold = static_cast<float>(V);
 	}
 	if (Cfg.SampleRate <= 0.0f)
 	{
@@ -12715,6 +13506,57 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 		{
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("method=phase: Phase curve not present (or no extrema) on %s"), *AssetPath));
+		}
+	}
+
+	// ---- T2-2: from_bones — planar-speed minima gated by ground height ----
+	// Explicit-only mode (NOT part of the auto cascade): fires only when method=from_bones.
+	// Resolves foot bones the same way footspeed does (explicit foot_bones override, else
+	// common-name auto-resolve), then uses DetectBonePlants (planar XY speed valley +
+	// ground-Z gate) and reports source="bones".
+	if (Source.IsEmpty() && Method == TEXT("from_bones"))
+	{
+		USkeleton* Skeleton = Seq->GetSkeleton();
+		if (!Skeleton)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("method=from_bones: no skeleton on %s"), *AssetPath));
+		}
+
+		const FReferenceSkeleton& RefSkel = Skeleton->GetReferenceSkeleton();
+
+		if (!ExplicitLeftBone.IsEmpty())
+		{
+			UsedLeftBone = (RefSkel.FindBoneIndex(FName(*ExplicitLeftBone)) != INDEX_NONE) ? FName(*ExplicitLeftBone) : NAME_None;
+		}
+		else
+		{
+			UsedLeftBone = ResolveFootBone(RefSkel,
+				{ FName(TEXT("foot_l")), FName(TEXT("ball_l")), FName(TEXT("LeftFoot")), FName(TEXT("L_Foot")) });
+		}
+		if (!ExplicitRightBone.IsEmpty())
+		{
+			UsedRightBone = (RefSkel.FindBoneIndex(FName(*ExplicitRightBone)) != INDEX_NONE) ? FName(*ExplicitRightBone) : NAME_None;
+		}
+		else
+		{
+			UsedRightBone = ResolveFootBone(RefSkel,
+				{ FName(TEXT("foot_r")), FName(TEXT("ball_r")), FName(TEXT("RightFoot")), FName(TEXT("R_Foot")) });
+		}
+
+		if (UsedLeftBone.IsNone() && UsedRightBone.IsNone())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("method=from_bones: could not resolve any foot bone on %s (supply foot_bones)"), *AssetPath));
+		}
+
+		if (!UsedLeftBone.IsNone())  DetectBonePlants(Seq, UsedLeftBone, Cfg, LeftTimes);
+		if (!UsedRightBone.IsNone()) DetectBonePlants(Seq, UsedRightBone, Cfg, RightTimes);
+
+		Source = TEXT("bones");
+		Confidence = (LeftTimes.Num() > 0 || RightTimes.Num() > 0) ? TEXT("high") : TEXT("heuristic");
+		if (LeftTimes.Num() == 0 && RightTimes.Num() == 0)
+		{
+			Notes.Add(MakeShared<FJsonValueString>(TEXT("no ground-contact plants found (static pose, or thresholds too tight)")));
 		}
 	}
 

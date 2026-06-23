@@ -11,6 +11,9 @@
 #include "MonolithChooserActions.h"
 #include "MonolithChooserAuthoringActions.h"
 #include "MonolithAbpGraphSurgeryActions.h"
+#include "MonolithRetargetSettingsActions.h"
+#include "MonolithSkeletonRetargetActions.h"
+#include "MonolithLocomotionAuthoringActions.h"
 #include "MonolithToolRegistry.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithAnimationModule"
@@ -27,6 +30,9 @@ void FMonolithAnimationModule::StartupModule()
 	FMonolithChooserActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithChooserAuthoringActions::RegisterActions(FMonolithToolRegistry::Get());
 	FMonolithAbpGraphSurgeryActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithRetargetSettingsActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithSkeletonRetargetActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithLocomotionAuthoringActions::RegisterActions(FMonolithToolRegistry::Get());
 
 	// Phase 5 Step 6 (MCP Ergonomics, 2026-05-11) — register the animation adapter.
 	// PoseSearchDatabase fill_kind replaces the 40+ add_database_animation

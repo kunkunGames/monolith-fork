@@ -109,7 +109,7 @@ namespace MonolithUI::AnimationInternal
 
         if (!NewAnim->MovieScene)
         {
-            NewAnim->MovieScene = NewObject<UMovieScene>(NewAnim, FName(TEXT("AnimSequence")));
+            NewAnim->MovieScene = NewObject<UMovieScene>(NewAnim, NewAnim->GetFName(), RF_Transactional);
         }
 
         WBP->Animations.Add(NewAnim);

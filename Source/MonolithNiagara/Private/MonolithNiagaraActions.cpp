@@ -5619,7 +5619,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputDI(const TSha
 			if (bIsCurveDI && CurveKeys.Contains(FMonolithJsonUtils::FieldKeyToString(Pair.Key))) continue;
 			if (bIsGridDI && GridKeys.Contains(FMonolithJsonUtils::FieldKeyToString(Pair.Key))) continue;
 
-			FProperty* Prop = DIUClass->FindPropertyByName(FName(*Pair.Key));
+			FProperty* Prop = DIUClass->FindPropertyByName(FName(*MonolithKeyToString(Pair.Key)));
 			if (!Prop) continue;
 			void* Addr = Prop->ContainerPtrToValuePtr<void>(DIInst);
 			if (FFloatProperty* FP = CastField<FFloatProperty>(Prop)) FP->SetPropertyValue(Addr, static_cast<float>(Pair.Value->AsNumber()));
@@ -9347,7 +9347,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureDataInterface(cons
 			TSharedRef<FJsonObject> FailEntry = MakeShared<FJsonObject>();
 			FailEntry->SetStringField(TEXT("property"), FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			FailEntry->SetStringField(TEXT("value"), ValStr);
-			FailEntry->SetStringField(TEXT("error"), FString::Printf(TEXT("ImportText_Direct failed for property '%s' with value '%s'"), *Pair.Key, *ValStr));
+			FailEntry->SetStringField(TEXT("error"), FString::Printf(TEXT("ImportText_Direct failed for property '%s' with value '%s'"), *MonolithKeyToString(Pair.Key), *ValStr));
 			PropsFailed.Add(MakeShared<FJsonValueObject>(FailEntry));
 		}
 	}
@@ -11047,7 +11047,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSpawnShape(const TShared
 			if (SetResult.bSuccess)
 				ParamsSet.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			else
-				Warnings.Add(FString::Printf(TEXT("Failed to set param '%s': %s"), *Pair.Key, *SetResult.ErrorMessage));
+				Warnings.Add(FString::Printf(TEXT("Failed to set param '%s': %s"), *MonolithKeyToString(Pair.Key), *SetResult.ErrorMessage));
 		}
 	}
 

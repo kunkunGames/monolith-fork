@@ -1666,7 +1666,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	// Post-write cradle for the top-level fields the tree touched.
 	for (const auto& KV : FMonolithJsonUtils::GetFields(Tree))
 	{
-		FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, KV.Key);
+		FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, MonolithKeyToString(KV.Key));
 		if (TopProp)
 		{
 			MonolithEditCradle::ReparentTransientInstancedSubobjects(NewAsset, TopProp);
@@ -1701,7 +1701,7 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 		TSharedPtr<FJsonObject> Values = MakeShared<FJsonObject>();
 		for (const auto& KV : FMonolithJsonUtils::GetFields(Tree))
 		{
-			FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, KV.Key);
+			FProperty* TopProp = FMonolithReflectionWalker::FindPropertyForwarding(ResolvedClass, MonolithKeyToString(KV.Key));
 			if (TopProp)
 			{
 				const void* ValuePtr = TopProp->ContainerPtrToValuePtr<void>(NewAsset);

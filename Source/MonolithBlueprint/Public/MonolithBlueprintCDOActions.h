@@ -9,4 +9,5 @@ public:
 
 	static FMonolithActionResult HandleGetCDOProperties(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetCDOProperty(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetPropertyAtPath(const TSharedPtr<FJsonObject>& Params);
 };

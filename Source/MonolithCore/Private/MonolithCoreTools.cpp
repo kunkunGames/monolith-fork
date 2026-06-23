@@ -84,6 +84,65 @@ static const TArray<FKnownOptionalModule>& GetKnownOptionalModules()
 	return Modules;
 }
 
+static FString MonolithTerseOneLineDescription(const FString& Full)
+{
+	const int32 HardCap = 150;
+	const int32 MinSentence = 25;
+	const int32 Len = Full.Len();
+
+	int32 SentenceEnd = MAX_int32;
+	for (int32 Index = MinSentence; Index < Len; ++Index)
+	{
+		const TCHAR Ch = Full[Index];
+		if (Ch == TEXT('.') || Ch == TEXT('!') || Ch == TEXT('?'))
+		{
+			const bool bFollowedBySpaceOrEnd = (Index + 1 >= Len) || FChar::IsWhitespace(Full[Index + 1]);
+			if (bFollowedBySpaceOrEnd)
+			{
+				SentenceEnd = Index + 1;
+				break;
+			}
+		}
+	}
+
+	int32 Cut = FMath::Min(SentenceEnd, HardCap);
+	if (Cut >= Len)
+	{
+		return Full;
+	}
+
+	if (Cut == HardCap && !FChar::IsWhitespace(Full[Cut]))
+	{
+		int32 WordBoundary = Cut;
+		while (WordBoundary > 0 && !FChar::IsWhitespace(Full[WordBoundary - 1]))
+		{
+			--WordBoundary;
+		}
+		if (WordBoundary > 0)
+		{
+			Cut = WordBoundary;
+		}
+	}
+
+	FString Trimmed = Full.Left(Cut);
+	int32 Tail = Trimmed.Len();
+	while (Tail > 0)
+	{
+		const TCHAR Ch = Trimmed[Tail - 1];
+		if (FChar::IsWhitespace(Ch) || Ch == TEXT('.') || Ch == TEXT('!') || Ch == TEXT('?'))
+		{
+			--Tail;
+		}
+		else
+		{
+			break;
+		}
+	}
+	Trimmed.LeftInline(Tail);
+	Trimmed += TEXT("...");
+	return Trimmed;
+}
+
 struct FNotificationBoolSetting
 {
 	const TCHAR* Name;
@@ -1669,6 +1728,44 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			}
 		}
 
+		// Terse-by-default: param schemas are omitted unless detail (canonical) or
+		// verbose (alias) is set. Schemas are fetched lazily via describe_query
+		// action_schema, or inlined for the whole namespace with detail=true.
+		bool bDetail = false;
+		Params->TryGetBoolField(TEXT("detail"), bDetail);          // canonical
+		if (!bDetail)
+		{
+			Params->TryGetBoolField(TEXT("verbose"), bDetail);     // accepted alias
+		}
+
+		// Optional substring filter on action name OR description (case-insensitive).
+		// Applied AFTER the category filter, BEFORE pagination.
+		FString Filter;
+		if (Params->TryGetStringField(TEXT("filter"), Filter) && !Filter.IsEmpty())
+		{
+			Actions = Actions.FilterByPredicate([&Filter](const FMonolithActionInfo& Info)
+			{
+				return Info.Action.Contains(Filter, ESearchCase::IgnoreCase)
+					|| Info.Description.Contains(Filter, ESearchCase::IgnoreCase);
+			});
+		}
+
+		// Pagination is OPT-IN. limit=0 (default) returns ALL post-filter actions so
+		// discoverability never regresses; any limit>0 slices [offset, offset+limit).
+		const int32 TotalCount = Actions.Num();
+		int32 Offset = 0;
+		int32 Limit = 0;
+		Params->TryGetNumberField(TEXT("offset"), Offset);
+		Params->TryGetNumberField(TEXT("limit"), Limit);
+
+		int32 SliceStart = 0;
+		int32 SliceEnd = TotalCount;
+		if (Limit > 0)
+		{
+			SliceStart = FMath::Clamp(Offset, 0, TotalCount);
+			SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
+		}
+
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
 		Result->SetStringField(TEXT("mode"), Mode);
 		if (!FilterCategory.IsEmpty())
@@ -1683,12 +1780,37 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		else
 		{
 			TArray<TSharedPtr<FJsonValue>> ActionArray;
-			ActionArray.Reserve(Actions.Num());
-			for (const FMonolithActionInfo& ActionInfo : Actions)
+			ActionArray.Reserve(SliceEnd - SliceStart);
+			for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
 			{
-				ActionArray.Add(MakeShared<FJsonValueObject>(MakeDiscoverActionRow(ActionInfo)));
+				const FMonolithActionInfo& ActionInfo = Actions[Index];
+				if (bDetail)
+				{
+					ActionArray.Add(MakeShared<FJsonValueObject>(MakeDiscoverActionRow(ActionInfo)));
+					continue;
+				}
+
+				TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
+				ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
+				ActionObj->SetStringField(TEXT("description"), MonolithTerseOneLineDescription(ActionInfo.Description));
+				if (!ActionInfo.Category.IsEmpty())
+				{
+					ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
+				}
+				ActionArray.Add(MakeShared<FJsonValueObject>(ActionObj));
 			}
 			Result->SetArrayField(TEXT("actions"), ActionArray);
+			Result->SetNumberField(TEXT("total"), TotalCount);
+			if (Limit > 0 && SliceEnd < TotalCount)
+			{
+				Result->SetNumberField(TEXT("next_offset"), SliceStart + Limit);
+			}
+			if (!bDetail)
+			{
+				Result->SetStringField(TEXT("schema_hint"),
+					FString::Printf(TEXT("Param schemas omitted. Call describe_query(action_schema, target_namespace=\"%s\", target_action=\"<name>\") for one action's full schema, or pass detail=true to inline all."),
+						*FilterNamespace));
+			}
 		}
 	}
 	else

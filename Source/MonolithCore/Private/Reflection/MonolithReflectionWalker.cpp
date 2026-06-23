@@ -78,6 +78,347 @@ FProperty* FMonolithReflectionWalker::FindPropertyForwarding(UStruct* Struct, co
 }
 
 // ---------------------------------------------------------------------------
+// Dotted+bracket path tokeniser.
+//
+// Splits "Standing.Gaits[Jog].Starts.Forward" into an ordered list of segments:
+//   { Member="Standing" }
+//   { Member="Gaits", Bracket="Jog", bHasBracket=true }
+//   { Member="Starts" }
+//   { Member="Forward" }
+//
+// A bracket binds to the member segment it trails, so "Gaits[Jog]" is ONE
+// segment with both a Member ("Gaits") and a bracket key ("Jog"). Multiple
+// brackets on one member ("Grid[2][3]") expand to a member then index-only
+// segments — supported by emitting bracket-only segments (Member empty,
+// bHasBracket true) so chained array-of-array / map-of-array paths resolve.
+// ---------------------------------------------------------------------------
+namespace
+{
+	struct FPathSegment
+	{
+		FString Member;        // Property name to descend into (may be empty for a chained bracket).
+		FString Bracket;       // Bracket token ("Jog", "0", ...). Valid only when bHasBracket.
+		bool bHasBracket = false;
+	};
+
+	// Returns false on malformed syntax (unbalanced brackets, empty member at start).
+	bool TokenizePropertyPath(const FString& Path, TArray<FPathSegment>& OutSegments, FString& OutError)
+	{
+		const FString Trimmed = Path.TrimStartAndEnd();
+		if (Trimmed.IsEmpty())
+		{
+			OutError = TEXT("empty path");
+			return false;
+		}
+
+		FPathSegment Current;
+		bool bHaveCurrent = false;
+		auto FlushCurrent = [&]()
+		{
+			if (bHaveCurrent)
+			{
+				OutSegments.Add(Current);
+				Current = FPathSegment();
+				bHaveCurrent = false;
+			}
+		};
+
+		int32 i = 0;
+		const int32 Len = Trimmed.Len();
+		while (i < Len)
+		{
+			const TCHAR C = Trimmed[i];
+			if (C == TEXT('.'))
+			{
+				FlushCurrent();
+				++i;
+				continue;
+			}
+			if (C == TEXT('['))
+			{
+				// A bracket either trails the current member, or (if no member is
+				// pending) forms a chained bracket-only segment on the previous result.
+				const int32 Close = Trimmed.Find(TEXT("]"), ESearchCase::CaseSensitive, ESearchDir::FromStart, i + 1);
+				if (Close == INDEX_NONE)
+				{
+					OutError = TEXT("unbalanced '[' in path");
+					return false;
+				}
+				const FString Token = Trimmed.Mid(i + 1, Close - i - 1);
+				if (bHaveCurrent && !Current.bHasBracket)
+				{
+					Current.Bracket = Token;
+					Current.bHasBracket = true;
+				}
+				else
+				{
+					// Chained bracket (e.g. "Grid[2][3]" or "Foo[a][b]"): close out
+					// the pending segment and emit a bracket-only segment.
+					FlushCurrent();
+					FPathSegment BracketOnly;
+					BracketOnly.bHasBracket = true;
+					BracketOnly.Bracket = Token;
+					OutSegments.Add(BracketOnly);
+				}
+				i = Close + 1;
+				continue;
+			}
+			// Accumulate a member-name character.
+			Current.Member.AppendChar(C);
+			bHaveCurrent = true;
+			++i;
+		}
+		FlushCurrent();
+
+		if (OutSegments.Num() == 0)
+		{
+			OutError = TEXT("path resolved to zero segments");
+			return false;
+		}
+		return true;
+	}
+} // namespace
+
+// ---------------------------------------------------------------------------
+// ResolvePath — walk a dotted+bracket path to a single leaf (FProperty*, void*).
+//
+// At each segment we hold a (CurStruct, CurPtr) cursor. A member descends into
+// an FStructProperty's field; a bracket indexes an FArrayProperty (integer) or
+// keys an FMapProperty (ImportText through KeyProp). An FObjectProperty member
+// is dereferenced to the pointed-at UObject so the next member resolves against
+// its class. The terminal leaf's value coercion is the CALLER's job (WriteLeaf),
+// so this routine never touches the value grammar — it only navigates.
+// ---------------------------------------------------------------------------
+FMonolithReflectionWalker::FPathResolveResult FMonolithReflectionWalker::ResolvePath(
+	UStruct* TopStruct,
+	void* Container,
+	const FString& Path,
+	bool bCreateMissingKeys)
+{
+	check(IsInGameThread());
+
+	FPathResolveResult Result;
+	if (!TopStruct || !Container)
+	{
+		Result.Error = TEXT("null TopStruct or Container");
+		return Result;
+	}
+
+	TArray<FPathSegment> Segments;
+	if (!TokenizePropertyPath(Path, Segments, Result.Error))
+	{
+		return Result;
+	}
+
+	// Cursor: the struct we currently iterate properties on, and the raw pointer
+	// to the live instance of that struct (or the UObject container at the root).
+	UStruct* CurStruct = TopStruct;
+	void* CurPtr = Container;
+	FProperty* CurContainerProp = nullptr;
+
+	for (int32 SegIdx = 0; SegIdx < Segments.Num(); ++SegIdx)
+	{
+		const FPathSegment& Seg = Segments[SegIdx];
+
+		// 1) Resolve the member property on the current struct (if this segment
+		//    names one — chained bracket-only segments skip this and operate on the
+		//    container property carried from the previous iteration).
+		FProperty* MemberProp = nullptr;
+		void* MemberPtr = CurPtr;
+		if (!Seg.Member.IsEmpty())
+		{
+			if (!CurStruct)
+			{
+				Result.Error = FString::Printf(TEXT("cannot resolve member '%s' after a bracket-only container segment"),
+					*Seg.Member);
+				return Result;
+			}
+			MemberProp = FindPropertyForwarding(CurStruct, Seg.Member);
+			if (!MemberProp)
+			{
+				Result.Error = FString::Printf(TEXT("unknown field '%s' on %s"),
+					*Seg.Member, *CurStruct->GetName());
+				return Result;
+			}
+			MemberPtr = MemberProp->ContainerPtrToValuePtr<void>(CurPtr);
+		}
+		else
+		{
+			if (!CurContainerProp)
+			{
+				Result.Error = FString::Printf(TEXT("malformed path: bracket without a preceding member at segment %d"), SegIdx);
+				return Result;
+			}
+			MemberProp = CurContainerProp;
+			MemberPtr = CurPtr;
+		}
+
+		// 2) If this segment has a bracket, the member MUST be an array or map; the
+		//    bracket selects the element/value and that becomes the new cursor target.
+		FProperty* ResolvedProp = MemberProp;
+		void* ResolvedPtr = MemberPtr;
+
+		if (Seg.bHasBracket)
+		{
+			const FString BracketTargetName = Seg.Member.IsEmpty() ? MemberProp->GetName() : Seg.Member;
+			if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(MemberProp))
+			{
+				if (!Seg.Bracket.IsNumeric())
+				{
+					Result.Error = FString::Printf(TEXT("array '%s' requires an integer index, got '[%s]'"),
+						*BracketTargetName, *Seg.Bracket);
+					return Result;
+				}
+				const int32 Index = FCString::Atoi(*Seg.Bracket);
+				FScriptArrayHelper Helper(ArrayProp, MemberPtr);
+				if (Index < 0 || Index >= Helper.Num())
+				{
+					Result.Error = FString::Printf(TEXT("array index %d out of range on '%s' (size %d)"),
+						Index, *BracketTargetName, Helper.Num());
+					return Result;
+				}
+				ResolvedProp = ArrayProp->Inner;
+				ResolvedPtr = Helper.GetRawPtr(Index);
+			}
+			else if (FMapProperty* MapProp = CastField<FMapProperty>(MemberProp))
+			{
+				FScriptMapHelper Helper(MapProp, MemberPtr);
+
+				// Build a scratch key from the bracket token via the key's ImportText
+				// grammar — this makes enum names, ints, FName/string keys all work.
+				void* KeyTemp = FMemory::Malloc(MapProp->KeyProp->GetSize(), MapProp->KeyProp->GetMinAlignment());
+				MapProp->KeyProp->InitializeValue(KeyTemp);
+				FStringOutputDevice KeyErr;
+				const TCHAR* KeyOk = MapProp->KeyProp->ImportText_Direct(*Seg.Bracket, KeyTemp, nullptr, PPF_None, &KeyErr);
+				if (!KeyOk)
+				{
+					MapProp->KeyProp->DestroyValue(KeyTemp);
+					FMemory::Free(KeyTemp);
+					Result.Error = FString::Printf(TEXT("map key '[%s]' on '%s' rejected by key grammar: %s"),
+						*Seg.Bracket, *BracketTargetName, *KeyErr);
+					return Result;
+				}
+
+				int32 InternalIndex = Helper.FindMapIndexWithKey(KeyTemp);
+				if (InternalIndex == INDEX_NONE)
+				{
+					if (!bCreateMissingKeys)
+					{
+						MapProp->KeyProp->DestroyValue(KeyTemp);
+						FMemory::Free(KeyTemp);
+						Result.Error = FString::Printf(TEXT("map key '[%s]' not found on '%s' (pass create_missing_keys=true to add it)"),
+							*Seg.Bracket, *BracketTargetName);
+						return Result;
+					}
+					// Add a default-initialised value under the new key, then re-locate.
+					void* ValTemp = FMemory::Malloc(MapProp->ValueProp->GetSize(), MapProp->ValueProp->GetMinAlignment());
+					MapProp->ValueProp->InitializeValue(ValTemp);
+					Helper.AddPair(KeyTemp, ValTemp);  // clones key + value
+					Helper.Rehash();
+					MapProp->ValueProp->DestroyValue(ValTemp);
+					FMemory::Free(ValTemp);
+					InternalIndex = Helper.FindMapIndexWithKey(KeyTemp);
+				}
+
+				MapProp->KeyProp->DestroyValue(KeyTemp);
+				FMemory::Free(KeyTemp);
+
+				if (InternalIndex == INDEX_NONE)
+				{
+					Result.Error = FString::Printf(TEXT("internal error: map key '[%s]' on '%s' could not be located after insert"),
+						*Seg.Bracket, *BracketTargetName);
+					return Result;
+				}
+				ResolvedProp = MapProp->ValueProp;
+				ResolvedPtr = Helper.GetValuePtr(InternalIndex);
+			}
+			else
+			{
+				Result.Error = FString::Printf(TEXT("field '%s' is not an array or map, cannot apply '[%s]'"),
+					*BracketTargetName, *Seg.Bracket);
+				return Result;
+			}
+		}
+
+		// 3) Last segment -> this is the leaf. Return it for WriteLeaf.
+		if (SegIdx == Segments.Num() - 1)
+		{
+			Result.bOk = true;
+			Result.LeafProp = ResolvedProp;
+			Result.LeafPtr = ResolvedPtr;
+			Result.LeafTypeName = ResolvedProp->GetCPPType();
+			return Result;
+		}
+
+		// 4) Not the leaf -> the resolved property must be descendable: a struct
+		//    (continue into its members) or an object ref (deref to its class).
+		if (FStructProperty* StructProp = CastField<FStructProperty>(ResolvedProp))
+		{
+			CurStruct = StructProp->Struct;
+			CurPtr = ResolvedPtr;
+			CurContainerProp = nullptr;
+			continue;
+		}
+		if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(ResolvedProp))
+		{
+			UObject* Pointee = ObjProp->GetObjectPropertyValue(ResolvedPtr);
+			if (!Pointee)
+			{
+				Result.Error = FString::Printf(TEXT("cannot descend through '%s': object reference is null"),
+					*Seg.Member);
+				return Result;
+			}
+			CurStruct = Pointee->GetClass();
+			CurPtr = Pointee;
+			CurContainerProp = nullptr;
+			continue;
+		}
+		if ((CastField<FArrayProperty>(ResolvedProp) || CastField<FMapProperty>(ResolvedProp))
+			&& Segments[SegIdx + 1].Member.IsEmpty())
+		{
+			CurStruct = nullptr;
+			CurPtr = ResolvedPtr;
+			CurContainerProp = ResolvedProp;
+			continue;
+		}
+
+		Result.Error = FString::Printf(TEXT("cannot descend through '%s' (type %s) — only structs and object refs are traversable"),
+			*Seg.Member, *ResolvedProp->GetCPPType());
+		return Result;
+	}
+
+	// Unreachable: the leaf return inside the loop always fires on the last segment.
+	Result.Error = TEXT("internal error: path produced no leaf");
+	return Result;
+}
+
+// ---------------------------------------------------------------------------
+// WriteLeaf — public forwarder onto DispatchByPropertyType so the surgical-path
+// handler reuses the exact bulk-walker value coercion (one source of truth for
+// scalars / enums / structs / arrays / maps / sets / hard + soft refs).
+// ---------------------------------------------------------------------------
+FBulkFillFieldWrite FMonolithReflectionWalker::WriteLeaf(
+	FProperty* LeafProp,
+	void* LeafPtr,
+	const TSharedPtr<FJsonValue>& JsonVal,
+	UObject* Owner,
+	const FBulkFillSpec& Spec,
+	FDryRunReport& OutReport,
+	const FString& PathLabel)
+{
+	FBulkFillFieldWrite Write;
+	Write.Path = PathLabel;
+	if (!LeafProp || !LeafPtr)
+	{
+		Write.bOk = false;
+		Write.Reason = TEXT("null leaf property or pointer");
+		return Write;
+	}
+	DispatchByPropertyType(LeafProp, LeafPtr, JsonVal, Owner, Spec, OutReport, PathLabel, Write);
+	return Write;
+}
+
+// ---------------------------------------------------------------------------
 // Recover the UEnum backing a UserDefinedEnum field inside a UserDefinedStruct.
 //
 // A UDS field of UserDefinedEnum type compiles to a plain numeric FProperty with
@@ -518,6 +859,7 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 		MapProp->KeyProp->InitializeValue(KeyTemp);
 		MapProp->ValueProp->InitializeValue(ValTemp);
 
+		const FString PairKeyStr = MonolithKeyToString(Pair.Key);
 		FBulkFillFieldWrite KeyWrite;
 		KeyWrite.Path = FString::Printf(TEXT("%s{key#%d}"), *PathPrefix, Index);
 		{
@@ -527,7 +869,7 @@ void FMonolithReflectionWalker::WriteMap(FMapProperty* MapProp, void* ValuePtr, 
 			KeyWrite.bOk = (Result != nullptr);
 			if (!KeyWrite.bOk)
 			{
-				KeyWrite.Reason = FString::Printf(TEXT("map key '%s' rejected: %s"), *Pair.Key, *ErrText);
+				KeyWrite.Reason = FString::Printf(TEXT("map key '%s' rejected: %s"), *PairKeyStr, *ErrText);
 				++LocalErrors;
 			}
 		}
@@ -638,13 +980,14 @@ void FMonolithReflectionWalker::WriteStruct(FStructProperty* StructProp, void* V
 		int32 LocalErrors = 0;
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(*NestedObj))
 		{
+			const FString PairKeyStr = MonolithKeyToString(Pair.Key);
 			FBulkFillFieldWrite W;
 			W.Path = FString::Printf(TEXT("%s.%s"), *PathPrefix, *Pair.Key);
 			FProperty* InnerProp = FindPropertyForwarding(StructProp->Struct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 			if (!InnerProp)
 			{
 				W.bOk = false;
-				W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *Pair.Key, *StructProp->Struct->GetName());
+				W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *PairKeyStr, *StructProp->Struct->GetName());
 				OutReport.FieldWrites.Add(W);
 				++LocalErrors;
 				continue;
@@ -697,13 +1040,14 @@ FDryRunReport FMonolithReflectionWalker::WriteTree(
 
 	for (const auto& Pair : FMonolithJsonUtils::GetFields(Tree))
 	{
+		const FString PairKeyStr = MonolithKeyToString(Pair.Key);
 		FBulkFillFieldWrite W;
 		W.Path = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 		FProperty* Prop = FindPropertyForwarding(TopStruct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 		if (!Prop)
 		{
 			W.bOk = false;
-			W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *Pair.Key, *TopStruct->GetName());
+			W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *PairKeyStr, *TopStruct->GetName());
 			Report.FieldWrites.Add(W);
 			continue;
 		}
@@ -745,13 +1089,14 @@ FDryRunReport FMonolithReflectionWalker::InspectTree(
 
 	for (const auto& Pair : FMonolithJsonUtils::GetFields(Tree))
 	{
+		const FString PairKeyStr = MonolithKeyToString(Pair.Key);
 		FBulkFillFieldWrite W;
 		W.Path = FMonolithJsonUtils::FieldKeyToString(Pair.Key);
 		FProperty* Prop = FindPropertyForwarding(TopStruct, FMonolithJsonUtils::FieldKeyToString(Pair.Key));
 		if (!Prop)
 		{
 			W.bOk = false;
-			W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *Pair.Key, *TopStruct->GetName());
+			W.Reason = FString::Printf(TEXT("unknown field '%s' on %s"), *PairKeyStr, *TopStruct->GetName());
 			Report.FieldWrites.Add(W);
 			continue;
 		}

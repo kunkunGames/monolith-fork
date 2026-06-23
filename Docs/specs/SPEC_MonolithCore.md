@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.20.1 (Beta)
+**Version:** 0.20.3 (Beta)
 
 ---
 
@@ -54,6 +54,26 @@
 | `guide` | `monolith_guide` | Section-keyed editorial guide from `Docs/MONOLITH_GUIDE.md` with live registry overlay. It explains workflow intent and recovery; it does not replace `monolith_find`, `monolith_discover`, or `describe`. |
 | `get_job` | `monolith_get_job` | Return one async job's status/progress/result by `job_id` (read-only, idempotent). Gated by `UMonolithSettings::bEnableAsyncJobs`: with the flag off it returns `{status:"disabled", requested_job_id, reason}` instead of touching the registry; with the flag on it returns the `FMonolithAsyncJobRegistry` row, or `{status:"not_found"}` for an expired/evicted/never-minted id. Required param: `job_id` (string). |
 | `cancel_job` | `monolith_cancel_job` | Request cooperative cancellation of an async job by `job_id` and return its current row (mutation, idempotent, non-destructive). Gated by `bEnableAsyncJobs`: with the flag off it returns `{status:"disabled", requested_job_id, cancel_requested:false, reason}`; with the flag on it sets the cooperative cancel flag (the running action must observe it) and returns the post-request row. Required param: `job_id` (string). |
+
+#### Terse per-namespace discover
+
+`monolith_discover(namespace)` is **terse by default**: for each action it returns `action` (name) + a one-line `description` only. The full per-action `params` JSON-Schema is NOT emitted by default — fetch a single action's schema with `describe_query action_schema` (the lazy-fetch target, ~54 tokens) or inline every action's schema with `detail=true`. Terse mode cuts per-namespace discover payload by ≥70% vs the pre-change shape (the win is dropping the eager `params` object, not truncating the action list).
+
+**One-line description trim (terse only).** Each `description` is trimmed to its first sentence (sentence terminator at index ≥25 followed by a space or end-of-string), else hard-capped at 150 chars on a word boundary, with an ASCII `"..."` suffix appended when trimmed; already-short descriptions are returned verbatim (no suffix). The FULL untrimmed description is preserved in detail mode and via `describe_query action_schema`.
+
+**Optional params:**
+
+| Param | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `detail` | bool | `false` (terse) | `true` inlines every action's full `params` schema — reproduces the pre-change response shape byte-for-byte (`action`/`description`/`category`/`params` per action). Canonical flag. |
+| `verbose` | bool | unset | Accepted ALIAS for `detail` (read only when `detail` is unset). `verbose=true` == `detail=true`. |
+| `filter` | string | — | Case-insensitive substring matched against the action name OR the FULL description. Applied after any `category` filter, before pagination. |
+| `offset` | int | `0` | Opt-in pagination start, clamped to `[0, total]`. Only meaningful with `limit > 0`. |
+| `limit` | int | `0` (= ALL) | `0` = no cap (the COMPLETE post-filter action list — no action hidden). Any `limit > 0` clamps to `[0, total]`. Pagination is purely OPT-IN. |
+
+**Top-level response fields:** `total` (always; post-filter count); `next_offset` (only when a positive `limit` was supplied AND more remain); `schema_hint` (terse only). The `schema_hint` string is: `Param schemas omitted. Call describe_query(action_schema, target_namespace="<ns>", target_action="<name>") for one action's full schema, or pass detail=true to inline all.`
+
+**Unchanged:** the full `discover()` (no namespace) response is untouched. `describe_query action_schema` is the unchanged lazy-fetch target for a single action's full schema.
 
 ### Actions (2 — namespace: "bulk_fill")
 

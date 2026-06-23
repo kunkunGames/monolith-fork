@@ -1,5 +1,6 @@
 // MonolithUIStylingActions.cpp
 #include "MonolithUIStylingActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithUIInternal.h"
 #include "MonolithParamSchema.h"
 #include "Styling/SlateTypes.h"
@@ -509,18 +510,19 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetColorScheme(const TSha
 
     for (const auto& Pair : FMonolithJsonUtils::GetFields(*ColorsObj))
     {
-        const EStyleColor* SlotColor = SlotMap.Find(Pair.Key);
+        const FString PairKeyStr = MonolithKeyToString(Pair.Key);
+        const EStyleColor* SlotColor = SlotMap.Find(PairKeyStr);
         if (!SlotColor)
         {
             return FMonolithActionResult::Error(
-                FString::Printf(TEXT("Unknown color slot: '%s'. Valid: User1-User16"), *Pair.Key));
+                FString::Printf(TEXT("Unknown color slot: '%s'. Valid: User1-User16"), *PairKeyStr));
         }
 
         FString ColorStr = Pair.Value->AsString();
         FLinearColor Color = MonolithUIInternal::ParseColor(ColorStr);
         USlateThemeManager::Get().SetDefaultColor(*SlotColor, Color);
         SlotsSet++;
-        SetNames.Add(Pair.Key);
+        SetNames.Add(PairKeyStr);
     }
 
     if (SlotsSet == 0)

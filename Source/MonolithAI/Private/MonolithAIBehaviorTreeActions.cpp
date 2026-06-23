@@ -788,7 +788,7 @@ namespace
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 		{
 			FString Error;
-			if (!SetPropertyValue(Obj, Pair.Key, Pair.Value, BT, Error))
+			if (!SetPropertyValue(Obj, MonolithKeyToString(Pair.Key), Pair.Value, BT, Error))
 			{
 				OutErrors.Add(Error);
 			}

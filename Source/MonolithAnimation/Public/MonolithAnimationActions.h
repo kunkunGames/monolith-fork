@@ -84,6 +84,9 @@ public:
 	static FMonolithActionResult HandleGetSkeletonSockets(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetSkeletonPreviewAttachedAssets(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBoneRefPose(const TSharedPtr<FJsonObject>& Params);
+	// T3-2: animated-frame FK-composed transform for one bone (extends get_bone_ref_pose's
+	// bind-pose compose to an evaluated animation frame/time).
+	static FMonolithActionResult HandleGetAnimatedBoneTransform(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetAbpInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetLiveLinkStatus(const TSharedPtr<FJsonObject>& Params);
 

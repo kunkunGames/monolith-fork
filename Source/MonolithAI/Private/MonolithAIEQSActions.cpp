@@ -240,7 +240,7 @@ namespace
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(PropsObj))
 		{
 			FString Error;
-			if (!SetEQSPropertyValue(Obj, Pair.Key, Pair.Value, Error))
+			if (!SetEQSPropertyValue(Obj, MonolithKeyToString(Pair.Key), Pair.Value, Error))
 			{
 				OutErrors.Add(Error);
 			}

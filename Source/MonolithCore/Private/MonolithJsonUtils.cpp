@@ -248,7 +248,7 @@ namespace MonolithResponseShapingDetail
 		{
 			if (IsArrayOfObjects(Pair.Value))
 			{
-				ListPayloadKeys.Add(Pair.Key);
+				ListPayloadKeys.Add(MonolithKeyToString(Pair.Key));
 			}
 		}
 
@@ -475,7 +475,7 @@ namespace MonolithResponseShapingDetail
 		Response->Values.Empty();
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(Built))
 		{
-			Response->SetField(Pair.Key, Pair.Value);
+			Response->SetField(MonolithKeyToString(Pair.Key), Pair.Value);
 		}
 	}
 

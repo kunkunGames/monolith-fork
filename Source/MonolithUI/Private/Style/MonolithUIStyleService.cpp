@@ -2,6 +2,7 @@
 // MonolithUIStyleService.cpp — Phase G
 
 #include "Style/MonolithUIStyleService.h"
+#include "MonolithJsonUtils.h"
 
 #if WITH_COMMONUI
 

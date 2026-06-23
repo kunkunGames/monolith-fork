@@ -184,7 +184,7 @@ namespace MonolithMeshBulkFillInternal
 			{
 				RowObj = *RowSubObj;
 			}
-			WriteSurfaceRow(DT, RowStruct, RowKV.Key, RowObj, Spec, Report);
+			WriteSurfaceRow(DT, RowStruct, MonolithKeyToString(RowKV.Key), RowObj, Spec, Report);
 		}
 
 		if (Spec.bStrict && Report.Errors > 0)

@@ -17,6 +17,9 @@
 #include "StructUtils/InstancedStruct.h"
 #include "ScopedTransaction.h"
 #include "MonolithBlueprintEditCradle.h"
+#include "UObject/SavePackage.h"
+#include "UObject/Package.h"
+#include "Misc/PackageName.h"
 
 // Forward declaration of Phase 1 handlers (defined at bottom of file).
 namespace MonolithCDOPhase1Internal
@@ -54,6 +57,35 @@ void FMonolithBlueprintCDOActions::RegisterActions(FMonolithToolRegistry& Regist
 			.Required(TEXT("value"), TEXT("any"), TEXT("New value — string, number, bool, or ImportText format for structs (e.g. \"(X=1.0,Y=2.0,Z=3.0)\")"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("If true, validate only — emit the would-be write but do not persist. Phase 1."), TEXT("false"))
 			.Optional(TEXT("strict"), TEXT("boolean"), TEXT("If true, promote silent drops / clamps / unknown-fields to hard errors. Phase 1."), TEXT("false"))
+			.Build());
+
+	// --- Surgical nested-path writer.
+	// set_cdo_property / set_cdo_properties address top-level properties (and, for
+	// the plural form, replace whole arrays/maps from a JSON tree). set_property_at_path
+	// instead targets ONE leaf deep inside a struct / array index / map key via a
+	// dotted+bracket path, leaving sibling entries untouched. This is the action that
+	// can write EditDefaultsOnly DataAsset fields the editor refuses on saved
+	// instances — the write goes through FProperty reflection + the engine edit
+	// cradle, not the editor's PropertyAccessUtil edit-flag gate.
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_property_at_path"),
+		TEXT("Set a SINGLE value at a nested property path on a Blueprint CDO or UObject asset "
+			 "(DataAsset, GameplayEffect, etc.) via generic reflection. Path is dotted + bracket: "
+			 "'.' descends into struct members, '[N]' indexes an array, '[Key]' keys a map "
+			 "(enum name, integer, FName, or string — imported through the map's key grammar). "
+			 "Example: 'Standing.Gaits[Jog].Starts.Forward'. The leaf value accepts scalars, "
+			 "enum names, ImportText struct literals, hard object refs and TSoftObjectPtr asset "
+			 "paths, identical to set_cdo_property. Surgical: sibling array elements / map keys are "
+			 "left untouched (unlike set_cdo_properties which rebuilds whole collections). Writes "
+			 "EditDefaultsOnly fields the editor blocks on saved instances."),
+		FMonolithActionHandler::CreateStatic(&HandleSetPropertyAtPath),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Blueprint or UObject asset path (e.g. /Game/Data/DA_MyData)"))
+			.Required(TEXT("path"), TEXT("string"), TEXT("Dotted+bracket property path, e.g. 'Standing.Gaits[Jog].Starts.Forward'. '.'=struct member, '[N]'=array index, '[Key]'=map key."))
+			.Required(TEXT("value"), TEXT("any"), TEXT("New leaf value — string / number / bool, an enum name, a soft/hard object asset path, or ImportText / JSON for a struct leaf."))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("If true, resolve the path and validate the leaf write but do not persist."), TEXT("false"))
+			.Optional(TEXT("strict"), TEXT("boolean"), TEXT("If true, promote silent drops / clamps to hard errors."), TEXT("false"))
+			.Optional(TEXT("create_missing_keys"), TEXT("boolean"), TEXT("If true, a '[Key]' segment whose map key is absent is added with a default-initialised value before writing the leaf. Default: error on a missing key."), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("If true, save the asset package to disk after the write (UPackage::SavePackage). Default: MarkPackageDirty only."), TEXT("false"))
 			.Build());
 
 	// --- Phase 1: bulk_fill plural sibling to set_cdo_property.
@@ -443,6 +475,241 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 	Root->SetStringField(TEXT("property_name"), Prop->GetName());
 	Root->SetStringField(TEXT("old_value"), OldValue);
 	Root->SetStringField(TEXT("new_value"), NewValue);
+
+	return FMonolithActionResult::Success(Root);
+}
+
+// ---------------------------------------------------------------------------
+// set_property_at_path — surgical nested-path writer.
+//
+// Resolves a dotted+bracket path to ONE leaf via FMonolithReflectionWalker::
+// ResolvePath, then writes the value through WriteLeaf (the same coercion the
+// bulk walker uses). The write is wrapped in the SAME engine edit cradle as
+// set_cdo_property (transaction -> Modify -> PreEditChange -> write ->
+// ReparentTransientInstancedSubobjects -> FireFullCradle -> MarkPackageDirty),
+// which is what lets it write EditDefaultsOnly fields the editor blocks on
+// saved instances — the cradle is FProperty-reflection-side, never the editor's
+// PropertyAccessUtil edit-flag gate.
+// ---------------------------------------------------------------------------
+FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetPropertyAtPath(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_property_at_path requires params"));
+	}
+
+	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
+	}
+
+	const FString Path = Params->GetStringField(TEXT("path"));
+	if (Path.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: path"));
+	}
+
+	if (!Params->HasField(TEXT("value")))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
+	}
+	const TSharedPtr<FJsonValue> JsonVal = Params->TryGetField(TEXT("value"));
+	if (!JsonVal.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("'value' field missing or null"));
+	}
+
+	bool bCreateMissingKeys = false;
+	Params->TryGetBoolField(TEXT("create_missing_keys"), bCreateMissingKeys);
+	bool bSave = false;
+	Params->TryGetBoolField(TEXT("save"), bSave);
+
+	// --- Load asset: Blueprint CDO or generic UObject (same dual-path as set_cdo_property) ---
+	UObject* TargetObject = nullptr;
+	UClass* TargetClass = nullptr;
+	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
+	if (BP && BP->GeneratedClass)
+	{
+		TargetClass = BP->GeneratedClass;
+		TargetObject = TargetClass->GetDefaultObject(false);
+	}
+	else
+	{
+		BP = nullptr;
+		TargetObject = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
+		if (TargetObject)
+		{
+			TargetClass = TargetObject->GetClass();
+		}
+	}
+
+	if (!TargetObject || !TargetClass)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset not found or has no class: %s"), *AssetPath));
+	}
+
+	FMonolithDryRunGuard DryRunGuard(Params);
+	FBulkFillSpec Spec;
+	Spec.TargetNamespace = TEXT("blueprint");
+	Spec.TargetAsset = AssetPath;
+	Spec.bDryRun = DryRunGuard.IsDryRun();
+	Spec.bStrict = DryRunGuard.IsStrict();
+
+	// --- Dry run: resolve the path against the LIVE object (read-only navigation;
+	// create_missing_keys is forced OFF so a dry run never mutates map storage),
+	// then validate the leaf write through a scratch buffer so nothing is touched.
+	if (DryRunGuard.IsDryRun())
+	{
+		FMonolithReflectionWalker::FPathResolveResult Resolved =
+			FMonolithReflectionWalker::ResolvePath(TargetClass, TargetObject, Path, /*bCreateMissingKeys=*/false);
+		if (!Resolved.bOk)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("path '%s' did not resolve: %s"), *Path, *Resolved.Error));
+		}
+
+		// Validate the leaf grammar against a scratch copy of the leaf property so
+		// the live value is never mutated.
+		FDryRunReport Report;
+		Report.bWouldApply = false;
+		void* Scratch = FMemory::Malloc(Resolved.LeafProp->GetSize(), Resolved.LeafProp->GetMinAlignment());
+		Resolved.LeafProp->InitializeValue(Scratch);
+		const FBulkFillFieldWrite W = FMonolithReflectionWalker::WriteLeaf(
+			Resolved.LeafProp, Scratch, JsonVal, nullptr, Spec, Report, Path);
+		Resolved.LeafProp->DestroyValue(Scratch);
+		FMemory::Free(Scratch);
+
+		Report.FieldWrites.Add(W);
+		Report.Errors = W.bOk ? 0 : 1;
+
+		FMonolithActionResult Result = DryRunGuard.MakeDryRunResponse(Report);
+		// Annotate the resolved leaf type so the caller can confirm what was targeted.
+		if (Result.Result.IsValid())
+		{
+			Result.Result->SetStringField(TEXT("resolved_leaf_type"), Resolved.LeafTypeName);
+		}
+		return Result;
+	}
+
+	// --- Engine edit cradle (matches set_cdo_property / Details-panel write path).
+	TargetObject->SetFlags(RF_Transactional);
+	FScopedTransaction Transaction(NSLOCTEXT("MonolithBlueprintCDOActions", "SetPropertyAtPath", "Monolith Set Property At Path"));
+	TargetObject->Modify();
+
+	// Resolve the path on the live object (may mutate map storage if create_missing_keys).
+	FMonolithReflectionWalker::FPathResolveResult Resolved =
+		FMonolithReflectionWalker::ResolvePath(TargetClass, TargetObject, Path, bCreateMissingKeys);
+	if (!Resolved.bOk)
+	{
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("path '%s' did not resolve: %s"), *Path, *Resolved.Error));
+	}
+
+	// PreEditChange on the TOP-LEVEL property the path enters, so the cradle and
+	// FOverridableManager register the edit. The path's first member is the head.
+	FString HeadMember = Path;
+	{
+		int32 DotIdx = INDEX_NONE, BracketIdx = INDEX_NONE;
+		Path.FindChar(TEXT('.'), DotIdx);
+		Path.FindChar(TEXT('['), BracketIdx);
+		int32 Cut = Path.Len();
+		if (DotIdx != INDEX_NONE) { Cut = FMath::Min(Cut, DotIdx); }
+		if (BracketIdx != INDEX_NONE) { Cut = FMath::Min(Cut, BracketIdx); }
+		HeadMember = Path.Left(Cut);
+	}
+	FProperty* HeadProp = FMonolithReflectionWalker::FindPropertyForwarding(TargetClass, HeadMember);
+	if (HeadProp)
+	{
+		FEditPropertyChain PropertyChain;
+		PropertyChain.AddHead(HeadProp);
+		PropertyChain.SetActivePropertyNode(HeadProp);
+		TargetObject->PreEditChange(PropertyChain);
+	}
+	else
+	{
+		TargetObject->PreEditChange(nullptr);
+	}
+
+	// Snapshot old leaf value for the response.
+	FString OldValue;
+	Resolved.LeafProp->ExportText_Direct(OldValue, Resolved.LeafPtr, Resolved.LeafPtr, TargetObject, PPF_None);
+
+	// --- Write the leaf through the shared walker coercion.
+	FDryRunReport Report;
+	Report.bWouldApply = true;
+	const FBulkFillFieldWrite W = FMonolithReflectionWalker::WriteLeaf(
+		Resolved.LeafProp, Resolved.LeafPtr, JsonVal, TargetObject, Spec, Report, Path);
+
+	if (!W.bOk)
+	{
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("write to '%s' (leaf type %s) failed: %s"),
+			*Path, *Resolved.LeafTypeName, *W.Reason));
+	}
+
+	// --- Post-write cradle (mirror set_cdo_property). Fire on the head property so
+	// nested object refs get FOverridableManager-marked + harvested at save.
+	if (HeadProp)
+	{
+		MonolithEditCradle::ReparentTransientInstancedSubobjects(TargetObject, HeadProp);
+		MonolithEditCradle::FireFullCradle(TargetObject, HeadProp);
+	}
+
+	// Read back the new leaf value for confirmation.
+	FString NewValue;
+	Resolved.LeafProp->ExportText_Direct(NewValue, Resolved.LeafPtr, Resolved.LeafPtr, TargetObject, PPF_None);
+
+	// --- Mark dirty.
+	if (BP)
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
+	}
+	else
+	{
+		TargetObject->MarkPackageDirty();
+	}
+
+	// --- Optional save to disk (pattern: MonolithAudioPerceptionActions.cpp:96).
+	bool bSaved = false;
+	FString SaveError;
+	if (bSave)
+	{
+		UPackage* Package = TargetObject->GetPackage();
+		if (Package)
+		{
+			const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+				Package->GetName(), FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+			SaveArgs.SaveFlags = SAVE_NoError;
+			bSaved = UPackage::SavePackage(Package, nullptr, *PackageFilename, SaveArgs);
+			if (!bSaved)
+			{
+				SaveError = FString::Printf(TEXT("SavePackage failed for %s"), *PackageFilename);
+			}
+		}
+		else
+		{
+			SaveError = TEXT("asset has no package to save");
+		}
+	}
+
+	// --- Build response ---
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("path"), Path);
+	Root->SetStringField(TEXT("resolved_leaf_type"), Resolved.LeafTypeName);
+	Root->SetStringField(TEXT("old_value"), OldValue);
+	Root->SetStringField(TEXT("new_value"), NewValue);
+	Root->SetBoolField(TEXT("created_missing_key"), bCreateMissingKeys);
+	Root->SetBoolField(TEXT("saved"), bSaved);
+	if (!SaveError.IsEmpty())
+	{
+		Root->SetStringField(TEXT("save_error"), SaveError);
+	}
 
 	return FMonolithActionResult::Success(Root);
 }

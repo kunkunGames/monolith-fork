@@ -966,16 +966,16 @@ FMonolithActionResult FMonolithMeshPresetActions::CreateTensionProfile(const TSh
 
 	for (const auto& Pair : FMonolithJsonUtils::GetFields(*FactorsPtr))
 	{
-		if (!KnownFactors.Contains(Pair.Key))
+		if (!KnownFactors.Contains(MonolithKeyToString(Pair.Key)))
 		{
-			UnknownFactors.Add(Pair.Key);
+			UnknownFactors.Add(MonolithKeyToString(Pair.Key));
 		}
 
 		const TSharedPtr<FJsonObject>* FactorObjPtr;
 		if (!Pair.Value->TryGetObject(FactorObjPtr) || !FactorObjPtr || !(*FactorObjPtr).IsValid())
 		{
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Factor '%s' must be a JSON object with at least a 'weight' field"), *Pair.Key));
+				TEXT("Factor '%s' must be a JSON object with at least a 'weight' field"), *MonolithKeyToString(Pair.Key)));
 		}
 
 		double Weight = 0.0;

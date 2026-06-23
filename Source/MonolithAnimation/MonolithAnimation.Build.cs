@@ -64,6 +64,9 @@ public class MonolithAnimation : ModuleRules
 		{
 			"MonolithCore",
 			"UnrealEd",
+			"Slate",        // STableRow/SCompoundWidget instantiation (FRetargetChainElement rows).
+			"SlateCore",    // FSlateAttributeDescriptor / SWidget::PrivateRegisterAttributes — was
+			                // transitively satisfied on 5.7, not re-exported on 5.8; link explicitly on both.
 			"AnimGraph",
 			"AnimGraphRuntime",
 			"BlueprintGraph",

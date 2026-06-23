@@ -1015,9 +1015,10 @@ FMonolithActionResult FMonolithAudioSoundCueActions::AddSoundCueNode(const TShar
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 		{
 			FString PropError;
-			if (!SetNodeProperty(NewNode, Pair.Key, Pair.Value, PropError))
+			const FString PairKeyStr = MonolithKeyToString(Pair.Key);
+			if (!SetNodeProperty(NewNode, PairKeyStr, Pair.Value, PropError))
 			{
-				UE_LOG(LogMonolith, Warning, TEXT("add_sound_cue_node: property '%s' error: %s"), *Pair.Key, *PropError);
+				UE_LOG(LogMonolith, Warning, TEXT("add_sound_cue_node: property '%s' error: %s"), *PairKeyStr, *PropError);
 			}
 		}
 	}
@@ -1599,10 +1600,11 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 				for (const auto& Pair : FMonolithJsonUtils::GetFields(*PropsObj))
 				{
 					FString PropError;
-					if (!SetNodeProperty(*FoundNode, Pair.Key, Pair.Value, PropError))
+					const FString PairKeyStr = MonolithKeyToString(Pair.Key);
+					if (!SetNodeProperty(*FoundNode, PairKeyStr, Pair.Value, PropError))
 					{
 						UE_LOG(LogMonolith, Warning, TEXT("build_sound_cue_from_spec: node '%s' property '%s' error: %s"),
-							*Id, *Pair.Key, *PropError);
+							*Id, *PairKeyStr, *PropError);
 					}
 				}
 			}

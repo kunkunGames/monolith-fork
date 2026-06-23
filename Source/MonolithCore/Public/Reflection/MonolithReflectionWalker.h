@@ -65,6 +65,67 @@ public:
 	static FProperty* FindPropertyForwarding(UStruct* Struct, const FString& Name);
 
 	/**
+	 * Result of resolving a dotted+bracket property path down to a single leaf.
+	 *
+	 * On success: LeafProp + LeafPtr address exactly the value to overwrite, and
+	 * the caller routes the value through WriteLeaf (the SAME coercion the bulk
+	 * walker uses — scalars/enums/structs/soft-refs/etc.). This is a SURGICAL
+	 * write: nested arrays/maps along the path are addressed in place, NOT
+	 * cleared+rebuilt the way WriteArray/WriteMap do for a full tree.
+	 */
+	struct FPathResolveResult
+	{
+		bool bOk = false;
+		FString Error;                  // Human-readable failure reason (empty on success).
+		FProperty* LeafProp = nullptr;  // Terminal FProperty to write through.
+		void* LeafPtr = nullptr;        // Address of the terminal value inside Container.
+		FString LeafTypeName;           // LeafProp->GetCPPType() — echoed back to the caller.
+	};
+
+	/**
+	 * Walk a dotted+bracket path (e.g. "Standing.Gaits[Jog].Starts.Forward")
+	 * from Container/TopStruct down to a single leaf value pointer.
+	 *
+	 * Path grammar:
+	 *   - "."   descends into an FStructProperty member.
+	 *   - "[N]" indexes an FArrayProperty (N = integer literal). Out-of-range errors.
+	 *   - "[K]" keys an FMapProperty; K is ImportText'd through the map's KeyProp,
+	 *           so enum names ("Jog"), integers, FName/string keys all resolve.
+	 *           Missing key -> error UNLESS bCreateMissingKeys (then AddPair with a
+	 *           default-initialised value, then re-locate the value ptr).
+	 *   - a bare segment after an FObjectProperty descends into the pointed-at
+	 *     UObject's class (the ref must already be set / resolvable in memory).
+	 *
+	 * Does NOT write the leaf and does NOT touch the edit cradle — the caller owns
+	 * the FScopedTransaction + Pre/PostEditChange + MarkPackageDirty, exactly as
+	 * set_cdo_property does. Game-thread only (mutates map storage when creating keys).
+	 */
+	static FPathResolveResult ResolvePath(
+		UStruct* TopStruct,
+		void* Container,
+		const FString& Path,
+		bool bCreateMissingKeys);
+
+	/**
+	 * Coerce + write a single JSON value into a single resolved leaf (LeafProp +
+	 * LeafPtr from ResolvePath). Public, thin forwarder onto the private
+	 * DispatchByPropertyType so the surgical-path handler reuses the EXACT same
+	 * value coercion as the bulk tree walker (scalars, enums, structs, arrays,
+	 * maps, sets, hard + soft object refs, UDS enums) without duplicating it.
+	 *
+	 * Returns the per-field write outcome. Like the rest of the walker it does NOT
+	 * wrap the write in a transaction or fire the edit cradle — the caller owns that.
+	 */
+	static FBulkFillFieldWrite WriteLeaf(
+		FProperty* LeafProp,
+		void* LeafPtr,
+		const TSharedPtr<FJsonValue>& JsonVal,
+		UObject* Owner,
+		const FBulkFillSpec& Spec,
+		FDryRunReport& OutReport,
+		const FString& PathLabel);
+
+	/**
 	 * Recover the UEnum backing a UserDefinedEnum field inside a UserDefinedStruct.
 	 *
 	 * A UserDefinedEnum field compiles to a plain numeric FProperty with no Enum

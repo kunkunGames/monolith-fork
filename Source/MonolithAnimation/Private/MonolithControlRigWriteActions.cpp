@@ -2,6 +2,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithJsonUtils.h"
 
 #include "ControlRigBlueprintLegacy.h"
 #include "RigVMModel/RigVMGraph.h"
@@ -579,7 +580,7 @@ FMonolithActionResult FMonolithControlRigWriteActions::HandleAddControlRigNode(c
 				// For objects/arrays, serialize to string
 				FString JsonStr;
 				TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonStr);
-				FJsonSerializer::Serialize(KV.Value, KV.Key, Writer);
+				FJsonSerializer::Serialize(KV.Value, MonolithKeyToString(KV.Key), Writer);
 				Value = JsonStr;
 			}
 

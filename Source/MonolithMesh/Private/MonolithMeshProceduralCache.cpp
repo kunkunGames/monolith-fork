@@ -236,7 +236,7 @@ FString FMonolithMeshProceduralCache::ComputeHash(const FString& ActionName, con
 	{
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
-			if (!ExcludeKeys.Contains(Pair.Key))
+			if (!ExcludeKeys.Contains(MonolithKeyToString(Pair.Key)))
 			{
 				Canonical->SetField(Pair.Key, Pair.Value);
 			}
@@ -333,7 +333,7 @@ void FMonolithMeshProceduralCache::Register(const FString& Hash, const FString& 
 		TSharedPtr<FJsonObject> IdentityParams = MakeShared<FJsonObject>();
 		for (const auto& Pair : FMonolithJsonUtils::GetFields(Params))
 		{
-			if (!ExcludeKeys.Contains(Pair.Key))
+			if (!ExcludeKeys.Contains(MonolithKeyToString(Pair.Key)))
 			{
 				IdentityParams->SetField(Pair.Key, Pair.Value);
 			}
@@ -399,7 +399,7 @@ int32 FMonolithMeshProceduralCache::ValidateCache()
 		const TSharedPtr<FJsonObject>* EntryObj = nullptr;
 		if (!Pair.Value.IsValid() || Pair.Value->Type != EJson::Object)
 		{
-			StaleHashes.Add(Pair.Key);
+			StaleHashes.Add(MonolithKeyToString(Pair.Key));
 			continue;
 		}
 
@@ -411,7 +411,7 @@ int32 FMonolithMeshProceduralCache::ValidateCache()
 		FString AssetPath;
 		if (!Entry->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty() || !FPackageName::DoesPackageExist(AssetPath))
 		{
-			StaleHashes.Add(Pair.Key);
+			StaleHashes.Add(MonolithKeyToString(Pair.Key));
 		}
 	}
 
@@ -467,7 +467,7 @@ int32 FMonolithMeshProceduralCache::ClearCache(const FString& TypeFilter)
 		FString Type;
 		if (Entry->TryGetStringField(TEXT("type"), Type) && Type.Equals(TypeFilter, ESearchCase::IgnoreCase))
 		{
-			ToRemove.Add(Pair.Key);
+			ToRemove.Add(MonolithKeyToString(Pair.Key));
 		}
 	}
 

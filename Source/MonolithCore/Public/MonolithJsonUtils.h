@@ -4,7 +4,45 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+// UE 5.8 changed FJsonObject::Values keys from FString to UE::FSharedString
+// (UE::TSharedString<TCHAR>); SharedString.h provides its definition.
+#include "Containers/SharedString.h"
+#endif
+
 MONOLITHCORE_API DECLARE_LOG_CATEGORY_EXTERN(LogMonolith, Log, All);
+
+/**
+ * Cross-version JSON-object key conversion (5.7 + 5.8).
+ *
+ * UE 5.8 changed `FJsonObject::Values` from `TMap<FString, ...>` to
+ * `TMap<UE::FSharedString, ...>` (`UE::TSharedString<TCHAR>`). That shared-string
+ * type has no `.ToLower()`, no implicit `FString` conversion, and no `operator+`/`[]`,
+ * so any `for (const auto& Pair : Obj->Values)` site that treated `Pair.Key` as an
+ * `FString` stops compiling on 5.8.
+ *
+ * `MonolithKeyToString(Pair.Key)` yields an `FString` from either key type, keeping
+ * every call site version-agnostic. The FString overload is a zero-copy passthrough
+ * (valid on both engines); the shared-string overload exists only on 5.8 and copies
+ * from the key's null-terminated buffer (`operator*`).
+ */
+FORCEINLINE const FString& MonolithKeyToString(const FString& Key) { return Key; }
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+FORCEINLINE FString MonolithKeyToString(const UE::FSharedString& Key) { return FString(*Key); }
+#endif
+
+/**
+ * Reverse direction: build an `FJsonObject::Values` lookup key from a runtime FString,
+ * for `Obj->Values.Find(...)` / `.FindChecked(...)` / `operator[]` by a string computed
+ * at runtime. On 5.8 the map is keyed by `UE::FSharedString` and FString does not
+ * implicitly convert (it would require two user-defined conversions); this makes the key
+ * explicitly. On 5.7 it is a zero-copy passthrough.
+ */
+#if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 8
+FORCEINLINE UE::FSharedString MonolithMakeJsonKey(const FString& Key) { return UE::FSharedString(*Key); }
+#else
+FORCEINLINE const FString& MonolithMakeJsonKey(const FString& Key) { return Key; }
+#endif
 
 class MONOLITHCORE_API FMonolithJsonUtils
 {
