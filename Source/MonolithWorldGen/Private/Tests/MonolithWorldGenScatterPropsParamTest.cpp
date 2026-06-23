@@ -1,6 +1,6 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshBlockoutActions.h"
-#include "Core/MonolithToolRegistry.h"
+#include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 

@@ -547,10 +547,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                         const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                         double Time = 0.0;
-                        FMonolithActionResult ParamError;
-                        if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
+                        FMonolithActionResult KeyframeTimeError;
+                        if (!TryExtractKeyframeTime(KfObj, Time, KeyframeTimeError))
                         {
-                            return ParamError;
+                            return KeyframeTimeError;
                         }
                         double Value = 0.0;
                         if (!KfObj->TryGetNumberField(TEXT("value"), Value))
@@ -625,10 +625,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            FMonolithActionResult ParamError;
-                            if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
+                            FMonolithActionResult KeyframeTimeError;
+                            if (!TryExtractKeyframeTime(KfObj, Time, KeyframeTimeError))
                             {
-                                return ParamError;
+                                return KeyframeTimeError;
                             }
                             double Value = Defaults[SubIdx];
                             const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);
@@ -701,10 +701,10 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleCreateAnimation(const T
                             const TSharedPtr<FJsonObject>& KfObj = *KfObjPtr;
 
                             double Time = 0.0;
-                            FMonolithActionResult ParamError;
-                            if (!TryExtractKeyframeTime(KfObj, Time, ParamError))
+                            FMonolithActionResult KeyframeTimeError;
+                            if (!TryExtractKeyframeTime(KfObj, Time, KeyframeTimeError))
                             {
-                                return ParamError;
+                                return KeyframeTimeError;
                             }
                             double Value = Defaults[SubIdx];
                             const TSharedPtr<FJsonValue> ValField = KfObj->TryGetField(FieldNames[SubIdx]);

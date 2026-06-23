@@ -452,6 +452,12 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleAddPerceptionComponent
 			TEXT("This AIController already has a UAIPerceptionComponent. Use configure_sight_sense etc. to modify it."));
 	}
 
+	FString DominantSense;
+	if (Params->HasField(TEXT("dominant_sense")) && !Params->TryGetStringField(TEXT("dominant_sense"), DominantSense))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'dominant_sense' must be a string"));
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add Perception Component")));
 
 	// Suppress skeleton regen during SCS modification
@@ -467,14 +473,6 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleAddPerceptionComponent
 	}
 
 	BP->SimpleConstructionScript->AddNode(NewNode);
-
-	// Set dominant sense if specified
-	FString DominantSense;
-	if (Params->HasField(TEXT("dominant_sense")) && !Params->TryGetStringField(TEXT("dominant_sense"), DominantSense))
-	{
-		BP->Status = SavedStatus;
-		return FMonolithActionResult::Error(TEXT("Parameter 'dominant_sense' must be a string"));
-	}
 
 	UAIPerceptionComponent* PerceptionComp = GetPerceptionTemplate(NewNode);
 	if (PerceptionComp && !DominantSense.IsEmpty())
@@ -946,6 +944,19 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 		return FMonolithActionResult::Error(TEXT("range must be a positive number"));
 	}
 
+	bool bEnemies, bNeutrals, bFriendlies;
+	FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+	if (!AffilResult.bSuccess)
+	{
+		return AffilResult;
+	}
+
+	FMonolithActionResult BaseParamValidation = ValidateBaseSenseConfigParamTypes(Params);
+	if (!BaseParamValidation.bSuccess)
+	{
+		return BaseParamValidation;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Hearing Sense")));
 
 	UAISenseConfig_Hearing* Hearing = FindOrCreateSenseConfig<UAISenseConfig_Hearing>(Ctx.PerceptionComp);
@@ -955,11 +966,6 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureHearingSense(
 	}
 
 	Hearing->HearingRange = static_cast<float>(Range);
-
-	// Affiliation
-	bool bEnemies, bNeutrals, bFriendlies;
-		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
-		if (!AffilResult.bSuccess) return AffilResult;
 
 	if (Params->HasField(TEXT("affiliation")))
 	{
@@ -1002,6 +1008,34 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureDamageSense(c
 		return ErrResult;
 	}
 
+	// Custom implementation class
+	FString ImplStr;
+	UClass* ImplClass = nullptr;
+	if (Params->HasField(TEXT("implementation")) && !Params->TryGetStringField(TEXT("implementation"), ImplStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'implementation' must be a string"));
+	}
+
+	if (!ImplStr.IsEmpty())
+	{
+		ImplClass = FindFirstObject<UClass>(*ImplStr, EFindFirstObjectOptions::NativeFirst);
+		if (!ImplClass)
+		{
+			ImplClass = FindFirstObject<UClass>(*(TEXT("U") + ImplStr), EFindFirstObjectOptions::NativeFirst);
+		}
+		if (!ImplClass || !ImplClass->IsChildOf(UAISense_Damage::StaticClass()))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Damage sense implementation class not found or not a UAISense_Damage subclass: %s"), *ImplStr));
+		}
+	}
+
+	FMonolithActionResult BaseParamValidation = ValidateBaseSenseConfigParamTypes(Params);
+	if (!BaseParamValidation.bSuccess)
+	{
+		return BaseParamValidation;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Damage Sense")));
 
 	UAISenseConfig_Damage* Damage = FindOrCreateSenseConfig<UAISenseConfig_Damage>(Ctx.PerceptionComp);
@@ -1010,29 +1044,9 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureDamageSense(c
 		return FMonolithActionResult::Error(TEXT("Failed to create damage sense config"));
 	}
 
-	// Custom implementation class
-	FString ImplStr;
-	if (Params->HasField(TEXT("implementation")) && !Params->TryGetStringField(TEXT("implementation"), ImplStr))
+	if (ImplClass)
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'implementation' must be a string"));
-	}
-
-	if (!ImplStr.IsEmpty())
-	{
-		UClass* ImplClass = FindFirstObject<UClass>(*ImplStr, EFindFirstObjectOptions::NativeFirst);
-		if (!ImplClass)
-		{
-			ImplClass = FindFirstObject<UClass>(*(TEXT("U") + ImplStr), EFindFirstObjectOptions::NativeFirst);
-		}
-		if (ImplClass && ImplClass->IsChildOf(UAISense_Damage::StaticClass()))
-		{
-			Damage->Implementation = ImplClass;
-		}
-		else
-		{
-			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("Damage sense implementation class not found or not a UAISense_Damage subclass: %s"), *ImplStr));
-		}
+		Damage->Implementation = ImplClass;
 	}
 
 	// Base-class params (max_age, bStartsEnabled) via shared helper. Replaces the prior Phase B inline
@@ -1072,6 +1086,19 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 		return ErrResult;
 	}
 
+	bool bEnemies, bNeutrals, bFriendlies;
+	FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
+	if (!AffilResult.bSuccess)
+	{
+		return AffilResult;
+	}
+
+	FMonolithActionResult BaseParamValidation = ValidateBaseSenseConfigParamTypes(Params);
+	if (!BaseParamValidation.bSuccess)
+	{
+		return BaseParamValidation;
+	}
+
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Configure Touch Sense")));
 
 	UAISenseConfig_Touch* Touch = FindOrCreateSenseConfig<UAISenseConfig_Touch>(Ctx.PerceptionComp);
@@ -1080,10 +1107,6 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureTouchSense(co
 		return FMonolithActionResult::Error(TEXT("Failed to create touch sense config"));
 	}
 
-	// Affiliation
-	bool bEnemies, bNeutrals, bFriendlies;
-		FMonolithActionResult AffilResult = ParseAffiliation(Params, TEXT("affiliation"), bEnemies, bNeutrals, bFriendlies);
-		if (!AffilResult.bSuccess) return AffilResult;
 	if (Params->HasField(TEXT("affiliation")))
 	{
 		Touch->DetectionByAffiliation.bDetectEnemies = bEnemies;
