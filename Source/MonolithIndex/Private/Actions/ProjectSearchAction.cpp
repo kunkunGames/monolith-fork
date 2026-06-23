@@ -61,8 +61,14 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 		? FProjectSearchOptions::ContentInclusive()
 		: FProjectSearchOptions::AssetNodeOnly();
 	// Q6 (PRD AssetSearchSemanticSearch): optional pushed-down scope filters.
-	Params->TryGetStringField(TEXT("asset_class"), Options.AssetClassFilter);
-	Params->TryGetStringField(TEXT("path_filter"), Options.PathFilter);
+	if (Params->HasField(TEXT("asset_class")) && !Params->TryGetStringField(TEXT("asset_class"), Options.AssetClassFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("'asset_class' parameter must be a string"), -32602);
+	}
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), Options.PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("'path_filter' parameter must be a string"), -32602);
+	}
 	// PRD AssetSearchSemanticSearch residual: opt-in per-result RRF score breakdown.
 	if (Params->HasField(TEXT("explain")))
 	{

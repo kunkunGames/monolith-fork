@@ -5,6 +5,7 @@
 #include "Actions/ProjectFindByTypeAction.h"
 #include "Actions/ProjectFindUnusedAction.h"
 #include "Actions/ProjectExportAssetTextAction.h"
+#include "Actions/ProjectSearchAction.h"
 #include "Dom/JsonObject.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexParamGuardTest, "Monolith.ParamGuard.ProjectIndex.MalformedInput", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -116,6 +117,25 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		FMonolithActionResult Result = FProjectExportAssetTextAction::Execute(Params);
 		TestFalse(TEXT("ExportAssetText: Reject wrong type for grep_pattern"), Result.bSuccess);
 		TestEqual(TEXT("ExportAssetText: Error code for grep_pattern"), Result.ErrorCode, -32602);
+	}
+
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("test"));
+		Params->SetNumberField(TEXT("asset_class"), 12345);
+		FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search: Reject wrong type for asset_class"), Result.bSuccess);
+		TestEqual(TEXT("Search: Error code for asset_class"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("test"));
+		Params->SetNumberField(TEXT("path_filter"), 12345);
+		FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search: Reject wrong type for path_filter"), Result.bSuccess);
+		TestEqual(TEXT("Search: Error code for path_filter"), Result.ErrorCode, -32602);
 	}
 
 	return true;
