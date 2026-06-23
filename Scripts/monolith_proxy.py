@@ -840,7 +840,32 @@ def _inject_monolith_query(response_str: str) -> str:
             if t.get("name") == "monolith_query":
                 return response_str
 
-        tools.append(_monolith_query_tool())
+        tools.append(_make_tool(
+            "monolith_query",
+            "Execute any Monolith action. Use monolith_find(query) to locate the right action, "
+            "monolith_discover(namespace) to inspect its schema, then call monolith_query with "
+            "the resolved namespace, action, and params.",
+            {
+                "type": "object",
+                "properties": {
+                    "namespace": {
+                        "type": "string",
+                        "description": "Target namespace, e.g. 'blueprint', 'source', 'gas'. Call monolith_discover() with no args to list all available namespaces.",
+                    },
+                    "action": {
+                        "type": "string",
+                        "description": "Action to execute. Call monolith_discover(namespace) for the "
+                        "full action list and monolith_discover(namespace, action, mode='schema') "
+                        "for exact parameter schemas.",
+                    },
+                    "params": {
+                        "type": "object",
+                        "description": "Arguments for the action.",
+                    },
+                },
+                "required": ["namespace", "action"],
+            }
+        ))
         return json.dumps(payload)
     except Exception as e:
         _log(f"_inject_monolith_query parse error: {e}")
@@ -1022,13 +1047,20 @@ def handle_initialize(msg: dict) -> str:
         },
         "serverInfo": {"name": PROXY_NAME, "version": PROXY_VERSION},
         "instructions": (
-            "Monolith MCP proxy for Unreal Engine. Tools are forwarded to the Unreal Editor. "
-            "Before calling a domain action, check its schema instead of guessing: "
-            "monolith_discover() lists namespaces, monolith_discover('<namespace>') lists a "
-            "namespace's actions, and describe_query('action_schema', ...) returns an action's "
-            "exact parameter schema. monolith_guide(section='recipes') gives cross-namespace "
-            "workflows, decision matrices, and gotchas. "
-            "If tools return errors about the editor not running, wait and retry."
+            "Monolith MCP proxy for Unreal Engine. Tools forward to the Unreal Editor.\n"
+            "\n"
+            "ROUTING:\n"
+            "  monolith_find(query)                            — find the right action\n"
+            "  monolith_discover()                             — list all namespaces\n"
+            "  monolith_discover(namespace)                    — list actions in a namespace\n"
+            "  monolith_discover(namespace, action, 'schema')  — fetch exact param schema\n"
+            "  monolith_query({namespace, action, params})     — execute any action\n"
+            "\n"
+            "SKILL LOADING: domain skills live in Skills/<namespace>/SKILL.md and document\n"
+            "available actions and params for that namespace.\n"
+            "\n"
+            "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n"
+            "Offline: Binaries/monolith_query.exe covers source/project/bridge reads."
         ),
     })
 
