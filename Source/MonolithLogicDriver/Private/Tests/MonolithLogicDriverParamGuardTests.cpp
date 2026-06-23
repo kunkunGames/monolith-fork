@@ -855,4 +855,63 @@ bool FMonolithParamGuardLogicDriverRenameNodeRejectsMalformedParamsTest::RunTest
 	return true;
 }
 
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.SetNodeClassRejectsMalformedParams
+// Validates that set_node_class rejects malformed/missing fields.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverSetNodeClassRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.SetNodeClassRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverSetNodeClassRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = FMonolithLogicDriverGraphActions::HandleSetNodeClass(EmptyParams);
+		TestTrue(TEXT("HandleSetNodeClass rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("HandleSetNodeClass reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingGuid = MakeShared<FJsonObject>();
+		MissingGuid->SetStringField(TEXT("asset_path"), TEXT("/Game/DummyPath"));
+		FMonolithActionResult Result = FMonolithLogicDriverGraphActions::HandleSetNodeClass(MissingGuid);
+		TestTrue(TEXT("HandleSetNodeClass rejects missing node_guid"), !Result.bSuccess);
+		TestTrue(TEXT("HandleSetNodeClass reports missing node_guid"), Result.ErrorMessage.Contains(TEXT("Missing required param 'node_guid'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingClass = MakeShared<FJsonObject>();
+		MissingClass->SetStringField(TEXT("asset_path"), TEXT("/Game/DummyPath"));
+		MissingClass->SetStringField(TEXT("node_guid"), TEXT("1234-5678"));
+		FMonolithActionResult Result = FMonolithLogicDriverGraphActions::HandleSetNodeClass(MissingClass);
+		TestTrue(TEXT("HandleSetNodeClass rejects missing class_path"), !Result.bSuccess);
+		TestTrue(TEXT("HandleSetNodeClass reports missing class_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'class_path'")));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.AutoArrangeGraphRejectsMalformedParams
+// Validates that auto_arrange_graph rejects malformed formatter param.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverAutoArrangeGraphRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.AutoArrangeGraphRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverAutoArrangeGraphRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(EmptyParams);
+		TestTrue(TEXT("HandleAutoArrangeGraph rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("HandleAutoArrangeGraph reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedFormatter = MakeShared<FJsonObject>();
+		MalformedFormatter->SetStringField(TEXT("asset_path"), TEXT("/Game/DummyPath"));
+		MalformedFormatter->SetNumberField(TEXT("formatter"), 123.0); // should be string
+		FMonolithActionResult Result = FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(MalformedFormatter);
+		TestTrue(TEXT("HandleAutoArrangeGraph rejects malformed formatter"), !Result.bSuccess);
+		TestEqual(TEXT("HandleAutoArrangeGraph returns ErrInvalidParams (-32602)"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("HandleAutoArrangeGraph reports malformed formatter error"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'formatter' must be a string")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
