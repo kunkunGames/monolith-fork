@@ -12172,11 +12172,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleConfigureSubUV(const TShare
 FMonolithActionResult FMonolithNiagaraActions::HandleRenameEmitter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString NewName = Params->GetStringField(TEXT("name"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId) || EmitterHandleId.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid param \'emitter\'"));
+	}
 
-	if (NewName.IsEmpty())
-		return FMonolithActionResult::Error(TEXT("Missing required param 'name'"));
+	FString NewName;
+	if (!Params->TryGetStringField(TEXT("name"), NewName) || NewName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param \'name\'"));
+	}
+
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -12210,12 +12217,20 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRenameEmitter(const TShared
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEmitterProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString PropertyName = Params->GetStringField(TEXT("property"));
-	if (PropertyName.IsEmpty()) PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId) || EmitterHandleId.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing or invalid param \'emitter\'"));
+	}
 
-	if (PropertyName.IsEmpty())
-		return FMonolithActionResult::Error(TEXT("Missing required param 'property'"));
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
+	{
+		if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Missing required param \'property\'"));
+		}
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
