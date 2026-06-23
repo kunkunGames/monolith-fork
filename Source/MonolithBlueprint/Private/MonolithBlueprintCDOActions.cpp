@@ -498,22 +498,18 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetPropertyAtPath(cons
 		return FMonolithActionResult::Error(TEXT("set_property_at_path requires params"));
 	}
 
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	if (AssetPath.IsEmpty())
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
 
-	const FString Path = Params->GetStringField(TEXT("path"));
-	if (Path.IsEmpty())
+	FString Path;
+	if (!Params->TryGetStringField(TEXT("path"), Path) || Path.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: path"));
 	}
 
-	if (!Params->HasField(TEXT("value")))
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
-	}
 	const TSharedPtr<FJsonValue> JsonVal = Params->TryGetField(TEXT("value"));
 	if (!JsonVal.IsValid())
 	{
