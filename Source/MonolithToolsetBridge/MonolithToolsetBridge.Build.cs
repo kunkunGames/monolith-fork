@@ -10,7 +10,7 @@ public class MonolithToolsetBridge : ModuleRules
 			return false;
 		}
 
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		if (File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
 		{
 			return true;
 		}
