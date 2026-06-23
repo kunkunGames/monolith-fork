@@ -1651,6 +1651,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 				ChildIndex = (*ToPtr)->ChildNodes.Num();
 			}
 
+			int32 MaxChildren = (*ToPtr)->GetMaxChildNodes();
+			if (ChildIndex >= MaxChildren)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Child index %d exceeds max children (%d) for node %s (%s)"),
+					ChildIndex, MaxChildren, *ToId, *(*ToPtr)->GetClass()->GetName()));
+			}
+
 			// Ensure enough child slots
 			while ((*ToPtr)->ChildNodes.Num() <= ChildIndex)
 			{

@@ -940,3 +940,58 @@ bool FMonolithAudioListPerceptionBoundSoundsLimitTest::RunTest(const FString& Pa
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioBuildSoundCueFromSpecMaxChildrenTest, "Monolith.ParamGuard.Audio.BuildSoundCueFromSpecMaxChildren", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioBuildSoundCueFromSpecMaxChildrenTest::RunTest(const FString& Parameters)
+{
+	FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestMaxChildrenCue"));
+
+	TSharedPtr<FJsonObject> SpecObj = MakeShared<FJsonObject>();
+
+	// Create a Looping node (max children = 1) and try to connect two children
+	TArray<TSharedPtr<FJsonValue>> NodesArray;
+
+	TSharedPtr<FJsonObject> LoopingNode = MakeShared<FJsonObject>();
+	LoopingNode->SetStringField(TEXT("id"), TEXT("loop1"));
+	LoopingNode->SetStringField(TEXT("type"), TEXT("Looping"));
+	NodesArray.Add(MakeShared<FJsonValueObject>(LoopingNode));
+
+	TSharedPtr<FJsonObject> WaveNode1 = MakeShared<FJsonObject>();
+	WaveNode1->SetStringField(TEXT("id"), TEXT("wave1"));
+	WaveNode1->SetStringField(TEXT("type"), TEXT("WavePlayer"));
+	NodesArray.Add(MakeShared<FJsonValueObject>(WaveNode1));
+
+	TSharedPtr<FJsonObject> WaveNode2 = MakeShared<FJsonObject>();
+	WaveNode2->SetStringField(TEXT("id"), TEXT("wave2"));
+	WaveNode2->SetStringField(TEXT("type"), TEXT("WavePlayer"));
+	NodesArray.Add(MakeShared<FJsonValueObject>(WaveNode2));
+
+	SpecObj->SetArrayField(TEXT("nodes"), NodesArray);
+
+	TArray<TSharedPtr<FJsonValue>> ConnsArray;
+
+	TSharedPtr<FJsonObject> Conn1 = MakeShared<FJsonObject>();
+	Conn1->SetStringField(TEXT("from"), TEXT("wave1"));
+	Conn1->SetStringField(TEXT("to"), TEXT("loop1"));
+	Conn1->SetNumberField(TEXT("child_index"), 0);
+	ConnsArray.Add(MakeShared<FJsonValueObject>(Conn1));
+
+	TSharedPtr<FJsonObject> Conn2 = MakeShared<FJsonObject>();
+	Conn2->SetStringField(TEXT("from"), TEXT("wave2"));
+	Conn2->SetStringField(TEXT("to"), TEXT("loop1"));
+	Conn2->SetNumberField(TEXT("child_index"), 1);
+	ConnsArray.Add(MakeShared<FJsonValueObject>(Conn2));
+
+	SpecObj->SetArrayField(TEXT("connections"), ConnsArray);
+	Params->SetObjectField(TEXT("spec"), SpecObj);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("build_sound_cue_from_spec"), Params);
+
+	TestFalse(TEXT("Exceeding max children should return an error"), Result.bSuccess);
+	TestTrue(TEXT("Error should mention child index exceeds max children"), Result.ErrorMessage.Contains(TEXT("exceeds max children")));
+
+	return true;
+}
