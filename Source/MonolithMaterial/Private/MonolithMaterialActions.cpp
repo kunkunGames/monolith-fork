@@ -8892,9 +8892,14 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 	{
 		return FMonolithActionResult::Error(ErrorMsg_TextureFolder, FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const TSharedPtr<FJsonObject>& MapsObj = Params->GetObjectField(TEXT("maps"));
+	TSharedPtr<FJsonObject> MapsObj;
+	FString ErrorMsg_Maps;
+	if (!MonolithParamUtils::GetRequiredObjectParam(Params, TEXT("maps"), MapsObj, ErrorMsg_Maps))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_Maps, FMonolithJsonUtils::ErrInvalidParams);
+	}
 
-	if (!MapsObj.IsValid() || MapsObj->Values.Num() == 0)
+	if (MapsObj->Values.Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("'maps' must be a non-empty object mapping PBR type to disk file path"));
 	}
