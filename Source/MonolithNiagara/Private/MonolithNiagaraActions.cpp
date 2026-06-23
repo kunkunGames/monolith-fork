@@ -5021,9 +5021,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 				return FMonolithActionResult::Error(TEXT("Parameter 'x' and 'y' must be numeric"));
 			}
 			double Z = 0.0;
-			O->TryGetNumberField(TEXT("z"), Z);
+			if (O->HasField(TEXT("z")) && !O->TryGetNumberField(TEXT("z"), Z))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'z' must be numeric"));
+			}
 			double W = 0.0;
-			O->TryGetNumberField(TEXT("w"), W);
+			if (O->HasField(TEXT("w")) && !O->TryGetNumberField(TEXT("w"), W))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'w' must be numeric"));
+			}
 			if (O->HasField(TEXT("w"))) ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), X, Y, Z, W);
 			else if (O->HasField(TEXT("z"))) ValStr = FString::Printf(TEXT("%f,%f,%f"), X, Y, Z);
 			else ValStr = FString::Printf(TEXT("%f,%f"), X, Y);
@@ -5037,7 +5043,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const T
 				return FMonolithActionResult::Error(TEXT("Parameter 'r', 'g', 'b' must be numeric"));
 			}
 			double A = 1.0;
-			O->TryGetNumberField(TEXT("a"), A);
+			if (O->HasField(TEXT("a")) && !O->TryGetNumberField(TEXT("a"), A))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'a' must be numeric"));
+			}
 			ValStr = FString::Printf(TEXT("%f,%f,%f,%f"), R2, G, B, A);
 		}
 		else if (O->HasField(TEXT("qx")) && O->HasField(TEXT("qy")) && O->HasField(TEXT("qz")) && O->HasField(TEXT("qw")))

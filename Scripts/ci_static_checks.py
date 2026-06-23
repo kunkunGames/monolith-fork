@@ -739,6 +739,24 @@ def check_proxy_smoke(ctx: CheckContext) -> None:
                 f"expected at least {min_tools}",
                 script,
             )
+        required_tools = config.get("required_offline_tools", [])
+        if isinstance(tools, list) and isinstance(required_tools, list):
+            tool_names = {
+                tool.get("name")
+                for tool in tools
+                if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+            }
+            missing_tools = [
+                name
+                for name in required_tools
+                if isinstance(name, str) and name not in tool_names
+            ]
+            if missing_tools:
+                ctx.block(
+                    "proxy-smoke",
+                    "offline tools/list missing required tool(s): " + ", ".join(missing_tools),
+                    script,
+                )
         if responses[3].get("result", {}).get("isError") is not True:
             ctx.block("proxy-smoke", "offline tools/call did not return graceful tool error", script)
         log_files = list(Path(log_tmp.name).glob("*/proxy.jsonl"))

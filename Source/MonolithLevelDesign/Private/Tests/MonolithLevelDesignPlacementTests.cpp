@@ -67,4 +67,29 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignGetLevelActorsParamGuardTest, "Monolith.ParamGuard.LevelDesign.GetLevelActors", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignGetLevelActorsParamGuardTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("radius"), TEXT("NotANumber"));
+
+		FMonolithActionResult Result = ExecutePlacementAction(TEXT("get_level_actors"), Params);
+		TestFalse(TEXT("get_level_actors should reject string radius"), Result.bSuccess);
+		TestTrue(TEXT("radius type error should mention radius"), Result.ErrorMessage.Contains(TEXT("radius")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("radius"), -1.0);
+
+		FMonolithActionResult Result = ExecutePlacementAction(TEXT("get_level_actors"), Params);
+		TestFalse(TEXT("get_level_actors should reject negative radius"), Result.bSuccess);
+		TestTrue(TEXT("negative radius error should mention lower bound"), Result.ErrorMessage.Contains(TEXT(">= 0.0")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

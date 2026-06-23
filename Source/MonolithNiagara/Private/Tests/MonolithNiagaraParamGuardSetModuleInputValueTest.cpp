@@ -38,5 +38,28 @@ bool FMonolithNiagaraParamGuardSetModuleInputValueTest::RunTest(const FString& P
     TestFalse(TEXT("HandleSetModuleInputValue should fail gracefully with non-numeric r field"), ResultColor.bSuccess);
     TestTrue(TEXT("Error message should mention numeric requirement for colors"), ResultColor.ErrorMessage.Contains(TEXT("must be numeric")));
 
+    // Optional vector components must not silently fall back to zero when present.
+    TSharedRef<FJsonObject> ValueObjBadZ = MakeShared<FJsonObject>();
+    ValueObjBadZ->SetNumberField(TEXT("x"), 1.0);
+    ValueObjBadZ->SetNumberField(TEXT("y"), 1.0);
+    ValueObjBadZ->SetStringField(TEXT("z"), TEXT("not_a_number"));
+    ParamsX->SetObjectField(TEXT("value"), ValueObjBadZ);
+
+    FMonolithActionResult ResultBadZ = FMonolithNiagaraActions::HandleSetModuleInputValue(ParamsX);
+    TestFalse(TEXT("HandleSetModuleInputValue should reject non-numeric optional z field"), ResultBadZ.bSuccess);
+    TestTrue(TEXT("Error message should mention z numeric requirement"), ResultBadZ.ErrorMessage.Contains(TEXT("z")));
+
+    // Optional color alpha must not silently fall back to one when present.
+    TSharedRef<FJsonObject> ValueObjBadAlpha = MakeShared<FJsonObject>();
+    ValueObjBadAlpha->SetNumberField(TEXT("r"), 1.0);
+    ValueObjBadAlpha->SetNumberField(TEXT("g"), 1.0);
+    ValueObjBadAlpha->SetNumberField(TEXT("b"), 1.0);
+    ValueObjBadAlpha->SetStringField(TEXT("a"), TEXT("not_a_number"));
+    ParamsX->SetObjectField(TEXT("value"), ValueObjBadAlpha);
+
+    FMonolithActionResult ResultBadAlpha = FMonolithNiagaraActions::HandleSetModuleInputValue(ParamsX);
+    TestFalse(TEXT("HandleSetModuleInputValue should reject non-numeric optional a field"), ResultBadAlpha.bSuccess);
+    TestTrue(TEXT("Error message should mention a numeric requirement"), ResultBadAlpha.ErrorMessage.Contains(TEXT("a")));
+
     return true;
 }

@@ -36,6 +36,45 @@
 
 namespace
 {
+	bool TryReadIntParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, int32& OutValue, FMonolithActionResult& OutError, bool bRequired, int32 DefaultValue = -1)
+	{
+		OutValue = DefaultValue;
+		if (!Params.IsValid() || !Params->HasField(Key))
+		{
+			if (bRequired)
+			{
+				OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Missing required param '%s'"), Key));
+				return false;
+			}
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> Value = Params->TryGetField(Key);
+		double RawValue = 0.0;
+		if (!Value.IsValid() || !Value->TryGetNumber(RawValue))
+		{
+			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s' must be an integer"), Key));
+			return false;
+		}
+
+		const double RoundedValue = FMath::RoundToDouble(RawValue);
+		if (!FMath::IsFinite(RawValue) || !FMath::IsNearlyEqual(RawValue, RoundedValue))
+		{
+			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s' must be an integer, got %g"), Key, RawValue));
+			return false;
+		}
+
+		if (RoundedValue < static_cast<double>(TNumericLimits<int32>::Min()) ||
+			RoundedValue > static_cast<double>(TNumericLimits<int32>::Max()))
+		{
+			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Parameter '%s' is outside int32 range"), Key));
+			return false;
+		}
+
+		OutValue = static_cast<int32>(RoundedValue);
+		return true;
+	}
+
 	UClass* ResolveStateTreeSchemaClass(const FString& RequestedName)
 	{
 		TArray<FString> CandidateNames;
@@ -1326,14 +1365,10 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TShar
 	// StateTree asset so an obviously bad request fails fast with an
 	// actionable error instead of a generic "StateTree not found".
 	int32 Index = -1;
-	if (Params->HasField(TEXT("index")))
+	FMonolithActionResult IndexError;
+	if (!TryReadIntParam(Params, TEXT("index"), Index, IndexError, false, -1))
 	{
-		double TempIndex = 0.0;
-		if (!Params->TryGetNumberField(TEXT("index"), TempIndex))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'index' must be a number"));
-		}
-		Index = static_cast<int32>(TempIndex);
+		return IndexError;
 	}
 
 	FString AssetPath, Error;
@@ -1564,12 +1599,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTask(const TSha
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
-	double TaskIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("task_index"), TaskIndexDouble))
+	int32 TaskIndex = INDEX_NONE;
+	FMonolithActionResult TaskIndexError;
+	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'task_index'"));
+		return TaskIndexError;
 	}
-	int32 TaskIndex = static_cast<int32>(TaskIndexDouble);
 
 	if (StateId.IsEmpty())
 	{
@@ -1608,12 +1643,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTTaskProperty(const
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
-	double TaskIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("task_index"), TaskIndexDouble))
+	int32 TaskIndex = INDEX_NONE;
+	FMonolithActionResult TaskIndexError;
+	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'task_index'"));
+		return TaskIndexError;
 	}
-	int32 TaskIndex = static_cast<int32>(TaskIndexDouble);
 	FString PropertyName = Params->GetStringField(TEXT("property_name"));
 
 	if (StateId.IsEmpty() || PropertyName.IsEmpty())
@@ -1761,12 +1796,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTEnterCondition(
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
-	double CondIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("condition_index"), CondIndexDouble))
+	int32 CondIndex = INDEX_NONE;
+	FMonolithActionResult CondIndexError;
+	if (!TryReadIntParam(Params, TEXT("condition_index"), CondIndex, CondIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'condition_index'"));
+		return CondIndexError;
 	}
-	int32 CondIndex = static_cast<int32>(CondIndexDouble);
 
 	if (StateId.IsEmpty())
 	{
@@ -1909,12 +1944,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTransition(cons
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
-	double TransIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("transition_index"), TransIndexDouble))
+	int32 TransIndex = INDEX_NONE;
+	FMonolithActionResult TransIndexError;
+	if (!TryReadIntParam(Params, TEXT("transition_index"), TransIndex, TransIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'transition_index'"));
+		return TransIndexError;
 	}
-	int32 TransIndex = static_cast<int32>(TransIndexDouble);
 
 	if (StateId.IsEmpty())
 	{
@@ -2024,12 +2059,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTPropertyBinding
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	double BindingIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("binding_index"), BindingIndexDouble))
+	int32 BindingIndex = INDEX_NONE;
+	FMonolithActionResult BindingIndexError;
+	if (!TryReadIntParam(Params, TEXT("binding_index"), BindingIndex, BindingIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'binding_index'"));
+		return BindingIndexError;
 	}
-	int32 BindingIndex = static_cast<int32>(BindingIndexDouble);
 
 	FStateTreeEditorPropertyBindings* Bindings = EditorData->GetPropertyEditorBindings();
 	if (!Bindings)
@@ -2112,14 +2147,10 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetSTBindableProperties
 
 	FString StateId = Params->GetStringField(TEXT("state_id"));
 	int32 TaskIndex = -1;
-	if (Params->HasField(TEXT("task_index")))
+	FMonolithActionResult TaskIndexError;
+	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, false, -1))
 	{
-		double TempTaskIndex = 0.0;
-		if (!Params->TryGetNumberField(TEXT("task_index"), TempTaskIndex))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'task_index' must be a number"));
-		}
-		TaskIndex = static_cast<int32>(TempTaskIndex);
+		return TaskIndexError;
 	}
 
 	TArray<TSharedPtr<FJsonValue>> PropArr;
@@ -2308,12 +2339,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransitionConditio
 		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
 	}
 
-	double TransIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("transition_index"), TransIndexDouble))
+	int32 TransIndex = INDEX_NONE;
+	FMonolithActionResult TransIndexError;
+	if (!TryReadIntParam(Params, TEXT("transition_index"), TransIndex, TransIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'transition_index'"));
+		return TransIndexError;
 	}
-	int32 TransIndex = static_cast<int32>(TransIndexDouble);
 	if (!State->Transitions.IsValidIndex(TransIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Transition index %d out of range (0-%d)"), TransIndex, State->Transitions.Num() - 1));
@@ -2458,12 +2489,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleConfigureSTConsideratio
 		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
 	}
 
-	double ConsIndexDouble = 0.0;
-	if (!Params->TryGetNumberField(TEXT("consideration_index"), ConsIndexDouble))
+	int32 ConsIndex = INDEX_NONE;
+	FMonolithActionResult ConsIndexError;
+	if (!TryReadIntParam(Params, TEXT("consideration_index"), ConsIndex, ConsIndexError, true))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid param 'consideration_index'"));
+		return ConsIndexError;
 	}
-	int32 ConsIndex = static_cast<int32>(ConsIndexDouble);
 	if (!State->Considerations.IsValidIndex(ConsIndex))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Consideration index %d out of range (0-%d)"), ConsIndex, State->Considerations.Num() - 1));

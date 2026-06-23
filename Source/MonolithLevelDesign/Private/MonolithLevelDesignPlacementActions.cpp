@@ -1144,12 +1144,6 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::RandomizeTransforms(
 
 FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const TSharedPtr<FJsonObject>& Params)
 {
-	UWorld* World = MonolithMeshUtils::GetEditorWorld();
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("No editor world available"));
-	}
-
 	// Parse filters
 	FString ClassFilter, TagFilter, SublevelFilter, MeshWildcard, NameWildcard, VolumeName;
 	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
@@ -1160,12 +1154,26 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const
 	Params->TryGetStringField(TEXT("volume_name"), VolumeName);
 
 	double Radius = 0.0;
-	if (Params->TryGetNumberField(TEXT("radius"), Radius))
+	if (Params->HasField(TEXT("radius")))
 	{
+		if (!Params->TryGetNumberField(TEXT("radius"), Radius))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'radius' must be a number"));
+		}
+		if (Radius < 0.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be >= 0.0, got %f"), Radius));
+		}
 		if (Radius > 50000.0)
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), Radius));
 		}
+	}
+
+	UWorld* World = MonolithMeshUtils::GetEditorWorld();
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("No editor world available"));
 	}
 
 	FVector Center(0, 0, 0);

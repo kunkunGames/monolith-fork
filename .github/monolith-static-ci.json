@@ -107,7 +107,14 @@
     "url_env": "MONOLITH_URL",
     "offline_url": "http://127.0.0.1:9/mcp",
     "expected_server_name": "monolith-proxy",
-    "expected_offline_min_tools": 4,
+    "expected_offline_min_tools": 5,
+    "required_offline_tools": [
+      "monolith_discover",
+      "monolith_status",
+      "monolith_update",
+      "monolith_reindex",
+      "monolith_query"
+    ],
     "timeout_seconds": 5
   },
   "skill_drift": {

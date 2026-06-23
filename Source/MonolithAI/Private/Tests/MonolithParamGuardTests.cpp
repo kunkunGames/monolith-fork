@@ -54,6 +54,17 @@ bool FMonolithAIStateTreeParamGuardTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("move_st_state should fail if index is wrong type"), Result.bSuccess);
     TestTrue(TEXT("move_st_state error should indicate wrong parameter type"), Result.ErrorMessage.Contains(TEXT("index")));
 
+    TSharedPtr<FJsonObject> FractionalPayload = MakeShared<FJsonObject>();
+    FractionalPayload->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/ST_Test"));
+    FractionalPayload->SetStringField(TEXT("state_id"), TEXT("00000000-0000-0000-0000-000000000000"));
+    FractionalPayload->SetStringField(TEXT("new_parent_id"), TEXT("11111111-1111-1111-1111-111111111111"));
+    FractionalPayload->SetNumberField(TEXT("index"), 1.5);
+
+    FMonolithActionResult FractionalResult = Registry.ExecuteAction(TEXT("ai"), TEXT("move_st_state"), FractionalPayload);
+
+    TestFalse(TEXT("move_st_state should reject fractional index values"), FractionalResult.bSuccess);
+    TestTrue(TEXT("move_st_state fractional index error should mention integer"), FractionalResult.ErrorMessage.Contains(TEXT("integer")));
+
     return true;
 }
 

@@ -802,6 +802,33 @@ def _make_tool(name: str, description: str, schema: dict) -> dict:
     return {"name": name, "description": description, "inputSchema": schema}
 
 
+def _monolith_query_tool() -> dict:
+    return _make_tool(
+        "monolith_query",
+        "Execute any Monolith action. Use monolith_find(query) to locate the right action, "
+        "monolith_discover(namespace) to inspect its schema, then call monolith_query with "
+        "the resolved namespace, action, and params.",
+        {
+            "type": "object",
+            "properties": {
+                "namespace": {
+                    "type": "string",
+                    "description": "Target namespace, e.g. 'blueprint', 'source', 'gas'. Call monolith_discover() with no args to list all available namespaces.",
+                },
+                "action": {
+                    "type": "string",
+                    "description": "Target action name within the namespace.",
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Arguments for the action.",
+                },
+            },
+            "required": ["namespace", "action"],
+        },
+    )
+
+
 def _inject_monolith_query(response_str: str) -> str:
     try:
         payload = json.loads(response_str)
@@ -813,30 +840,7 @@ def _inject_monolith_query(response_str: str) -> str:
             if t.get("name") == "monolith_query":
                 return response_str
 
-        tools.append(_make_tool(
-            "monolith_query",
-            "Execute any Monolith action. Use monolith_find(query) to locate the right action, "
-            "monolith_discover(namespace) to inspect its schema, then call monolith_query with "
-            "the resolved namespace, action, and params.",
-            {
-                "type": "object",
-                "properties": {
-                    "namespace": {
-                        "type": "string",
-                        "description": "Target namespace, e.g. 'blueprint', 'source', 'gas'. Call monolith_discover() with no args to list all available namespaces.",
-                    },
-                    "action": {
-                        "type": "string",
-                        "description": "Target action name within the namespace.",
-                    },
-                    "params": {
-                        "type": "object",
-                        "description": "Arguments for the action.",
-                    },
-                },
-                "required": ["namespace", "action"],
-            }
-        ))
+        tools.append(_monolith_query_tool())
         return json.dumps(payload)
     except Exception as e:
         _log(f"_inject_monolith_query parse error: {e}")
@@ -916,6 +920,7 @@ def _seed_tools() -> list[dict]:
         "Re-index the Monolith project database. Requires the editor-side Monolith server.",
         _empty_object_schema(),
     ))
+    tools.append(_monolith_query_tool())
     return tools
 
 
