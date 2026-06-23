@@ -1300,6 +1300,29 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithPCG.md` for the deep dive.
 
 ---
 
+## chooser
+
+Optional ChooserTable authoring, modification, and evaluation discovery. Requires the engine Chooser plugin.
+
+| Action | Params |
+|--------|--------|
+| `create_chooser_table` | `asset_path`, `output_type` (optional string) |
+| `add_chooser_column` | `asset_path`, `column_kind`, `binding_property` (optional string) |
+| `add_chooser_row` | `asset_path`, `cells`, `output_psd` (optional string) |
+| `set_chooser_cell` | `asset_path`, `column_index`, `row_index`, `bool_value` (optional boolean), `enum_value` (optional integer), `comparison` (optional string), `float_min` (optional number), `float_max` (optional number), `tags` (optional any) |
+| `set_context_object_class` | `asset_path`, `class_path`, `context_index` (optional integer) |
+| `set_result_asset_reference` | `asset_path`, `asset_path_value`, `row_or_column` |
+| `set_evaluate_chooser_result_reference` | `asset_path`, `child_chooser_path`, `row` |
+| `duplicate_chooser_tree` | `source_paths`, `destination_folder`, `remap_rules` (optional array) |
+| `inspect_chooser` | `asset_path`, `include_cells` (optional boolean), `recursive` (optional boolean) |
+| `list_chooser_tables` | `path_filter` (optional string) |
+| `get_chooser_table` | `asset_path`, `include_rows` (optional boolean) |
+| `list_chooser_columns` | `asset_path` |
+| `list_chooser_rows` | `asset_path`, `start_row` (optional number), `limit` (optional number) |
+| `list_chooser_references` | `asset_path` |
+| `validate_chooser` | `asset_path`, `expected_context_class` (optional string), `expected_result_type` (optional string) |
+| `validate_chooser_table` | `asset_path` |
+
 ## dataflow
 
 Read-only Dataflow/Chaos graph discovery and bounded graph inspection. `get_status` and `list_assets` always register; the graph and node-schema readers are conditional on `WITH_MONOLITH_DATAFLOW`. Does not load, evaluate, regenerate, or mutate Dataflow assets. **8 actions.**
