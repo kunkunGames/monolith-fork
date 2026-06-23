@@ -469,7 +469,13 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleAddPerceptionComponent
 	BP->SimpleConstructionScript->AddNode(NewNode);
 
 	// Set dominant sense if specified
-	FString DominantSense = Params->GetStringField(TEXT("dominant_sense"));
+	FString DominantSense;
+	if (Params->HasField(TEXT("dominant_sense")) && !Params->TryGetStringField(TEXT("dominant_sense"), DominantSense))
+	{
+		BP->Status = SavedStatus;
+		return FMonolithActionResult::Error(TEXT("Parameter 'dominant_sense' must be a string"));
+	}
+
 	UAIPerceptionComponent* PerceptionComp = GetPerceptionTemplate(NewNode);
 	if (PerceptionComp && !DominantSense.IsEmpty())
 	{
@@ -1005,7 +1011,12 @@ FMonolithActionResult FMonolithAIPerceptionActions::HandleConfigureDamageSense(c
 	}
 
 	// Custom implementation class
-	FString ImplStr = Params->GetStringField(TEXT("implementation"));
+	FString ImplStr;
+	if (Params->HasField(TEXT("implementation")) && !Params->TryGetStringField(TEXT("implementation"), ImplStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'implementation' must be a string"));
+	}
+
 	if (!ImplStr.IsEmpty())
 	{
 		UClass* ImplClass = FindFirstObject<UClass>(*ImplStr, EFindFirstObjectOptions::NativeFirst);
