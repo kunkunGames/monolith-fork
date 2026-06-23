@@ -162,11 +162,17 @@ FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonOb
 	}
 
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+	}
 	const int32 Limit = FMonolithWaterActions::ClampWaterLimit(LimitValue);
 
 	FString NameFilter;
-	Params->TryGetStringField(TEXT("actor_name_filter"), NameFilter);
+	if (Params->HasField(TEXT("actor_name_filter")) && !Params->TryGetStringField(TEXT("actor_name_filter"), NameFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("actor_name_filter must be a string"));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Limit);
