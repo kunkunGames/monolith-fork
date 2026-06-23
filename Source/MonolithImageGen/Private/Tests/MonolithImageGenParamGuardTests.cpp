@@ -79,4 +79,31 @@ bool FMonolithParamGuardImageGenGenerateImageViaIma2MalformedParamsTest::RunTest
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardImageGenImportGeneratedImageMalformedParamsTest, "Monolith.ParamGuard.MonolithImageGen.ImportGeneratedImageRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardImageGenImportGeneratedImageMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("import_generated_image action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("imagegen"), TEXT("import_generated_image")));
+
+	// Test 1: Empty parameters
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("imagegen"), TEXT("import_generated_image"), EmptyParams);
+		TestFalse(TEXT("ImportGeneratedImage with empty params should fail"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	// Test 2: Missing bytes_b64 and file_path
+	{
+		TSharedPtr<FJsonObject> MissingInputParams = MakeShared<FJsonObject>();
+		MissingInputParams->SetStringField(TEXT("other_param"), TEXT("value"));
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("imagegen"), TEXT("import_generated_image"), MissingInputParams);
+		TestFalse(TEXT("ImportGeneratedImage missing input params should fail"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
