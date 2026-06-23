@@ -159,7 +159,7 @@ public:
 Add your indexer to `UMonolithIndexSubsystem::Initialize()`:
 
 ```cpp
-Indexers.Add(MakeUnique<FMyIndexer>());
+RegisterIndexer(MakeShared<FMyIndexer>());
 ```
 
 ### 3. Add DB tables if needed
