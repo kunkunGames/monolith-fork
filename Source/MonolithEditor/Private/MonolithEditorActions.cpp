@@ -1293,6 +1293,7 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 
 	// Echo the excluded categories so callers know what was bucketed out of error_count.
 	TArray<TSharedPtr<FJsonValue>> ExclEcho;
+	ExclEcho.Reserve(ExcludeCategories.Num());
 	for (const FString& C : ExcludeCategories) { ExclEcho.Add(MakeShared<FJsonValueString>(C)); }
 	Root->SetArrayField(TEXT("excluded_categories"), ExclEcho);
 
@@ -7864,11 +7865,13 @@ namespace MonolithEditorPieSmoke
 			auto FieldsToJson = [](const TArray<FString>& Fields) -> TArray<TSharedPtr<FJsonValue>>
 			{
 				TArray<TSharedPtr<FJsonValue>> Out;
+				Out.Reserve(Fields.Num());
 				for (const FString& F : Fields) { Out.Add(MakeShared<FJsonValueString>(F)); }
 				return Out;
 			};
 
 			TArray<TSharedPtr<FJsonValue>> SetupArr;
+			SetupArr.Reserve(S.ActorSetupResults.Num());
 			for (const FPieSmokeActorSetupResult& Entry : S.ActorSetupResults)
 			{
 				TSharedPtr<FJsonObject> EObj = MakeShared<FJsonObject>();
@@ -7945,6 +7948,7 @@ namespace MonolithEditorPieSmoke
 				Trace->SetBoolField(TEXT("requested"), true);
 				Trace->SetBoolField(TEXT("tracing"), S.bTraceStarted);
 				TArray<TSharedPtr<FJsonValue>> ChArr;
+				ChArr.Reserve(S.TraceChannels.Num());
 				for (const FString& Ch : S.TraceChannels) { ChArr.Add(MakeShared<FJsonValueString>(Ch)); }
 				Trace->SetArrayField(TEXT("channels"), ChArr);
 				if (!S.TraceStatus.IsEmpty()) { Trace->SetStringField(TEXT("status"), S.TraceStatus); }
@@ -9121,6 +9125,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 				if (Skipped.Num() > 0)
 				{
 					TArray<TSharedPtr<FJsonValue>> SkippedJson;
+					SkippedJson.Reserve(Skipped.Num());
 					for (const FString& S : Skipped) { SkippedJson.Add(MakeShared<FJsonValueString>(S)); }
 					ActorRow->SetArrayField(TEXT("properties_skipped"), SkippedJson);
 				}
@@ -9428,6 +9433,7 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 				if (Skipped.Num() > 0)
 				{
 					TArray<TSharedPtr<FJsonValue>> SkippedJson;
+					SkippedJson.Reserve(Skipped.Num());
 					for (const FString& S : Skipped) { SkippedJson.Add(MakeShared<FJsonValueString>(S)); }
 					ActorRow->SetArrayField(TEXT("properties_skipped"), SkippedJson);
 				}
