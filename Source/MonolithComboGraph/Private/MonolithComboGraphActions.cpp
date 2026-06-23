@@ -669,7 +669,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 	}
 
 	FString PathFilter;
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'path_filter', expected string"));
+	}
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -1097,7 +1100,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	}
 
 	FString NodeType;
-	Params->TryGetStringField(TEXT("node_type"), NodeType);
+	if (Params->HasField(TEXT("node_type")) && !Params->TryGetStringField(TEXT("node_type"), NodeType))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'node_type', expected string"));
+	}
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
 	float PlayRate = 1.0f;
@@ -1702,13 +1708,22 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 	}
 
 	FString ComboGraphPath;
-	Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath);
+	if (Params->HasField(TEXT("combo_graph")) && !Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'combo_graph', expected string"));
+	}
 
 	FString InitialInput;
-	Params->TryGetStringField(TEXT("initial_input"), InitialInput);
+	if (Params->HasField(TEXT("initial_input")) && !Params->TryGetStringField(TEXT("initial_input"), InitialInput))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'initial_input', expected string"));
+	}
 
 	FString ParentClassName;
-	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
+	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_class', expected string"));
+	}
 	if (ParentClassName.IsEmpty()) ParentClassName = TEXT("GameplayAbility");
 
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
