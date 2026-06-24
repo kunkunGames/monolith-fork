@@ -516,6 +516,7 @@ namespace MonolithUIRegistryPhase2
             // the standard `IsValidEnumValue` test.
             TArray<TSharedPtr<FJsonValue>> Values;
             const int32 NumEntries = EnumPtr->NumEnums();
+            Values.Reserve(NumEntries);
             for (int32 i = 0; i < NumEntries; ++i)
             {
                 // Skip _MAX sentinel (last entry on UENUM() with no explicit values)
