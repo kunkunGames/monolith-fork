@@ -742,6 +742,11 @@ $trackedFiles = $allTrackedFiles | Where-Object {
             break
         }
     }
+    # Strip internal planning, spec, and documentation folders.
+    # These are explicitly excluded from the release ZIP as per AGENTS.md rule 19.
+    if ($keep -and ($path -like ".jules/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Docs/plans/*")) {
+        $keep = $false
+    }
     # Strip internal testing-execution records (Docs/testing/) -- per-feature test-pass
     # diaries with no downstream consumer value. Public-facing test artefacts live
     # elsewhere (SPEC sections, automation tests under Source/).
