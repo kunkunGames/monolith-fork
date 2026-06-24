@@ -818,6 +818,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetIkRigBoneSettin
 		}
 
 		TArray<TSharedPtr<FJsonValue>> BoneEntries;
+		BoneEntries.Reserve(BonesToRead.Num());
 		for (const FName& Bone : BonesToRead)
 		{
 			FIKRigBoneSettingsBase* Settings = Solver->GetBoneSettings(Bone);
