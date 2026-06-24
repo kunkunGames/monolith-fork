@@ -667,7 +667,17 @@ FMonolithActionResult FMonolithDataflowActions::ListAssets(const TSharedPtr<FJso
 	}
 
 	double LimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	if (Params->HasField(TEXT("limit")))
+	{
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("limit must be a valid number"));
+		}
+		if (LimitValue > 500.0)
+		{
+			return FMonolithActionResult::Error(TEXT("limit exceeds maximum allowed (500)"));
+		}
+	}
 	const int32 Limit = MonolithDataflow::ClampLimit(LimitValue);
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
