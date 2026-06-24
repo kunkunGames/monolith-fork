@@ -292,6 +292,14 @@ namespace MonolithUIInternal
         Obj->SetStringField(TEXT("visibility"), UEnum::GetValueAsString(Widget->GetVisibility()));
         Obj->SetNumberField(TEXT("render_opacity"), Widget->GetRenderOpacity());
         Obj->SetBoolField(TEXT("is_variable"), Widget->bIsVariable);
+        if (const UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+        {
+            Obj->SetStringField(TEXT("text"), TextBlock->GetText().ToString());
+        }
+        else if (const URichTextBlock* RichTextBlock = Cast<URichTextBlock>(Widget))
+        {
+            Obj->SetStringField(TEXT("text"), RichTextBlock->GetText().ToString());
+        }
 
         // Slot info (how this widget sits in its parent)
         if (UPanelSlot* Slot = Widget->Slot)

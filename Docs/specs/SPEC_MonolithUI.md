@@ -11,7 +11,7 @@
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
 
 **The optional EffectSurface provider is NOT a build-system dependency** (decoupled 2026-04-27). EffectSurface support is delivered via UClass-by-name reflection through `MonolithUI::GetEffectSurfaceClass()` — see § "Optional Dep Probe API" and § "Error Contract — Optional EffectSurface Provider Absence (-32010)". External providers may depend on MonolithUI for registry/spec structs, but MonolithUI must not depend on them.
-**Total actions in `ui::` namespace:** **130** when `WITH_COMMONUI=1` (72 always-on owned by this module + 57 CommonUI owned by this module conditional on `WITH_COMMONUI` + 1 inline diagnostic `dump_style_cache_stats` registered from `MonolithUIModule.cpp` under the same gate) + **4 GAS UI binding aliases owned by `MonolithGAS`** (also registered into `ui::`, conditional on `WITH_GBA`). Without `WITH_COMMONUI`, the namespace registers **72** actions; without `WITH_GBA` the four bridge aliases are absent. Phase 3 of the 2026-05-16 UI Gap Audit (2026-05-16) landed 4 actions: 3 CommonUI scaffolders (`scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`) + 1 always-on multi-screen menu builder (`build_menu_from_spec`).
+**MonolithUI-owned actions in `ui::` namespace:** **135** when `WITH_COMMONUI=1` (73 always-on owned by this module + 62 CommonUI owned by this module conditional on `WITH_COMMONUI`, including the inline diagnostic `dump_style_cache_stats` registered from `MonolithUIModule.cpp` under the same gate). Without `WITH_COMMONUI`, the namespace registers **73** MonolithUI-owned actions. **4 GAS UI binding aliases owned by `MonolithGAS`** may also register into `ui::` when `WITH_GBA` is enabled.
 **Settings toggle:** `bEnableUI` (default: True)
 **MCP tool:** `ui_query`
 **Namespace:** `ui`
@@ -32,9 +32,9 @@
 | Accessibility (non-CommonUI) | 4 | `MonolithUIAccessibilityActions.cpp` | always |
 | Hoisted Design Import | 5 | `Actions/Hoisted/{TextureIngest,FontIngest,RoundedCorner,Shadow,Gradient}Actions.cpp` | always — `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
-| Spec Builder + Serializer | 4 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, plus Phase 3 (2026-05-16) `build_menu_from_spec` |
+| Spec Builder + Serializer | 5 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
 | Type Registry diagnostic | 4 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
-| **Always-on subtotal** | **72** | | |
+| **Always-on subtotal** | **73** | | |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 14 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` — Phase 2 (2026-05-16) added `apply_token_binding`, `convert_textblock_to_common`, `set_action_bar_button_class`; Phase 3 (2026-05-23) added `convert_border_to_common`, `reparent_widget_root` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -47,10 +47,10 @@
 | CommonUI Scaffolders | 3 | `CommonUI/MonolithCommonUITemplateActions.cpp` | `WITH_COMMONUI` — Phase 3 (2026-05-16) `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **62** | | conditional |
-| **MonolithUI total** | **134** | | full configuration |
+| **MonolithUI total** | **135** | | full configuration |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
-Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-04-26 (Phase L). Phase 2 of the 2026-05-16 UI Gap Audit landed 8 additional actions (4 always-on + 4 CommonUI-gated) bringing the totals to 70 / 55 / 125. Phase 3 of the 2026-05-16 UI Gap Audit landed 4 more (1 always-on `build_menu_from_spec` + 3 CommonUI-gated scaffolders) bringing the totals to 71 / 58 / 129. Phase 3 of the 2026-05-22 UI Blueprint Gap Audit landed 4 more CommonUI-gated actions (`set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`) bringing the totals to 71 / 62 / 133. Phase 4 of the 2026-05-22 UI Blueprint Gap Audit (2026-05-23) landed 1 always-on action (`set_widget_is_variable`) bringing the totals to 72 / 62 / 134 (CommonUI subtotal unchanged). Production registration sites only — Tests/ excluded.
+Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-04-26 (Phase L). Phase 2 of the 2026-05-16 UI Gap Audit landed 8 additional actions (4 always-on + 4 CommonUI-gated) bringing the totals to 70 / 55 / 125. Phase 3 of the 2026-05-16 UI Gap Audit landed 4 more (1 always-on `build_menu_from_spec` + 3 CommonUI-gated scaffolders) bringing the totals to 71 / 58 / 129. Phase 3 of the 2026-05-22 UI Blueprint Gap Audit landed 4 more CommonUI-gated actions (`set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`) bringing the totals to 71 / 62 / 133. Phase 4 of the 2026-05-22 UI Blueprint Gap Audit (2026-05-23) landed 1 always-on action (`set_widget_is_variable`) bringing the totals to 72 / 62 / 134 (CommonUI subtotal unchanged). The 2026-06-24 UMG anchor audit landed 1 always-on action (`audit_widget_layout`) bringing the totals to 73 / 62 / 135. Production registration sites only — Tests/ excluded.
 
 ### Classes
 
@@ -68,7 +68,7 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 | `FMonolithUIRegistryActions` | Registers `dump_property_allowlist` (Phase B diagnostic) |
 | `MonolithUI::FTextureIngestActions` / `FFontIngestActions` / `FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Hoisted Design Import + Animation v2 verbs (Phase D, 2026-04-26) |
 | `MonolithUI::FEffectSurfaceActions` | EffectSurface sub-bag setters + preset (Phase F, 2026-04-26) |
-| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) |
+| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) + `audit_widget_layout` (2026-06-24 structural UMG anchor audit) |
 | `MonolithCommonUITemplate::Register` | CommonUI headline scaffolders: `scaffold_main_menu` / `scaffold_settings_panel_with_tabs` / `scaffold_pause_menu` (Phase 3 of the 2026-05-16 UI Gap Audit). File-static handlers in `CommonUI/MonolithCommonUITemplateActions.cpp` — `WITH_COMMONUI` only |
 | `UMonolithUIRegistrySubsystem` (UEditorSubsystem) | Live type registry + per-type property allowlist (Phase B) |
 | `FUITypeRegistry` / `FUIPropertyAllowlist` / `FUIPropertyPathCache` / `FUIReflectionHelper` | Registry data model + safe reflection write surface (Phases B + C) |
@@ -507,6 +507,52 @@ ui::dump_ui_spec({
 }
 ```
 
+**Structural layout audit (2026-06-24 UMG anchor audit):**
+
+`ui::audit_widget_layout` reuses `FUISpecSerializer` instead of parsing WidgetBlueprint assets separately. It batch-dumps either explicit `asset_paths[]` or every WidgetBlueprint under `path_prefix` (default `/Game/UI`) and reports structural risks before screenshot review:
+
+| Pattern | Severity | Detection |
+|---|---|---|
+| Unallowlisted `CanvasPanelSlot` | Warning | Parent node is `CanvasPanel` and the asset/widget identifier is not present in `allowed_canvas_slots[]`. |
+| Edge anchor mismatch | Error | `top_right`/`bottom_right`/right-edge anchor with negative X offset and left alignment, or bottom-edge anchor with negative Y offset and top alignment. |
+| Dynamic text without width/wrap containment | Warning | Text-like widget id (`Stage`, `Wave`, `Prompt`, `Info`, `Description`, `Name`, `Title`, `Label`) has no serialized wrap mode and no inherited width bound from a fixed Canvas slot, explicit width, or `MaxDesiredWidth`. `MinDesiredWidth` is only a floor and is not treated as overflow containment. |
+
+```jsonc
+ui::audit_widget_layout({
+  path_prefix?: "/Game/UI",
+  asset_paths?: ["/Game/UI/Widget/HUD/WBP_HUD"],
+  allowed_canvas_slots?: [
+    "/Game/UI/Foundation/SoftwareCursors/W_ArrowCursor",
+    "/Game/UI/Widget/HUD/WBP_HUD::InventoryWidget"
+  ],
+  include_tests?: false,
+  treat_warnings_as_errors?: false
+})
+=>
+{
+  bSuccess: bool,
+  status: "ok" | "findings_failed",
+  path_prefix: str,
+  summary: {
+    assets_scanned: int,
+    nodes_scanned: int,
+    canvas_slots: int,
+    error_count: int,
+    warning_count: int,
+    dump_error_count: int,
+    treat_warnings_as_errors: bool
+  },
+  assets: [
+    { asset_path: str, parent_class: str, root_type: str, root_widget: str, node_count: int, canvas_slot_count: int, slot_counts: object, error_count: int, warning_count: int }
+  ],
+  findings: [
+    { severity: "warning" | "error", category: str, asset_path: str, widget_id: str, widget_path: str, message: str, suggested_fix: str, details?: object }
+  ]
+}
+```
+
+This action is structural proof only. It does not replace the PC/mobile responsive screenshot gates when runtime UI layout or presentation changes.
+
 **Lossy boundary catalogue.** The following do not roundtrip perfectly; the rebuild side falls back to defaults or warns:
 
 | Field | Behaviour | Rationale |
@@ -541,9 +587,10 @@ ui::dump_ui_spec({
 
 - `Source/MonolithUI/Public/Spec/UISpecSerializer.h` -- `FUISpecSerializer::Dump` entry + `FUISpecSerializerInputs` / `FUISpecSerializerResult` structs.
 - `Source/MonolithUI/Private/Spec/UISpecSerializer.cpp` -- per-slot/-content/-style/-effect/-commonui readers + recursive widget walker.
-- `Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp` -- `ui::dump_ui_spec` action handler + the inverse `NodeToJson` / `SlotToJson` / `EffectToJson` / `CommonUIToJson` packers.
+- `Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp` -- `ui::dump_ui_spec` action handler + the inverse `NodeToJson` / `SlotToJson` / `EffectToJson` / `CommonUIToJson` packers, plus the read-only `ui::audit_widget_layout` structural validator.
 - `Source/MonolithUI/Public/Registry/UIReflectionHelper.h` (+ `.cpp`) -- new `ReadJsonPath` method (symmetric counterpart to `ApplyJsonPath`); read-side `ReadValueFromProperty` dispatch table mirrors the existing write-side `WriteValueToProperty`.
 - `Source/MonolithUI/Private/Tests/UISpecRoundtripTests.cpp` -- automation tests J1 (`MonolithUI.SpecSerializer.RoundtripIdentity`), supported slot/content/style coverage (`MonolithUI.SpecSerializer.SupportedFields`), curated anchor coverage (`MonolithUI.SpecSerializer.PublicFields`), J4 (`MonolithUI.SpecSerializer.RoundtripCorpus` -- 5 representative WBP shapes), and a per-slot-type coverage test (`MonolithUI.SpecSerializer.SlotCoverage`).
+- `Source/MonolithUI/Private/Tests/MonolithUILayoutAuditTests.cpp` -- deterministic `ui::audit_widget_layout` contract tests that construct an edge-anchored Canvas slot with mismatched alignment and verify the `CanvasAnchorMismatch` finding, plus a min-width-only `SizeBox` wrapper around unwrapped dynamic text to verify `MinDesiredWidth` does not suppress `UnboundedDynamicText`.
 
 ### LLM Error Reporting (M5 — Phase K, landed 2026-04-26)
 

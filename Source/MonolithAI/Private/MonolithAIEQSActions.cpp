@@ -81,6 +81,35 @@ namespace
 		return Query->GetOptionsMutable();
 	}
 
+	bool SaveEQSQuery(UEnvQuery* Query, FString& OutError)
+	{
+		if (!Query)
+		{
+			OutError = TEXT("Cannot save null EQS query");
+			return false;
+		}
+
+		UPackage* Package = Query->GetOutermost();
+		if (!Package)
+		{
+			OutError = FString::Printf(TEXT("EQS query has no outer package: %s"), *Query->GetName());
+			return false;
+		}
+
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		if (!UPackage::SavePackage(Package, Query, *PackageFilename, SaveArgs))
+		{
+			OutError = FString::Printf(TEXT("Failed to save EQS query package: %s"), *Package->GetName());
+			return false;
+		}
+
+		return true;
+	}
+
 	/** Apply a JSON property value to a UPROPERTY on a UObject (EQS variant, no BT dependency). */
 	bool SetEQSPropertyValue(UObject* Obj, const FString& PropName, const TSharedPtr<FJsonValue>& Value, FString& OutError)
 	{
@@ -828,8 +857,16 @@ FMonolithActionResult FMonolithAIEQSActions::HandleCreateEQSQuery(const TSharedP
 	FAssetRegistryModule::AssetCreated(Query);
 	Query->MarkPackageDirty();
 
+	const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+		PackagePath,
+		FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	const bool bSaved = UPackage::SavePackage(Package, Query, *PackageFilename, SaveArgs);
+
 	TSharedPtr<FJsonObject> Result = MonolithAI::MakeAssetResult(PackagePath, TEXT("EQS query created"));
 	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1029,11 +1066,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSGenerator(const TShared
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	int32 OptionIndex = Query->GetOptions().Num() - 1;
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetStringField(TEXT("generator_class"), GenClass->GetName());
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Generator added"));
 
 	if (PropErrors.Num() > 0)
@@ -1084,10 +1128,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleRemoveEQSGenerator(const TSha
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("removed_option_index"), OptionIndex);
 	Result->SetStringField(TEXT("removed_generator_class"), RemovedClassName);
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Option removed"));
 	Result->SetNumberField(TEXT("remaining_options"), Query->GetOptions().Num());
 	return FMonolithActionResult::Success(Result);
@@ -1138,10 +1189,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSGenerator(const T
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetStringField(TEXT("generator_class"), Option->Generator->GetClass()->GetName());
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Generator configured"));
 
 	if (PropErrors.Num() > 0)
@@ -1213,12 +1271,19 @@ FMonolithActionResult FMonolithAIEQSActions::HandleAddEQSTest(const TSharedPtr<F
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	int32 TestIndex = Option->Tests.Num() - 1;
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetNumberField(TEXT("test_index"), TestIndex);
 	Result->SetStringField(TEXT("test_class"), TestClass->GetName());
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Test added"));
 
 	if (PropErrors.Num() > 0)
@@ -1276,11 +1341,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleRemoveEQSTest(const TSharedPt
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetNumberField(TEXT("removed_test_index"), TestIndex);
 	Result->SetStringField(TEXT("removed_test_class"), RemovedClassName);
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Test removed"));
 	Result->SetNumberField(TEXT("remaining_tests"), Option->Tests.Num());
 	return FMonolithActionResult::Success(Result);
@@ -1333,11 +1405,18 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSTest(const TShare
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetNumberField(TEXT("test_index"), TestIndex);
 	Result->SetStringField(TEXT("test_class"), Test->GetClass()->GetName());
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Test configured"));
 
 	if (PropErrors.Num() > 0)
@@ -1532,10 +1611,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSScoring(const TSh
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetNumberField(TEXT("test_index"), TestIndex);
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Scoring configured"));
 
 	// Echo back current state
@@ -1666,10 +1752,17 @@ FMonolithActionResult FMonolithAIEQSActions::HandleConfigureEQSFilter(const TSha
 
 	Query->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveEQSQuery(Query, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 	Result->SetNumberField(TEXT("option_index"), OptionIndex);
 	Result->SetNumberField(TEXT("test_index"), TestIndex);
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetStringField(TEXT("message"), TEXT("Filter configured"));
 
 	// Echo back current state

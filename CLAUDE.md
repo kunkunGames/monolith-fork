@@ -70,7 +70,7 @@ Project search is content-inclusive by default. Live `project.search` and offlin
 
 `project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
 
-`Scripts/check_index_freshness.ps1` runs the offline health -> repair -> re-verify chain for both DBs in one call: report mode prints each warning plus exact repair commands; `-Execute` runs only the warning-indicated `repair_crg_cache`/`repair_fts` repairs and refuses on-disk DB writes while the MCP endpoint is up unless `-AllowLiveEditor` is passed. Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
+`Scripts/check_index_freshness.ps1` runs the offline health -> repair -> re-verify chain for both DBs in one call: report mode prints each warning plus exact repair commands; `-Execute` runs only the warning-indicated `repair_crg_cache`/`repair_fts` repairs and refuses on-disk DB writes while the MCP endpoint is up unless `-AllowLiveEditor` is passed. Contract: `Docs/specs/Script/SPEC_MonolithAgentOpsScripts.md`.
 
 ## 13. Offline Source/Bridge Usage
 
@@ -112,7 +112,7 @@ D:\P4\game\BatchFiles\RunHeadlessEditor.bat
 
 Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
-`Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
+`Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances and MCP-disabled editor processes are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/Script/SPEC_MonolithAgentOpsScripts.md`.
 
 ## 15. Tool Invocation Daily Logs
 

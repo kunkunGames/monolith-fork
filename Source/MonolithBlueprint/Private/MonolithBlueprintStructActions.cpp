@@ -22,6 +22,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "ScopedTransaction.h"
+#include "UObject/SoftObjectPath.h"
 
 // ============================================================
 //  Registration
@@ -431,21 +432,103 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateUserDefinedEn
 
 static UScriptStruct* ResolveScriptStruct(const FString& StructName)
 {
+	FString NormalizedStructName = StructName;
+	NormalizedStructName.TrimStartAndEndInline();
+	if (NormalizedStructName.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	auto TryResolveObjectPath = [](const FString& ObjectPath) -> UScriptStruct*
+	{
+		if (ObjectPath.IsEmpty())
+		{
+			return nullptr;
+		}
+		if (UScriptStruct* LoadedStruct = LoadObject<UScriptStruct>(nullptr, *ObjectPath))
+		{
+			return LoadedStruct;
+		}
+		if (UScriptStruct* MemoryStruct = FindObject<UScriptStruct>(nullptr, *ObjectPath))
+		{
+			return MemoryStruct;
+		}
+		if (UObject* LoadedObject = StaticLoadObject(UObject::StaticClass(), nullptr, *ObjectPath))
+		{
+			if (UScriptStruct* LoadedStruct = Cast<UScriptStruct>(LoadedObject))
+			{
+				return LoadedStruct;
+			}
+		}
+		if (UObject* SoftLoadedObject = FSoftObjectPath(ObjectPath).TryLoad())
+		{
+			if (UScriptStruct* LoadedStruct = Cast<UScriptStruct>(SoftLoadedObject))
+			{
+				return LoadedStruct;
+			}
+		}
+		if (UObject* MemoryObject = StaticFindObject(UObject::StaticClass(), nullptr, *ObjectPath))
+		{
+			if (UScriptStruct* MemoryStruct = Cast<UScriptStruct>(MemoryObject))
+			{
+				return MemoryStruct;
+			}
+		}
+		return nullptr;
+	};
+
+	if (NormalizedStructName.StartsWith(TEXT("/")))
+	{
+		FString ObjectPath = NormalizedStructName;
+		if (!ObjectPath.Contains(TEXT(".")))
+		{
+			int32 LastSlash = INDEX_NONE;
+			if (ObjectPath.FindLastChar(TEXT('/'), LastSlash) && LastSlash >= 0 && LastSlash + 1 < ObjectPath.Len())
+			{
+				ObjectPath += TEXT(".");
+				ObjectPath += ObjectPath.Mid(LastSlash + 1);
+			}
+		}
+
+		if (UScriptStruct* ResolvedStruct = TryResolveObjectPath(ObjectPath))
+		{
+			return ResolvedStruct;
+		}
+
+		FAssetRegistryModule& AssetRegistryModule =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+		if (!AssetData.IsValid())
+		{
+			AssetRegistryModule.Get().ScanPathsSynchronous(
+				{ FPackageName::GetLongPackagePath(FPackageName::ObjectPathToPackageName(ObjectPath)) },
+				/*bForceRescan=*/true);
+			AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+		}
+		if (AssetData.IsValid())
+		{
+			if (UScriptStruct* ResolvedStruct = TryResolveObjectPath(AssetData.GetSoftObjectPath().ToString()))
+			{
+				return ResolvedStruct;
+			}
+		}
+	}
+
 	// Try as-is first
-	UScriptStruct* Found = FindFirstObject<UScriptStruct>(*StructName, EFindFirstObjectOptions::NativeFirst);
+	UScriptStruct* Found = FindFirstObject<UScriptStruct>(*NormalizedStructName, EFindFirstObjectOptions::NativeFirst);
 	if (Found) return Found;
 
 	// Try with F prefix (common C++ convention: FMyStruct)
-	if (!StructName.StartsWith(TEXT("F")))
+	if (!NormalizedStructName.StartsWith(TEXT("F")))
 	{
-		Found = FindFirstObject<UScriptStruct>(*(TEXT("F") + StructName), EFindFirstObjectOptions::NativeFirst);
+		Found = FindFirstObject<UScriptStruct>(*(TEXT("F") + NormalizedStructName), EFindFirstObjectOptions::NativeFirst);
 		if (Found) return Found;
 	}
 
 	// Try stripping F prefix if provided
-	if (StructName.StartsWith(TEXT("F")) && StructName.Len() > 1)
+	if (NormalizedStructName.StartsWith(TEXT("F")) && NormalizedStructName.Len() > 1)
 	{
-		Found = FindFirstObject<UScriptStruct>(*StructName.Mid(1), EFindFirstObjectOptions::NativeFirst);
+		Found = FindFirstObject<UScriptStruct>(*NormalizedStructName.Mid(1), EFindFirstObjectOptions::NativeFirst);
 		if (Found) return Found;
 	}
 

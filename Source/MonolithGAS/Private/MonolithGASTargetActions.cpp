@@ -114,6 +114,35 @@ UClass* GetTargetActorParentClass(const FString& TypeStr)
 	return nullptr;
 }
 
+bool SaveTargetActorBlueprint(UBlueprint* BP, FString& OutError)
+{
+	if (!BP)
+	{
+		OutError = TEXT("Cannot save null TargetActor Blueprint");
+		return false;
+	}
+
+	UPackage* Package = BP->GetOutermost();
+	if (!Package)
+	{
+		OutError = FString::Printf(TEXT("TargetActor Blueprint has no outer package: %s"), *BP->GetName());
+		return false;
+	}
+
+	const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+		Package->GetName(),
+		FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	if (!UPackage::SavePackage(Package, BP, *PackageFilename, SaveArgs))
+	{
+		OutError = FString::Printf(TEXT("Failed to save TargetActor Blueprint package: %s"), *Package->GetName());
+		return false;
+	}
+
+	return true;
+}
+
 /** Set a float property on a CDO via reflection */
 bool SetFloatPropOnCDO(UObject* CDO, const FString& PropName, float Value)
 {
@@ -499,8 +528,15 @@ FMonolithActionResult FMonolithGASTargetActions::HandleConfigureTargetActor(cons
 	FBlueprintEditorUtils::MarkBlueprintAsModified(BP);
 	FKismetEditorUtilities::CompileBlueprint(BP, EBlueprintCompileOptions::SkipGarbageCollection);
 
+	FString SaveError;
+	if (!SaveTargetActorBlueprint(BP, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MonolithGAS::MakeAssetResult(AssetPath,
 		FString::Printf(TEXT("Configured %d properties on TargetActor"), SetProps.Num()));
+	Result->SetBoolField(TEXT("saved"), true);
 
 	TArray<TSharedPtr<FJsonValue>> PropsArr;
 	PropsArr.Reserve(SetProps.Num());

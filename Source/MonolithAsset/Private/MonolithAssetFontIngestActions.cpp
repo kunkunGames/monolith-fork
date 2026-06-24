@@ -24,9 +24,11 @@
 
 // Asset registry + asset tools (unique naming)
 #include "AssetRegistry/AssetRegistryModule.h"  // FAssetRegistryModule::AssetCreated
+#include "AssetRegistry/IAssetRegistry.h"
 #include "AssetToolsModule.h"                   // FAssetToolsModule
 #include "IAssetTools.h"                        // IAssetTools::CreateUniqueAssetName
 #include "Modules/ModuleManager.h"              // FModuleManager::LoadModuleChecked
+#include "UObject/SoftObjectPath.h"
 
 // Slate (headless guard)
 #include "Framework/Application/SlateApplication.h" // FSlateApplication::IsInitialized
@@ -76,6 +78,23 @@ namespace MonolithAsset::FontIngestInternal
         FString    AssetPath;   // Long package name, e.g. /Game/UI/Fonts/Example/F_Regular
         FString    Typeface;    // Passed through for typeface-entry construction
     };
+
+    static bool PackageOrAssetExists(IAssetRegistry& AssetRegistry, const FString& PackageName, const FString& AssetName)
+    {
+        if (FindPackage(nullptr, *PackageName))
+        {
+            return true;
+        }
+
+        FString ExistingPackageFilename;
+        if (FPackageName::DoesPackageExist(PackageName, &ExistingPackageFilename))
+        {
+            return true;
+        }
+
+        const FString ObjectPath = FString::Printf(TEXT("%s.%s"), *PackageName, *AssetName);
+        return AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(ObjectPath)).IsValid();
+    }
 } // namespace MonolithAsset::FontIngestInternal
 
 FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(const TSharedPtr<FJsonObject>& Params)
@@ -150,6 +169,9 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
     bool bSave = true;
     Params->TryGetBoolField(TEXT("save"), bSave);
 
+    bool bAllowUniqueNames = true;
+    Params->TryGetBoolField(TEXT("allow_unique_names"), bAllowUniqueNames);
+
     // --- Parse face specs (fail fast on malformed entries before touching disk / packages) ---
     TArray<FFaceSpec> FaceSpecs;
     FaceSpecs.Reserve(FacesArr->Num());
@@ -198,6 +220,40 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
         }
     }
 
+    if (!bAllowUniqueNames)
+    {
+        IAssetRegistry& AssetRegistry =
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+        const FString DesiredFamilyPackageBase = Destination / FamilyName;
+        if (const FString ValidationError = MonolithCore::ValidatePackagePath(DesiredFamilyPackageBase); !ValidationError.IsEmpty())
+        {
+            return FMonolithActionResult::Error(ValidationError, -32603);
+        }
+        if (PackageOrAssetExists(AssetRegistry, DesiredFamilyPackageBase, FamilyName))
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("Asset already exists at '%s' and allow_unique_names=false"), *DesiredFamilyPackageBase),
+                -32603);
+        }
+
+        for (const FFaceSpec& Spec : FaceSpecs)
+        {
+            const FString DesiredFaceAssetName = FString::Printf(TEXT("F_%s"), *Spec.Typeface);
+            const FString DesiredFacePackageBase = Destination / DesiredFaceAssetName;
+            if (const FString ValidationError = MonolithCore::ValidatePackagePath(DesiredFacePackageBase); !ValidationError.IsEmpty())
+            {
+                return FMonolithActionResult::Error(ValidationError, -32603);
+            }
+            if (PackageOrAssetExists(AssetRegistry, DesiredFacePackageBase, DesiredFaceAssetName))
+            {
+                return FMonolithActionResult::Error(
+                    FString::Printf(TEXT("Asset already exists at '%s' and allow_unique_names=false"), *DesiredFacePackageBase),
+                    -32603);
+            }
+        }
+    }
+
     // --- Per-face import ---
     // Per-face error doesn't abort the whole batch (log warning, continue). We
     // still require at least one face to succeed before creating the composite UFont.
@@ -233,9 +289,17 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
 
         FString UniqueFacePackageName;
         FString UniqueFaceAssetName;
-        AssetToolsModule.Get().CreateUniqueAssetName(
-            DesiredFacePackageBase, /*Suffix=*/FString(),
-            /*out*/ UniqueFacePackageName, /*out*/ UniqueFaceAssetName);
+        if (bAllowUniqueNames)
+        {
+            AssetToolsModule.Get().CreateUniqueAssetName(
+                DesiredFacePackageBase, /*Suffix=*/FString(),
+                /*out*/ UniqueFacePackageName, /*out*/ UniqueFaceAssetName);
+        }
+        else
+        {
+            UniqueFacePackageName = DesiredFacePackageBase;
+            UniqueFaceAssetName = DesiredFaceAssetName;
+        }
 
         if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniqueFacePackageName); !ValidationError.IsEmpty())
         {
@@ -323,9 +387,17 @@ FMonolithActionResult MonolithAsset::FFontIngestActions::HandleImportFontFamily(
     const FString DesiredFamilyPackageBase = Destination / FamilyName;
     FString UniqueFamilyPackageName;
     FString UniqueFamilyAssetName;
-    AssetToolsModule.Get().CreateUniqueAssetName(
-        DesiredFamilyPackageBase, /*Suffix=*/FString(),
-        /*out*/ UniqueFamilyPackageName, /*out*/ UniqueFamilyAssetName);
+    if (bAllowUniqueNames)
+    {
+        AssetToolsModule.Get().CreateUniqueAssetName(
+            DesiredFamilyPackageBase, /*Suffix=*/FString(),
+            /*out*/ UniqueFamilyPackageName, /*out*/ UniqueFamilyAssetName);
+    }
+    else
+    {
+        UniqueFamilyPackageName = DesiredFamilyPackageBase;
+        UniqueFamilyAssetName = FamilyName;
+    }
 
     if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniqueFamilyPackageName); !ValidationError.IsEmpty())
     {
@@ -434,7 +506,8 @@ void MonolithAsset::FFontIngestActions::Register(FMonolithToolRegistry& Registry
              "faces (array<object>, required, non-empty, each { typeface: string (e.g. 'Regular','Bold'), source_path: string (absolute TTF path) }), "
              "loading_policy (string, optional, default 'LazyLoad', one of LazyLoad|Stream|Inline), "
              "hinting (string, optional, default 'Default', one of Default|Auto|AutoLight|Monochrome|None), "
-             "save (bool, optional, default true). "
+             "save (bool, optional, default true), "
+             "allow_unique_names (bool, optional, default true; false fails if requested package names already exist). "
              "Per-face errors don't abort the batch -- if at least one face imports, the composite UFont is still created; "
              "failed faces appear in the warnings array. Returns { family_asset_path, face_asset_paths[], faces_imported, faces_requested, warnings? }."),
         FMonolithActionHandler::CreateStatic(&MonolithAsset::FFontIngestActions::HandleImportFontFamily),
@@ -445,5 +518,6 @@ void MonolithAsset::FFontIngestActions::Register(FMonolithToolRegistry& Registry
             .Optional(TEXT("loading_policy"), TEXT("string"), TEXT("LazyLoad, Stream, or Inline"), TEXT("LazyLoad"))
             .Optional(TEXT("hinting"), TEXT("string"), TEXT("Default, Auto, AutoLight, Monochrome, or None"), TEXT("Default"))
             .Optional(TEXT("save"), TEXT("bool"), TEXT("Save imported font assets"), TEXT("true"))
+            .Optional(TEXT("allow_unique_names"), TEXT("bool"), TEXT("Allow CreateUniqueAssetName fallback when requested paths exist"), TEXT("true"))
             .Build());
 }

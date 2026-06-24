@@ -1,5 +1,62 @@
 # BlueprintEditing Benchmark Results
 
+## v5.3 (2026-06-25) — generative/import-pipeline and deep asset-authoring expansion
+
+The current static suite has **362 tasks across 11 categories**. The new work expands
+`asset_authoring` to **53** create/edit/save/read-back chains for high-ROI UE asset types beyond
+Blueprint graph edits: Texture file import metadata, ImageGen Texture2D/MSDF provenance assets,
+Interchange texture/audio and StaticMesh import/reimport/export, ModelGen StaticMesh provenance
+import, Font, StringTable CSV import, StaticMesh OBJ import/collision/LOD screen-size metadata,
+Material Function, animation core assets, IK Rig/Retargeter metadata, audio routing/template/spec
+assets, Niagara sidecars, EQS, Chooser Tables, GAS Ability/Cue/TargetActor assets, Material graph
+build/export, CommonUI text-block authoring, AnimMontage sections/slots, AnimSequence curve/sync
+metadata, Niagara HLSL module stack insertion, BehaviorTree spec-build, BehaviorTree
+Task/Decorator/Service Blueprint assets, GAS Enhanced Input binding smoke, parameterized Material
+Instance overrides, CommonUI input-action DataTables, GameplayEffect template duplication,
+AIController perception config, HLODLayer config, static/dynamic Content Browser collections,
+UWidgetAnimation v2 tracks, external generated-image import, and WorldGen blockout-volume
+Blueprint setup.
+MetaSound Source, StateTree creation, GeometryScript handle workflows, Interchange skeletal/scene
+import, full retarget batches, ControlRig authoring, and LevelSequence authoring remain outside this
+representative generated suite until their live action, portable benchmark fixture, and cleanup
+contracts are proven.
+
+### v5.3 live scored run
+
+| Field | Value |
+|-------|-------|
+| Label | `v5.3-full-jobs4f` |
+| Run (UTC) | 2026-06-24T20:43:14Z |
+| MCP version | `0.20.3` |
+| Engine | `++UE5+Release-5.8-CL-55116800` |
+| Project | `GO` |
+| Tasks run | 362 |
+| Transport errors | 0 |
+| `error_count` | 0 |
+| `blueprint_editing_score` | **1.000** |
+| Output | `Saved\Monolith\Benchmarks\BlueprintEditing\v5.3-full-jobs4f\summary.json` |
+
+All eleven dimensions scored **1.000**: `edit_execute`, `asset_authoring`, `edit_schema`,
+`graph_read`, `variable_read`, `error_path`, `workflow_execute`, `duplicate_reject`,
+`negative_compile`, `read_schema`, and `type_discovery`. The run used `--jobs 4` with editor
+resource locks, so asset creation/save chains do not race Blueprint/project graph-index work.
+
+Focused live smoke runs for the latest asset-authoring rows also passed on UE 5.8 /
+Monolith MCP 0.20.3:
+
+- Seven deep asset-authoring rows passed with `task_count=7`, `error_count=0`, and
+`asset_authoring_rate=1.0` at
+`Saved\Monolith\Benchmarks\BlueprintEditing\asset_authoring_deep_focus2d_20260625_0424\summary.json`.
+- Six UE5.8 high-ROI rows passed with `task_count=6`, `error_count=0`, and
+`asset_authoring_rate=1.0` at
+`Saved\Monolith\Benchmarks\BlueprintEditing\asset_authoring_expansion_focus3_20260625_0447\summary.json`.
+- Four additional UE5.8 high-ROI rows passed with `task_count=4`, `error_count=0`, and
+`asset_authoring_rate=1.0` at
+`Saved\Monolith\Benchmarks\BlueprintEditing\asset_authoring_expansion_focus4b_20260625_0502\summary.json`.
+
+The v5.1 live 1.000 remains useful historical evidence for the Blueprint graph hardening, but the
+v5.3 run above is the current 362-task UE 5.8 baseline.
+
 ## v5.1 (2026-06-18) — adversarial hardening + practical expansion
 
 The v5.1 changeset hardened the scoring engine against gaming, roughly doubled executed
@@ -107,7 +164,7 @@ preflight passes** (see Run Command below).
 | Tasks run | 191 |
 | `blueprint_editing_score` | 1.000 (v4 weights; reachable without true read-back — the v5 defect class) |
 
-## Run Command (v5)
+## Run Command (v5.3)
 
 ```powershell
 # 1. Bring the editor / MCP endpoint up first if it is down:
@@ -117,16 +174,15 @@ preflight passes** (see Run Command below).
 python Scripts\blueprint_editing_benchmark.py preflight --mcp-url http://localhost:9316/mcp
 # 3. Create / verify fixtures (now creates typed vars and setup function stubs for all 7 fixtures):
 python Scripts\blueprint_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp
-# 4. Run the v5 benchmark. run performs readiness preflight by default:
+# 4. Run the v5.3 benchmark in parallel. run performs readiness preflight by default:
 python Scripts\blueprint_editing_benchmark.py run `
   --mcp-url http://localhost:9316/mcp `
   --tasks Benchmarks\BlueprintEditing\tasks.jsonl `
-  --label v5 `
-  --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\v5
+  --label v5.3 `
+  --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\v5.3 `
+  --jobs 4
 ```
 
-Expected on a healthy live editor: 295 tasks loaded; `edit_execute_rate`,
-`workflow_execute_rate`, `error_path_rate`, and `duplicate_reject_rate` at or near 1.0 (the
-benchmark's own fixtures and the live `blueprint` handlers satisfy every read-back). A near-1.0
-here now *means* the server actually performs, wires, compiles-clean, rejects bad input, and
-guards duplicates — not merely that it replied without error.
+Expected on a healthy live editor: 362 tasks loaded and all eleven rates at or near 1.0. A near-1.0
+here now *means* the server actually performs, wires, compiles-clean, creates/edits/saves common UE
+asset types, rejects bad input, and guards duplicates — not merely that it replied without error.

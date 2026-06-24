@@ -28,8 +28,13 @@
 #include "Registry/UITypeRegistry.h"
 #include "Registry/UIPropertyAllowlist.h"
 
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/ARFilter.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
+#include "WidgetBlueprint.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -1002,6 +1007,428 @@ namespace MonolithUI::SpecActionsInternal
     }
 
     // ------------------------------------------------------------------
+    // ui::audit_widget_layout handler
+    //
+    // Batch structural validation layered on top of FUISpecSerializer. This
+    // stays read-only: it serializes WBP trees and inspects the resulting spec
+    // for risky Canvas-slot and text-containment patterns.
+    // ------------------------------------------------------------------
+
+    struct FWidgetLayoutAuditAccumulator
+    {
+        FString AssetPath;
+        TSet<FString> AllowedCanvasSlots;
+        TArray<TSharedPtr<FJsonValue>>& Findings;
+        TMap<FString, int32> SlotCounts;
+        int32 NodeCount = 0;
+        int32 CanvasSlotCount = 0;
+        int32 ErrorCount = 0;
+        int32 WarningCount = 0;
+
+        FWidgetLayoutAuditAccumulator(
+            const FString& InAssetPath,
+            const TSet<FString>& InAllowedCanvasSlots,
+            TArray<TSharedPtr<FJsonValue>>& InFindings)
+            : AssetPath(InAssetPath)
+            , AllowedCanvasSlots(InAllowedCanvasSlots)
+            , Findings(InFindings)
+        {
+        }
+    };
+
+    static bool TryReadStringArrayParam(
+        const TSharedPtr<FJsonObject>& Params,
+        const TCHAR* FieldName,
+        TArray<FString>& OutValues,
+        FString& OutError)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Params.IsValid() || !Params->TryGetArrayField(FieldName, Values) || !Values)
+        {
+            return true;
+        }
+
+        for (int32 Index = 0; Index < Values->Num(); ++Index)
+        {
+            const TSharedPtr<FJsonValue>& Value = (*Values)[Index];
+            if (!Value.IsValid() || Value->Type != EJson::String)
+            {
+                OutError = FString::Printf(TEXT("`%s[%d]` must be a string."), FieldName, Index);
+                return false;
+            }
+
+            FString StringValue;
+            if (!Value->TryGetString(StringValue) || StringValue.IsEmpty())
+            {
+                OutError = FString::Printf(TEXT("`%s[%d]` must be a non-empty string."), FieldName, Index);
+                return false;
+            }
+            OutValues.Add(MoveTemp(StringValue));
+        }
+        return true;
+    }
+
+    static TSharedPtr<FJsonObject> Vec2ToJson(const FVector2D& Value)
+    {
+        TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+        Out->SetNumberField(TEXT("x"), Value.X);
+        Out->SetNumberField(TEXT("y"), Value.Y);
+        return Out;
+    }
+
+    static bool IdentifierMatches(
+        const TSet<FString>& Identifiers,
+        const FString& AssetPath,
+        const FString& WidgetPath,
+        const FString& WidgetId)
+    {
+        return Identifiers.Contains(TEXT("*"))
+            || Identifiers.Contains(AssetPath)
+            || Identifiers.Contains(WidgetId)
+            || Identifiers.Contains(FString::Printf(TEXT("%s::%s"), *AssetPath, *WidgetId))
+            || Identifiers.Contains(FString::Printf(TEXT("%s::%s"), *AssetPath, *WidgetPath));
+    }
+
+    static void AddLayoutAuditFinding(
+        FWidgetLayoutAuditAccumulator& Acc,
+        const TCHAR* Severity,
+        const TCHAR* Category,
+        const FString& WidgetPath,
+        const FName& WidgetId,
+        const FString& Message,
+        const FString& SuggestedFix,
+        const TSharedPtr<FJsonObject>& Details = nullptr)
+    {
+        TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+        Finding->SetStringField(TEXT("severity"), Severity);
+        Finding->SetStringField(TEXT("category"), Category);
+        Finding->SetStringField(TEXT("asset_path"), Acc.AssetPath);
+        Finding->SetStringField(TEXT("widget_id"), WidgetId.ToString());
+        Finding->SetStringField(TEXT("widget_path"), WidgetPath);
+        Finding->SetStringField(TEXT("message"), Message);
+        Finding->SetStringField(TEXT("suggested_fix"), SuggestedFix);
+        if (Details.IsValid())
+        {
+            Finding->SetObjectField(TEXT("details"), Details);
+        }
+
+        if (FCString::Stricmp(Severity, TEXT("error")) == 0)
+        {
+            ++Acc.ErrorCount;
+        }
+        else if (FCString::Stricmp(Severity, TEXT("warning")) == 0)
+        {
+            ++Acc.WarningCount;
+        }
+
+        Acc.Findings.Add(MakeShared<FJsonValueObject>(Finding));
+    }
+
+    static bool AnchorNameContains(const FName& AnchorPreset, const TCHAR* Token)
+    {
+        return AnchorPreset.ToString().Contains(Token, ESearchCase::IgnoreCase);
+    }
+
+    static bool IsTextLikeNode(const FUISpecNode& Node)
+    {
+        const FString Type = Node.Type.ToString();
+        return Type.Equals(TEXT("TextBlock"), ESearchCase::IgnoreCase)
+            || Type.Equals(TEXT("RichTextBlock"), ESearchCase::IgnoreCase)
+            || Type.Contains(TEXT("Text"), ESearchCase::IgnoreCase);
+    }
+
+    static bool IsDynamicTextLikeId(const FName& WidgetId)
+    {
+        const FString Id = WidgetId.ToString();
+        static const TCHAR* DynamicTokens[] =
+        {
+            TEXT("Stage"),
+            TEXT("Wave"),
+            TEXT("Prompt"),
+            TEXT("Info"),
+            TEXT("Description"),
+            TEXT("Name"),
+            TEXT("Title"),
+            TEXT("Label"),
+        };
+
+        for (const TCHAR* Token : DynamicTokens)
+        {
+            if (Id.Contains(Token, ESearchCase::IgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool NodeAddsWidthBound(const FUISpecNode& Node, bool bCanvasSlot)
+    {
+        return Node.Style.Width > 0.f
+            || (Node.Style.bOverrideMaxDesiredWidth && Node.Style.MaxDesiredWidth > 0.f)
+            || (bCanvasSlot && Node.Slot.Size.X > 0.f && !Node.Slot.bAutoSize);
+    }
+
+    static void AuditWidgetNodeRecursive(
+        const FUISpecNode& Node,
+        const FName& ParentType,
+        const FString& WidgetPath,
+        bool bInheritedWidthBound,
+        FWidgetLayoutAuditAccumulator& Acc)
+    {
+        ++Acc.NodeCount;
+
+        const bool bCanvasSlot = ParentType == FName(TEXT("CanvasPanel"));
+        if (!ParentType.IsNone())
+        {
+            const FString SlotType = FString::Printf(TEXT("%sSlot"), *ParentType.ToString());
+            Acc.SlotCounts.FindOrAdd(SlotType)++;
+        }
+
+        if (bCanvasSlot)
+        {
+            ++Acc.CanvasSlotCount;
+
+            const FString WidgetId = Node.Id.ToString();
+            if (!IdentifierMatches(Acc.AllowedCanvasSlots, Acc.AssetPath, WidgetPath, WidgetId))
+            {
+                TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+                Details->SetStringField(TEXT("anchor_preset"), Node.Slot.AnchorPreset.ToString());
+                Details->SetObjectField(TEXT("position"), Vec2ToJson(Node.Slot.Position));
+                Details->SetObjectField(TEXT("size"), Vec2ToJson(Node.Slot.Size));
+                Details->SetObjectField(TEXT("alignment"), Vec2ToJson(Node.Slot.Alignment));
+                Details->SetBoolField(TEXT("auto_size"), Node.Slot.bAutoSize);
+                AddLayoutAuditFinding(
+                    Acc,
+                    TEXT("warning"),
+                    TEXT("UnwhitelistedCanvasSlot"),
+                    WidgetPath,
+                    Node.Id,
+                    TEXT("CanvasPanelSlot found without an explicit audit allowlist entry."),
+                    TEXT("Move this child to an automatic layout container, or add an explicit allowlist identifier if the Canvas placement is intentional."),
+                    Details);
+            }
+
+            const bool bRightAnchored = AnchorNameContains(Node.Slot.AnchorPreset, TEXT("right"));
+            const bool bBottomAnchored = AnchorNameContains(Node.Slot.AnchorPreset, TEXT("bottom"));
+            const bool bNegativeRightOffset = Node.Slot.Position.X < -KINDA_SMALL_NUMBER;
+            const bool bNegativeBottomOffset = Node.Slot.Position.Y < -KINDA_SMALL_NUMBER;
+            const bool bRightAlignmentMismatch = bRightAnchored && Node.Slot.Alignment.X < 0.5f && bNegativeRightOffset;
+            const bool bBottomAlignmentMismatch = bBottomAnchored && Node.Slot.Alignment.Y < 0.5f && bNegativeBottomOffset;
+            if (bRightAlignmentMismatch || bBottomAlignmentMismatch)
+            {
+                TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+                Details->SetStringField(TEXT("anchor_preset"), Node.Slot.AnchorPreset.ToString());
+                Details->SetObjectField(TEXT("position"), Vec2ToJson(Node.Slot.Position));
+                Details->SetObjectField(TEXT("alignment"), Vec2ToJson(Node.Slot.Alignment));
+                Details->SetBoolField(TEXT("right_alignment_mismatch"), bRightAlignmentMismatch);
+                Details->SetBoolField(TEXT("bottom_alignment_mismatch"), bBottomAlignmentMismatch);
+                AddLayoutAuditFinding(
+                    Acc,
+                    TEXT("error"),
+                    TEXT("CanvasAnchorMismatch"),
+                    WidgetPath,
+                    Node.Id,
+                    TEXT("Edge-anchored Canvas slot uses negative offsets with an opposing zero-style alignment."),
+                    TEXT("Match right/bottom anchors with right/bottom alignment, or move this placement into a single responsive layout owner."),
+                    Details);
+            }
+        }
+
+        const bool bHasWidthBound = bInheritedWidthBound || NodeAddsWidthBound(Node, bCanvasSlot);
+        const bool bHasWrap = Node.Content.WrapMode == FName(TEXT("Wrap"));
+        if (IsTextLikeNode(Node) && IsDynamicTextLikeId(Node.Id) && !bHasWrap && !bHasWidthBound)
+        {
+            TSharedPtr<FJsonObject> Details = MakeShared<FJsonObject>();
+            Details->SetStringField(TEXT("wrap_mode"), Node.Content.WrapMode.ToString());
+            Details->SetNumberField(TEXT("font_size"), Node.Content.FontSize);
+            Details->SetNumberField(TEXT("text_length"), Node.Content.Text.Len());
+            AddLayoutAuditFinding(
+                Acc,
+                TEXT("warning"),
+                TEXT("UnboundedDynamicText"),
+                WidgetPath,
+                Node.Id,
+                TEXT("Dynamic text-like widget has no serialized wrap mode and no inherited width bound."),
+                TEXT("Add a SizeBox max width, explicit wrapping/truncation policy, or a bounded parent slot so long localized text cannot escape its background."),
+                Details);
+        }
+
+        for (const TSharedPtr<FUISpecNode>& Child : Node.Children)
+        {
+            if (!Child.IsValid())
+            {
+                continue;
+            }
+
+            const FString ChildPath = WidgetPath.IsEmpty()
+                ? Child->Id.ToString()
+                : FString::Printf(TEXT("%s/%s"), *WidgetPath, *Child->Id.ToString());
+            AuditWidgetNodeRecursive(*Child, Node.Type, ChildPath, bHasWidthBound, Acc);
+        }
+    }
+
+    static void CollectWidgetBlueprintAssetPaths(const FString& PathPrefix, bool bIncludeTests, TArray<FString>& OutAssetPaths)
+    {
+        FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+        IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+        FARFilter Filter;
+        Filter.bRecursivePaths = true;
+        Filter.PackagePaths.Add(FName(*PathPrefix));
+        Filter.ClassPaths.Add(UWidgetBlueprint::StaticClass()->GetClassPathName());
+
+        TArray<FAssetData> Assets;
+        AssetRegistry.GetAssets(Filter, Assets);
+        OutAssetPaths.Reserve(OutAssetPaths.Num() + Assets.Num());
+        for (const FAssetData& Asset : Assets)
+        {
+            const FString PackageName = Asset.PackageName.ToString();
+            if (!bIncludeTests && PackageName.StartsWith(TEXT("/Game/Tests/")))
+            {
+                continue;
+            }
+            OutAssetPaths.Add(PackageName);
+        }
+        OutAssetPaths.Sort();
+    }
+
+    static FMonolithActionResult HandleAuditWidgetLayout(const TSharedPtr<FJsonObject>& Params)
+    {
+        if (!Params.IsValid())
+        {
+            return FMonolithActionResult::Error(TEXT("Missing params object"), -32602);
+        }
+
+        TArray<FString> AssetPaths;
+        TArray<FString> AllowedCanvasSlots;
+        FString ParamError;
+        if (!TryReadStringArrayParam(Params, TEXT("asset_paths"), AssetPaths, ParamError)
+            || !TryReadStringArrayParam(Params, TEXT("allowed_canvas_slots"), AllowedCanvasSlots, ParamError))
+        {
+            return FMonolithActionResult::Error(ParamError, -32602);
+        }
+
+        bool bIncludeTests = false;
+        bool bTreatWarningsAsErrors = false;
+        Params->TryGetBoolField(TEXT("include_tests"), bIncludeTests);
+        Params->TryGetBoolField(TEXT("treat_warnings_as_errors"), bTreatWarningsAsErrors);
+
+        FString PathPrefix = TEXT("/Game/UI");
+        Params->TryGetStringField(TEXT("path_prefix"), PathPrefix);
+        if (AssetPaths.Num() == 0)
+        {
+            CollectWidgetBlueprintAssetPaths(PathPrefix, bIncludeTests, AssetPaths);
+        }
+
+        TSet<FString> AllowedSet;
+        for (const FString& Identifier : AllowedCanvasSlots)
+        {
+            AllowedSet.Add(Identifier);
+        }
+
+        TArray<TSharedPtr<FJsonValue>> AssetReports;
+        TArray<TSharedPtr<FJsonValue>> Findings;
+        int32 TotalNodes = 0;
+        int32 TotalCanvasSlots = 0;
+        int32 TotalErrors = 0;
+        int32 TotalWarnings = 0;
+        int32 DumpErrors = 0;
+
+        for (const FString& AssetPath : AssetPaths)
+        {
+            FUISpecSerializerInputs DumpInputs;
+            DumpInputs.AssetPath = AssetPath;
+            const FUISpecSerializerResult DumpResult = FUISpecSerializer::Dump(DumpInputs);
+
+            TSharedPtr<FJsonObject> AssetOut = MakeShared<FJsonObject>();
+            AssetOut->SetStringField(TEXT("asset_path"), AssetPath);
+            AssetOut->SetBoolField(TEXT("dump_success"), DumpResult.bSuccess);
+            AssetOut->SetNumberField(TEXT("nodes_visited"), DumpResult.NodesVisited);
+
+            if (!DumpResult.bSuccess || !DumpResult.Document.Root.IsValid())
+            {
+                ++DumpErrors;
+                TArray<TSharedPtr<FJsonValue>> Errors;
+                for (const FUISpecError& Error : DumpResult.Errors)
+                {
+                    TSharedPtr<FJsonObject> ErrorOut = MakeShared<FJsonObject>();
+                    ErrorOut->SetStringField(TEXT("category"), Error.Category.ToString());
+                    ErrorOut->SetStringField(TEXT("message"), Error.Message);
+                    Errors.Add(MakeShared<FJsonValueObject>(ErrorOut));
+                }
+                AssetOut->SetArrayField(TEXT("errors"), Errors);
+                AssetReports.Add(MakeShared<FJsonValueObject>(AssetOut));
+                continue;
+            }
+
+            AssetOut->SetStringField(TEXT("parent_class"), DumpResult.Document.ParentClass);
+            AssetOut->SetStringField(TEXT("root_type"), DumpResult.Document.Root->Type.ToString());
+            AssetOut->SetStringField(TEXT("root_widget"), DumpResult.Document.Root->Id.ToString());
+
+            FWidgetLayoutAuditAccumulator Acc(AssetPath, AllowedSet, Findings);
+            AuditWidgetNodeRecursive(
+                *DumpResult.Document.Root,
+                NAME_None,
+                DumpResult.Document.Root->Id.ToString(),
+                /*bInheritedWidthBound=*/false,
+                Acc);
+
+            TSharedPtr<FJsonObject> SlotCounts = MakeShared<FJsonObject>();
+            for (const TPair<FString, int32>& Pair : Acc.SlotCounts)
+            {
+                SlotCounts->SetNumberField(Pair.Key, Pair.Value);
+            }
+
+            AssetOut->SetNumberField(TEXT("node_count"), Acc.NodeCount);
+            AssetOut->SetNumberField(TEXT("canvas_slot_count"), Acc.CanvasSlotCount);
+            AssetOut->SetNumberField(TEXT("error_count"), Acc.ErrorCount);
+            AssetOut->SetNumberField(TEXT("warning_count"), Acc.WarningCount);
+            AssetOut->SetObjectField(TEXT("slot_counts"), SlotCounts);
+            AssetReports.Add(MakeShared<FJsonValueObject>(AssetOut));
+
+            TotalNodes += Acc.NodeCount;
+            TotalCanvasSlots += Acc.CanvasSlotCount;
+            TotalErrors += Acc.ErrorCount;
+            TotalWarnings += Acc.WarningCount;
+        }
+
+        if (AssetPaths.Num() == 0)
+        {
+            ++TotalErrors;
+            TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+            Finding->SetStringField(TEXT("severity"), TEXT("error"));
+            Finding->SetStringField(TEXT("category"), TEXT("AssetInventory"));
+            Finding->SetStringField(TEXT("asset_path"), PathPrefix);
+            Finding->SetStringField(TEXT("message"), TEXT("No WidgetBlueprint assets were found for the requested path_prefix."));
+            Finding->SetStringField(TEXT("suggested_fix"), TEXT("Pass explicit asset_paths or verify the path_prefix points at a content folder containing WidgetBlueprint assets."));
+            Findings.Add(MakeShared<FJsonValueObject>(Finding));
+        }
+
+        const bool bPassed = DumpErrors == 0
+            && TotalErrors == 0
+            && (!bTreatWarningsAsErrors || TotalWarnings == 0);
+
+        TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+        Summary->SetNumberField(TEXT("assets_scanned"), AssetPaths.Num());
+        Summary->SetNumberField(TEXT("nodes_scanned"), TotalNodes);
+        Summary->SetNumberField(TEXT("canvas_slots"), TotalCanvasSlots);
+        Summary->SetNumberField(TEXT("error_count"), TotalErrors + DumpErrors);
+        Summary->SetNumberField(TEXT("warning_count"), TotalWarnings);
+        Summary->SetNumberField(TEXT("dump_error_count"), DumpErrors);
+        Summary->SetBoolField(TEXT("treat_warnings_as_errors"), bTreatWarningsAsErrors);
+
+        TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+        Out->SetBoolField(TEXT("bSuccess"), bPassed);
+        Out->SetStringField(TEXT("status"), bPassed ? TEXT("ok") : TEXT("findings_failed"));
+        Out->SetStringField(TEXT("path_prefix"), PathPrefix);
+        Out->SetObjectField(TEXT("summary"), Summary);
+        Out->SetArrayField(TEXT("assets"), AssetReports);
+        Out->SetArrayField(TEXT("findings"), Findings);
+        return FMonolithActionResult::Success(Out);
+    }
+
+    // ------------------------------------------------------------------
     // Phase 3 Item #18 (2026-05-16 UI Gap Audit) — ui::build_menu_from_spec
     //
     // Conservative MVP scope: validator + per-screen embedded spec dispatch are
@@ -1308,6 +1735,28 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Long-package asset path of the WBP to read, e.g. /Game/UI/MyMenu"))
             .Optional(TEXT("emit_defaults"), TEXT("boolean"), TEXT("Include fields that match engine defaults. Default false."), TEXT("false"))
             .Optional(TEXT("request_id"), TEXT("string"), TEXT("Caller-supplied UUID echoed back in the response."))
+            .Build());
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("audit_widget_layout"),
+        TEXT("Read-only structural UMG layout audit layered on top of FUISpecSerializer. "
+             "Batch-dumps WidgetBlueprint specs from asset_paths or a path_prefix (default /Game/UI), "
+             "then reports CanvasPanelSlot concentration, unwhitelisted absolute placement, edge-anchor "
+             "alignment/negative-offset mismatches, and dynamic text widgets without serialized wrap or width containment. "
+             "Returns { bSuccess, status, summary, assets[], findings[] }. Warnings can be promoted with "
+             "treat_warnings_as_errors=true."),
+        FMonolithActionHandler::CreateStatic(&HandleAuditWidgetLayout),
+        FParamSchemaBuilder()
+            .Optional(TEXT("asset_paths"), TEXT("array"),
+                TEXT("Optional explicit WidgetBlueprint long-package paths. Omit to scan path_prefix."))
+            .Optional(TEXT("path_prefix"), TEXT("string"),
+                TEXT("Content path scanned when asset_paths is omitted. Default /Game/UI."), TEXT("/Game/UI"))
+            .Optional(TEXT("allowed_canvas_slots"), TEXT("array"),
+                TEXT("Canvas allowlist identifiers: '*', asset path, widget id, asset::widget id, or asset::widget/path."))
+            .Optional(TEXT("include_tests"), TEXT("boolean"),
+                TEXT("Include /Game/Tests assets during path_prefix scans. Default false."), TEXT("false"))
+            .Optional(TEXT("treat_warnings_as_errors"), TEXT("boolean"),
+                TEXT("Fail bSuccess when warning findings exist. Default false."), TEXT("false"))
             .Build());
 
     // Phase 3 Item #18 (2026-05-16 UI Gap Audit) — build_menu_from_spec.

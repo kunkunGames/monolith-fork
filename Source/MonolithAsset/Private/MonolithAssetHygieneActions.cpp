@@ -298,5 +298,11 @@ FMonolithActionResult FMonolithAssetHygieneActions::BatchRenameAssets(const TSha
 	Result->SetArrayField(TEXT("renames"), PreviewArr);
 	Result->SetStringField(TEXT("note"), TEXT("Redirectors created for reference fixup. Run 'Fix Up Redirectors' to clean up."));
 
+	if (!bSuccess)
+	{
+		return FMonolithActionResult::Error(TEXT("AssetTools.RenameAssets failed for one or more assets"))
+			.WithErrorData(Result);
+	}
+
 	return FMonolithActionResult::Success(Result);
 }

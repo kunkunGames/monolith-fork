@@ -26,6 +26,7 @@ public class MonolithAsset : ModuleRules
 			"ImageCore",
 			"RenderCore",
 			"RHI",
+			"SourceControl",
 			"Slate",
 			"SlateCore"
 		});

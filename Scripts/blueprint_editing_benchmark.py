@@ -6,7 +6,7 @@ Measures the MCP server's capability to support blueprint editing workflows
 across 7 Blueprint types: Actor, Character, Widget, AnimInstance, GameplayAbility,
 ActorComponent, and Interface.
 
-Ten task categories:
+Eleven task categories:
   type_discovery   - project.search for benchmark-fixture names (portable; not GO-content)
   graph_read       - blueprint.list_graphs / get_graph_data / get_graph_summary
   variable_read    - blueprint.get_variables with options
@@ -14,12 +14,29 @@ Ten task categories:
   edit_schema      - monolith_discover schema for 46 edit actions (strict: isError fails)
   workflow_execute - run real multi-step workflows end-to-end and READ BACK the result
   edit_execute     - call real edit actions against fixtures AND read back the mutation
+  asset_authoring  - create/edit/save high-ROI cross-domain UE asset types and read them back
   error_path       - send invalid inputs and verify an INPUT-SPECIFIC structured isError
   duplicate_reject - second identical add_* call must be refused (no silent suffix/no-op)
   negative_compile - deliberately break a graph and require a REPORTED compile error
 
+v5.3 (2026-06-25): generative/import-pipeline and deep asset-authoring expansion.
+  - asset_authoring now covers 53 create/edit/save/read-back chains, adding ImageGen Texture2D,
+    ImageGen MSDF texture/material, Interchange typed texture import/static-mesh reimport-export,
+    Interchange audio import, ModelGen provenance StaticMesh import, mesh LOD quality metadata,
+    Montage/curve/sync metadata, IK Rig/Retargeter metadata, CommonUI, Niagara module, GAS input binding,
+    Material graph/parameter instances, BehaviorTree spec-build, BehaviorTree node Blueprint,
+    AIController perception, HLODLayer, Content Browser collections, UWidgetAnimation v2,
+    external generated-image import, and WorldGen blockout Blueprint coverage.
+
+v5.2 (2026-06-24): high-ROI asset-authoring expansion.
+  - asset_authoring now covers 25 create/edit/save/read-back chains across Texture/Font/DataTable/
+    StringTable/Input/Material/MIC/MaterialFunction/StaticMesh/CurveTable/DataAsset/UMG/
+    Animation/Audio/Niagara/AI/GAS/Chooser assets.
+  - The composite reserves 0.10 weight for cross-domain asset authoring while preserving v5.1's
+    strict read-back, duplicate, error-path, and negative-compile gates.
+
 v5.1 (2026-06-18): adversarial hardening + practical-coverage expansion (295->305 tasks).
-- error_path scores on the OFFENDING IDENTIFIER (specific_tokens), not generic words, so a
+  - error_path scores on the OFFENDING IDENTIFIER (specific_tokens), not generic words, so a
   reject-everything server no longer passes the inverted category.
 - edit_execute CREATES are delete-first op_chains (a same-named leftover is removed first), so
   the read-back proves THIS run made the edit; add_node reads back the returned node id (${self});
@@ -41,21 +58,28 @@ steps assert error_count == 0; workflow_completeness (existence-only) -> execute
 
 The weights live in the single ``WEIGHTS`` dict below and are the sole source of truth consumed by
 aggregate(), the manifest score_formula, the comparison renderer, and this docstring. Action names
-verified against the live blueprint namespace catalog (v0.20.2).
+verified against the live blueprint namespace catalog (v0.20.3).
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import concurrent.futures
 import datetime as _dt
 import json
+import math
 import pathlib
 import socket
+import struct
+import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import wave
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
 
@@ -72,13 +96,14 @@ DEFAULT_RESULTS_ROOT = pathlib.Path("Saved/Monolith/Benchmarks/BlueprintEditing"
 # schema-only signals; workflow_execute (executed chains) replaces the existence-only
 # workflow_completeness (0.03) at 0.10.
 WEIGHTS: Dict[str, float] = {
-    "edit_execute": 0.31,      # de-diluted (read-only tasks moved out) + gains delete/data-pin/set_pin/value tasks
-    "edit_schema": 0.08,       # residual coverage tripwire; 46 names must still resolve (was 0.14)
-    "graph_read": 0.12,
-    "variable_read": 0.12,
-    "error_path": 0.10,        # now input-specific (offending identifier required)
-    "workflow_execute": 0.10,
-    "duplicate_reject": 0.07,  # first-call-gated, delete-reset (was 0.08)
+    "edit_execute": 0.27,      # read-back-verified BP graph/class/component edits
+    "asset_authoring": 0.10,   # non-graph UE asset creation/edit/save/read-back coverage
+    "edit_schema": 0.07,       # residual coverage tripwire; 46 names must still resolve
+    "graph_read": 0.11,
+    "variable_read": 0.11,
+    "error_path": 0.09,        # now input-specific (offending identifier required)
+    "workflow_execute": 0.09,
+    "duplicate_reject": 0.06,  # first-call-gated, delete-reset
     "negative_compile": 0.05,  # NEW: the only test that makes "compile is clean" falsifiable
     "read_schema": 0.02,       # lenient introspection tripwire (was 0.05)
     "type_discovery": 0.03,
@@ -244,7 +269,7 @@ BLUEPRINT_EDIT_ACTIONS: List[Tuple[str, str]] = [
 # each of these is actually RUN step-by-step against a fixture, with add_node ids threaded
 # into connect_pins (${label}) and a final read-back that must observe the end state.
 # Scored by _score_op_chain. All action names + params verified against the live catalog
-# (v0.20.2) and the captured live response shapes.
+# (v0.20.3) and the captured live response shapes.
 BLUEPRINT_WORKFLOW_EXECUTE: List[Dict[str, Any]] = [
     {
         "name": "build_function",
@@ -746,7 +771,8 @@ FIXTURE_FUNCTIONS_BY_TYPE: Dict[str, List[str]] = {
 INTERFACE_FIXTURE_FUNCTIONS: List[str] = FIXTURE_FUNCTIONS_BY_TYPE["Interface"]
 
 # 10 type-specific edit_execute tasks per Blueprint type (70 total).
-# All action names verified against live blueprint namespace catalog v0.20.2.
+# Blueprint action names verified against live namespace catalog v0.20.3; cross-domain
+# asset_authoring names are limited to actions registered in the current project catalog.
 # Tasks assume fixtures created by `setup_fixtures` command exist at /Game/Benchmarks/.
 # Tasks at indexes 0–N are NOT guaranteed idempotent; run `setup_fixtures` before each benchmark.
 BLUEPRINT_EDIT_EXECUTE_TASKS_BY_TYPE: Dict[str, List[Dict[str, Any]]] = {
@@ -1172,6 +1198,3173 @@ BLUEPRINT_ADDITIONAL_EDIT_EXECUTE_TASKS: List[Dict[str, Any]] = [
      "description": "Duplicate Actor BenchCameraBoom component to BenchCameraBoomCopy"},
 ]
 
+ASSET_AUTHORING_ROOT = "/Game/Benchmarks/AssetAuthoring"
+ASSET_AUTHORING_DELETE_PREFIXES = [ASSET_AUTHORING_ROOT]
+ASSET_AUTHORING_BMP_2X2_B64 = (
+    "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA=="
+)
+ASSET_AUTHORING_PNG_2X2_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4nGP476DwX6Hh/38GhRMJ///fcfgPAFcgCl5F2IZIAAAAAElFTkSuQmCC"
+)
+ASSET_AUTHORING_FILE_BMP_MARKER = "__ASSET_AUTHORING_FILE_BMP__"
+ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP_MARKER = "__ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP__"
+ASSET_AUTHORING_STRINGTABLE_CSV_MARKER = "__ASSET_AUTHORING_STRINGTABLE_CSV__"
+ASSET_AUTHORING_STATIC_MESH_OBJ_MARKER = "__ASSET_AUTHORING_STATIC_MESH_OBJ__"
+ASSET_AUTHORING_STATIC_MESH_LOD_OBJ_MARKER = "__ASSET_AUTHORING_STATIC_MESH_LOD_OBJ__"
+ASSET_AUTHORING_MODELGEN_OBJ_MARKER = "__ASSET_AUTHORING_MODELGEN_OBJ__"
+ASSET_AUTHORING_INTERCHANGE_MESH_OBJ_MARKER = "__ASSET_AUTHORING_INTERCHANGE_MESH_OBJ__"
+ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ_MARKER = "__ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ__"
+ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ_MARKER = "__ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ__"
+ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV_MARKER = "__ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV__"
+ASSET_AUTHORING_ENGINE_ROBOTO_MARKER = "__ENGINE_ROBOTO_REGULAR_TTF__"
+_ASSET_AUTHORING_FIXTURE_LOCK = threading.Lock()
+
+ASSET_AUTHORING_TASKS: List[Dict[str, Any]] = [
+    {
+        "name": "texture_import_rename_save",
+        "domain": "asset",
+        "edit_domain": "texture",
+        "description": "Import and save a BMP Texture2D from bytes, rename it through AssetTools, and inspect the renamed asset",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchIcon",
+                                      f"{ASSET_AUTHORING_ROOT}/T_BenchIcon_Renamed"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "asset_query",
+             "args": {"action": "import_texture_from_bytes",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchIcon",
+                      "bytes_b64": ASSET_AUTHORING_BMP_2X2_B64,
+                      "format_hint": "bmp", "texture_role": "ui_icon",
+                      "settings": {"srgb": True}, "save": True}},
+            {"tool": "asset_query",
+             "args": {"action": "batch_rename_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchIcon"],
+                      "add_suffix": "_Renamed"},
+             "contains": ["status", "success", "T_BenchIcon_Renamed"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchIcon_Renamed"}},
+        ],
+        "verify": [
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchIcon_Renamed"},
+             "contains": ["T_BenchIcon_Renamed", "Texture2D"]},
+        ],
+    },
+    {
+        "name": "texture_file_import_metadata_roundtrip",
+        "domain": "asset",
+        "edit_domain": "texture_file_import",
+        "description": "Import a Texture2D from a real source file, assert source metadata is returned, save it, and validate the asset",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "asset_query",
+             "args": {"action": "import_texture_from_file",
+                      "source_path": ASSET_AUTHORING_FILE_BMP_MARKER,
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport",
+                      "replace_existing": True,
+                      "settings": {"srgb": True, "lod_group": "UI"}},
+             "contains": ["TSF_BGRA8", "source_size_x", "source_size_y"],
+             "not_contains": ["unknown"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_cdo_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport",
+                      "property_name": "SRGB",
+                      "value": False},
+             "contains": ["SRGB"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport"}},
+        ],
+        "verify": [
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport"},
+             "contains": ["T_BenchFileImport", "Texture2D", "source_width", "source_height"]},
+            {"tool": "asset_query",
+             "args": {"action": "validate_specialized_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport"}},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_cdo_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchFileImport"},
+             "contains": ["SRGB", "false"]},
+        ],
+    },
+    {
+        "name": "imagegen_texture_provenance_roundtrip",
+        "domain": "imagegen",
+        "edit_domain": "generated_texture",
+        "description": "Generate a deterministic Texture2D through ImageGen, save it, and verify redacted generation provenance",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchGeneratedPrompt"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "imagegen_query",
+             "args": {"action": "generate_image",
+                      "prompt": "small benchmark checker icon texture, four colored quadrants",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchGeneratedPrompt",
+                      "overwrite_policy": "fail",
+                      "texture_role": "ui_icon",
+                      "save": True},
+             "contains": ["T_BenchGeneratedPrompt", "local_deterministic", "ui_icon"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchGeneratedPrompt"}},
+        ],
+        "verify": [
+            {"tool": "imagegen_query",
+             "args": {"action": "get_generated_asset_provenance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchGeneratedPrompt"},
+             "contains": ["found", "true", "local_deterministic", "monolith/local-gradient-png-v1", "prompt_redacted"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchGeneratedPrompt"},
+             "contains": ["T_BenchGeneratedPrompt", "Texture2D", "512x512", "TEXTUREGROUP_UI"]},
+        ],
+    },
+    {
+        "name": "imagegen_msdf_svg_roundtrip",
+        "domain": "imagegen",
+        "edit_domain": "msdf_texture",
+        "description": "Validate an MSDF-ready SVG, bake an MSDF Texture2D plus preview material, save it, and inspect texture/provenance",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchMsdfGlyph",
+                                      f"{ASSET_AUTHORING_ROOT}/M_M_T_BenchMsdfGlyph"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "imagegen_query",
+             "args": {"action": "validate_svg",
+                      "svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"12\" y=\"12\" width=\"40\" height=\"40\" fill=\"black\"/></svg>",
+                      "profile": "msdf_source"},
+             "contains": ["msdf_ready", "true", "geometry_valid", "true"]},
+            {"tool": "imagegen_query",
+             "args": {"action": "generate_msdf_from_svg",
+                      "svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"12\" y=\"12\" width=\"40\" height=\"40\" fill=\"black\"/></svg>",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchMsdfGlyph",
+                      "size": 128,
+                      "pixel_range": 8,
+                      "verify_samples": True,
+                      "create_material": True,
+                      "verify_material_render": False,
+                      "overwrite_policy": "fail",
+                      "save": True},
+             "contains": ["T_BenchMsdfGlyph", "msdf_texture_asset_path", "channel_samples", "monolith_cpu_contour_msdf_v1"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchMsdfGlyph"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_M_T_BenchMsdfGlyph"}},
+        ],
+        "verify": [
+            {"tool": "imagegen_query",
+             "args": {"action": "get_generated_asset_provenance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchMsdfGlyph"},
+             "contains": ["found", "true", "kind", "msdf", "monolith/local-msdf-cpu-v1"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchMsdfGlyph"},
+             "contains": ["T_BenchMsdfGlyph", "Texture2D", "128x128", "TC_Masks", "SRGB", "False"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_M_T_BenchMsdfGlyph"},
+             "contains": ["M_M_T_BenchMsdfGlyph", "Material"]},
+        ],
+    },
+    {
+        "name": "interchange_texture_import_roundtrip",
+        "domain": "interchange",
+        "edit_domain": "interchange_texture_import",
+        "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchInterchangeTexture"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "interchange_query",
+             "args": {"action": "can_import",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT},
+             "contains": ["can_import", "true", "BMP texture image"]},
+            {"tool": "interchange_query",
+             "args": {"action": "import_texture",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT,
+                      "conflict_policy": "overwrite",
+                      "confirm": True},
+             "contains": ["status", "imported", "T_BenchInterchangeTexture", "Texture2D"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchInterchangeTexture"}},
+        ],
+        "verify": [
+            {"tool": "interchange_query",
+             "args": {"action": "get_import_data",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchInterchangeTexture"},
+             "contains": ["has_import_data", "true", "T_BenchInterchangeTexture.bmp", "exists", "true"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchInterchangeTexture"},
+             "contains": ["T_BenchInterchangeTexture", "Texture2D"]},
+        ],
+    },
+    {
+        "name": "interchange_static_mesh_reimport_export_roundtrip",
+        "domain": "interchange",
+        "edit_domain": "interchange_static_mesh_reimport_export",
+        "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "interchange_query",
+             "args": {"action": "can_import",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_MESH_OBJ_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT},
+             "contains": ["can_import", "true", "Wavefront OBJ static mesh"]},
+            {"tool": "interchange_query",
+             "args": {"action": "import_mesh",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_MESH_OBJ_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT,
+                      "conflict_policy": "overwrite",
+                      "confirm": True},
+             "contains": ["status", "imported", "SM_BenchInterchangeCube", "StaticMesh"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"}},
+            {"tool": "interchange_query",
+             "args": {"action": "can_reimport",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"},
+             "contains": ["can_reimport", "true", "SM_BenchInterchangeCube.obj"]},
+            {"tool": "interchange_query",
+             "args": {"action": "update_reimport_path",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ_MARKER,
+                      "confirm": True},
+             "contains": ["updated_reimport_path", "SM_BenchInterchangeCube_Reimport.obj"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"}},
+            {"tool": "interchange_query",
+             "args": {"action": "reimport_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube",
+                      "confirm": True},
+             "contains": ["status", "reimported", "SM_BenchInterchangeCube_Reimport.obj"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"}},
+            {"tool": "interchange_query",
+             "args": {"action": "export_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube",
+                      "file_path": ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ_MARKER,
+                      "replace_existing": True,
+                      "confirm": True},
+             "contains": ["status", "exported", "file_size_bytes"]},
+        ],
+        "verify": [
+            {"tool": "interchange_query",
+             "args": {"action": "get_import_data",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"},
+             "contains": ["has_import_data", "true", "SM_BenchInterchangeCube_Reimport.obj", "exists", "true"]},
+            {"tool": "interchange_query",
+             "args": {"action": "can_import",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT},
+             "contains": ["can_import", "true", "Wavefront OBJ static mesh"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchInterchangeCube"},
+             "contains": ["SM_BenchInterchangeCube", "StaticMesh", "Triangles", "12",
+                          "SM_BenchInterchangeCube_Reimport.obj"]},
+        ],
+    },
+    {
+        "name": "interchange_audio_import_roundtrip",
+        "domain": "interchange",
+        "edit_domain": "interchange_audio_import",
+        "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchInterchangeTone"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "interchange_query",
+             "args": {"action": "can_import",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT},
+             "contains": ["can_import", "true"]},
+            {"tool": "interchange_query",
+             "args": {"action": "import_audio",
+                      "source_file": ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV_MARKER,
+                      "destination_path": ASSET_AUTHORING_ROOT,
+                      "conflict_policy": "overwrite",
+                      "confirm": True},
+             "contains": ["status", "imported", "SW_BenchInterchangeTone", "SoundWave"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchInterchangeTone"}},
+        ],
+        "verify": [
+            {"tool": "interchange_query",
+             "args": {"action": "get_import_data",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchInterchangeTone"},
+             "contains": ["has_import_data", "true", "SW_BenchInterchangeTone.wav", "exists", "true"]},
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_wave_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchInterchangeTone"},
+             "contains": ["SW_BenchInterchangeTone", "num_channels", "sample_rate"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchInterchangeTone"},
+             "contains": ["SW_BenchInterchangeTone", "SoundWave"]},
+        ],
+    },
+    {
+        "name": "font_family_import_roundtrip",
+        "domain": "asset",
+        "edit_domain": "font",
+        "description": "Resolve the project engine, import an engine TTF as UFont/UFontFace assets, save them, and inspect both outputs",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/Font_BenchRoboto",
+                                      f"{ASSET_AUTHORING_ROOT}/F_Regular"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "asset_query",
+             "args": {"action": "import_font_family",
+                      "destination": ASSET_AUTHORING_ROOT,
+                      "family_name": "Font_BenchRoboto",
+                       "faces": [{"typeface": "Regular",
+                                  "source_path": ASSET_AUTHORING_ENGINE_ROBOTO_MARKER}],
+                       "loading_policy": "LazyLoad",
+                       "hinting": "Default",
+                       "save": True,
+                       "allow_unique_names": False},
+             "contains": ["Font_BenchRoboto", "F_Regular", "faces_imported"],
+             "not_contains": ["Font_BenchRoboto1", "Font_BenchRoboto2", "F_Regular1", "F_Regular2"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_cdo_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Font_BenchRoboto",
+                      "property_name": "LegacyFontSize",
+                      "value": 18},
+             "contains": ["LegacyFontSize"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Font_BenchRoboto"}},
+        ],
+        "verify": [
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                       "asset_path": f"{ASSET_AUTHORING_ROOT}/Font_BenchRoboto"},
+             "contains": ["Font_BenchRoboto", "Font"],
+             "not_contains": ["Font_BenchRoboto1", "Font_BenchRoboto2"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                       "asset_path": f"{ASSET_AUTHORING_ROOT}/F_Regular"},
+             "contains": ["F_Regular", "FontFace"],
+             "not_contains": ["F_Regular1", "F_Regular2"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_cdo_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Font_BenchRoboto"},
+             "contains": ["LegacyFontSize", "18"]},
+        ],
+    },
+    {
+        "name": "datatable_struct_row_roundtrip",
+        "domain": "data",
+        "edit_domain": "datatable",
+        "description": "Create a UserDefinedStruct-backed DataTable, add and update a row, save it, and read back row values",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/DT_BenchRows",
+                                      f"{ASSET_AUTHORING_ROOT}/S_BenchRow",
+                                      f"{ASSET_AUTHORING_ROOT}/E_BenchState"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_user_defined_struct",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/S_BenchRow",
+                      "fields": [{"name": "DisplayName", "type": "text"},
+                                  {"name": "Power", "type": "int", "default_value": "1"}]}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_user_defined_enum",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/E_BenchState",
+                      "values": ["Idle", "Active", "Cooldown"]}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_data_table",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows",
+                      "row_struct": f"{ASSET_AUTHORING_ROOT}/S_BenchRow.S_BenchRow"}},
+            {"tool": "blueprint_query",
+             "args": {"action": "add_data_table_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows",
+                      "row_name": "Sword",
+                      "values": {"DisplayName": "Iron Sword", "Power": 10}}},
+            {"tool": "blueprint_query",
+             "args": {"action": "update_data_table_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows",
+                      "row_name": "Sword",
+                      "confirm": True,
+                      "values": {"DisplayName": "Silver Sword", "Power": 12}}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_data_table_rows",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows"},
+             "contains": ["Sword", "Silver Sword", "12"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "describe_data_table_schema",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchRows"},
+             "contains": ["DisplayName", "Power"]},
+        ],
+    },
+    {
+        "name": "stringtable_lifecycle",
+        "domain": "localization",
+        "edit_domain": "stringtable",
+        "description": "Create a StringTable, write a localized entry and metadata, save it, and read the entry back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/ST_BenchUI"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "localization_query",
+             "args": {"action": "create_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI",
+                      "namespace": "BenchUI", "confirm": True, "save": True}},
+            {"tool": "localization_query",
+             "args": {"action": "set_string_entry",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI",
+                      "key": "StartButton", "source_string": "Start",
+                      "metadata": {"Context": "MainMenu"}, "confirm": True, "save": True}},
+            {"tool": "localization_query",
+             "args": {"action": "set_string_metadata",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI",
+                      "key": "StartButton", "metadata_key": "Screen",
+                      "metadata_value": "Title", "confirm": True, "save": True}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI"}},
+        ],
+        "verify": [
+            {"tool": "localization_query",
+             "args": {"action": "get_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI",
+                      "include_metadata": True},
+             "contains": ["StartButton", "Start", "MainMenu", "Title"]},
+            {"tool": "localization_query",
+             "args": {"action": "validate_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchUI"}},
+        ],
+    },
+    {
+        "name": "stringtable_csv_import_roundtrip",
+        "domain": "localization",
+        "edit_domain": "stringtable_csv",
+        "description": "Create a StringTable, import translator-style CSV rows with metadata, save it, and validate the imported entries",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "localization_query",
+             "args": {"action": "create_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport",
+                      "namespace": "BenchCsvImport", "confirm": True, "save": True}},
+            {"tool": "localization_query",
+             "args": {"action": "import_string_table_csv",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport",
+                      "file_path": ASSET_AUTHORING_STRINGTABLE_CSV_MARKER,
+                      "replace_existing": True,
+                      "confirm": True,
+                      "save": True}},
+            {"tool": "localization_query",
+             "args": {"action": "set_string_metadata",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport",
+                      "key": "ConfirmButton",
+                      "metadata_key": "Screen",
+                      "metadata_value": "ConfirmDialog",
+                      "confirm": True,
+                      "save": True}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport"}},
+        ],
+        "verify": [
+            {"tool": "localization_query",
+             "args": {"action": "get_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport",
+                      "include_metadata": True},
+             "contains": ["ConfirmButton", "Confirm", "metadata.Context", "Dialog", "ConfirmDialog"]},
+            {"tool": "localization_query",
+             "args": {"action": "validate_string_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ST_BenchCsvImport"}},
+        ],
+    },
+    {
+        "name": "enhanced_input_mapping_roundtrip",
+        "domain": "input",
+        "edit_domain": "enhanced_input",
+        "description": "Create an InputAction and InputMappingContext, map SpaceBar, validate mappings, and read the key binding back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/IA_BenchJump",
+                                      f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "input_query",
+             "args": {"action": "create_input_action",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump",
+                      "value_type": "Boolean", "description": "Bench jump action",
+                      "overwrite": True, "save": True}},
+            {"tool": "input_query",
+             "args": {"action": "set_input_action_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump",
+                      "description": "Bench jump action edited",
+                      "trigger_when_paused": True, "save": True}},
+            {"tool": "input_query",
+             "args": {"action": "create_input_mapping_context",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault",
+                      "description": "Bench mapping context", "overwrite": True, "save": True}},
+            {"tool": "input_query", "allow_error": True,
+             "args": {"action": "remove_input_mapping",
+                      "context_path": f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault",
+                      "action_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump",
+                      "key": "SpaceBar", "save": True}},
+            {"tool": "input_query",
+             "args": {"action": "add_input_mapping",
+                      "context_path": f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault",
+                      "action_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump",
+                      "key": "SpaceBar", "save": True}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault"}},
+        ],
+        "verify": [
+            {"tool": "input_query",
+             "args": {"action": "get_input_action",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchJump"},
+             "contains": ["Boolean", "Bench jump action edited"]},
+            {"tool": "input_query",
+             "args": {"action": "get_input_mapping_context",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault"},
+             "contains": ["IA_BenchJump", "SpaceBar"]},
+            {"tool": "input_query",
+             "args": {"action": "validate_input_mappings",
+                      "context_paths": [f"{ASSET_AUTHORING_ROOT}/IMC_BenchDefault"]}},
+        ],
+    },
+    {
+        "name": "material_instance_save_roundtrip",
+        "domain": "material",
+        "edit_domain": "material",
+        "description": "Create a Material, edit material properties, create a MIC, save both, and validate/read them back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/MI_BenchAuthoring",
+                                      f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "material_query",
+             "args": {"action": "create_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring",
+                      "shading_model": "Unlit", "material_domain": "Surface"}},
+            {"tool": "material_query",
+             "args": {"action": "set_material_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring",
+                      "two_sided": True, "shading_model": "Unlit"}},
+            {"tool": "material_query",
+             "args": {"action": "create_material_instance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchAuthoring",
+                      "parent_material": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring"}},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring"}},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchAuthoring"}},
+        ],
+        "verify": [
+            {"tool": "material_query",
+             "args": {"action": "validate_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring"}},
+            {"tool": "material_query",
+             "args": {"action": "get_material_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchAuthoring"},
+             "contains": ["two_sided", "Unlit"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchAuthoring"},
+             "contains": ["MI_BenchAuthoring", "MaterialInstance"]},
+        ],
+    },
+    {
+        "name": "material_function_roundtrip",
+        "domain": "material",
+        "edit_domain": "material_function",
+        "description": "Create a Material Function, build function input/output expressions, save it, and inspect graph structure",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "material_query",
+             "args": {"action": "create_material_function",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale",
+                      "description": "Benchmark scalar passthrough",
+                      "expose_to_library": True,
+                      "library_categories": ["Benchmark"],
+                      "type": "MaterialFunction"},
+             "contains": ["MF_BenchScalarScale", "MaterialFunction", "Benchmark scalar"]},
+            {"tool": "material_query",
+             "args": {"action": "build_function_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale",
+                      "clear_existing": True,
+                      "graph_spec": {
+                          "inputs": [{"id": "BenchInput", "name": "BenchInput",
+                                      "type": "float", "description": "Benchmark scalar input"}],
+                          "outputs": [{"id": "BenchOutput", "name": "BenchOutput",
+                                       "description": "Benchmark scalar output"}],
+                          "connections": [{"from": "BenchInput", "to": "BenchOutput"}],
+                      }},
+             "contains": ["input_count", "output_count"]},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale"}},
+        ],
+        "verify": [
+            {"tool": "material_query",
+             "args": {"action": "get_function_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale"},
+             "contains": ["BenchInput", "BenchOutput", "Benchmark scalar"]},
+            {"tool": "material_query",
+             "args": {"action": "export_function_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MF_BenchScalarScale"},
+             "contains": ["BenchInput", "BenchOutput"]},
+        ],
+    },
+    {
+        "name": "material_graph_build_roundtrip",
+        "domain": "material",
+        "edit_domain": "material_graph",
+        "description": "Create a base Material, build a graph, compile/save it, and read/export graph topology back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "material_query",
+             "args": {"action": "create_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt",
+                      "blend_mode": "Opaque",
+                      "shading_model": "DefaultLit",
+                      "material_domain": "Surface"},
+             "contains": ["M_BenchGraphBuilt"]},
+            {"tool": "material_query",
+             "args": {"action": "build_material_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt",
+                      "clear_existing": True,
+                      "graph_spec": {
+                          "nodes": [
+                              {"id": "BaseTint", "class": "VectorParameter",
+                               "props": {"ParameterName": "BaseTint"},
+                               "pos": [-420, -120]},
+                              {"id": "RoughnessValue", "class": "ScalarParameter",
+                               "props": {"ParameterName": "BenchRoughness"},
+                               "pos": [-420, 120]},
+                          ],
+                          "outputs": [
+                              {"from": "BaseTint", "from_pin": "RGB", "to_property": "BaseColor"},
+                              {"from": "RoughnessValue", "to_property": "Roughness"},
+                          ],
+                      }}},
+            {"tool": "material_query",
+             "args": {"action": "recompile_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt",
+                      "include_stats": True}},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt"}},
+        ],
+        "verify": [
+            {"tool": "material_query",
+             "args": {"action": "get_full_connection_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt"},
+             "contains": ["BaseColor", "Roughness"]},
+            {"tool": "material_query",
+             "args": {"action": "export_material_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt",
+                      "include_properties": True},
+             "contains": ["BaseTint", "BenchRoughness"]},
+            {"tool": "material_query",
+             "args": {"action": "validate_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt"}},
+            {"tool": "material_query",
+             "args": {"action": "get_compilation_stats",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchGraphBuilt"}},
+        ],
+    },
+    {
+        "name": "static_mesh_import_collision_roundtrip",
+        "domain": "mesh",
+        "edit_domain": "static_mesh_import",
+        "description": "Import a local OBJ as a StaticMesh asset, edit simple collision, save it, and inspect mesh/collision data",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SM_BenchImported"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "mesh_query",
+             "args": {"action": "import_mesh",
+                      "files": [ASSET_AUTHORING_STATIC_MESH_OBJ_MARKER],
+                      "destination": ASSET_AUTHORING_ROOT,
+                      "replace_existing": True,
+                      "combine_meshes": True,
+                      "auto_generate_collision": True,
+                      "material_import": "skip"},
+             "contains": ["SM_BenchImported", "StaticMesh", "triangle_count"]},
+            {"tool": "mesh_query",
+             "args": {"action": "set_mesh_collision",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchImported",
+                      "collision_type": "simple_box"},
+             "contains": ["simple_box", "box_elements"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchImported"}},
+        ],
+        "verify": [
+            {"tool": "mesh_query",
+             "args": {"action": "get_mesh_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchImported"},
+             "contains": ["SM_BenchImported", "StaticMesh", "triangles", "12"]},
+            {"tool": "mesh_query",
+             "args": {"action": "get_mesh_collision",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchImported"},
+             "contains": ["collision_type", "boxes"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchImported"},
+             "contains": ["SM_BenchImported", "StaticMesh"]},
+        ],
+    },
+    {
+        "name": "static_mesh_lod_screen_quality_roundtrip",
+        "domain": "mesh",
+        "edit_domain": "static_mesh_lod_quality",
+        "description": "Import a StaticMesh, edit its LOD screen-size metadata, save it, and run mesh quality/game-readiness read-backs",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "mesh_query",
+             "args": {"action": "import_mesh",
+                      "files": [ASSET_AUTHORING_STATIC_MESH_LOD_OBJ_MARKER],
+                      "destination": ASSET_AUTHORING_ROOT,
+                      "replace_existing": True,
+                      "combine_meshes": True,
+                      "auto_generate_collision": True,
+                      "material_import": "skip"},
+             "contains": ["SM_BenchLodScreen", "StaticMesh", "triangle_count"]},
+            {"tool": "mesh_query",
+             "args": {"action": "set_lod_screen_sizes",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen",
+                      "screen_sizes": [0.95]},
+             "contains": ["lod_count", "screen_sizes"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"}},
+        ],
+        "verify": [
+            {"tool": "mesh_query",
+             "args": {"action": "get_mesh_lods",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"},
+             "contains": ["screen_size", "triangles", "12"]},
+            {"tool": "mesh_query",
+             "args": {"action": "analyze_mesh_quality",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"},
+             "contains": ["degenerate_triangles", "duplicate_vertices", "lod_count", "overall_score"]},
+            {"tool": "mesh_query",
+             "args": {"action": "validate_game_ready",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"},
+             "contains": ["collision", "lods"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchLodScreen"},
+             "contains": ["SM_BenchLodScreen", "StaticMesh"]},
+        ],
+    },
+    {
+        "name": "modelgen_static_mesh_provenance_roundtrip",
+        "domain": "modelgen",
+        "edit_domain": "generated_static_mesh",
+        "description": "Import a generated-model OBJ through ModelGen, save it as StaticMesh, and verify redacted generation provenance",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "modelgen_query",
+             "args": {"action": "import_generated_model",
+                      "file_path": ASSET_AUTHORING_MODELGEN_OBJ_MARKER,
+                      "destination": ASSET_AUTHORING_ROOT,
+                      "provider": "external",
+                      "model": "benchmark/local-obj",
+                      "prompt": "small generated benchmark cube mesh",
+                      "replace_existing": True,
+                      "material_import": "skip",
+                      "save": True},
+             "contains": ["SM_BenchGeneratedModel", "vertex_count", "triangle_count", "provenance"]},
+            {"tool": "mesh_query",
+             "args": {"action": "set_mesh_collision",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel",
+                      "collision_type": "simple_box"},
+             "contains": ["simple_box", "box_elements"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel"}},
+        ],
+        "verify": [
+            {"tool": "modelgen_query",
+             "args": {"action": "get_generated_model_provenance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel"},
+             "contains": ["found", "true", "kind", "model", "benchmark/local-obj", "prompt_redacted"]},
+            {"tool": "mesh_query",
+             "args": {"action": "get_mesh_collision",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel"},
+             "contains": ["collision_type", "boxes"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SM_BenchGeneratedModel"},
+             "contains": ["SM_BenchGeneratedModel", "StaticMesh", "Triangles", "12"]},
+        ],
+    },
+    {
+        "name": "curvetable_key_roundtrip",
+        "domain": "data",
+        "edit_domain": "curvetable",
+        "description": "Create a CurveTable UObject asset, write linear curve keys, save it, and read the curve row back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/CT_BenchScaling"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_data_asset",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/CT_BenchScaling",
+                      "class_name": "CurveTable"}},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_curve_table_keys",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CT_BenchScaling",
+                      "row_name": "DamageScale",
+                      "keys": [{"time": 0.0, "value": 1.0},
+                                {"time": 10.0, "value": 2.5}],
+                      "interp_mode": "linear", "save": True}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CT_BenchScaling"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "read_curve_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CT_BenchScaling",
+                      "row_name": "DamageScale"},
+            "contains": ["DamageScale", "2.5", "simple"]},
+        ],
+    },
+    {
+        "name": "dataasset_reflection_roundtrip",
+        "domain": "data",
+        "edit_domain": "data_asset",
+        "description": "Create a raw UObject asset, edit top-level properties through reflection, save it, and read values back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_data_asset",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface",
+                      "class_name": "PhysicalMaterial"}},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_cdo_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface",
+                      "property_name": "Friction", "value": 0.73}},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_cdo_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface",
+                      "property_name": "Restitution", "value": 0.11}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_cdo_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface",
+                      "name_pattern": "Friction"},
+             "contains": ["Friction", "0.73"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/PM_BenchSurface"},
+             "contains": ["PM_BenchSurface", "PhysicalMaterial"]},
+        ],
+    },
+    {
+        "name": "umg_widget_tree_roundtrip",
+        "domain": "ui",
+        "edit_domain": "widget_blueprint",
+        "description": "Create a Widget Blueprint, add and style a TextBlock, compile/save it, and read the widget tree back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ui_query",
+             "args": {"action": "create_widget_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring",
+                      "root_widget": "CanvasPanel"}},
+            {"tool": "ui_query",
+             "args": {"action": "add_widget",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring",
+                      "widget_class": "TextBlock", "widget_name": "BenchTitle",
+                      "anchor_preset": "top_left",
+                      "position": {"x": 32, "y": 24},
+                      "size": {"x": 360, "y": 64},
+                      "compile": False}},
+            {"tool": "ui_query",
+             "args": {"action": "set_text",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring",
+                      "widget_name": "BenchTitle",
+                      "text": "Benchmark Ready", "font_size": 24,
+                      "compile": False}},
+            {"tool": "ui_query",
+             "args": {"action": "compile_widget",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring"}},
+        ],
+        "verify": [
+            {"tool": "ui_query",
+             "args": {"action": "get_widget_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAuthoring"},
+            "contains": ["BenchTitle", "TextBlock", "Benchmark Ready"]},
+        ],
+    },
+    {
+        "name": "commonui_text_block_roundtrip",
+        "domain": "ui",
+        "edit_domain": "commonui_text_block",
+        "description": "Create a CommonActivatableWidget, convert/configure CommonTextBlock text, compile/save, and audit CommonUI wiring",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ui_query",
+             "args": {"action": "create_activatable_widget",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel",
+                      "root_widget": "CanvasPanel"},
+             "contains": ["WBP_BenchCommonPanel", "CommonActivatableWidget"]},
+            {"tool": "ui_query",
+             "args": {"action": "add_widget",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel",
+                      "widget_class": "TextBlock", "widget_name": "BenchCommonLabel",
+                      "anchor_preset": "center",
+                      "position": {"x": 0, "y": 0},
+                      "size": {"x": 420, "y": 64},
+                      "compile": False},
+             "contains": ["BenchCommonLabel", "TextBlock"]},
+            {"tool": "ui_query",
+             "args": {"action": "set_text",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel",
+                      "widget_name": "BenchCommonLabel",
+                      "text": "CommonUI Bench", "font_size": 22,
+                      "compile": False}},
+            {"tool": "ui_query",
+             "args": {"action": "convert_textblock_to_common",
+                      "wbp_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel",
+                      "widget_name": "BenchCommonLabel"},
+             "contains": ["BenchCommonLabel", "CommonTextBlock"]},
+            {"tool": "ui_query",
+             "args": {"action": "configure_common_text",
+                      "wbp_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel",
+                      "widget_name": "BenchCommonLabel",
+                      "wrap_text_width": 420,
+                      "line_height_percentage": 1.1,
+                      "mobile_font_size_multiplier": 1.2,
+                      "text_case": "ToUpper"},
+             "contains": ["BenchCommonLabel"]},
+            {"tool": "ui_query",
+             "args": {"action": "compile_widget",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"},
+             "contains": ["compiled", "true", "error_count", "0"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"}},
+        ],
+        "verify": [
+            {"tool": "ui_query",
+             "args": {"action": "get_widget_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"},
+             "contains": ["BenchCommonLabel", "CommonTextBlock", "CommonUI Bench"]},
+            {"tool": "ui_query",
+             "args": {"action": "audit_commonui_widget",
+                      "wbp_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"},
+             "contains": ["WBP_BenchCommonPanel", "issue_count"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchCommonPanel"},
+             "contains": ["WBP_BenchCommonPanel", "WidgetBlueprint"]},
+        ],
+    },
+    {
+        "name": "animation_core_assets_roundtrip",
+        "domain": "animation",
+        "edit_domain": "animation_core",
+        "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/A_BenchSkeletalCube",
+                                      f"{ASSET_AUTHORING_ROOT}/BS_BenchSkeletalCube",
+                                      f"{ASSET_AUTHORING_ROOT}/ABP_BenchSkeletalCube"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "animation_query",
+             "args": {"action": "create_sequence",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchSkeletalCube",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"},
+             "contains": ["A_BenchSkeletalCube", "SkeletalCube_Skeleton"]},
+            {"tool": "animation_query",
+             "args": {"action": "set_sequence_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchSkeletalCube",
+                      "rate_scale": 1.25,
+                      "loop": True},
+             "contains": ["rate_scale", "1.25", "loop"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchSkeletalCube"}},
+            {"tool": "animation_query",
+             "args": {"action": "create_blend_space",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BS_BenchSkeletalCube",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+                      "axis_x_name": "Speed",
+                      "axis_x_min": 0,
+                      "axis_x_max": 600,
+                      "axis_y_name": "Direction",
+                      "axis_y_min": -180,
+                      "axis_y_max": 180},
+             "contains": ["BS_BenchSkeletalCube", "SkeletalCube_Skeleton", "Speed", "Direction"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BS_BenchSkeletalCube"}},
+            {"tool": "animation_query",
+             "args": {"action": "create_anim_blueprint",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ABP_BenchSkeletalCube",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+                      "parent_class": "AnimInstance"},
+             "contains": ["ABP_BenchSkeletalCube", "SkeletalCube_Skeleton", "AnimInstance",
+                          "generated_class"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ABP_BenchSkeletalCube"}},
+        ],
+        "verify": [
+            {"tool": "animation_query",
+             "args": {"action": "get_sequence_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchSkeletalCube"},
+             "contains": ["A_BenchSkeletalCube", "SkeletalCube_Skeleton", "rate_scale",
+                          "1.25", "is_looping", "true"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_blend_space_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BS_BenchSkeletalCube"},
+             "contains": ["BS_BenchSkeletalCube", "SkeletalCube_Skeleton", "Speed",
+                          "Direction"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_abp_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/ABP_BenchSkeletalCube"},
+             "contains": ["ABP_BenchSkeletalCube", "SkeletalCube_Skeleton", "AnimGraph",
+                          "EventGraph", "AnimInstance"]},
+        ],
+    },
+    {
+        "name": "animation_montage_sections_roundtrip",
+        "domain": "animation",
+        "edit_domain": "montage",
+        "description": "Create an AnimSequence and Montage from the engine skeletal cube skeleton, add slot/sections/segment, save, and inspect montage layout",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/A_BenchMontageSource",
+                                      f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "animation_query",
+             "args": {"action": "create_sequence",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchMontageSource",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"},
+             "contains": ["A_BenchMontageSource", "SkeletalCube_Skeleton"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchMontageSource"}},
+            {"tool": "animation_query",
+             "args": {"action": "create_montage",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"},
+             "contains": ["AM_BenchSkeletalCube", "SkeletalCube_Skeleton"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube"}},
+            {"tool": "animation_query",
+             "args": {"action": "add_montage_slot",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube",
+                      "slot_name": "BenchSlot"},
+             "contains": ["BenchSlot"]},
+            {"tool": "animation_query",
+             "args": {"action": "add_montage_section",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube",
+                      "section_name": "Intro",
+                      "start_time": 0.0},
+             "contains": ["Intro"]},
+            {"tool": "animation_query",
+             "args": {"action": "add_montage_section",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube",
+                      "section_name": "Recover",
+                      "start_time": 0.1},
+             "contains": ["Recover"]},
+            {"tool": "animation_query",
+             "args": {"action": "add_montage_anim_segment",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube",
+                      "anim_path": f"{ASSET_AUTHORING_ROOT}/A_BenchMontageSource",
+                      "slot_index": 1,
+                      "start_pos": 0.0,
+                      "anim_start_time": 0.0,
+                      "anim_end_time": 0.1,
+                      "play_rate": 1.0,
+                      "looping_count": 1},
+             "contains": ["A_BenchMontageSource"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube"}},
+        ],
+        "verify": [
+            {"tool": "animation_query",
+             "args": {"action": "get_montage_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube"},
+             "contains": ["AM_BenchSkeletalCube", "BenchSlot", "Intro", "Recover"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AM_BenchSkeletalCube"},
+             "contains": ["AM_BenchSkeletalCube", "AnimMontage"]},
+        ],
+    },
+    {
+        "name": "animation_sequence_curve_sync_metadata_roundtrip",
+        "domain": "animation",
+        "edit_domain": "animation_sequence_events",
+        "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "animation_query",
+             "args": {"action": "create_sequence",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta",
+                      "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"},
+             "contains": ["A_BenchEventMeta", "SkeletalCube_Skeleton"]},
+            {"tool": "animation_query",
+             "args": {"action": "add_curve",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta.A_BenchEventMeta",
+                      "curve_name": "BenchSpeedCurve",
+                      "curve_type": "Float"},
+             "contains": ["BenchSpeedCurve"]},
+            {"tool": "animation_query",
+             "args": {"action": "set_curve_keys",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta.A_BenchEventMeta",
+                      "curve_name": "BenchSpeedCurve",
+                      "keys_json": "[{\"time\":0.0,\"value\":0.25,\"interp\":\"linear\"},{\"time\":0.1,\"value\":1.0,\"interp\":\"linear\"}]"},
+             "contains": ["BenchSpeedCurve", "num_keys", "2"]},
+            {"tool": "animation_query",
+             "args": {"action": "add_sync_marker",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta.A_BenchEventMeta",
+                      "marker_name": "BenchPlant",
+                      "time": 0.0,
+                      "track_index": 0},
+             "contains": ["BenchPlant"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta"}},
+        ],
+        "verify": [
+            {"tool": "animation_query",
+             "args": {"action": "get_curve_keys",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta.A_BenchEventMeta",
+                      "curve_name": "BenchSpeedCurve"},
+             "contains": ["BenchSpeedCurve", "0.25", "1"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_sync_markers",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta.A_BenchEventMeta"},
+             "contains": ["BenchPlant"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_sequence_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/A_BenchEventMeta"},
+             "contains": ["A_BenchEventMeta", "SkeletalCube_Skeleton"]},
+        ],
+    },
+    {
+        "name": "animation_ikrig_retargeter_metadata_roundtrip",
+        "domain": "animation",
+        "edit_domain": "ikrig_retargeter",
+        "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/IKR_BenchSource",
+                                      f"{ASSET_AUTHORING_ROOT}/IKR_BenchTarget",
+                                      f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "animation_query",
+             "args": {"action": "create_ik_rig",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchSource",
+                      "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"},
+             "contains": ["IKR_BenchSource", "SkeletalCube", "bone_count"]},
+            {"tool": "animation_query",
+             "args": {"action": "create_ik_rig",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchTarget",
+                      "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"},
+             "contains": ["IKR_BenchTarget", "SkeletalCube", "bone_count"]},
+            {"tool": "animation_query",
+             "args": {"action": "create_ik_retargeter",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget"},
+             "contains": ["RTG_BenchSourceToTarget", "retarget_op_count"]},
+            {"tool": "animation_query",
+             "args": {"action": "set_retargeter_rigs",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget",
+                      "source_ik_rig_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchSource",
+                      "target_ik_rig_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchTarget",
+                      "source_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+                      "target_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+                      "auto_map": "fuzzy"},
+             "contains": ["IKR_BenchSource", "IKR_BenchTarget", "default_ops_seeded", "true"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchSource"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchTarget"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget"}},
+        ],
+        "verify": [
+            {"tool": "animation_query",
+             "args": {"action": "get_ikrig_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchSource"},
+             "contains": ["IKR_BenchSource", "SkeletalCube", "bone_count"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_ikrig_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IKR_BenchTarget"},
+             "contains": ["IKR_BenchTarget", "SkeletalCube", "bone_count"]},
+            {"tool": "animation_query",
+             "args": {"action": "get_retargeter_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget"},
+             "contains": ["IKR_BenchSource", "IKR_BenchTarget", "retarget_op_count",
+                          "source_preview_mesh", "target_preview_mesh"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/RTG_BenchSourceToTarget"},
+             "contains": ["RTG_BenchSourceToTarget"]},
+        ],
+    },
+    {
+        "name": "audio_soundcue_roundtrip",
+        "domain": "audio",
+        "edit_domain": "sound_cue",
+        "description": "Create a test SoundWave, SoundClass, and SoundCue, assign class metadata, save, validate, and read references back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchTone",
+                                      f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX",
+                                      f"{ASSET_AUTHORING_ROOT}/SCue_BenchTone"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "audio_query",
+             "args": {"action": "create_test_wave",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTone",
+                      "frequency_hz": 440.0, "duration_seconds": 0.25,
+                      "sample_rate": 44100, "amplitude": 0.4}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX",
+                      "properties": {"Volume": 0.75}}},
+            {"tool": "audio_query",
+             "args": {"action": "set_sound_class_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX",
+                      "properties": {"Volume": 0.5, "Pitch": 1.0}}},
+            {"tool": "audio_query",
+             "args": {"action": "batch_assign_sound_class",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchTone"],
+                      "sound_class": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTone"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX"}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_cue",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchTone",
+                      "sound_waves": [f"{ASSET_AUTHORING_ROOT}/SW_BenchTone"]}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchTone"}},
+        ],
+        "verify": [
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_class_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchSFX"},
+             "contains": ["Volume", "0.5"]},
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_wave_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTone"},
+             "contains": ["SoundClass_BenchSFX"]},
+            {"tool": "audio_query",
+             "args": {"action": "find_sound_waves_in_cue",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchTone"},
+             "contains": ["SW_BenchTone"]},
+            {"tool": "audio_query",
+             "args": {"action": "validate_sound_cue",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchTone"}},
+        ],
+    },
+    {
+        "name": "audio_routing_settings_roundtrip",
+        "domain": "audio",
+        "edit_domain": "audio_routing",
+        "description": "Create attenuation, mix, concurrency, and submix assets, edit routing settings, save, and read each value back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SA_BenchSpatial",
+                                      f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchDialog",
+                                      f"{ASSET_AUTHORING_ROOT}/Mix_BenchDialog",
+                                      f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchDialog",
+                                      f"{ASSET_AUTHORING_ROOT}/Submix_BenchDialog"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchDialog",
+                      "properties": {"Volume": 0.9}},
+             "contains": ["SoundClass_BenchDialog", "Volume"]},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_attenuation",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SA_BenchSpatial",
+                      "settings": {"bAttenuate": True, "FalloffDistance": 725.0}},
+             "contains": ["SA_BenchSpatial", "FalloffDistance"]},
+            {"tool": "audio_query",
+             "args": {"action": "set_attenuation_settings",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SA_BenchSpatial",
+                      "settings": {"bEnableOcclusion": True,
+                                   "OcclusionVolumeAttenuation": 0.42}},
+             "contains": ["bEnableOcclusion", "OcclusionVolumeAttenuation", "0.419"]},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_mix",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Mix_BenchDialog"},
+             "contains": ["Mix_BenchDialog"]},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_concurrency",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchDialog",
+                      "settings": {"MaxCount": 3, "VolumeScale": 0.6}},
+             "contains": ["Concurrency_BenchDialog", "MaxCount"]},
+            {"tool": "audio_query",
+             "args": {"action": "set_concurrency_settings",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchDialog",
+                      "settings": {"MaxCount": 4, "VolumeScale": 0.55}},
+             "contains": ["MaxCount", "4"]},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_submix",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Submix_BenchDialog"},
+             "contains": ["Submix_BenchDialog"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SA_BenchSpatial"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchDialog"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Mix_BenchDialog"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchDialog.Concurrency_BenchDialog"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Submix_BenchDialog"}},
+        ],
+        "verify": [
+            {"tool": "audio_query",
+             "args": {"action": "get_attenuation_settings",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SA_BenchSpatial"},
+             "contains": ["bEnableOcclusion", "OcclusionVolumeAttenuation", "0.419"]},
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_mix_settings",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Mix_BenchDialog"},
+             "contains": ["Mix_BenchDialog", "duration"]},
+            {"tool": "audio_query",
+             "args": {"action": "get_concurrency_settings",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchDialog"},
+             "contains": ["MaxCount", "4"]},
+            {"tool": "audio_query",
+             "args": {"action": "get_submix_properties",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Submix_BenchDialog"},
+             "contains": ["Submix_BenchDialog", "output_volume_db"]},
+        ],
+    },
+    {
+        "name": "audio_soundcue_spec_roundtrip",
+        "domain": "audio",
+        "edit_domain": "sound_cue_spec",
+        "description": "Build a SoundCue graph from a declarative spec with two WavePlayers feeding a Mixer, save it, and validate references",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecLow",
+                                      f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecHigh",
+                                      f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "audio_query",
+             "args": {"action": "create_test_wave",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecLow",
+                      "frequency_hz": 330.0,
+                      "duration_seconds": 0.2,
+                      "sample_rate": 44100,
+                      "amplitude": 0.35}},
+            {"tool": "audio_query",
+             "args": {"action": "create_test_wave",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecHigh",
+                      "frequency_hz": 660.0,
+                      "duration_seconds": 0.2,
+                      "sample_rate": 44100,
+                      "amplitude": 0.35}},
+            {"tool": "audio_query",
+             "args": {"action": "build_sound_cue_from_spec",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix",
+                      "spec": {
+                          "nodes": [
+                              {"id": "low", "type": "WavePlayer",
+                               "properties": {"SoundWave": f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecLow"}},
+                              {"id": "high", "type": "WavePlayer",
+                               "properties": {"SoundWave": f"{ASSET_AUTHORING_ROOT}/SW_BenchSpecHigh"}},
+                              {"id": "mix", "type": "Mixer"},
+                          ],
+                          "connections": [
+                              {"from": "low", "to": "mix", "child_index": 0},
+                              {"from": "high", "to": "mix", "child_index": 1},
+                          ],
+                          "first_node": "mix",
+                          "properties": {"VolumeMultiplier": 0.8, "PitchMultiplier": 1.0},
+                      }},
+             "contains": ["SCue_BenchSpecMix", "node_count", "3", "connection_count", "2"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix"}},
+        ],
+        "verify": [
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_cue_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix"},
+             "contains": ["SoundNodeMixer", "SoundNodeWavePlayer", "SW_BenchSpecLow", "SW_BenchSpecHigh"]},
+            {"tool": "audio_query",
+             "args": {"action": "find_sound_waves_in_cue",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix"},
+             "contains": ["SW_BenchSpecLow", "SW_BenchSpecHigh"]},
+            {"tool": "audio_query",
+             "args": {"action": "validate_sound_cue",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SCue_BenchSpecMix"},
+             "contains": ["valid", "true"]},
+        ],
+    },
+    {
+        "name": "audio_template_routing_roundtrip",
+        "domain": "audio",
+        "edit_domain": "audio_template_batch",
+        "description": "Apply a batch audio template to a generated SoundWave, save it, and read back routing/compression/looping fields",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated",
+                                      f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchTemplate",
+                                      f"{ASSET_AUTHORING_ROOT}/SA_BenchTemplate",
+                                      f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchTemplate",
+                                      f"{ASSET_AUTHORING_ROOT}/Submix_BenchTemplate"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "audio_query",
+             "args": {"action": "create_test_wave",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated",
+                      "frequency_hz": 550.0,
+                      "duration_seconds": 0.2,
+                      "sample_rate": 44100,
+                      "amplitude": 0.3}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchTemplate",
+                      "properties": {"Volume": 0.67}}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_attenuation",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SA_BenchTemplate",
+                      "settings": {"bAttenuate": True, "FalloffDistance": 512.0}}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_concurrency",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchTemplate",
+                      "settings": {"MaxCount": 2}}},
+            {"tool": "audio_query",
+             "args": {"action": "create_sound_submix",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/Submix_BenchTemplate"}},
+            {"tool": "audio_query",
+             "args": {"action": "apply_audio_template",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated"],
+                      "template": {
+                          "sound_class": f"{ASSET_AUTHORING_ROOT}/SoundClass_BenchTemplate",
+                          "attenuation": f"{ASSET_AUTHORING_ROOT}/SA_BenchTemplate",
+                          "submix": f"{ASSET_AUTHORING_ROOT}/Submix_BenchTemplate",
+                          "concurrency": f"{ASSET_AUTHORING_ROOT}/Concurrency_BenchTemplate",
+                          "compression": {"quality": 55, "type": "BinkAudio"},
+                          "looping": True,
+                          "virtualization": "PlayWhenSilent",
+                      }},
+             "contains": ["modified", "1", "sound_class", "attenuation", "submix", "concurrency",
+                          "compression", "looping", "virtualization"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated"}},
+        ],
+        "verify": [
+            {"tool": "audio_query",
+             "args": {"action": "get_sound_wave_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated"},
+             "contains": ["SW_BenchTemplated", "SoundClass_BenchTemplate", "SA_BenchTemplate",
+                          "Submix_BenchTemplate", "compression_quality", "55", "looping", "true"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/SW_BenchTemplated"},
+             "contains": ["SW_BenchTemplated", "SoundWave"]},
+        ],
+    },
+    {
+        "name": "niagara_system_roundtrip",
+        "domain": "niagara",
+        "edit_domain": "niagara_system",
+        "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "niagara_query",
+             "args": {"action": "create_system",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"}},
+            {"tool": "niagara_query",
+             "args": {"action": "create_emitter",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "name": "BenchEmitter", "sim_target": "cpu"}},
+            {"tool": "niagara_query",
+             "args": {"action": "set_system_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "property": "WarmupTime", "value": "0.2"}},
+            {"tool": "niagara_query",
+             "args": {"action": "set_emitter_loop_profile",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "emitter": "BenchEmitter",
+                      "loop_behavior": "Once", "loop_duration": 0.4}},
+            {"tool": "niagara_query",
+             "args": {"action": "set_fixed_bounds",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "min": [-100.0, -100.0, -50.0],
+                      "max": [100.0, 100.0, 250.0]},
+             "contains": ["success", "system"]},
+            {"tool": "niagara_query",
+             "args": {"action": "save_system",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"}},
+        ],
+        "verify": [
+            {"tool": "niagara_query",
+             "args": {"action": "list_emitters",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"},
+             "contains": ["BenchEmitter"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_system_summary",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"},
+             "contains": ["BenchEmitter", "fixed_bounds", "true"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_emitter_timing_summary",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "emitter": "BenchEmitter"},
+             "contains": ["BenchEmitter", "0.4"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_system_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst",
+                      "property": "WarmupTime"},
+             "contains": ["0.2"]},
+            {"tool": "niagara_query",
+             "args": {"action": "validate_system",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchBurst"}},
+        ],
+    },
+    {
+        "name": "niagara_sidecar_assets_roundtrip",
+        "domain": "niagara",
+        "edit_domain": "niagara_sidecar_assets",
+        "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals",
+                                      f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "niagara_query",
+             "args": {"action": "create_npc",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals",
+                      "namespace": "BenchGlobals"},
+             "contains": ["NPC_BenchGlobals", "BenchGlobals"]},
+            {"tool": "niagara_query",
+             "args": {"action": "add_npc_parameter",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals",
+                      "name": "BenchSpawnScale",
+                      "type": "float"},
+             "contains": ["BenchSpawnScale", "Float"]},
+            {"tool": "niagara_query",
+             "args": {"action": "set_npc_default",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals",
+                      "name": "BenchSpawnScale",
+                      "value": 0.85},
+             "contains": ["BenchSpawnScale"]},
+            {"tool": "niagara_query",
+             "args": {"action": "create_effect_type",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget",
+                      "cull_reaction": "DeactivateImmediate",
+                      "update_frequency": "Low",
+                      "max_distance": 2500.0},
+             "contains": ["NE_BenchBudget"]},
+            {"tool": "niagara_query",
+             "args": {"action": "set_effect_type_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget",
+                      "property": "CullReaction",
+                      "value": "PauseResume"},
+             "contains": ["CullReaction"]},
+            {"tool": "niagara_query",
+             "args": {"action": "save_system",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals"}},
+            {"tool": "niagara_query",
+             "args": {"action": "save_system",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget"}},
+        ],
+        "verify": [
+            {"tool": "niagara_query",
+             "args": {"action": "get_npc",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NPC_BenchGlobals"},
+             "contains": ["BenchGlobals", "BenchSpawnScale", "0.85"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_effect_type",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget"},
+             "contains": ["CullReaction", "PauseResume"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NE_BenchBudget"},
+            "contains": ["NE_BenchBudget", "NiagaraEffectType"]},
+        ],
+    },
+    {
+        "name": "niagara_hlsl_module_roundtrip",
+        "domain": "niagara",
+        "edit_domain": "niagara_module_script",
+        "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack",
+                                      f"{ASSET_AUTHORING_ROOT}/NM_BenchScaleFloat"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "niagara_query",
+             "args": {"action": "create_module_from_hlsl",
+                      "name": "NM_BenchScaleFloat",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/NM_BenchScaleFloat",
+                      "hlsl": "OutValue = InValue * Scale;",
+                      "inputs": [{"name": "InValue", "type": "float"},
+                                  {"name": "Scale", "type": "float"}],
+                      "outputs": [{"name": "OutValue", "type": "float"}],
+                      "description": "Benchmark scalar multiply module"},
+             "contains": ["NM_BenchScaleFloat", "InValue", "OutValue"]},
+            {"tool": "niagara_query",
+             "args": {"action": "create_system",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack"},
+             "contains": ["NS_BenchModuleStack"]},
+            {"tool": "niagara_query",
+             "args": {"action": "create_emitter",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack",
+                      "name": "BenchEmitter", "sim_target": "cpu"},
+             "contains": ["BenchEmitter"]},
+            {"tool": "niagara_query",
+             "args": {"action": "request_compile",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack",
+                      "force": True,
+                      "synchronous": True},
+             "contains": ["NS_BenchModuleStack"]},
+            {"tool": "niagara_query",
+             "args": {"action": "add_module",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack",
+                      "emitter": "BenchEmitter",
+                      "usage": "particle_update",
+                      "module_script": f"{ASSET_AUTHORING_ROOT}/NM_BenchScaleFloat.NM_BenchScaleFloat"},
+             "contains": ["node_guid"]},
+            {"tool": "niagara_query",
+             "args": {"action": "save_system",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack"}},
+        ],
+        "verify": [
+            {"tool": "niagara_query",
+             "args": {"action": "get_ordered_modules",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack",
+                      "emitter": "BenchEmitter"},
+             "contains": ["NM_BenchScaleFloat", "particle_update"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_module_graph",
+                      "script_path": f"{ASSET_AUTHORING_ROOT}/NM_BenchScaleFloat"},
+             "contains": ["InValue", "Scale", "OutValue"]},
+            {"tool": "niagara_query",
+             "args": {"action": "get_system_summary",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/NS_BenchModuleStack"},
+             "contains": ["BenchEmitter"]},
+        ],
+    },
+    {
+        "name": "ai_blackboard_behavior_tree_roundtrip",
+        "domain": "ai",
+        "edit_domain": "behavior_tree",
+        "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision",
+                                      f"{ASSET_AUTHORING_ROOT}/BT_BenchDecision"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_blackboard",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"}},
+            {"tool": "ai_query",
+             "args": {"action": "add_bb_key",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision",
+                      "key_name": "TargetActor", "key_type": "Object",
+                      "base_class": "Actor"}},
+            {"tool": "ai_query",
+             "args": {"action": "add_bb_key",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision",
+                      "key_name": "PatrolIndex", "key_type": "Int"}},
+            {"tool": "ai_query",
+             "args": {"action": "rename_bb_key",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision",
+                      "old_name": "PatrolIndex", "new_name": "PatrolPointIndex"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"}},
+            {"tool": "ai_query",
+             "args": {"action": "create_behavior_tree",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchDecision",
+                      "blackboard_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"}},
+            {"tool": "ai_query",
+             "args": {"action": "set_bt_blackboard",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchDecision",
+                      "blackboard_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchDecision"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_blackboard",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchDecision"},
+             "contains": ["TargetActor", "PatrolPointIndex"]},
+            {"tool": "ai_query",
+             "args": {"action": "get_behavior_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchDecision"},
+             "contains": ["BB_BenchDecision"]},
+        ],
+    },
+    {
+        "name": "ai_eqs_query_roundtrip",
+        "domain": "ai",
+        "edit_domain": "eqs_query",
+        "description": "Create an EQS query, add a generator and scored/filtering test, save it, and inspect the query options",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_eqs_query",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover"},
+             "contains": ["EQS_BenchCover"]},
+            {"tool": "ai_query",
+             "args": {"action": "add_eqs_generator",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover",
+                      "generator_class": "EnvQueryGenerator_SimpleGrid",
+                      "properties": {"GridSize": 400.0, "SpaceBetween": 100.0}},
+             "contains": ["EnvQueryGenerator_SimpleGrid", "option_index"]},
+            {"tool": "ai_query",
+             "args": {"action": "add_eqs_test",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover",
+                      "option_index": 0,
+                      "test_class": "EnvQueryTest_Distance"},
+             "contains": ["EnvQueryTest_Distance", "test_index"]},
+            {"tool": "ai_query",
+             "args": {"action": "configure_eqs_scoring",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover",
+                      "option_index": 0,
+                      "test_index": 0,
+                      "purpose": "FilterAndScore",
+                      "equation": "InverseLinear",
+                      "factor": 2.0},
+             "contains": ["InverseLinear", "scoring_factor", "2"]},
+            {"tool": "ai_query",
+             "args": {"action": "configure_eqs_filter",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover",
+                      "option_index": 0,
+                      "test_index": 0,
+                      "filter_type": "Range",
+                      "min": 100.0,
+                      "max": 1200.0},
+             "contains": ["Range", "float_value_min", "100", "float_value_max", "1200"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_eqs_query",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover"},
+             "contains": ["EnvQueryGenerator_SimpleGrid", "EnvQueryTest_Distance", "InverseLinear", "1200"]},
+            {"tool": "ai_query",
+             "args": {"action": "validate_eqs_query",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchCover"}},
+        ],
+    },
+    {
+        "name": "ai_behavior_tree_spec_roundtrip",
+        "domain": "ai",
+        "edit_domain": "behavior_tree_spec",
+        "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "build_behavior_tree_from_spec",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol",
+                      "strict_mode": True,
+                      "spec": {
+                          "root": {
+                              "type": "Selector",
+                              "name": "BenchRootSelector",
+                              "children": [
+                                  {"type": "BTTask_Wait",
+                                   "name": "BenchWait",
+                                   "properties": {"WaitTime": 0.1}},
+                              ],
+                          },
+                      }},
+             "contains": ["BT_BenchSpecPatrol", "node_count"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_behavior_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol"},
+             "contains": ["Selector", "BTTask_Wait", "BenchWait"]},
+            {"tool": "ai_query",
+             "args": {"action": "get_bt_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol"},
+             "contains": ["Selector", "BTTask_Wait"]},
+            {"tool": "ai_query",
+             "args": {"action": "validate_behavior_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchSpecPatrol"}},
+        ],
+    },
+    {
+        "name": "ai_behavior_tree_node_blueprints_roundtrip",
+        "domain": "ai",
+        "edit_domain": "behavior_tree_node_blueprints",
+        "description": "Create BehaviorTree Task/Decorator/Service Blueprint assets, save them, and verify their parent classes",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BTT_BenchScan",
+                                      f"{ASSET_AUTHORING_ROOT}/BTD_BenchCanSee",
+                                      f"{ASSET_AUTHORING_ROOT}/BTS_BenchSense"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_bt_task_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BTT_BenchScan",
+                      "name": "BTT_BenchScan"},
+             "contains": ["BTT_BenchScan", "BTTask_BlueprintBase"]},
+            {"tool": "ai_query",
+             "args": {"action": "create_bt_decorator_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BTD_BenchCanSee",
+                      "name": "BTD_BenchCanSee"},
+             "contains": ["BTD_BenchCanSee", "BTDecorator_BlueprintBase"]},
+            {"tool": "ai_query",
+             "args": {"action": "create_bt_service_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BTS_BenchSense",
+                      "name": "BTS_BenchSense"},
+             "contains": ["BTS_BenchSense", "BTService_BlueprintBase"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTT_BenchScan"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTD_BenchCanSee"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTS_BenchSense"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_parent_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTT_BenchScan"},
+             "contains": ["BTTask_BlueprintBase"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_parent_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTD_BenchCanSee"},
+             "contains": ["BTDecorator_BlueprintBase"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_parent_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTS_BenchSense"},
+             "contains": ["BTService_BlueprintBase"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BTT_BenchScan"},
+             "contains": ["BTT_BenchScan", "Blueprint"]},
+        ],
+    },
+    {
+        "name": "gas_gameplay_effect_roundtrip",
+        "domain": "gas",
+        "edit_domain": "gameplay_effect",
+        "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "create_gameplay_effect",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow",
+                      "duration_policy": "has_duration"}},
+            {"tool": "gas_query",
+             "args": {"action": "set_duration",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow",
+                      "duration_policy": "has_duration",
+                      "duration_magnitude": 4.0}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_gameplay_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow"},
+             "contains": ["has_duration", "4"]},
+            {"tool": "gas_query",
+             "args": {"action": "validate_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSlow"}},
+        ],
+    },
+    {
+        "name": "gas_ability_blueprint_roundtrip",
+        "domain": "gas",
+        "edit_domain": "gameplay_ability",
+        "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown",
+                                      f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "create_gameplay_effect",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown",
+                      "duration_policy": "has_duration"},
+             "contains": ["GE_BenchDashCooldown"]},
+            {"tool": "gas_query",
+             "args": {"action": "set_duration",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown",
+                      "duration_policy": "has_duration",
+                      "duration_magnitude": 1.25},
+             "contains": ["1.25"]},
+            {"tool": "gas_query",
+             "args": {"action": "add_ge_component",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown",
+                      "component_type": "target_tags",
+                      "config": {"tags": ["Cooldown.Skill.001"]}},
+             "contains": ["target_tags", "component_count"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown"}},
+            {"tool": "gas_query",
+             "args": {"action": "create_ability",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash",
+                      "parent_class": "GameplayAbility",
+                      "display_name": "Bench Dash"},
+             "contains": ["GA_BenchDash", "GameplayAbility", "Bench Dash"]},
+            {"tool": "gas_query",
+             "args": {"action": "set_ability_policy",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash",
+                      "instancing_policy": "InstancedPerActor",
+                      "net_execution_policy": "LocalPredicted",
+                      "net_security_policy": "ClientOrServer"},
+             "contains": ["InstancedPerActor", "LocalPredicted", "ClientOrServer"]},
+            {"tool": "gas_query",
+             "args": {"action": "set_ability_cooldown",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash",
+                      "cooldown_effect_class": f"{ASSET_AUTHORING_ROOT}/GE_BenchDashCooldown"},
+             "contains": ["GE_BenchDashCooldown"]},
+            {"tool": "gas_query",
+             "args": {"action": "add_commit_and_end_flow",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash",
+                      "position": {"x": 240, "y": 0}},
+             "contains": ["CommitAbility", "EndAbility"]},
+            {"tool": "gas_query",
+             "args": {"action": "compile_ability",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"},
+             "contains": ["success", "error_count", "0"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_ability_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"},
+             "contains": ["InstancedPerActor", "LocalPredicted", "GE_BenchDashCooldown"]},
+            {"tool": "gas_query",
+             "args": {"action": "get_ability_graph_flow",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"},
+             "contains": ["instant", "has_commit_ability", "has_end_ability"]},
+            {"tool": "gas_query",
+             "args": {"action": "validate_ability_blueprint",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchDash"}},
+        ],
+    },
+    {
+        "name": "gas_input_binding_roundtrip",
+        "domain": "gas",
+        "edit_domain": "ability_input_binding",
+        "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor",
+                                      f"{ASSET_AUTHORING_ROOT}/GA_BenchInputDash",
+                                      f"{ASSET_AUTHORING_ROOT}/IA_BenchDashInput"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor",
+                      "parent_class": "Actor",
+                      "blueprint_type": "Normal"},
+             "contains": ["BP_BenchGASInputActor", "Actor"]},
+            {"tool": "gas_query",
+             "args": {"action": "add_asc_to_actor",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor",
+                      "asc_class": "AbilitySystemComponent",
+                      "location": "self"},
+             "contains": ["AbilitySystemComponent", "self"]},
+            {"tool": "gas_query",
+             "args": {"action": "create_ability",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchInputDash",
+                      "parent_class": "GameplayAbility",
+                      "display_name": "Bench Input Dash"},
+             "contains": ["GA_BenchInputDash", "GameplayAbility", "Bench Input Dash"]},
+            {"tool": "input_query",
+             "args": {"action": "create_input_action",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchDashInput",
+                      "value_type": "Boolean",
+                      "description": "Bench dash input",
+                      "overwrite": True,
+                      "save": True},
+             "contains": ["IA_BenchDashInput", "Boolean"]},
+            {"tool": "gas_query",
+             "args": {"action": "setup_ability_input_binding",
+                      "actor_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor",
+                      "binding_mode": "enhanced_input"},
+             "contains": ["enhanced_input", "has_asc", "true"]},
+            {"tool": "gas_query",
+             "args": {"action": "bind_ability_to_input",
+                      "actor_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor",
+                      "ability_class": f"{ASSET_AUTHORING_ROOT}/GA_BenchInputDash",
+                      "input_action": f"{ASSET_AUTHORING_ROOT}/IA_BenchDashInput",
+                      "trigger_event": "triggered"},
+             "contains": ["GA_BenchInputDash", "IA_BenchDashInput", "triggered", "enhanced_input"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchInputDash"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_ability_input_bindings",
+                      "actor_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor"},
+             "contains": ["has_asc", "true", "AbilitySystemComponent"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_components",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchGASInputActor"},
+             "contains": ["AbilitySystemComponent"]},
+            {"tool": "gas_query",
+             "args": {"action": "get_ability_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GA_BenchInputDash"},
+             "contains": ["GA_BenchInputDash", "GameplayAbility"]},
+            {"tool": "input_query",
+             "args": {"action": "get_input_action",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/IA_BenchDashInput"},
+             "contains": ["IA_BenchDashInput", "Boolean"]},
+        ],
+    },
+    {
+        "name": "gas_gameplay_cue_notify_roundtrip",
+        "domain": "gas",
+        "edit_domain": "gameplay_cue_notify",
+        "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/GCN_BenchImpact"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "create_gameplay_cue_notify",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GCN_BenchImpact",
+                      "cue_tag": "GameplayCue.Skill.001",
+                      "type": "looping"},
+             "contains": ["GCN_BenchImpact", "GameplayCue.Skill.001", "looping"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_cdo_property",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GCN_BenchImpact",
+                      "property_name": "bAutoDestroyOnRemove",
+                      "value": True},
+             "contains": ["bAutoDestroyOnRemove"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GCN_BenchImpact"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_cue_info",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GCN_BenchImpact"},
+             "contains": ["GCN_BenchImpact", "looping", "GameplayCueNotify_Actor",
+                          "GameplayCue.Skill.001", "bAutoDestroyOnRemove", "true"]},
+            {"tool": "gas_query",
+             "args": {"action": "list_gameplay_cues",
+                      "type_filter": "looping"},
+             "contains": ["GCN_BenchImpact"]},
+        ],
+    },
+    {
+        "name": "chooser_table_roundtrip",
+        "domain": "animation",
+        "edit_domain": "chooser_table",
+        "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                                      f"{ASSET_AUTHORING_ROOT}/T_BenchChooserResult"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "asset_query",
+             "args": {"action": "import_texture_from_bytes",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchChooserResult",
+                      "bytes_b64": ASSET_AUTHORING_BMP_2X2_B64,
+                      "format_hint": "bmp",
+                      "texture_role": "ui_icon",
+                      "overwrite": True,
+                      "save": True},
+             "contains": ["T_BenchChooserResult"]},
+            {"tool": "chooser_query",
+             "args": {"action": "create_chooser_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "output_type": "ObjectResult",
+                      "output_class": "/Script/Engine.Texture2D",
+                      "context_class": "/Script/CoreUObject.Object"},
+             "contains": ["CHT_BenchTextureChoice", "ObjectResult", "Texture2D"]},
+            {"tool": "chooser_query",
+             "args": {"action": "add_chooser_column",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "column_kind": "Bool"},
+             "contains": ["column_count", "Bool"]},
+            {"tool": "chooser_query",
+             "args": {"action": "add_chooser_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "cells": [True],
+                      "output_psd": f"{ASSET_AUTHORING_ROOT}/T_BenchChooserResult"},
+             "contains": ["row_count", "T_BenchChooserResult"]},
+            {"tool": "chooser_query",
+             "args": {"action": "set_chooser_cell",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "column_index": 0,
+                      "row_index": 0,
+                      "bool_value": False},
+             "contains": ["column_index", "row_index"]},
+            {"tool": "chooser_query",
+             "args": {"action": "validate_chooser",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "expected_result_type": "ObjectResult"},
+             "contains": ["valid", "true", "ObjectResult"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice"},
+             "contains": ["saved", "CHT_BenchTextureChoice"]},
+        ],
+        "verify": [
+            {"tool": "chooser_query",
+             "args": {"action": "inspect_chooser",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/CHT_BenchTextureChoice",
+                      "include_cells": True,
+                      "recursive": True},
+             "contains": ["CHT_BenchTextureChoice", "ObjectResult", "BoolColumn",
+                          "T_BenchChooserResult", "false", "compiled"]},
+        ],
+    },
+    {
+        "name": "gas_target_actor_roundtrip",
+        "domain": "gas",
+        "edit_domain": "target_actor",
+        "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "create_target_actor",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere",
+                      "targeting_type": "sphere",
+                      "radius": 200.0,
+                      "max_range": 1200.0},
+             "contains": ["TA_BenchSphere", "sphere", "GameplayAbilityTargetActor_Radius"]},
+            {"tool": "gas_query",
+             "args": {"action": "configure_target_actor",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere",
+                      "radius": 275.0,
+                      "max_range": 1500.0,
+                      "should_produce_target_data_on_server": True,
+                      "debug_draw": True},
+             "contains": ["Radius = 275"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_parent_class",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere"},
+             "contains": ["GameplayAbilityTargetActor_Radius"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/TA_BenchSphere"},
+             "contains": ["TA_BenchSphere", "Blueprint"]},
+        ],
+    },
+    {
+        "name": "material_instance_parameter_overrides_roundtrip",
+        "domain": "material",
+        "edit_domain": "material_instance_parameters",
+        "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/M_BenchParamBase",
+                                      f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "material_query",
+             "args": {"action": "create_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchParamBase",
+                      "blend_mode": "Opaque",
+                      "shading_model": "DefaultLit",
+                      "material_domain": "Surface"},
+             "contains": ["M_BenchParamBase"]},
+            {"tool": "material_query",
+             "args": {"action": "build_material_graph",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchParamBase",
+                      "clear_existing": True,
+                      "graph_spec": {
+                          "nodes": [
+                              {"id": "BenchTint", "class": "VectorParameter",
+                               "props": {"ParameterName": "BenchTint"},
+                               "pos": [-360, -80]},
+                              {"id": "BenchRoughness", "class": "ScalarParameter",
+                               "props": {"ParameterName": "BenchRoughness"},
+                               "pos": [-360, 120]},
+                          ],
+                          "outputs": [
+                              {"from": "BenchTint", "from_pin": "RGB", "to_property": "BaseColor"},
+                              {"from": "BenchRoughness", "to_property": "Roughness"},
+                          ],
+                      }},
+             "contains": ["M_BenchParamBase"]},
+            {"tool": "material_query",
+             "args": {"action": "create_material_instance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides",
+                      "parent_material": f"{ASSET_AUTHORING_ROOT}/M_BenchParamBase"},
+             "contains": ["MI_BenchParamOverrides"]},
+            {"tool": "material_query",
+             "args": {"action": "set_instance_parameters",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides",
+                      "parameters": [
+                          {"name": "BenchRoughness", "type": "scalar", "value": 0.42},
+                          {"name": "BenchTint", "type": "vector",
+                           "value": {"R": 0.1, "G": 0.7, "B": 0.3, "A": 1.0}},
+                      ]},
+             "contains": ["BenchRoughness", "BenchTint"]},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/M_BenchParamBase"}},
+            {"tool": "material_query",
+             "args": {"action": "save_material",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides"}},
+        ],
+        "verify": [
+            {"tool": "material_query",
+             "args": {"action": "get_instance_parameters",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides"},
+             "contains": ["BenchRoughness", "BenchTint", "is_overridden"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/MI_BenchParamOverrides"},
+             "contains": ["MI_BenchParamOverrides", "MaterialInstance"]},
+        ],
+    },
+    {
+        "name": "commonui_input_action_datatable_roundtrip",
+        "domain": "ui",
+        "edit_domain": "commonui_input_action_datatable",
+        "description": "Create a CommonUI input-action DataTable, add keyboard/gamepad glyph rows, save, and read the rows back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/DT_BenchCommonActions"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ui_query",
+             "args": {"action": "create_input_action_data_table",
+                      "package_path": ASSET_AUTHORING_ROOT,
+                      "asset_name": "DT_BenchCommonActions"},
+             "contains": ["DT_BenchCommonActions"]},
+            {"tool": "ui_query",
+             "args": {"action": "add_input_action_row",
+                      "table_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchCommonActions",
+                      "row_name": "BenchAccept",
+                      "display_name": "Bench Accept",
+                      "hold_display_name": "Hold Bench Accept",
+                      "nav_bar_priority": 10,
+                      "keyboard_key": "(Key=(KeyName=E))",
+                      "gamepad_key": "(Key=(KeyName=Gamepad_FaceButton_Bottom))"},
+             "contains": ["BenchAccept"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchCommonActions"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_data_table_rows",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchCommonActions"},
+             "contains": ["BenchAccept", "Bench Accept", "DefaultGamepadInputTypeInfo"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchCommonActions"},
+             "contains": ["DT_BenchCommonActions", "DataTable"]},
+        ],
+    },
+    {
+        "name": "gas_effect_template_duplicate_roundtrip",
+        "domain": "gas",
+        "edit_domain": "gameplay_effect_template",
+        "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate",
+                                      f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownClone"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "create_effect_from_template",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate",
+                      "template": "cooldown",
+                      "overrides": {"duration": 2.5,
+                                    "tags": {"target_tags": ["Cooldown.Bench.Template"]}}},
+             "contains": ["GE_BenchCooldownTemplate", "cooldown"]},
+            {"tool": "gas_query",
+             "args": {"action": "set_effect_stacking",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate",
+                      "stacking_type": "aggregate_by_target",
+                      "stack_limit": 2,
+                      "stack_duration_refresh_policy": "RefreshOnSuccessfulApplication",
+                      "stack_period_reset_policy": "ResetOnSuccessfulApplication",
+                      "stack_expiration_policy": "ClearEntireStack"},
+             "contains": ["aggregate_by_target", "2"]},
+            {"tool": "gas_query",
+             "args": {"action": "set_period",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate",
+                      "period": 0.5,
+                      "execute_on_application": True},
+             "contains": ["0.5"]},
+            {"tool": "gas_query",
+             "args": {"action": "duplicate_gameplay_effect",
+                      "source_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate",
+                      "dest_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownClone",
+                      "overrides": {"duration_policy": "has_duration"}},
+             "contains": ["GE_BenchCooldownClone"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownClone"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_gameplay_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate"},
+             "contains": ["GE_BenchCooldownTemplate", "has_duration", "0.5"]},
+            {"tool": "gas_query",
+             "args": {"action": "get_gameplay_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownClone"},
+             "contains": ["GE_BenchCooldownClone", "has_duration"]},
+            {"tool": "gas_query",
+             "args": {"action": "validate_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchCooldownTemplate"}},
+        ],
+    },
+    {
+        "name": "ai_controller_perception_roundtrip",
+        "domain": "ai",
+        "edit_domain": "ai_controller_perception",
+        "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BB_BenchController",
+                                      f"{ASSET_AUTHORING_ROOT}/BT_BenchController",
+                                      f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_blackboard",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchController"},
+             "contains": ["BB_BenchController"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchController"}},
+            {"tool": "ai_query",
+             "args": {"action": "add_bb_key",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchController",
+                      "key_name": "TargetActor", "key_type": "Object",
+                      "base_class": "Actor"},
+             "contains": ["TargetActor"]},
+            {"tool": "ai_query",
+             "args": {"action": "create_behavior_tree",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchController",
+                      "blackboard_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchController"},
+             "contains": ["BT_BenchController"]},
+            {"tool": "ai_query",
+             "args": {"action": "create_ai_controller",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight",
+                      "bt_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchController",
+                      "bb_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchController"},
+             "contains": ["AIC_BenchSight"]},
+            {"tool": "ai_query",
+             "args": {"action": "set_ai_team",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight",
+                      "team_id": 7},
+             "contains": ["7"]},
+            {"tool": "ai_query",
+             "args": {"action": "set_ai_controller_flags",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight",
+                      "wants_player_state": True,
+                      "start_ai_on_possess": True,
+                      "allow_strafe": True},
+             "contains": ["AIC_BenchSight"]},
+            {"tool": "ai_query",
+             "args": {"action": "add_perception_component",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight",
+                      "dominant_sense": "Sight"},
+             "contains": ["AIPerceptionComponent"]},
+            {"tool": "ai_query",
+             "args": {"action": "configure_sight_sense",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight",
+                      "radius": 1800.0,
+                      "lose_radius": 2200.0,
+                      "peripheral_angle": 70.0,
+                      "affiliation": {"enemies": True, "neutrals": True, "friendlies": False},
+                      "max_age": 3.0},
+             "contains": ["Sight", "1800"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_ai_controller",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight"},
+             "contains": ["AIC_BenchSight", "AIController", "allow_strafe", "true"]},
+            {"tool": "ai_query",
+             "args": {"action": "get_perception_config",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight"},
+             "contains": ["Sight", "1800", "70"]},
+            {"tool": "ai_query",
+             "args": {"action": "validate_ai_controller",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/AIC_BenchSight"}},
+        ],
+    },
+    {
+        "name": "hlod_layer_config_roundtrip",
+        "domain": "hlod",
+        "edit_domain": "hlod_layer",
+        "description": "Create a World Partition HLODLayer asset, reconfigure cell/loading settings, save, and inspect the reflected HLOD layer",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "hlod_query",
+             "args": {"action": "create_hlod_layer",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld",
+                      "layer_type": "MeshSimplify",
+                      "cell_size": 12000,
+                      "loading_range": 1.5},
+             "contains": ["HLODLayer_BenchWorld"]},
+            {"tool": "hlod_query",
+             "args": {"action": "configure_hlod_layer",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld",
+                      "layer_type": "MeshMerge",
+                      "cell_size": 24000,
+                      "loading_range": 2.5},
+             "contains": ["HLODLayer_BenchWorld"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld"}},
+        ],
+        "verify": [
+            {"tool": "hlod_query",
+             "args": {"action": "get_hlod_layer",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld"},
+             "contains": ["HLODLayer_BenchWorld", "HLODLayer"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/HLODLayer_BenchWorld"},
+             "contains": ["HLODLayer_BenchWorld"]},
+        ],
+    },
+    {
+        "name": "collection_static_membership_roundtrip",
+        "domain": "collection",
+        "edit_domain": "content_browser_collection",
+        "description": "Create a local Content Browser collection, add a generated Texture2D member, color it, and verify membership",
+        "chain": [
+            {"tool": "collection_query", "allow_error": True,
+             "args": {"action": "delete_collection",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local",
+                      "force": True}},
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchCollectionIcon"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "asset_query",
+             "args": {"action": "import_texture_from_bytes",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchCollectionIcon",
+                      "bytes_b64": ASSET_AUTHORING_BMP_2X2_B64,
+                      "format_hint": "bmp",
+                      "texture_role": "ui_icon",
+                      "save": True},
+             "contains": ["T_BenchCollectionIcon"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchCollectionIcon"}},
+            {"tool": "collection_query",
+             "args": {"action": "create_collection",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local",
+                      "storage_mode": "static"},
+             "contains": ["BenchAssetAuthoringCollection"]},
+            {"tool": "collection_query",
+             "args": {"action": "add_assets",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchCollectionIcon"]},
+             "contains": ["added", "1"]},
+            {"tool": "collection_query",
+             "args": {"action": "set_collection_color",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local",
+                      "color": {"r": 0.1, "g": 0.45, "b": 0.9, "a": 1.0}},
+             "contains": ["BenchAssetAuthoringCollection"]},
+        ],
+        "verify": [
+            {"tool": "collection_query",
+             "args": {"action": "contains_asset",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchCollectionIcon"},
+             "contains": ["true"]},
+            {"tool": "collection_query",
+             "args": {"action": "list_assets",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local"},
+             "contains": ["T_BenchCollectionIcon"]},
+            {"tool": "collection_query",
+             "args": {"action": "get_collection",
+                      "name": "BenchAssetAuthoringCollection",
+                      "share_type": "local"},
+            "contains": ["BenchAssetAuthoringCollection"]},
+        ],
+    },
+    {
+        "name": "ui_animation_v2_roundtrip",
+        "domain": "ui",
+        "edit_domain": "widget_animation_v2",
+        "description": "Create a Widget Blueprint, add a TextBlock, author a multi-key UWidgetAnimation, save, and read animation tracks back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ui_query",
+             "args": {"action": "create_widget_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel",
+                      "root_widget": "CanvasPanel"},
+             "contains": ["WBP_BenchAnimatedPanel"]},
+            {"tool": "ui_query",
+             "args": {"action": "add_widget",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel",
+                      "widget_class": "TextBlock",
+                      "widget_name": "BenchAnimatedLabel",
+                      "anchor_preset": "center",
+                      "position": {"x": 0, "y": 0},
+                      "size": {"x": 360, "y": 72},
+                      "compile": False},
+             "contains": ["BenchAnimatedLabel"]},
+            {"tool": "ui_query",
+             "args": {"action": "set_text",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel",
+                      "widget_name": "BenchAnimatedLabel",
+                      "text": "Animated Benchmark",
+                      "font_size": 26,
+                      "compile": False}},
+            {"tool": "ui_query",
+             "args": {"action": "create_animation_v2",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel",
+                      "animation_name": "IntroFade",
+                      "duration_sec": 0.75,
+                      "tracks": [
+                          {"widget_name": "BenchAnimatedLabel",
+                           "property": "RenderOpacity",
+                           "keys": [
+                               {"time": 0.0, "value": 0.0, "interp": "linear"},
+                               {"time": 0.25, "value": 0.45, "interp": "linear"},
+                               {"time": 0.75, "value": 1.0, "interp": "linear"},
+                           ]},
+                      ],
+                      "compile_once": True},
+             "contains": ["IntroFade"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel"}},
+        ],
+        "verify": [
+            {"tool": "ui_query",
+             "args": {"action": "list_animations",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel"},
+             "contains": ["IntroFade"]},
+            {"tool": "ui_query",
+             "args": {"action": "get_animation_details",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/WBP_BenchAnimatedPanel",
+                      "animation_name": "IntroFade"},
+             "contains": ["BenchAnimatedLabel", "MovieSceneFloatTrack", "keyframe_count", "3", "0.75"]},
+        ],
+    },
+    {
+        "name": "imagegen_external_png_import_roundtrip",
+        "domain": "imagegen",
+        "edit_domain": "generated_image_import",
+        "description": "Import externally generated PNG bytes as a Texture2D through ImageGen provenance, save, and inspect provenance/read-back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/T_BenchExternalGenerated"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "imagegen_query",
+             "args": {"action": "import_generated_image",
+                      "bytes_b64": ASSET_AUTHORING_PNG_2X2_B64,
+                      "format_hint": "png",
+                      "prompt": "benchmark external generated png fixture",
+                      "provider": "benchmark-external",
+                      "model": "fixture-png-2x2",
+                      "destination": f"{ASSET_AUTHORING_ROOT}/T_BenchExternalGenerated",
+                      "overwrite_policy": "fail",
+                      "texture_role": "ui_icon",
+                      "save": True,
+                      "save_source_png": False},
+             "contains": ["T_BenchExternalGenerated"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchExternalGenerated"}},
+        ],
+        "verify": [
+            {"tool": "imagegen_query",
+             "args": {"action": "get_generated_asset_provenance",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchExternalGenerated"},
+             "contains": ["benchmark-external", "fixture-png-2x2"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/T_BenchExternalGenerated"},
+             "contains": ["T_BenchExternalGenerated", "Texture2D"]},
+        ],
+    },
+    {
+        "name": "worldgen_blockout_blueprint_roundtrip",
+        "domain": "worldgen",
+        "edit_domain": "blockout_volume_blueprint",
+        "description": "Create the reusable WorldGen blockout-volume Blueprint asset, save it, and verify its authoring variables",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "worldgen_query",
+             "args": {"action": "create_blockout_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume",
+                      "force": True},
+             "contains": ["BP_BenchBlockoutVolume"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "compile_blueprint",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume"},
+             "contains": ["error_count", "0"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_variables",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume"},
+             "contains": ["RoomType", "BlockoutTags", "Density"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchBlockoutVolume"},
+             "contains": ["BP_BenchBlockoutVolume", "Blueprint"]},
+        ],
+    },
+    {
+        "name": "collection_dynamic_query_roundtrip",
+        "domain": "collection",
+        "edit_domain": "content_browser_dynamic_collection",
+        "description": "Create a dynamic Content Browser collection, edit its project asset query, color it, and read the query back",
+        "chain": [
+            {"tool": "collection_query", "allow_error": True,
+             "args": {"action": "delete_collection",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local",
+                      "force": True}},
+            {"tool": "collection_query",
+             "args": {"action": "create_collection",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local",
+                      "storage_mode": "dynamic"},
+             "contains": ["BenchAssetAuthoringDynamicCollection"]},
+            {"tool": "collection_query",
+             "args": {"action": "set_dynamic_query",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local",
+                      "query_text": "Path:/Game/Benchmarks/AssetAuthoring"},
+             "contains": ["BenchAssetAuthoringDynamicCollection"]},
+            {"tool": "collection_query",
+             "args": {"action": "set_collection_color",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local",
+                      "color": {"r": 0.8, "g": 0.3, "b": 0.15, "a": 1.0}},
+             "contains": ["BenchAssetAuthoringDynamicCollection"]},
+        ],
+        "verify": [
+            {"tool": "collection_query",
+             "args": {"action": "get_dynamic_query",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local"},
+             "contains": ["BenchAssetAuthoringDynamicCollection", "Path:/Game/Benchmarks/AssetAuthoring"]},
+            {"tool": "collection_query",
+             "args": {"action": "get_collection",
+                      "name": "BenchAssetAuthoringDynamicCollection",
+                      "share_type": "local"},
+             "contains": ["BenchAssetAuthoringDynamicCollection", "dynamic", "0.800000"]},
+        ],
+    },
+    {
+        "name": "blueprint_spec_builder_roundtrip",
+        "domain": "blueprint",
+        "edit_domain": "blueprint_spec_builder",
+        "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_blueprint",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor",
+                      "parent_class": "Actor",
+                      "blueprint_type": "Normal"},
+             "contains": ["BP_BenchSpecActor", "Actor"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "build_blueprint_from_spec",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor",
+                      "graph_name": "EventGraph",
+                      "variables": [
+                          {"name": "BenchSpecHealth", "type": "float",
+                           "default_value": "125.0", "category": "Benchmark",
+                           "instance_editable": True},
+                      ],
+                      "components": [
+                          {"name": "BenchSpecSphere", "class": "SphereComponent"},
+                      ],
+                      "nodes": [
+                          {"id": "evt", "type": "CustomEvent",
+                           "event_name": "BenchSpecRun", "position": [0, 0]},
+                          {"id": "print", "type": "CallFunction",
+                           "function_name": "PrintString", "position": [320, 0]},
+                      ],
+                      "connections": [
+                          {"source": "evt", "source_pin": "Then",
+                           "target": "print", "target_pin": "execute"},
+                      ],
+                      "pin_defaults": [
+                          {"node_id": "print", "pin_name": "InString",
+                           "value": "BenchSpecBuilt"},
+                      ],
+                      "auto_compile": True},
+             "contains": ["variables_created", "components_created", "nodes_created", "connections_made"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_variables",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor"},
+             "contains": ["BenchSpecHealth", "125"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_components",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor"},
+             "contains": ["BenchSpecSphere", "SphereComponent"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "get_graph_data",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor",
+                      "graph_name": "EventGraph"},
+             "contains": ["BenchSpecRun", "PrintString"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "compile_blueprint",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchSpecActor"},
+             "contains": ["error_count", "0"]},
+        ],
+    },
+    {
+        "name": "datatable_bulk_import_export_roundtrip",
+        "domain": "data",
+        "edit_domain": "datatable_bulk_import_export",
+        "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/S_BenchBulkRow",
+                                      f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_user_defined_struct",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/S_BenchBulkRow",
+                      "fields": [{"name": "DisplayName", "type": "text"},
+                                  {"name": "Power", "type": "int", "default_value": "0"}]},
+             "contains": ["S_BenchBulkRow", "DisplayName", "Power"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/S_BenchBulkRow"}},
+            {"tool": "blueprint_query",
+             "args": {"action": "create_data_table",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "row_struct": f"{ASSET_AUTHORING_ROOT}/S_BenchBulkRow.S_BenchBulkRow"},
+             "contains": ["DT_BenchBulkRows"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "set_data_table_rows",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "rows": [{"row_name": "Alpha",
+                                "values": {"DisplayName": "Alpha Sword", "Power": 11}},
+                               {"row_name": "Beta",
+                                "values": {"DisplayName": "Beta Axe", "Power": 17}}],
+                      "strict": True,
+                      "save": False},
+             "contains": ["Alpha", "Beta", "Power"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "rename_data_table_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "old_name": "Alpha",
+                      "new_name": "AlphaRenamed",
+                      "save": False},
+             "contains": ["AlphaRenamed"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "duplicate_data_table_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "source_row": "Beta",
+                      "new_name": "BetaCopy",
+                      "save": False},
+             "contains": ["BetaCopy"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "remove_data_table_row",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "row_name": "BetaCopy",
+                      "confirm": True,
+                      "save": False},
+             "contains": ["BetaCopy"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "export_data_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "format": "json",
+                      "simple_text": True},
+             "contains": ["AlphaRenamed", "Beta", "total_rows"]},
+            {"tool": "blueprint_query",
+             "args": {"action": "import_data_table",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows",
+                      "format": "csv",
+                      "mode": "replace",
+                      "text": "Name,DisplayName,Power\nImportedAlpha,Imported Sword,21\nImportedBeta,Imported Shield,34\n",
+                      "save": True},
+             "contains": ["rows_written", "2", "success", "true"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/S_BenchBulkRow"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows"}},
+        ],
+        "verify": [
+            {"tool": "blueprint_query",
+             "args": {"action": "get_data_table_rows",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows"},
+             "contains": ["ImportedAlpha", "Imported Sword", "21", "ImportedBeta", "34"],
+             "not_contains": ["AlphaRenamed", "BetaCopy"]},
+            {"tool": "asset_query",
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/DT_BenchBulkRows"},
+             "contains": ["DT_BenchBulkRows", "DataTable"]},
+        ],
+    },
+    {
+        "name": "ai_blackboard_inheritance_duplicate_roundtrip",
+        "domain": "ai",
+        "edit_domain": "blackboard_inheritance_duplicate",
+        "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BB_BenchParent",
+                                      f"{ASSET_AUTHORING_ROOT}/BB_BenchChild",
+                                      f"{ASSET_AUTHORING_ROOT}/BB_BenchChildCopy"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_blackboard",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchParent"},
+             "contains": ["BB_BenchParent"]},
+            {"tool": "ai_query",
+             "args": {"action": "batch_add_bb_keys",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchParent",
+                      "keys": [{"name": "TargetActor", "type": "Object",
+                                "base_class": "/Script/Engine.Actor",
+                                "description": "Inherited target"},
+                               {"name": "Alertness", "type": "Float",
+                                "description": "Inherited alertness"}]},
+             "contains": ["TargetActor", "Alertness"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchParent"}},
+            {"tool": "ai_query",
+             "args": {"action": "create_blackboard",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild",
+                      "parent_bb": f"{ASSET_AUTHORING_ROOT}/BB_BenchParent"},
+             "contains": ["BB_BenchChild"]},
+            {"tool": "ai_query",
+             "args": {"action": "add_bb_key",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild",
+                      "key_name": "LocalRoute",
+                      "key_type": "Name",
+                      "description": "Child route key"},
+             "contains": ["LocalRoute"]},
+            {"tool": "ai_query",
+             "args": {"action": "duplicate_blackboard",
+                      "source_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild",
+                      "dest_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChildCopy"},
+             "contains": ["BB_BenchChildCopy"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChildCopy"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_blackboard",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild"},
+             "contains": ["TargetActor", "Alertness", "LocalRoute", "inherited"]},
+            {"tool": "ai_query",
+             "args": {"action": "get_blackboard",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchChildCopy"},
+             "contains": ["TargetActor", "Alertness", "LocalRoute"]},
+            {"tool": "ai_query",
+             "args": {"action": "compare_blackboards",
+                      "path_a": f"{ASSET_AUTHORING_ROOT}/BB_BenchChild",
+                      "path_b": f"{ASSET_AUTHORING_ROOT}/BB_BenchChildCopy"},
+             "contains": ["only_in_a", "only_in_b", "type_changed", "same"]},
+        ],
+    },
+    {
+        "name": "ai_eqs_template_roundtrip",
+        "domain": "ai",
+        "edit_domain": "eqs_template",
+        "description": "Create an EQS query from the find_cover preset template with overrides, save it, and inspect template-generated options/tests",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/EQS_BenchTemplateCover"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_eqs_from_template",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchTemplateCover",
+                      "template": "find_cover",
+                      "properties": {"GridSize": 1600, "SpaceBetween": 250}},
+             "contains": ["EQS_BenchTemplateCover", "find_cover"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchTemplateCover"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_eqs_query",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchTemplateCover"},
+             "contains": ["EnvQueryGenerator", "EnvQueryTest", "1600"]},
+            {"tool": "ai_query",
+             "args": {"action": "validate_eqs_query",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/EQS_BenchTemplateCover"}},
+        ],
+    },
+    {
+        "name": "ai_behavior_tree_template_export_roundtrip",
+        "domain": "ai",
+        "edit_domain": "behavior_tree_template_export",
+        "description": "Create a BehaviorTree from the patrol template, save its paired Blackboard, export the spec, and validate the generated tree",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol",
+                                      f"{ASSET_AUTHORING_ROOT}/BB_BenchTemplatePatrol"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "ai_query",
+             "args": {"action": "create_bt_from_template",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol",
+                      "template": "patrol"},
+             "contains": ["BT_BenchTemplatePatrol", "patrol", "BB_BenchTemplatePatrol"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BB_BenchTemplatePatrol"}},
+        ],
+        "verify": [
+            {"tool": "ai_query",
+             "args": {"action": "get_behavior_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol"},
+             "contains": ["BT_BenchTemplatePatrol", "BB_BenchTemplatePatrol"]},
+            {"tool": "ai_query",
+             "args": {"action": "export_bt_spec",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol"},
+             "contains": ["blackboard_path", "root", "patrol"]},
+            {"tool": "ai_query",
+             "args": {"action": "validate_behavior_tree",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BT_BenchTemplatePatrol"}},
+        ],
+    },
+    {
+        "name": "gas_effect_spec_builder_roundtrip",
+        "domain": "gas",
+        "edit_domain": "gameplay_effect_spec_builder",
+        "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back",
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura",
+                                      f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAuraClone"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "gas_query",
+             "args": {"action": "build_effect_from_spec",
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura",
+                      "spec": {"duration_policy": "has_duration",
+                               "duration_magnitude": 3.0,
+                               "period": 0.5,
+                               "execute_on_application": True,
+                               "stacking": {"type": "AggregateByTarget",
+                                            "limit": 2}}},
+             "contains": ["GE_BenchSpecAura", "has_duration"]},
+            {"tool": "gas_query",
+             "args": {"action": "duplicate_gameplay_effect",
+                      "source_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura",
+                      "dest_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAuraClone",
+                      "overrides": {"duration_policy": "has_duration"}},
+             "contains": ["GE_BenchSpecAuraClone"]},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura"}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAuraClone"}},
+        ],
+        "verify": [
+            {"tool": "gas_query",
+             "args": {"action": "get_gameplay_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura"},
+             "contains": ["GE_BenchSpecAura", "has_duration"]},
+            {"tool": "gas_query",
+             "args": {"action": "get_gameplay_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAuraClone"},
+             "contains": ["GE_BenchSpecAuraClone", "has_duration"]},
+            {"tool": "gas_query",
+             "args": {"action": "validate_effect",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/GE_BenchSpecAura"}},
+        ],
+    },
+]
+
 
 # ---------------------------------------------------------------------------
 # Utilities
@@ -1323,6 +4516,203 @@ def result_data(response: Dict[str, Any]) -> Dict[str, Any]:
     payload = result_payload(response)
     structured = structured_content(payload)
     return structured if structured else payload
+
+
+def project_root() -> pathlib.Path:
+    """Return the Unreal project root without relying on the current working directory."""
+    return resolve_plugin_path(".").parent.parent
+
+
+def asset_authoring_fixture_dir() -> pathlib.Path:
+    return project_root() / "Saved" / "Monolith" / "Benchmarks" / "BlueprintEditing" / "AssetAuthoringFixtures"
+
+
+def ensure_asset_authoring_local_fixtures() -> Dict[str, pathlib.Path]:
+    """Materialize local source files required by asset-authoring import tasks."""
+    with _ASSET_AUTHORING_FIXTURE_LOCK:
+        fixture_dir = asset_authoring_fixture_dir()
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+
+        texture_file = fixture_dir / "T_BenchFileImport.bmp"
+        texture_file.write_bytes(base64.b64decode(ASSET_AUTHORING_BMP_2X2_B64))
+
+        interchange_texture_file = fixture_dir / "T_BenchInterchangeTexture.bmp"
+        interchange_texture_file.write_bytes(base64.b64decode(ASSET_AUTHORING_BMP_2X2_B64))
+
+        stringtable_csv = fixture_dir / "ST_BenchCsvImport.csv"
+        stringtable_csv.write_text(
+            "key,source_string,metadata.Context,metadata.Screen\n"
+            "ConfirmButton,Confirm,Dialog,Main\n"
+            "CancelButton,Cancel,Dialog,Main\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        static_mesh_obj = fixture_dir / "SM_BenchImported.obj"
+        static_mesh_obj.write_text(
+            "o SM_BenchImported\n"
+            "v -50 -50 0\n"
+            "v 50 -50 0\n"
+            "v 50 50 0\n"
+            "v -50 50 0\n"
+            "v -50 -50 100\n"
+            "v 50 -50 100\n"
+            "v 50 50 100\n"
+            "v -50 50 100\n"
+            "vt 0 0\n"
+            "vt 1 0\n"
+            "vt 1 1\n"
+            "vt 0 1\n"
+            "vn 0 0 -1\n"
+            "vn 0 0 1\n"
+            "vn 0 -1 0\n"
+            "vn 1 0 0\n"
+            "vn 0 1 0\n"
+            "vn -1 0 0\n"
+            "f 1/1/1 3/3/1 2/2/1\n"
+            "f 1/1/1 4/4/1 3/3/1\n"
+            "f 5/1/2 6/2/2 7/3/2\n"
+            "f 5/1/2 7/3/2 8/4/2\n"
+            "f 1/1/3 2/2/3 6/3/3\n"
+            "f 1/1/3 6/3/3 5/4/3\n"
+            "f 2/1/4 3/2/4 7/3/4\n"
+            "f 2/1/4 7/3/4 6/4/4\n"
+            "f 3/1/5 4/2/5 8/3/5\n"
+            "f 3/1/5 8/3/5 7/4/5\n"
+            "f 4/1/6 1/2/6 5/3/6\n"
+            "f 4/1/6 5/3/6 8/4/6\n",
+            encoding="ascii",
+            newline="\n",
+        )
+
+        static_mesh_lod_obj = fixture_dir / "SM_BenchLodScreen.obj"
+        static_mesh_lod_obj.write_text(
+            static_mesh_obj.read_text(encoding="ascii").replace(
+                "o SM_BenchImported", "o SM_BenchLodScreen", 1
+            ),
+            encoding="ascii",
+            newline="\n",
+        )
+
+        modelgen_obj = fixture_dir / "SM_BenchGeneratedModel.obj"
+        modelgen_obj.write_text(
+            static_mesh_obj.read_text(encoding="ascii").replace(
+                "o SM_BenchImported", "o SM_BenchGeneratedModel", 1
+            ),
+            encoding="ascii",
+            newline="\n",
+        )
+
+        interchange_mesh_obj = fixture_dir / "SM_BenchInterchangeCube.obj"
+        interchange_mesh_obj.write_text(
+            static_mesh_obj.read_text(encoding="ascii").replace(
+                "o SM_BenchImported", "o SM_BenchInterchangeCube", 1
+            ),
+            encoding="ascii",
+            newline="\n",
+        )
+
+        interchange_mesh_reimport_obj = fixture_dir / "SM_BenchInterchangeCube_Reimport.obj"
+        interchange_mesh_reimport_obj.write_text(
+            static_mesh_obj.read_text(encoding="ascii").replace(
+                "o SM_BenchImported", "o SM_BenchInterchangeCube_Reimport", 1
+            ),
+            encoding="ascii",
+            newline="\n",
+        )
+
+        interchange_mesh_export_obj = fixture_dir / "SM_BenchInterchangeCube_Export.obj"
+
+        interchange_audio_wav = fixture_dir / "SW_BenchInterchangeTone.wav"
+        sample_rate = 22050
+        duration_seconds = 0.18
+        frames = bytearray()
+        for index in range(int(sample_rate * duration_seconds)):
+            sample = int(32767 * 0.28 * math.sin(2.0 * math.pi * 440.0 * index / sample_rate))
+            frames.extend(struct.pack("<h", sample))
+        with wave.open(str(interchange_audio_wav), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(sample_rate)
+            handle.writeframes(frames)
+
+    return {
+        ASSET_AUTHORING_FILE_BMP_MARKER: texture_file,
+        ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP_MARKER: interchange_texture_file,
+        ASSET_AUTHORING_STRINGTABLE_CSV_MARKER: stringtable_csv,
+        ASSET_AUTHORING_STATIC_MESH_OBJ_MARKER: static_mesh_obj,
+        ASSET_AUTHORING_STATIC_MESH_LOD_OBJ_MARKER: static_mesh_lod_obj,
+        ASSET_AUTHORING_MODELGEN_OBJ_MARKER: modelgen_obj,
+        ASSET_AUTHORING_INTERCHANGE_MESH_OBJ_MARKER: interchange_mesh_obj,
+        ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ_MARKER: interchange_mesh_reimport_obj,
+        ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ_MARKER: interchange_mesh_export_obj,
+        ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV_MARKER: interchange_audio_wav,
+    }
+
+
+_ENGINE_ROBOTO_CACHE: Optional[pathlib.Path] = None
+
+
+def resolve_engine_roboto_regular_ttf() -> pathlib.Path:
+    """Resolve the UE root from GO.uproject EngineAssociation and return Roboto-Regular.ttf."""
+    global _ENGINE_ROBOTO_CACHE
+    if _ENGINE_ROBOTO_CACHE is not None:
+        return _ENGINE_ROBOTO_CACHE
+
+    root = project_root()
+    resolver = root / "BatchFiles" / "Script" / "ResolveUnrealEngine.ps1"
+    uproject = root / "GO.uproject"
+    if not resolver.is_file():
+        raise RuntimeError(f"Unreal engine resolver not found: {resolver}")
+    if not uproject.is_file():
+        raise RuntimeError(f"GO.uproject not found: {uproject}")
+
+    engine_root_text = subprocess.check_output(
+        [
+            "powershell",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(resolver),
+            "-Project",
+            str(uproject),
+            "-Output",
+            "Root",
+        ],
+        cwd=str(root),
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=60,
+    ).strip()
+    engine_root = pathlib.Path(engine_root_text)
+    candidate = engine_root / "Engine" / "Content" / "Slate" / "Fonts" / "Roboto-Regular.ttf"
+    if not candidate.is_file():
+        raise RuntimeError(f"Roboto-Regular.ttf not found under resolved engine root: {candidate}")
+
+    _ENGINE_ROBOTO_CACHE = candidate
+    return candidate
+
+
+def resolve_asset_authoring_placeholders(value: Any) -> Any:
+    """Resolve portable benchmark placeholder tokens to local absolute source files."""
+    if isinstance(value, str):
+        if value in (ASSET_AUTHORING_FILE_BMP_MARKER, ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP_MARKER,
+                     ASSET_AUTHORING_STRINGTABLE_CSV_MARKER, ASSET_AUTHORING_STATIC_MESH_OBJ_MARKER,
+                     ASSET_AUTHORING_STATIC_MESH_LOD_OBJ_MARKER, ASSET_AUTHORING_MODELGEN_OBJ_MARKER,
+                     ASSET_AUTHORING_INTERCHANGE_MESH_OBJ_MARKER,
+                     ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ_MARKER,
+                     ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ_MARKER,
+                     ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV_MARKER):
+            return ensure_asset_authoring_local_fixtures()[value].as_posix()
+        if value == ASSET_AUTHORING_ENGINE_ROBOTO_MARKER:
+            return resolve_engine_roboto_regular_ttf().as_posix()
+        return value
+    if isinstance(value, list):
+        return [resolve_asset_authoring_placeholders(item) for item in value]
+    if isinstance(value, dict):
+        return {key: resolve_asset_authoring_placeholders(item) for key, item in value.items()}
+    return value
 
 
 def count_by(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str, int]:
@@ -1774,7 +5164,8 @@ def _score_negative_compile(url: str, task: Dict[str, Any], timeout_s: float) ->
 
     for step in task.get("setup_chain", []):
         args = _subst_ids(dict(step.get("args", {})), captured)
-        resp = mcp_call(url, tool, args, timeout_s=timeout_s)
+        step_tool = str(step.get("tool", tool))
+        resp = mcp_call(url, step_tool, args, timeout_s=timeout_s)
         action = str(args.get("action", ""))
         if "capture" in step:
             nid = _extract_node_id(resp)
@@ -1797,7 +5188,8 @@ def _score_negative_compile(url: str, task: Dict[str, Any], timeout_s: float) ->
     # -nullrhi editor on the next boot's asset scan. Run tolerantly; does not affect the score.
     for step in task.get("cleanup_chain", []):
         try:
-            mcp_call(url, tool, _subst_ids(dict(step.get("args", {})), captured), timeout_s=timeout_s)
+            step_tool = str(step.get("tool", tool))
+            mcp_call(url, step_tool, _subst_ids(dict(step.get("args", {})), captured), timeout_s=timeout_s)
         except Exception:
             pass
 
@@ -1825,6 +5217,101 @@ def _score_negative_compile(url: str, task: Dict[str, Any], timeout_s: float) ->
 # ---------------------------------------------------------------------------
 # Task scoring
 # ---------------------------------------------------------------------------
+
+def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
+    """Score cross-namespace asset-authoring chains.
+
+    These tasks intentionally step outside the blueprint graph namespace to cover common UE asset
+    lifecycles that agents frequently author: Texture2D ingest, DataTables, StringTables, Enhanced
+    Input, Materials/MICs, and CurveTables. Each chain must mutate/save through the owning
+    namespace and then prove the result with one or more read-back calls.
+    """
+    steps_evidence: List[Dict[str, Any]] = []
+    verify_evidence: List[Dict[str, Any]] = []
+    ok = True
+
+    for step in task.get("chain", []):
+        tool = str(step.get("tool", task.get("tool", "")))
+        args = resolve_asset_authoring_placeholders(dict(step.get("args", {})))
+        resp = mcp_call(url, tool, args, timeout_s=timeout_s)
+        text = result_text(resp)
+        is_err = _is_error(resp)
+        transport_or_parse = bool(resp.get("transport_error") or resp.get("parse_error"))
+        allow_error = bool(step.get("allow_error"))
+        contains = step.get("contains") or []
+        not_contains = step.get("not_contains") or []
+        contains_ok = all(str(tok) in text for tok in contains)
+        not_contains_ok = all(str(tok) not in text for tok in not_contains)
+        step_ok = not transport_or_parse and (not is_err or allow_error) and contains_ok and not_contains_ok
+        steps_evidence.append({
+            "tool": tool,
+            "action": args.get("action", ""),
+            "is_error": is_err,
+            "transport_error": bool(resp.get("transport_error")),
+            "parse_error": bool(resp.get("parse_error")),
+            "allow_error": allow_error,
+            "contains": contains,
+            "contains_ok": contains_ok,
+            "not_contains": not_contains,
+            "not_contains_ok": not_contains_ok,
+            "ok": step_ok,
+            "snippet": text[:180],
+            "raw_error": str(resp.get("raw", ""))[:220] if resp.get("transport_error") else "",
+        })
+        if not step_ok:
+            ok = False
+            break
+
+    if ok:
+        for verify in task.get("verify", []):
+            if not isinstance(verify, dict):
+                continue
+            tool = str(verify.get("tool", task.get("tool", "")))
+            args = resolve_asset_authoring_placeholders(dict(verify.get("args", {})))
+            resp = mcp_call(url, tool, args, timeout_s=timeout_s)
+            text = result_text(resp)
+            contains = verify.get("contains") or []
+            not_contains = verify.get("not_contains") or []
+            server_ok = not resp.get("transport_error") and not resp.get("parse_error") and not _is_error(resp)
+            contains_ok = all(str(tok) in text for tok in contains)
+            not_contains_ok = all(str(tok) not in text for tok in not_contains)
+            verify_ok = server_ok and contains_ok and not_contains_ok
+            verify_evidence.append({
+                "tool": tool,
+                "action": args.get("action", ""),
+                "server_ok": server_ok,
+                "transport_error": bool(resp.get("transport_error")),
+                "parse_error": bool(resp.get("parse_error")),
+                "contains": contains,
+                "contains_ok": contains_ok,
+                "not_contains": not_contains,
+                "not_contains_ok": not_contains_ok,
+                "ok": verify_ok,
+                "snippet": text[:220],
+                "raw_error": str(resp.get("raw", ""))[:220] if resp.get("transport_error") else "",
+            })
+            ok = ok and verify_ok
+            if not verify_ok:
+                break
+
+    return {
+        "task_id": task.get("id"),
+        "category": "asset_authoring",
+        "namespace": task.get("namespace"),
+        "action": task.get("action"),
+        "blueprint_type": task.get("blueprint_type", ""),
+        "domain": task.get("domain", ""),
+        "edit_domain": task.get("edit_domain", ""),
+        "workflow": task.get("workflow", task.get("name", "")),
+        "direct_success": ok,
+        "planning_signals": False,
+        "evidence": {"steps": steps_evidence, "verify": verify_evidence},
+        "transport_error": False,
+        "transport_error_raw": "",
+        "response_is_error": not ok,
+        "response_text": json.dumps(verify_evidence)[:500],
+    }
+
 
 def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
     """Score a duplicate_reject task.
@@ -1916,6 +5403,8 @@ def _score_duplicate_reject(url: str, task: Dict[str, Any], timeout_s: float) ->
 
 def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
     category = task.get("category", "")
+    if category == "asset_authoring":
+        return _score_asset_authoring_task(url, task, timeout_s)
     if category == "duplicate_reject":
         return _score_duplicate_reject(url, task, timeout_s)
     if category == "negative_compile":
@@ -2106,7 +5595,14 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
 # Aggregate
 # ---------------------------------------------------------------------------
 
-def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    *,
+    warn_missing_categories: bool = True,
+) -> Dict[str, Any]:
     def rate(cat: str) -> float:
         cat_rows = [r for r in rows if r["category"] == cat]
         return avg([1.0 if r["direct_success"] else 0.0 for r in cat_rows])
@@ -2117,10 +5613,11 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
     # (The hard guard lives in build_static_tasks; this protects partial/ad-hoc task files at run time.)
     missing_categories = [name for name in WEIGHTS
                           if not any(r["category"] == name for r in rows)]
-    for name in missing_categories:
-        print(f"WARNING: weighted category '{name}' has 0 rows; its dimension is zeroed "
-              f"(-{WEIGHTS[name]} max score). The composite is not comparable to a full run.",
-              flush=True)
+    if warn_missing_categories:
+        for name in missing_categories:
+            print(f"WARNING: weighted category '{name}' has 0 rows; its dimension is zeroed "
+                  f"(-{WEIGHTS[name]} max score). The composite is not comparable to a full run.",
+                  flush=True)
 
     # rates[name] for every weighted dimension, keyed by the WEIGHTS category names.
     rates: Dict[str, float] = {name: rate(name) for name in WEIGHTS}
@@ -2153,7 +5650,7 @@ def aggregate(label: str, status: Dict[str, Any], tasks: List[Dict[str, Any]], r
             "rate": round(avg([1.0 if r["direct_success"] else 0.0 for r in t_rows]), 6),
         }
 
-    error_count = sum(1 for r in rows if r.get("transport_error") or r.get("response_is_error"))
+    error_count = sum(1 for r in rows if not r.get("direct_success", False))
 
     return {
         "label": label,
@@ -2347,10 +5844,12 @@ def build_wiring_chains() -> List[Dict[str, Any]]:
             "chain": [
                 {"op": "add_node", "capture": "a",
                  "args": {"action": "add_node", "asset_path": path, "graph_name": "EventGraph",
-                          "node_type": "CallFunction", "function_name": "PrintString"}},
+                          "node_type": "CallFunction", "function_name": "PrintString",
+                          "position": [0, 0]}},
                 {"op": "add_node", "capture": "b",
                  "args": {"action": "add_node", "asset_path": path, "graph_name": "EventGraph",
-                          "node_type": "CallFunction", "function_name": "PrintString"}},
+                          "node_type": "CallFunction", "function_name": "PrintString",
+                          "position": [420, 0]}},
                 {"op": "connect_pins",
                  "args": {"action": "connect_pins", "asset_path": path, "graph_name": "EventGraph",
                           "source_node": "${a}", "source_pin": "then",
@@ -2470,11 +5969,11 @@ def build_negative_compile_tasks() -> List[Dict[str, Any]]:
     a dedicated scratch BP so it never poisons the 14 clean-compile fixtures, and reset per run
     (remove+add the break variable) so it is idempotent.
 
-    Break mechanism (VALIDATED against the live UE 5.7 editor): set a variable's type to a
-    non-existent struct. compile_blueprint then returns {status:"Error", error_count:2,
-    errors:[{message:"The variable BenchBreakVar declared in ... has an invalid type Structure"}]}.
-    (The audit's proposed dangling-VariableGet and duplicate-event breaks were both verified to be
-    silently tolerated by UE — error_count stayed 0 — so they are NOT used.)"""
+    Break mechanism (validated against the live UE 5.8 editor): create a function and set one
+    input to a non-existent struct type. compile_blueprint then returns status:"Error" with a
+    real compiler diagnostic: "bad or unknown type (Structure)". Invalid member-variable types
+    and dangling VariableGet nodes are silently tolerated/normalized by UE 5.8, so they are not
+    used for this falsification test."""
     SC = "/Game/Benchmarks/BPB_CompileFailScratch"
     return [{
         "id": None, "category": "negative_compile", "namespace": "blueprint",
@@ -2482,28 +5981,32 @@ def build_negative_compile_tasks() -> List[Dict[str, Any]]:
         "asset_path": SC, "graph_name": "EventGraph",
         "blueprint_type": "Actor", "domain": "gameplay", "edit_domain": "compilation",
         "safety": "mutating_fixture",
-        "description": "Deliberately break a scratch blueprint (variable with an invalid struct type) and require a reported compile error",
+        "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error",
         "setup_chain": [
             {"op": "create_blueprint",
              "args": {"action": "create_blueprint", "save_path": SC,
                       "parent_class": "Actor", "blueprint_type": "Normal"}},
-            {"op": "remove_variable",
-             "args": {"action": "remove_variable", "asset_path": SC, "name": "BenchBreakVar"}},
-            {"op": "add_variable",
-             "args": {"action": "add_variable", "asset_path": SC, "name": "BenchBreakVar", "type": "int"}},
-            {"op": "set_variable_type",
-             "args": {"action": "set_variable_type", "asset_path": SC, "name": "BenchBreakVar",
-                      "type": "struct:MonolithBenchNoSuchStructZZZ"}},
+            {"op": "remove_function",
+             "args": {"action": "remove_function", "asset_path": SC, "name": "BenchBadSignature"}},
+            {"op": "add_function",
+             "args": {"action": "add_function", "asset_path": SC,
+                      "function_name": "BenchBadSignature"}},
+            {"op": "set_function_params",
+             "args": {"action": "set_function_params", "asset_path": SC,
+                      "function_name": "BenchBadSignature",
+                      "inputs": [{"name": "BadStruct",
+                                  "type": "struct:MonolithBenchNoSuchStructZZZ"}],
+                      "outputs": []}},
         ],
         "compile_args": {"action": "compile_blueprint", "asset_path": SC},
         # Repair the break and save a CLEAN scratch BP so a corrupt (invalid-type) asset is never
         # persisted — that would crash the -nullrhi editor on the next boot's asset scan.
         "cleanup_chain": [
-            {"args": {"action": "set_variable_type", "asset_path": SC, "name": "BenchBreakVar", "type": "int"}},
+            {"args": {"action": "remove_function", "asset_path": SC, "name": "BenchBadSignature"}},
             {"args": {"action": "compile_blueprint", "asset_path": SC}},
-            {"args": {"action": "save_asset", "asset_path": SC}},
+            {"tool": "asset_query", "args": {"action": "save_asset", "asset_path": SC}},
         ],
-        "expected": {"is_compile_error": True, "error_tokens": ["invalid type"]},
+        "expected": {"is_compile_error": True, "error_tokens": ["bad or unknown type", "unknown type"]},
     }]
 
 
@@ -2515,7 +6018,7 @@ def build_additional_graph_read_tasks() -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
     for bp in BP_TYPES:
         asset_name = fixture_asset_name(bp)
-        parent_token = FIXTURE_CREATE_PARAMS[bp["type"]]["parent_class"]
+        parent_class_name = FIXTURE_CREATE_PARAMS[bp["type"]]["parent_class"]
         tasks.append({
             "category": "graph_read",
             "namespace": "blueprint",
@@ -2534,7 +6037,7 @@ def build_additional_graph_read_tasks() -> List[Dict[str, Any]]:
             "action": "get_parent_class",
             "tool": "blueprint_query",
             "arguments": {"action": "get_parent_class", "asset_path": bp["path"]},
-            "expected": {"server_handled": True, "contains": [parent_token]},
+            "expected": {"server_handled": True, "contains": [parent_class_name]},
             "safety": "read_only",
             "blueprint_type": bp["type"],
             "domain": bp["domain"],
@@ -2892,6 +6395,26 @@ def build_static_tasks() -> List[Dict[str, Any]]:
             "description": spec["description"],
         })
 
+    # --- asset_authoring: high-ROI UE asset lifecycle tasks across common authoring namespaces ---
+    for spec in ASSET_AUTHORING_TASKS:
+        tasks.append({
+            "id": next_id(),
+            "category": "asset_authoring",
+            "namespace": "mixed",
+            "action": "op_chain",
+            "tool": "monolith_query",
+            "asset_path": ASSET_AUTHORING_ROOT,
+            "chain": spec["chain"],
+            "verify": spec["verify"],
+            "expected": {"direct_success": True},
+            "safety": "mutating_benchmark_assets",
+            "edit_domain": spec.get("edit_domain", ""),
+            "blueprint_type": "",
+            "domain": spec.get("domain", ""),
+            "workflow": spec["name"],
+            "description": spec["description"],
+        })
+
     # --- negative_compile (the only test that makes "compile is clean" falsifiable) ---
     for spec in build_negative_compile_tasks():
         spec["id"] = next_id()
@@ -2991,11 +6514,11 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "description": (
             "Measures blueprint editing capability: type discovery, graph/variable reads, "
             "edit action schemas, read-back-verified edit execution, executed end-to-end "
-            "workflows, graceful input-specific error handling, duplicate-name rejection, "
-            "and explicit fixture lifecycle preflight"
+            "workflows, high-ROI cross-domain asset authoring, graceful input-specific error "
+            "handling, duplicate-name rejection, and explicit fixture lifecycle preflight"
         ),
         "primary_score": "blueprint_editing_score",
-        "expected_namespace": "blueprint",
+        "expected_namespace": "blueprint-plus-asset-authoring",
         "generated_at": utc_now(),
         "task_count": len(tasks),
         "category_counts": count_by(tasks, "category"),
@@ -3006,12 +6529,13 @@ def generate_tasks(tasks_path: pathlib.Path, manifest_path: pathlib.Path) -> Dic
         "weights": dict(WEIGHTS),
         "base_edit_execute_tasks_per_type": 10,
         "additional_edit_execute_tasks": len(BLUEPRINT_ADDITIONAL_EDIT_EXECUTE_TASKS),
+        "asset_authoring_tasks": len(ASSET_AUTHORING_TASKS),
         "edit_execute_tasks_per_type": edit_execute_counts,
         "fixture_paths": {bp["type"]: bp["path"] for bp in BP_TYPES},
         "preflight_command": "python Scripts/blueprint_editing_benchmark.py preflight --mcp-url http://localhost:9316/mcp",
         "setup_fixtures_command": "python Scripts/blueprint_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
         "score_dimensions": list(SCORE_DIMENSIONS),
-        "catalog_version_verified": "v0.20.2-blueprint-138-actions",
+        "catalog_version_verified": "v0.20.3-blueprint-139-actions-plus-asset-authoring",
         "task_file": display_path(tasks_path),
     }
     write_json(manifest_path, manifest)
@@ -3036,6 +6560,28 @@ def endpoint_preflight(url: str, timeout_s: float) -> Dict[str, Any]:
     }
 
 
+def project_index_preflight(url: str, timeout_s: float) -> Dict[str, Any]:
+    response = mcp_call(url, "project_query", {
+        "action": "search",
+        "query": "BPB_TestActor",
+        "include_content": False,
+        "limit": 1,
+    }, timeout_s=timeout_s)
+    failure_kind = classify_mcp_failure(response)
+    data = result_data(response) if not failure_kind else {}
+    results = project_results(data)
+    ok = (not failure_kind) and len(results) >= 1
+    return {
+        "ok": ok,
+        "phase": "project_index",
+        "failure_kind": failure_kind or ("" if ok else "project_index_empty"),
+        "message": "ProjectIndex project.search is ready" if ok else "ProjectIndex project.search is not ready for type_discovery tasks",
+        "query": "BPB_TestActor",
+        "results_count": len(results),
+        "snippet": str(response.get("raw", ""))[:300] if response.get("transport_error") else result_text(response)[:300],
+    }
+
+
 def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bool = True) -> Dict[str, Any]:
     endpoint = endpoint_preflight(url, timeout_s)
     if not endpoint["ok"] or not require_fixtures:
@@ -3045,7 +6591,21 @@ def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bo
             "failure_kind": endpoint["failure_kind"],
             "message": endpoint["message"],
             "endpoint": endpoint,
+            "project_index": None,
             "fixtures": [],
+        }
+
+    project_index = project_index_preflight(url, timeout_s)
+    if not project_index["ok"]:
+        return {
+            "ok": False,
+            "phase": project_index["phase"],
+            "failure_kind": project_index["failure_kind"],
+            "message": project_index["message"],
+            "endpoint": endpoint,
+            "project_index": project_index,
+            "fixtures": [],
+            "first_failure": project_index,
         }
 
     fixtures: List[Dict[str, Any]] = []
@@ -3128,6 +6688,7 @@ def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bo
         "failure_kind": "" if ok else str(first_failure.get("failure_kind", "fixture_readiness_failed")),
         "message": "All BlueprintEditing fixtures are ready" if ok else str(first_failure.get("message", "Fixture preflight failed")),
         "endpoint": endpoint,
+        "project_index": project_index,
         "fixtures": fixtures,
         "first_failure": first_failure,
     }
@@ -3138,6 +6699,10 @@ def print_preflight_summary(preflight: Dict[str, Any]) -> None:
     print(f"preflight: {status} phase={preflight.get('phase')} failure_kind={preflight.get('failure_kind', '')}", flush=True)
     if preflight.get("message"):
         print(f"  {preflight['message']}", flush=True)
+    project_index = preflight.get("project_index")
+    if isinstance(project_index, dict):
+        p_status = "ok" if project_index.get("ok") else "FAILED"
+        print(f"  [{p_status}] project.search {project_index.get('query')} results={project_index.get('results_count', 0)}", flush=True)
     for fixture in preflight.get("fixtures", []):
         f_status = "ok" if fixture.get("ok") else "FAILED"
         print(f"  [{f_status}] {fixture.get('blueprint_type')} {fixture.get('asset_path')}", flush=True)
@@ -3300,17 +6865,126 @@ def setup_fixtures(url: str, timeout_s: float) -> Dict[str, Any]:
 # Run
 # ---------------------------------------------------------------------------
 
+def _normalize_resource_path(value: str) -> Optional[str]:
+    if not value.startswith("/Game/"):
+        return None
+    # Object paths can include a subobject/export suffix; the package path is the lock boundary.
+    return value.split(".", 1)[0]
+
+
+def _collect_resource_paths(value: Any, *, skip_keys: Optional[Set[str]] = None) -> Set[str]:
+    skip_keys = skip_keys or set()
+    paths: Set[str] = set()
+    if isinstance(value, str):
+        normalized = _normalize_resource_path(value)
+        if normalized:
+            paths.add(normalized)
+    elif isinstance(value, list):
+        for item in value:
+            paths.update(_collect_resource_paths(item, skip_keys=skip_keys))
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if str(key) in skip_keys:
+                continue
+            paths.update(_collect_resource_paths(item, skip_keys=skip_keys))
+    return paths
+
+
+GLOBAL_TOOL_LOCKS = {
+    # These namespaces share editor graph loading and ProjectIndex state. They need the same lock:
+    # separate per-tool locks still let project.search overlap Blueprint graph reads, which is not
+    # reentrant in the headless editor.
+    "blueprint_query": "tool:editor_graph_index",
+    "project_query": "tool:editor_graph_index",
+}
+ASSET_AUTHORING_GLOBAL_LOCK = "tool:editor_graph_index"
+
+
+def _collect_tool_names(task: Dict[str, Any]) -> Set[str]:
+    tools: Set[str] = set()
+    if task.get("tool"):
+        tools.add(str(task["tool"]))
+    for block_name in ("chain", "verify", "setup_chain", "cleanup_chain"):
+        for step in task.get(block_name, []) or []:
+            if isinstance(step, dict) and step.get("tool"):
+                tools.add(str(step["tool"]))
+    return tools
+
+
+def task_resource_keys(task: Dict[str, Any]) -> List[str]:
+    """Return package-level locks needed to run a task safely with other tasks.
+
+    Read/schema/catalog tasks stay lock-free. Mutating Blueprint and asset-authoring tasks lock the
+    concrete packages they touch, so a parallel run can make progress without racing two edits on the
+    same fixture or deleting an asset while another task is verifying it.
+    """
+    category = str(task.get("category", ""))
+    paths: Set[str] = set()
+    skip_keys = {"allowed_prefixes"}
+    lock_keys: Set[str] = {
+        GLOBAL_TOOL_LOCKS[tool] for tool in _collect_tool_names(task)
+        if tool in GLOBAL_TOOL_LOCKS
+    }
+
+    if category in {"read_schema", "edit_schema"}:
+        return sorted(lock_keys)
+
+    if category == "asset_authoring":
+        # Live editor asset creation/save/delete touches global package, AssetRegistry, source-control,
+        # graph compilation, and factory state across namespaces. Per-package locks are insufficient:
+        # authoring chains must not overlap Blueprint/project graph reads or other editor mutations.
+        lock_keys.add(ASSET_AUTHORING_GLOBAL_LOCK)
+        for block_name in ("chain", "verify"):
+            for step in task.get(block_name, []) or []:
+                if isinstance(step, dict):
+                    paths.update(_collect_resource_paths(step.get("args", {}), skip_keys=skip_keys))
+    else:
+        if task.get("asset_path"):
+            paths.update(_collect_resource_paths(task.get("asset_path"), skip_keys=skip_keys))
+        for key in ("arguments", "setup_arguments", "setup_chain", "cleanup_chain",
+                    "compile_args", "verify", "verify_connection", "verify_disconnection"):
+            paths.update(_collect_resource_paths(task.get(key), skip_keys=skip_keys))
+
+    return sorted(lock_keys | paths)
+
+
+def _score_task_with_locks(
+    url: str,
+    task: Dict[str, Any],
+    timeout_s: float,
+    locks_by_key: Dict[str, threading.Lock],
+    resource_keys: Optional[List[str]] = None,
+) -> Tuple[Dict[str, Any], List[str]]:
+    keys = resource_keys if resource_keys is not None else task_resource_keys(task)
+    acquired: List[threading.Lock] = []
+    try:
+        for key in keys:
+            lock = locks_by_key[key]
+            lock.acquire()
+            acquired.append(lock)
+        return score_task(url, task, timeout_s), keys
+    finally:
+        for lock in reversed(acquired):
+            lock.release()
+
+
 def run_benchmark(
     url: str,
     tasks_path: pathlib.Path,
     output_dir: pathlib.Path,
     label: str,
     timeout_s: float,
+    jobs: int = 1,
 ) -> Dict[str, Any]:
     tasks_path = resolve_plugin_path(tasks_path)
     tasks = load_jsonl(tasks_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     status_response = mcp_call(url, "monolith_status", {}, timeout_s=timeout_s)
+    if status_response.get("transport_error") or status_response.get("parse_error") or _is_error(status_response):
+        raise RuntimeError(
+            "monolith_status failed before benchmark execution: "
+            f"{str(status_response.get('raw') or result_text(status_response))[:300]}"
+        )
     status = result_data(status_response)
     benchmark_inputs = build_benchmark_inputs("BlueprintEditing", tasks_path=tasks_path, mcp_status=status)
 
@@ -3319,21 +6993,96 @@ def run_benchmark(
     if per_task_jsonl.exists():
         per_task_jsonl.unlink()
 
-    for index, task in enumerate(tasks, 1):
-        row = score_task(url, task, timeout_s)
-        rows.append(row)
-        with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-            handle.write("\n")
-        print(f"[{index}/{len(tasks)}] {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
-        if index == 1 or index == len(tasks) or index % 10 == 0:
-            partial = aggregate(label, status, tasks[:index], rows)
-            partial["completed_task_count"] = index
-            partial["total_task_count"] = len(tasks)
-            attach_benchmark_inputs(partial, benchmark_inputs)
-            write_json(output_dir / "partial_summary.json", partial)
+    jobs = max(1, int(jobs))
+    if jobs == 1:
+        for index, task in enumerate(tasks, 1):
+            row = score_task(url, task, timeout_s)
+            row["task_index"] = index
+            rows.append(row)
+            with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+                handle.write("\n")
+            print(f"[{index}/{len(tasks)}] {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
+            if index == 1 or index == len(tasks) or index % 10 == 0:
+                partial = aggregate(label, status, tasks[:index], rows, warn_missing_categories=False)
+                partial["completed_task_count"] = index
+                partial["total_task_count"] = len(tasks)
+                partial["execution"] = {"mode": "sequential", "jobs": 1}
+                attach_benchmark_inputs(partial, benchmark_inputs)
+                write_json(output_dir / "partial_summary.json", partial)
+    else:
+        task_keys_by_index = [task_resource_keys(task) for task in tasks]
+        locks_by_key: Dict[str, threading.Lock] = {
+            key: threading.Lock()
+            for key in sorted({key for keys in task_keys_by_index for key in keys})
+        }
+        rows_by_index: List[Optional[Dict[str, Any]]] = [None] * len(tasks)
+        completed = 0
+        print(f"Running {len(tasks)} tasks with jobs={jobs} and package-level resource locks", flush=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
+            future_to_index = {
+                executor.submit(
+                    _score_task_with_locks,
+                    url,
+                    task,
+                    timeout_s,
+                    locks_by_key,
+                    task_keys_by_index[index - 1],
+                ): index
+                for index, task in enumerate(tasks, 1)
+            }
+            for future in concurrent.futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    row, resource_keys = future.result()
+                except Exception as exc:  # noqa: BLE001 - benchmark rows should record runner faults.
+                    task = tasks[index - 1]
+                    row = {
+                        "task_id": task.get("id"),
+                        "category": task.get("category"),
+                        "namespace": task.get("namespace"),
+                        "action": task.get("action"),
+                        "blueprint_type": task.get("blueprint_type", ""),
+                        "domain": task.get("domain", ""),
+                        "edit_domain": task.get("edit_domain", ""),
+                        "workflow": task.get("workflow", ""),
+                        "direct_success": False,
+                        "planning_signals": False,
+                        "evidence": {"runner_exception": type(exc).__name__, "message": str(exc)},
+                        "transport_error": False,
+                        "transport_error_raw": "",
+                        "response_is_error": True,
+                        "response_text": str(exc)[:500],
+                    }
+                    resource_keys = task_resource_keys(task)
+                row["task_index"] = index
+                row["resource_keys"] = resource_keys
+                rows_by_index[index - 1] = row
+                completed += 1
+                with per_task_jsonl.open("a", encoding="utf-8", newline="\n") as handle:
+                    handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+                    handle.write("\n")
+                print(f"[{completed}/{len(tasks)}] #{index} {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
+                if completed == 1 or completed == len(tasks) or completed % 10 == 0:
+                    partial_rows = [r for r in rows_by_index if r is not None]
+                    partial_tasks = [tasks[i] for i, r in enumerate(rows_by_index) if r is not None]
+                    partial = aggregate(label, status, partial_tasks, partial_rows, warn_missing_categories=False)
+                    partial["completed_task_count"] = completed
+                    partial["total_task_count"] = len(tasks)
+                    partial["execution"] = {
+                        "mode": "parallel",
+                        "jobs": jobs,
+                        "resource_lock_count": len(locks_by_key),
+                    }
+                    attach_benchmark_inputs(partial, benchmark_inputs)
+                    write_json(output_dir / "partial_summary.json", partial)
+        rows = [r for r in rows_by_index if r is not None]
 
     summary = aggregate(label, status, tasks, rows)
+    summary["execution"] = {
+        "mode": "parallel" if jobs > 1 else "sequential",
+        "jobs": jobs,
+    }
     attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
@@ -3428,6 +7177,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     run_cmd.add_argument("--output-dir", type=pathlib.Path, required=True)
     run_cmd.add_argument("--label", required=True)
     run_cmd.add_argument("--request-timeout-s", type=float, default=12.0)
+    run_cmd.add_argument("--jobs", type=int, default=1,
+                         help="Number of parallel task workers; package-level locks serialize tasks that touch the same /Game asset")
     run_cmd.add_argument("--skip-preflight", action="store_true",
                          help="Compatibility escape hatch: run without fixture readiness preflight")
 
@@ -3466,7 +7217,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if not preflight.get("ok"):
                 sys.stdout.buffer.write((json.dumps({"preflight": preflight}, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
                 return 1
-        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s)
+        summary = run_benchmark(args.mcp_url, args.tasks, args.output_dir, args.label, args.request_timeout_s, args.jobs)
         sys.stdout.buffer.write((json.dumps(summary, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
         return 0
 

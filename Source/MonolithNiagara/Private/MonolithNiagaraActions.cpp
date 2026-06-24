@@ -8439,6 +8439,19 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSystemProperty(const TSh
 		FPropertyChangedEvent PCE(nullptr);
 		System->PostEditChangeProperty(PCE);
 		System->RequestCompile(false);
+		if (UPackage* Package = System->GetOutermost())
+		{
+			Package->MarkPackageDirty();
+			const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+				Package->GetName(),
+				FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+			if (!UPackage::SavePackage(Package, System, *PackageFilename, SaveArgs))
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save Niagara system after setting '%s'"), *PropertyName));
+			}
+		}
 	}
 	return bOk ? NA_SuccessStr(TEXT("System property set")) : FMonolithActionResult::Error(
 		FString::Printf(TEXT("Unknown property '%s'. Supported: WarmupTime, WarmupTickCount, WarmupTickDelta, bFixedTickDelta, FixedTickDeltaTime, bDeterminism, RandomSeed, MaxPoolSize, or any UNiagaraSystem UProperty name."), *PropertyName));

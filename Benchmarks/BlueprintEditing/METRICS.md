@@ -1,15 +1,16 @@
 # BlueprintEditing Benchmark Metrics
 
-## Primary Score Formula (v5.1)
+## Primary Score Formula (v5.3)
 
 ```
-blueprint_editing_score = 0.31 * edit_execute_rate       (delete-first + read-back verified)
-                        + 0.12 * graph_read_rate
-                        + 0.12 * variable_read_rate
-                        + 0.10 * error_path_rate          (offending-identifier specific)
-                        + 0.10 * workflow_execute_rate    (executed end-to-end)
-                        + 0.08 * edit_schema_rate
-                        + 0.07 * duplicate_reject_rate    (clean-first-call gated)
+blueprint_editing_score = 0.27 * edit_execute_rate       (delete-first + read-back verified)
+                        + 0.10 * asset_authoring_rate    (cross-domain asset create/edit/save)
+                        + 0.11 * graph_read_rate
+                        + 0.11 * variable_read_rate
+                        + 0.09 * error_path_rate          (offending-identifier specific)
+                        + 0.09 * workflow_execute_rate    (executed end-to-end)
+                        + 0.07 * edit_schema_rate
+                        + 0.06 * duplicate_reject_rate    (clean-first-call gated)
                         + 0.05 * negative_compile_rate    (compiler-runs falsifiable)
                         + 0.03 * type_discovery_rate
                         + 0.02 * read_schema_rate
@@ -19,6 +20,27 @@ All rates are in `[0.0, 1.0]`. The composite score is in `[0.0, 1.0]`.
 Weights sum to exactly 1.0 and live in the single `WEIGHTS` dict in
 `Scripts/blueprint_editing_benchmark.py` — the sole source of truth for the scorer, the manifest
 formula string, the comparison report, and the module docstring (an `assert` enforces the sum).
+
+> **v5.3 generative/import-pipeline asset-authoring expansion (2026-06-25):** the current generated
+> task set is 362 tasks across 11 categories. `asset_authoring` now has 53 create/edit/save/read-back
+> chains covering Texture/Font/DataTable/StringTable/Input/Material/MIC/MaterialFunction/CurveTable/
+> DataAsset/StaticMesh/UMG/Animation/Audio/Niagara/AI/GAS/Chooser assets plus ImageGen,
+> Interchange, ModelGen provenance/import-pipeline assets, StaticMesh LOD quality metadata,
+> Material graph build/export, CommonUI text-block authoring, AnimMontage sections/slots,
+> AnimSequence curve/sync metadata, IK Rig/Retargeter metadata, SoundCue spec graph authoring,
+> batch audio template routing, Niagara HLSL module stack insertion, BehaviorTree spec-build,
+> BehaviorTree Task/Decorator/Service Blueprint assets, GAS Enhanced Input binding smoke,
+> parameterized Material Instance overrides, CommonUI input-action DataTables, GameplayEffect
+> template duplication, AIController perception config, HLODLayer config, static/dynamic Content
+> Browser collections, UWidgetAnimation v2 tracks, external generated-image import, and WorldGen
+> blockout-volume Blueprint setup.
+> MetaSound Source, StateTree creation, GeometryScript handle workflows, Interchange skeletal/scene
+> import, full retarget batches, ControlRig authoring, and LevelSequence authoring remain outside
+> this representative suite until their live action, portable benchmark fixture, and cleanup
+> contracts are proven. The
+> composite reserves 0.10 weight for this
+> non-Blueprint-graph UE asset authoring surface while preserving the strict v5.1 read-back,
+> duplicate, error-path, and negative-compile gates.
 
 > **v5.1 adversarial hardening + practical expansion (2026-06-18):** an adversarial audit plus a
 > live baseline run (`baseline-v5-pre` = 0.967) exposed scoring holes and benchmark defects, all
@@ -74,15 +96,16 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 
 | Metric | Type | Range | Definition |
 |--------|------|-------|------------|
-| `blueprint_editing_score` | composite | 0.0 – 1.0 | Weighted sum of the ten dimension rates |
+| `blueprint_editing_score` | composite | 0.0 – 1.0 | Weighted sum of the eleven dimension rates |
 | `edit_execute_rate` | rate | 0.0 – 1.0 | Real edit actions against fixtures, **delete-first + read-back verified** — strict: isError/transport error = fail, AND the mutation must be observable via a follow-up read. Creates run a leading remove so the read-back proves THIS run made the edit; `add_node` reads back the exact returned node id; `set_component_property` reads back the value; `add_replicated_variable` asserts the replication flag; node-wiring chains confirm the `connect_pins` connection (exec AND data pins); compile slots require `error_count == 0` |
+| `asset_authoring_rate` | rate | 0.0 – 1.0 | Cross-domain UE asset chains run through owner namespaces, mutate/save the asset, and prove the result through read-back/inspection |
 | `edit_schema_rate` | rate | 0.0 – 1.0 | Schema fetch for 46 edit actions — strict: isError = fail |
 | `graph_read_rate` | rate | 0.0 – 1.0 | Graph reads — strict: isError = fail + content shape check for known fixtures |
 | `variable_read_rate` | rate | 0.0 – 1.0 | Variable reads — strict: isError = fail + fixture variable / interface function name check |
 | `error_path_rate` | rate | 0.0 – 1.0 | **Inverted + input-specific**: pass = a structured `isError` whose message references the **offending identifier** (the unique `NONEXISTENT_*`/`INVALID_*` token); transport crash OR a generic error that names only the category word = fail |
 | `workflow_execute_rate` | rate | 0.0 – 1.0 | Executed end-to-end workflow chains — strict: every step runs, compile is clean, and the end state reads back. Replaces existence-only `workflow_completeness`. |
 | `duplicate_reject_rate` | rate | 0.0 – 1.0 | **Inverted**: the first call must CLEANLY create the entity (delete-reset each run); the second identical call must return a duplicate-specific `isError`. A silent suffix/no-op, OR a server that errors on every call, fails. |
-| `negative_compile_rate` | rate | 0.0 – 1.0 | A deliberately broken scratch blueprint (variable given an invalid struct type) must be REPORTED as a real compile failure (`error_count>0`). Transport/isError (asset-load failure) OR a clean `error_count:0` envelope = fail. Makes "compile is clean" falsifiable. |
+| `negative_compile_rate` | rate | 0.0 – 1.0 | A deliberately broken scratch blueprint function signature (input set to a non-existent struct type) must be REPORTED as a real compile failure (`error_count>0`). Transport/isError (asset-load failure) OR a clean `error_count:0` envelope = fail. Makes "compile is clean" falsifiable. |
 | `read_schema_rate` | rate | 0.0 – 1.0 | Schema fetch for 23 read actions — lenient: only checks `planning_signals` + `skill` |
 | `type_discovery_rate` | rate | 0.0 – 1.0 | project.search for fixture names — requires ≥1 result; required-result queries target the benchmark's own fixtures (portable across projects) |
 | `error_count` | count | 0 – N | Transport errors + isError responses across all tasks (diagnostic only) |
@@ -91,13 +114,14 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 
 | Dimension | Weight | Rationale |
 |-----------|--------|-----------|
-| `edit_execute_rate` | 0.31 | Highest weight: real edit actions, delete-first + read-back verified (a no-op can no longer ride leftover state). De-diluted (4 read-only tasks moved out) and broadened with delete/data-pin/pin-literal/value tasks, so the weight rose 0.26→0.31. |
-| `graph_read_rate` | 0.12 | Most common inspection call; strict + content shape check means empty envelopes don't pass. |
-| `variable_read_rate` | 0.12 | Variable inspection underlies most edit workflows; strict + fixture/interface content check. |
-| `error_path_rate` | 0.10 | Input-SPECIFIC rejection: the error must name the offending identifier. Crash, silent success, OR a generic always-error all score 0. |
-| `workflow_execute_rate` | 0.10 | Executed end-to-end workflows (build→wire→compile-clean→read-back). Real authoring sequences, not catalog-name presence. |
-| `edit_schema_rate` | 0.08 | Schema correctness for all 46 edit actions; a coverage tripwire (unknown names isError and fail). Down 0.14→0.08 — a schema-only signal is worth less now that execution is read-back verified. |
-| `duplicate_reject_rate` | 0.07 | Duplicate-name guard consistency across `add_*`; clean-first-call gated and delete-reset. |
+| `edit_execute_rate` | 0.27 | Highest single weight: real Blueprint edits, delete-first + read-back verified (a no-op can no longer ride leftover state). |
+| `asset_authoring_rate` | 0.10 | Cross-domain UE asset authoring beyond Blueprint graph edits: create/edit/save/read-back for common high-ROI asset types. |
+| `graph_read_rate` | 0.11 | Most common inspection call; strict + content shape check means empty envelopes don't pass. |
+| `variable_read_rate` | 0.11 | Variable inspection underlies most edit workflows; strict + fixture/interface content check. |
+| `error_path_rate` | 0.09 | Input-SPECIFIC rejection: the error must name the offending identifier. Crash, silent success, OR a generic always-error all score 0. |
+| `workflow_execute_rate` | 0.09 | Executed end-to-end workflows (build→wire→compile-clean→read-back). Real authoring sequences, not catalog-name presence. |
+| `edit_schema_rate` | 0.07 | Schema correctness for all 46 edit actions; a coverage tripwire (unknown names isError and fail). |
+| `duplicate_reject_rate` | 0.06 | Duplicate-name guard consistency across `add_*`; clean-first-call gated and delete-reset. |
 | `negative_compile_rate` | 0.05 | The only dimension that proves the compiler actually runs; without it `error_count:0` is unfalsifiable. |
 | `type_discovery_rate` | 0.03 | Discovery is a prerequisite but converges quickly; fixture-based so it is portable. |
 | `read_schema_rate` | 0.02 | Lenient introspection tripwire; rarely fails on healthy endpoints. Down 0.05→0.02. |
@@ -113,20 +137,19 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 | `edit_schema` | 46 | read_only_discovery |
 | `workflow_execute` | 11 | mutating_fixture |
 | `edit_execute` | 113 | mutating_fixture |
+| `asset_authoring` | 53 | mutating_asset_authoring |
 | `error_path` | 20 | read_only_invalid |
 | `duplicate_reject` | 11 | mutating_idempotency |
 | `negative_compile` | 1 | mutating_fixture |
-| **Total** | **309** | |
+| **Total** | **362** | |
 
-`edit_execute` = 70 base single edit tasks (10 × 7 BP types) + 6 executed node-wiring chains +
-28 practical expansion edits. The expansion covers Widget style/property/graph edits,
-AnimBP variables/thread-safe helpers, GAS ability BPs, ActorComponent contracts, Interface
-signatures, and component/property edit read-backs. `workflow_execute` is now 11 executed chains
-and replaces the old `workflow_completeness` (5).
+`asset_authoring` = 53 cross-domain create/edit/save/read-back chains under
+`/Game/Benchmarks/AssetAuthoring`. `workflow_execute` is now 11 executed chains and replaces the
+old `workflow_completeness` (5).
 "already exists" responses count as success only when the read-back still confirms the entity
 is present (idempotent across repeated benchmark runs, but a silent no-op cannot pass).
 
-## Read Action Names (23, verified v0.20.2)
+## Read Action Names (23, verified v0.20.3)
 
 All names verified against the live `blueprint` namespace catalog via `monolith_discover(namespace="blueprint", mode="actions")`.
 
@@ -156,7 +179,7 @@ All names verified against the live `blueprint` namespace catalog via `monolith_
 | `get_function_signature` | expanded schema coverage |
 | `get_event_dispatcher_details` | expanded schema coverage |
 
-## Edit Action Domain Breakdown (46, verified v0.20.2)
+## Edit Action Domain Breakdown (46, verified v0.20.3)
 
 | Domain | Count | Actions |
 |--------|------:|---------|
@@ -196,17 +219,17 @@ Note: `undo`/`redo` do not exist in the blueprint catalog; replaced with `auto_l
 | `graph_read` | Partially | Content check catches empty `list_graphs`; `get_graph_data`/`get_graph_summary` only no-error. |
 | `variable_read` | Partially | Fixture variable / interface function name check catches empty lists. |
 
-**Recomputed stub ceiling (v5.1).** A name-correct, no-editor stub scores **zero** on
+**Recomputed stub ceiling (v5.2).** A name-correct, no-editor stub scores **zero** on
 `edit_execute` (delete-first read-back fails), `workflow_execute`, `error_path`,
 `duplicate_reject`, and `negative_compile`, and only partial on the content-checked reads:
-`0.31*0 + 0.08*1 + 0.12*0.5 + 0.12*0.5 + 0.10*0 + 0.10*0 + 0.07*0 + 0.05*0 + 0.03*0 + 0.02*1 ≈ 0.22`
-The hardening drops the stub ceiling from v5 ≈0.31 to **≈0.22** (and the schema-fetch re-weight
+`0.27*0 + 0.10*0 + 0.07*1 + 0.11*0.5 + 0.11*0.5 + 0.09*0 + 0.09*0 + 0.06*0 + 0.05*0 + 0.03*0 + 0.02*1 ≈ 0.20`
+The hardening drops the stub ceiling from v5 ≈0.31 to **≈0.20** (and the schema-fetch re-weight
 removes most of the residue): the benchmark now genuinely separates a live editor that performs,
 confirms, and compiles real edits from a server that merely returns well-formed envelopes.
 
 ## Catalog Version
 
-Action names verified against Monolith MCP blueprint namespace v0.20.2 (138 actions total). The
+Action names verified against Monolith MCP blueprint namespace v0.20.3 (139 actions total). The
 v5 read-back/wiring upgrade was authored against captured live response shapes: `add_node`
 returns the node at top-level `id`; a connected pin's `connected_to` holds `"<target_id>.<pin>"`;
 `compile_blueprint` returns `error_count`/`errors`/`status`; `get_variables` exposes

@@ -1,4 +1,5 @@
 #include "MonolithAudioQueryActions.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
@@ -379,7 +380,7 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSoundWaveInfo(const TShared
 	FString AssetPath;
 	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
 
-	USoundWave* SoundWave = Cast<USoundWave>(StaticLoadObject(USoundWave::StaticClass(), nullptr, *AssetPath));
+	USoundWave* SoundWave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(AssetPath);
 	if (!SoundWave)
 	{
 		return FMonolithActionResult::Error(FString::Printf(

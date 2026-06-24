@@ -15,6 +15,7 @@
 #include "Internationalization/Internationalization.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
+#include "Internationalization/StringTableRegistry.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -184,6 +185,11 @@ namespace
 			return FindObject<UObject>(ExistingPackage, *AssetName) != nullptr;
 		}
 		return false;
+	}
+
+	FName MakeStringTableAssetId(const FString& PackagePath, const FString& AssetName)
+	{
+		return FName(*FString::Printf(TEXT("%s.%s"), *PackagePath, *AssetName));
 	}
 
 	bool ResolveProjectFilePath(const FString& RawPath, FString& OutFilePath, FString& OutError)
@@ -917,11 +923,19 @@ FMonolithActionResult FMonolithLocalizationActions::CreateStringTable(const TSha
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
 	}
 
+	const FName TableId = MakeStringTableAssetId(PackagePath, AssetName);
+	bool bUnregisteredStaleTable = false;
+	if (!Options.bDryRun && FStringTableRegistry::Get().FindStringTable(TableId).IsValid())
+	{
+		bUnregisteredStaleTable = FStringTableRegistry::Get().UnregisterStringTable(TableId);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	AddMutationBaseFields(Result, AssetPath, Options, false, false);
 	Result->SetStringField(TEXT("package_path"), PackagePath);
 	Result->SetStringField(TEXT("name"), AssetName);
 	Result->SetStringField(TEXT("namespace"), Namespace);
+	Result->SetBoolField(TEXT("unregistered_stale_string_table"), bUnregisteredStaleTable);
 	if (Options.bDryRun)
 	{
 		Result->SetBoolField(TEXT("would_create"), true);

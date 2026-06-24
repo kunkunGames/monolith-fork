@@ -32,6 +32,35 @@
 
 namespace
 {
+	bool SaveBlueprintPackage(UBlueprint* BP, FString& OutError)
+	{
+		if (!BP)
+		{
+			OutError = TEXT("Cannot save null Blueprint");
+			return false;
+		}
+
+		UPackage* Package = BP->GetOutermost();
+		if (!Package)
+		{
+			OutError = FString::Printf(TEXT("Blueprint has no outer package: %s"), *BP->GetName());
+			return false;
+		}
+
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		if (!UPackage::SavePackage(Package, BP, *PackageFilename, SaveArgs))
+		{
+			OutError = FString::Printf(TEXT("Failed to save Blueprint package: %s"), *Package->GetName());
+			return false;
+		}
+
+		return true;
+	}
+
 	// ── Property type validation ──────────────────────────────────────────
 	// Returns true if FProperty's underlying type matches the requested C++ type T.
 	// Prevents silent memory corruption from mismatched ContainerPtrToValuePtr<T> casts.
@@ -949,6 +978,55 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCompileAbility(const TSh
 	// Collect errors/warnings from nodes
 	TArray<TSharedPtr<FJsonValue>> Errors;
 	TArray<TSharedPtr<FJsonValue>> Warnings;
+	TSet<FString> SeenMessages;
+	auto AppendCompilerMessage = [&Errors, &Warnings, &SeenMessages](
+		const FString& Message,
+		const EMessageSeverity::Type Severity,
+		const FString& NodeId = FString(),
+		const FString& NodeTitle = FString(),
+		const FString& GraphName = FString())
+	{
+		if (Message.IsEmpty())
+		{
+			return;
+		}
+		const FString Key = FString::Printf(TEXT("%d:%s:%s:%s"), (int32)Severity, *NodeId, *GraphName, *Message);
+		if (SeenMessages.Contains(Key))
+		{
+			return;
+		}
+		SeenMessages.Add(Key);
+
+		TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();
+		MsgObj->SetStringField(TEXT("message"), Message);
+		if (!NodeId.IsEmpty())
+		{
+			MsgObj->SetStringField(TEXT("node_id"), NodeId);
+		}
+		if (!NodeTitle.IsEmpty())
+		{
+			MsgObj->SetStringField(TEXT("node_title"), NodeTitle);
+		}
+		if (!GraphName.IsEmpty())
+		{
+			MsgObj->SetStringField(TEXT("graph"), GraphName);
+		}
+
+		if (Severity == EMessageSeverity::Error)
+		{
+			Errors.Add(MakeShared<FJsonValueObject>(MsgObj));
+		}
+		else if (Severity == EMessageSeverity::Warning)
+		{
+			Warnings.Add(MakeShared<FJsonValueObject>(MsgObj));
+		}
+	};
+
+	for (const TSharedRef<FTokenizedMessage>& Msg : Results.Messages)
+	{
+		AppendCompilerMessage(Msg->ToText().ToString(), Msg->GetSeverity());
+	}
+
 	{
 		TArray<UEdGraph*> AllGraphs;
 		Ctx.BP->GetAllGraphs(AllGraphs);
@@ -960,28 +1038,37 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleCompileAbility(const TSh
 				if (!Node || !Node->bHasCompilerMessage) continue;
 				if (Node->ErrorMsg.IsEmpty()) continue;
 
-				TSharedPtr<FJsonObject> MsgObj = MakeShared<FJsonObject>();
-				MsgObj->SetStringField(TEXT("node_id"), Node->NodeGuid.ToString());
-				MsgObj->SetStringField(TEXT("node_title"), Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString());
-				MsgObj->SetStringField(TEXT("graph"), Graph->GetName());
-				MsgObj->SetStringField(TEXT("message"), Node->ErrorMsg);
-
-				if (Node->ErrorType == EMessageSeverity::Error)
-				{
-					Errors.Add(MakeShared<FJsonValueObject>(MsgObj));
-				}
-				else
-				{
-					Warnings.Add(MakeShared<FJsonValueObject>(MsgObj));
-				}
+				const EMessageSeverity::Type NodeSeverity =
+					(Node->ErrorType == EMessageSeverity::Warning)
+						? EMessageSeverity::Warning
+						: EMessageSeverity::Error;
+				AppendCompilerMessage(
+					Node->ErrorMsg,
+					NodeSeverity,
+					Node->NodeGuid.ToString(),
+					Node->GetNodeTitle(ENodeTitleType::FullTitle).ToString(),
+					Graph->GetName());
 			}
 		}
 	}
 
+	FString SaveError;
+	const bool bCompileFailed = Errors.Num() > 0 || Ctx.BP->Status == BS_Error;
+	bool bSaved = false;
+	if (!bCompileFailed)
+	{
+		if (!SaveBlueprintPackage(Ctx.BP, SaveError))
+		{
+			return FMonolithActionResult::Error(SaveError);
+		}
+		bSaved = true;
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Ctx.AssetPath);
+	Result->SetBoolField(TEXT("saved"), bSaved);
 
-	bool bHasErrors = Errors.Num() > 0;
+	bool bHasErrors = bCompileFailed;
 	Result->SetStringField(TEXT("status"), bHasErrors ? TEXT("error") : TEXT("success"));
 	Result->SetArrayField(TEXT("errors"), Errors);
 	Result->SetArrayField(TEXT("warnings"), Warnings);

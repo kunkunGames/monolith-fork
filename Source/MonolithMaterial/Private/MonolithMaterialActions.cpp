@@ -3000,6 +3000,18 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 
 	FAssetRegistryModule::AssetCreated(MIC);
 	Pkg->MarkPackageDirty();
+	MIC->PostEditChange();
+
+	const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+		Pkg->GetName(),
+		FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	const bool bSaved = UPackage::SavePackage(Pkg, MIC, *PackageFilename, SaveArgs);
+	if (!bSaved)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save material instance at '%s'"), *AssetPath));
+	}
 
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetStringField(TEXT("asset_path"), MIC->GetPathName());
@@ -3009,6 +3021,7 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterialInstance(const TSh
 	ResultJson->SetNumberField(TEXT("vector_overrides"), VectorCount);
 	ResultJson->SetNumberField(TEXT("texture_overrides"), TextureCount);
 	ResultJson->SetNumberField(TEXT("static_switch_overrides"), SwitchCount);
+	ResultJson->SetBoolField(TEXT("saved"), bSaved);
 
 	return FMonolithActionResult::Success(ResultJson);
 }

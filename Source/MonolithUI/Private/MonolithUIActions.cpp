@@ -528,6 +528,10 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
             TEXT("Call ui::get_widget_tree to enumerate live widget names; the parent must be a UPanelWidget subclass.")));
     }
 
+    WBP->Modify();
+    WBP->WidgetTree->Modify();
+    ParentPanel->Modify();
+
     // Construct widget
     UWidget* NewWidget = WBP->WidgetTree->ConstructWidget<UWidget>(WidgetClass, WidgetFName);
     if (!NewWidget)
@@ -535,6 +539,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
         return FMonolithActionResult::Error(
             FString::Printf(TEXT("Failed to construct widget of class %s"), *WidgetClassName));
     }
+    NewWidget->Modify();
 
     // Add to parent.
     //
@@ -566,6 +571,7 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
         }
         return FMonolithActionResult::Error(TEXT("AddChild returned null slot"));
     }
+    Slot->Modify();
 
     // Configure canvas slot if applicable
     if (UCanvasPanelSlot* CSlot = Cast<UCanvasPanelSlot>(Slot))
@@ -676,7 +682,11 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
     MonolithUIInternal::RegisterCreatedWidget(WBP, NewWidget);
 
     // Mark modified
+    WBP->WidgetTree->Modify();
+    ParentPanel->Modify();
+    NewWidget->Modify();
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+    WBP->GetOutermost()->MarkPackageDirty();
 
     // Compile if requested
     const bool bCompile = MonolithUIInternal::GetOptionalBool(Params, TEXT("compile"), true);

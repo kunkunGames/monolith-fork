@@ -17,6 +17,8 @@
 #include "Dom/JsonValue.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Misc/PackageName.h"
+#include "UObject/SavePackage.h"
 #include "UObject/UnrealType.h"
 
 // LogMonolith declared in MonolithJsonUtils.h (MonolithCore)
@@ -73,6 +75,27 @@ namespace AudioBatchHelpers
 			}
 		}
 		return Result;
+	}
+
+	static bool SaveSoundAsset(USoundBase* Sound)
+	{
+		if (!Sound)
+		{
+			return false;
+		}
+
+		UPackage* Package = Sound->GetOutermost();
+		if (!Package)
+		{
+			return false;
+		}
+
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		return UPackage::SavePackage(Package, Sound, *PackageFilename, SaveArgs);
 	}
 
 	// Parse asset_paths from params — common to all batch actions
@@ -319,7 +342,13 @@ FMonolithActionResult FMonolithAudioBatchActions::BatchAssignSoundClass(const TS
 
 		Sound->Modify();
 		Sound->SoundClassObject = SoundClass;
+		Sound->PostEditChange();
 		Sound->MarkPackageDirty();
+		if (!SaveSoundAsset(Sound))
+		{
+			AddFailure(Failed, Path, TEXT("Failed to save after assigning SoundClass"));
+			continue;
+		}
 		Modified++;
 	}
 

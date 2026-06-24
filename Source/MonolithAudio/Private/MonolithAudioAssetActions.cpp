@@ -755,6 +755,8 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundAttenuation(const T
 		return FMonolithActionResult::Error(Error);
 	}
 
+	bool bSaved = true;
+
 	// Apply optional initial settings
 	const TSharedPtr<FJsonObject>* SettingsJson = nullptr;
 	if (Params->TryGetObjectField(TEXT("settings"), SettingsJson) && SettingsJson && SettingsJson->IsValid())
@@ -764,12 +766,30 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundAttenuation(const T
 		{
 			UE_LOG(LogMonolith, Warning, TEXT("create_sound_attenuation: partial settings error: %s"), *SetError);
 		}
+		Asset->PostEditChange();
 		Asset->GetPackage()->MarkPackageDirty();
+
+		UPackage* Package = Asset->GetOutermost();
+		bSaved = false;
+		if (Package)
+		{
+			const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+				Package->GetName(),
+				FPackageName::GetAssetPackageExtension());
+			FSavePackageArgs SaveArgs;
+			SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+			bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+		}
+		if (!bSaved)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save sound attenuation asset: %s"), *AssetPath));
+		}
 	}
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Asset->GetPathName());
 	Result->SetObjectField(TEXT("settings"), StructToJson(FSoundAttenuationSettings::StaticStruct(), &Asset->Attenuation));
+	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -825,9 +845,26 @@ FMonolithActionResult FMonolithAudioAssetActions::SetAttenuationSettings(const T
 	Asset->PostEditChange();
 	Asset->GetPackage()->MarkPackageDirty();
 
+	UPackage* Package = Asset->GetOutermost();
+	bool bSaved = false;
+	if (Package)
+	{
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+	}
+	if (!bSaved)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save sound attenuation asset: %s"), *AssetPath));
+	}
+
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Asset->GetPathName());
 	Result->SetObjectField(TEXT("settings"), StructToJson(FSoundAttenuationSettings::StaticStruct(), &Asset->Attenuation));
+	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1167,6 +1204,18 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 
 	Asset->GetPackage()->MarkPackageDirty();
 
+	UPackage* Package = Asset->GetOutermost();
+	bool bSaved = false;
+	if (Package)
+	{
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		bSaved = UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+	}
+
 	// Build result
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Asset->GetPathName());
@@ -1184,6 +1233,7 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 	Result->SetNumberField(TEXT("fade_in_time"), Asset->FadeInTime);
 	Result->SetNumberField(TEXT("duration"), Asset->Duration);
 	Result->SetNumberField(TEXT("fade_out_time"), Asset->FadeOutTime);
+	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }
 

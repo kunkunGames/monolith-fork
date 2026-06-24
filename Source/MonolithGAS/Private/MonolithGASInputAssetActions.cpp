@@ -14,6 +14,7 @@
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/SoftObjectPath.h"
 
 namespace
 {
@@ -176,6 +177,34 @@ namespace
 			OutError = FString::Printf(TEXT("InputMappingContext asset not found: %s"), *Path);
 		}
 		return Context;
+	}
+
+	template <typename AssetType>
+	AssetType* FindExistingInputAssetForCreate(const FString& ObjectPath, const TCHAR* ExpectedTypeName, FString& OutError)
+	{
+		if (AssetType* Existing = FindObject<AssetType>(nullptr, *ObjectPath))
+		{
+			return Existing;
+		}
+
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		const FAssetData ExistingAsset = AssetRegistry.GetAssetByObjectPath(FSoftObjectPath(ObjectPath));
+		if (!ExistingAsset.IsValid())
+		{
+			return nullptr;
+		}
+
+		UObject* LoadedObject = ExistingAsset.GetAsset();
+		if (AssetType* Existing = Cast<AssetType>(LoadedObject))
+		{
+			return Existing;
+		}
+
+		OutError = FString::Printf(
+			TEXT("Asset already exists at '%s' but is not a %s."),
+			*ObjectPath,
+			ExpectedTypeName);
+		return nullptr;
 	}
 
 	bool ParseKey(const FString& KeyName, FKey& OutKey, FString& OutError)
@@ -535,7 +564,11 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputAction(con
 
 	const FString PackagePath = NormalizeInputAssetPackagePath(AssetPath);
 	const FString ObjectPath = NormalizeObjectPath(PackagePath);
-	UInputAction* Action = LoadObject<UInputAction>(nullptr, *ObjectPath);
+	UInputAction* Action = FindExistingInputAssetForCreate<UInputAction>(ObjectPath, TEXT("InputAction"), Error);
+	if (!Error.IsEmpty())
+	{
+		return FMonolithActionResult::Error(Error);
+	}
 	if (Action && !bOverwrite)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("InputAction already exists: %s"), *AssetPath));
@@ -851,7 +884,11 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleCreateInputMappingCon
 
 	const FString PackagePath = NormalizeInputAssetPackagePath(AssetPath);
 	const FString ObjectPath = NormalizeObjectPath(PackagePath);
-	UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, *ObjectPath);
+	UInputMappingContext* Context = FindExistingInputAssetForCreate<UInputMappingContext>(ObjectPath, TEXT("InputMappingContext"), Error);
+	if (!Error.IsEmpty())
+	{
+		return FMonolithActionResult::Error(Error);
+	}
 	if (Context && !bOverwrite)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("InputMappingContext already exists: %s"), *AssetPath));

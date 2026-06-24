@@ -108,7 +108,10 @@ function Get-EditorServerCandidates {
         ForEach-Object { $cims[[int]$_.ProcessId] = $_.CommandLine }
     return @($procs | Where-Object {
             $cmd = $cims[$_.Id]
-            (-not $cmd) -or (-not ($cmd -match '(?i)(^|\s)-(game|server)(\s|$)'))
+            (-not $cmd) -or (
+                (-not ($cmd -match '(?i)(^|\s)-(game|server)(\s|$)')) -and
+                (-not ($cmd -match '(?i)bMcpServerEnabled\s*[:=]\s*False'))
+            )
         })
 }
 
@@ -146,6 +149,11 @@ if ($editorProcs.Count -gt 0 -and -not $ForceLaunch) {
 }
 else {
     Write-Output ("INFO launching {0}" -f $wrapper)
+    $headlessArgs = @(
+        '-ini:EditorPerProjectUserSettings:AssetEditorSubsystem:CleanShutdown=True',
+        '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.EditorLoadingSavingSettings]:RestoreOpenAssetTabsOnRestart=NeverRestore'
+    )
+    Write-Output ("INFO launch_overrides {0}" -f ($headlessArgs -join ' '))
     # The wrapper must get its own (hidden) console: the editor it backgrounds inherits
     # that console's stdio, so piping the wrapper here would block until the editor
     # exits, and sharing this script's console group would forward a later Ctrl/kill
@@ -153,7 +161,7 @@ else {
     # Start-Process -Wait) is used because Windows PowerShell 5.1's -Wait waits on the
     # whole descendant tree — including the backgrounded editor — while .NET
     # WaitForExit only waits on the wrapper process itself.
-    $wrapperProc = Start-Process -FilePath $wrapper -WorkingDirectory $hostRoot -WindowStyle Hidden -PassThru
+    $wrapperProc = Start-Process -FilePath $wrapper -ArgumentList $headlessArgs -WorkingDirectory $hostRoot -WindowStyle Hidden -PassThru
     if (-not $wrapperProc.WaitForExit(60000)) {
         Write-Output 'RESULT=WRAPPER_FAILED exit_code=timeout detail=RunHeadlessEditor.bat did not exit within 60s'
         exit 4

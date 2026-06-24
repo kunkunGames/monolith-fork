@@ -6,7 +6,7 @@ Measures Monolith MCP blueprint editing capability across 7 Blueprint types: Act
 
 | File | Purpose |
 |------|---------|
-| `tasks.jsonl` | 309 benchmark tasks across 10 categories |
+| `tasks.jsonl` | 362 benchmark tasks across 11 categories |
 | `manifest.json` | Benchmark metadata, score formula, weights, category counts |
 | `METRICS.md` | Metric definitions, weights, scoring policy, anti-gaming notes |
 | `RESULTS.md` | Benchmark results |
@@ -15,6 +15,29 @@ Measures Monolith MCP blueprint editing capability across 7 Blueprint types: Act
 
 ## Task Categories
 
+> **v5.3 (2026-06-25) — generative/import-pipeline asset-authoring expansion:** extends the
+> `asset_authoring` dimension to 53 create/edit/save/read-back chains. New coverage includes
+> ImageGen deterministic Texture2D provenance, ImageGen MSDF texture/material baking, Interchange
+> typed texture/audio import, Interchange StaticMesh import/reimport/export, and ModelGen
+> provenance StaticMesh import/collision editing, plus StaticMesh LOD screen-size quality metadata,
+> Material graph build/export, CommonUI text-block authoring, AnimMontage sections/slots,
+> AnimSequence curve/sync marker metadata, IK Rig/Retargeter metadata, SoundCue spec graphs,
+> batch audio template routing, Niagara HLSL module stack insertion, BehaviorTree spec-build,
+> BehaviorTree Task/Decorator/Service Blueprint assets, GAS Enhanced Input binding smoke,
+> parameterized Material Instance overrides, CommonUI input-action DataTables, GameplayEffect
+> template duplication, AIController perception config, HLODLayer config, static/dynamic Content
+> Browser collections, UWidgetAnimation v2 tracks, external generated-image import, and WorldGen
+> blockout-volume Blueprint setup.
+>
+> **v5.2 (2026-06-24) — high-ROI asset-authoring expansion:** expanded coverage to
+> Texture file import metadata, Font, StringTable CSV import, Material Functions, StaticMesh OBJ
+> import/collision, animation core assets, audio routing assets, Niagara Parameter Collections and
+> EffectTypes, EQS, Chooser Tables, and GAS GameplayAbility/Cue/TargetActor assets, while keeping the benchmark
+> project-content portable. MetaSound Source, StateTree creation, GeometryScript parametric mesh
+> candidates, Interchange skeletal/scene import, full retarget batches, ControlRig authoring, and
+> LevelSequence authoring are outside this representative suite until their live action, portable
+> benchmark fixture, and cleanup contracts are proven.
+>
 > **v5.1 (2026-06-18) — adversarial hardening + practical-coverage expansion:** closed the
 > scoring holes a reject-everything / read-only / no-op server could exploit and roughly doubled
 > executed coverage. (1) **`error_path`** now scores on the **offending identifier** (the unique
@@ -44,9 +67,10 @@ Measures Monolith MCP blueprint editing capability across 7 Blueprint types: Act
 | `edit_schema` | 46 | `monolith_discover` | Schema has `planning_signals` + `skill` AND no isError (strict) |
 | `workflow_execute` | 11 | `blueprint_query` | Executed multi-step chains run, compile clean, and read back their end state |
 | `edit_execute` | 113 | `blueprint_query` | Edit call succeeds AND its mutation is observable via read-back; creates run delete-first so the read-back proves THIS run; includes UMG, AnimBP, GAS, ActorComponent, Interface, component/property value, exec- and data-pin wiring, pin literals, and delete round-trips |
+| `asset_authoring` | 53 | mixed owner namespaces | Cross-domain UE assets are created, edited, saved through owning namespaces, then inspected/read back |
 | `error_path` | 20 | `blueprint_query` | Server returns a structured `isError` whose message references the **offending identifier** (transport crash = fail; generic-only error = fail) |
 | `duplicate_reject` | 11 | `blueprint_query` | First call CLEANLY creates the entity (delete-reset each run) AND a second identical `add_*` call returns a duplicate-specific `isError` |
-| `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch blueprint must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
+| `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
 
 ## Blueprint Types Tested
 
@@ -60,7 +84,7 @@ Measures Monolith MCP blueprint editing capability across 7 Blueprint types: Act
 | ActorComponent | component | `/Game/Benchmarks/BC_TestComponent` |
 | Interface | interface | `/Game/Benchmarks/BPI_TestInterface` |
 
-## Primary Score (v5.1)
+## Primary Score (v5.3)
 
 The weights live in the single `WEIGHTS` dict in `Scripts/blueprint_editing_benchmark.py` and
 are the only source of truth (consumed by the scorer, the manifest formula, the comparison
@@ -68,13 +92,14 @@ report, and the module docstring — they cannot drift apart). See `METRICS.md` 
 weights rationale and changelog.
 
 ```
-blueprint_editing_score = 0.31 * edit_execute_rate       (delete-first + read-back verified)
-                        + 0.12 * graph_read_rate
-                        + 0.12 * variable_read_rate
-                        + 0.10 * error_path_rate          (offending-identifier specific)
-                        + 0.10 * workflow_execute_rate    (executed end-to-end)
-                        + 0.08 * edit_schema_rate
-                        + 0.07 * duplicate_reject_rate    (clean-first-call gated)
+blueprint_editing_score = 0.27 * edit_execute_rate       (delete-first + read-back verified)
+                        + 0.10 * asset_authoring_rate    (cross-domain asset create/edit/save)
+                        + 0.11 * graph_read_rate
+                        + 0.11 * variable_read_rate
+                        + 0.09 * error_path_rate          (offending-identifier specific)
+                        + 0.09 * workflow_execute_rate    (executed end-to-end)
+                        + 0.07 * edit_schema_rate
+                        + 0.06 * duplicate_reject_rate    (clean-first-call gated)
                         + 0.05 * negative_compile_rate    (compiler-runs falsifiable)
                         + 0.03 * type_discovery_rate
                         + 0.02 * read_schema_rate
@@ -84,14 +109,15 @@ blueprint_editing_score = 0.31 * edit_execute_rate       (delete-first + read-ba
 
 | Metric | Weight | Direction | Scoring Policy |
 |--------|--------|-----------|----------------|
-| `edit_execute_rate` | 0.31 | higher is better | Strict + delete-first read-back. Creates run a leading remove so the read-back proves THIS run made the edit; `add_node` reads back the returned node id; `set_component_property` reads back the value; node-wiring chains execute `connect_pins` (exec AND data pins); compile slots require `error_count == 0`. A non-editing stub scores 0. |
-| `graph_read_rate` | 0.12 | higher is better | Strict. isError from server fails (asset-not-found is a real signal). |
-| `variable_read_rate` | 0.12 | higher is better | Strict. Same policy as graph_read; Interface fixture asserts its function stubs. |
-| `error_path_rate` | 0.10 | higher is better | Inverted + input-specific. The isError message must reference the **offending identifier**; a generic always-error server fails. Covers nonexistent inputs AND real precondition/value failures (create-on-existing, bad type/parent/node_type tokens). |
-| `workflow_execute_rate` | 0.10 | higher is better | Strict. An executed multi-step chain must run, compile clean, and read back its end state. Replaces existence-only `workflow_completeness`. |
-| `edit_schema_rate` | 0.08 | higher is better | Strict. isError on schema fetch fails the task. |
-| `duplicate_reject_rate` | 0.07 | higher is better | Inverted. First call must CLEANLY create (delete-reset each run); the second identical call must return a duplicate-specific isError. Catches silent-suffix/no-op handling that `edit_execute` cannot see. |
-| `negative_compile_rate` | 0.05 | higher is better | A deliberately broken scratch blueprint must be REPORTED as a real compile failure (`error_count>0`). Makes "compile is clean" falsifiable. |
+| `edit_execute_rate` | 0.27 | higher is better | Strict + delete-first read-back. Creates run a leading remove so the read-back proves THIS run made the edit; `add_node` reads back the returned node id; `set_component_property` reads back the value; node-wiring chains execute `connect_pins` (exec AND data pins); compile slots require `error_count == 0`. A non-editing stub scores 0. |
+| `asset_authoring_rate` | 0.10 | higher is better | Strict. Cross-domain UE asset chains must create/edit/save through owner namespaces and prove results through read-back/inspection. |
+| `graph_read_rate` | 0.11 | higher is better | Strict. isError from server fails (asset-not-found is a real signal). |
+| `variable_read_rate` | 0.11 | higher is better | Strict. Same policy as graph_read; Interface fixture asserts its function stubs. |
+| `error_path_rate` | 0.09 | higher is better | Inverted + input-specific. The isError message must reference the **offending identifier**; a generic always-error server fails. Covers nonexistent inputs AND real precondition/value failures (create-on-existing, bad type/parent/node_type tokens). |
+| `workflow_execute_rate` | 0.09 | higher is better | Strict. An executed multi-step chain must run, compile clean, and read back its end state. Replaces existence-only `workflow_completeness`. |
+| `edit_schema_rate` | 0.07 | higher is better | Strict. isError on schema fetch fails the task. |
+| `duplicate_reject_rate` | 0.06 | higher is better | Inverted. First call must CLEANLY create (delete-reset each run); the second identical call must return a duplicate-specific isError. Catches silent-suffix/no-op handling that `edit_execute` cannot see. |
+| `negative_compile_rate` | 0.05 | higher is better | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`). Makes "compile is clean" falsifiable. |
 | `type_discovery_rate` | 0.03 | higher is better | Valid non-error project search with ≥1 result; required-result queries target the benchmark's own fixtures (portable across projects). |
 | `read_schema_rate` | 0.02 | higher is better | Lenient. Only checks `planning_signals` and `skill` metadata fields. |
 
@@ -145,7 +171,8 @@ python Scripts\blueprint_editing_benchmark.py run `
   --mcp-url http://localhost:9316/mcp `
   --tasks Benchmarks\BlueprintEditing\tasks.jsonl `
   --label current `
-  --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\current
+  --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\current `
+  --jobs 4
 ```
 
 ## Compare
