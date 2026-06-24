@@ -25,6 +25,7 @@
 #include "UObject/UObjectGlobals.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "ScopedTransaction.h"
 
 #if WITH_CHOOSER
 // UChooserTable lives on the Chooser module public include path (Chooser.Build.cs
@@ -1968,26 +1969,62 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Unsupported function signature for a thread-safe call: %s"), *GuardError));
 	}
 
-	// --- 1) Ensure the thread-safe FUNCTION graph exists. (Reused verbatim from the chooser path.) ---
+	FScopedTransaction Transaction(NSLOCTEXT("MonolithAnimation", "BindThreadsafeUpdateFunction", "Bind Threadsafe Update Function"));
+	ABP->Modify();
 	UEdGraph* FuncGraph = nullptr;
+	bool bFuncCreated = false;
+	TArray<UEdGraphNode*> CreatedNodes;
+	UK2Node_FunctionEntry* EntryNode = nullptr;
+	bool bEntryThreadSafeCaptured = false;
+	bool bEntryThreadSafeBefore = false;
+	TFunction<FMonolithActionResult(const FString&)> FailAfterMutation = [&Transaction](const FString& Message)
+	{
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(Message);
+	};
+
+	// --- 1) Ensure the thread-safe FUNCTION graph exists. (Reused verbatim from the chooser path.) ---
 	for (UEdGraph* G : ABP->FunctionGraphs)
 	{
 		if (G && G->GetName() == FuncGraphName) { FuncGraph = G; break; }
 	}
-	bool bFuncCreated = false;
 	if (!FuncGraph)
 	{
 		FuncGraph = FBlueprintEditorUtils::CreateNewGraph(
 			ABP, FName(*FuncGraphName), UEdGraph::StaticClass(), UEdGraphSchema_K2::StaticClass());
 		if (!FuncGraph)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create function graph: %s"), *FuncGraphName));
+			return FailAfterMutation(FString::Printf(TEXT("Failed to create function graph: %s"), *FuncGraphName));
 		}
 		FBlueprintEditorUtils::AddFunctionGraph<UClass>(ABP, FuncGraph, /*bIsUserCreated=*/true, /*SignatureFromObject=*/(UClass*)nullptr);
 		bFuncCreated = true;
 	}
 
-	UK2Node_FunctionEntry* EntryNode = nullptr;
+	FailAfterMutation = [&Transaction, &CreatedNodes, ABP, &FuncGraph, &bFuncCreated, &EntryNode, &bEntryThreadSafeCaptured, &bEntryThreadSafeBefore](const FString& Message)
+	{
+		for (int32 Index = CreatedNodes.Num() - 1; Index >= 0; --Index)
+		{
+			if (UEdGraphNode* Node = CreatedNodes[Index])
+			{
+				FBlueprintEditorUtils::RemoveNode(ABP, Node, /*bDontRecompile=*/true);
+			}
+		}
+		CreatedNodes.Reset();
+		if (bEntryThreadSafeCaptured && EntryNode)
+		{
+			EntryNode->Modify();
+			EntryNode->MetaData.bThreadSafe = bEntryThreadSafeBefore;
+		}
+		if (bFuncCreated && FuncGraph)
+		{
+			FBlueprintEditorUtils::RemoveGraph(ABP, FuncGraph, EGraphRemoveFlags::Recompile);
+			FuncGraph = nullptr;
+			bFuncCreated = false;
+		}
+		Transaction.Cancel();
+		return FMonolithActionResult::Error(Message);
+	};
+
 	for (UEdGraphNode* Node : FuncGraph->Nodes)
 	{
 		EntryNode = Cast<UK2Node_FunctionEntry>(Node);
@@ -1995,15 +2032,18 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	}
 	if (!EntryNode)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("No function entry node in graph '%s'"), *FuncGraphName));
+		return FailAfterMutation(FString::Printf(TEXT("No function entry node in graph '%s'"), *FuncGraphName));
 	}
 	EntryNode->Modify();
+	bEntryThreadSafeBefore = EntryNode->MetaData.bThreadSafe;
+	bEntryThreadSafeCaptured = true;
 	EntryNode->MetaData.bThreadSafe = true;
 
 	// --- 2) Spawn the UK2Node_CallFunction and bind it via SetFromFunction (DIVERGENCE from chooser:
 	//        the reflective EvaluateChooser2 spawn is replaced by a standard CallFunction node). ---
 	UK2Node_CallFunction* CallNode = NewObject<UK2Node_CallFunction>(FuncGraph);
 	FuncGraph->AddNode(CallNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	CreatedNodes.Add(CallNode);
 	CallNode->CreateNewGuid();
 	CallNode->NodePosX = 300;
 	CallNode->NodePosY = 0;
@@ -2011,7 +2051,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	CallNode->AllocateDefaultPins();
 
 	const UEdGraphSchema* Schema = FuncGraph->GetSchema();
-	if (!Schema) return FMonolithActionResult::Error(TEXT("Function graph has no schema"));
+	if (!Schema) return FailAfterMutation(TEXT("Function graph has no schema"));
 
 	// --- 3) Wire FunctionEntry exec -> call node exec input. ---
 	int32 Wired = 0;
@@ -2028,6 +2068,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	{
 		UK2Node_Self* SelfNode = NewObject<UK2Node_Self>(FuncGraph);
 		FuncGraph->AddNode(SelfNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+		CreatedNodes.Add(SelfNode);
 		SelfNode->CreateNewGuid();
 		SelfNode->NodePosX = 100;
 		SelfNode->NodePosY = 150;
@@ -2061,24 +2102,24 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 			const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
 			if (!V->TryGetObject(EntryPtr) || !EntryPtr)
 			{
-				return FMonolithActionResult::Error(TEXT("each arg_bindings entry must be an object { pin, value } or { pin, self }"));
+				return FailAfterMutation(TEXT("each arg_bindings entry must be an object { pin, value } or { pin, self }"));
 			}
 			const TSharedPtr<FJsonObject>& Entry = *EntryPtr;
 			FString PinName;
 			Entry->TryGetStringField(TEXT("pin"), PinName);
 			if (PinName.IsEmpty())
 			{
-				return FMonolithActionResult::Error(TEXT("arg_bindings entry missing required 'pin'"));
+				return FailAfterMutation(TEXT("arg_bindings entry missing required 'pin'"));
 			}
 			UEdGraphPin* InPin = FindPinByNameDir(CallNode, FName(*PinName), EGPD_Input);
 			if (!InPin)
 			{
-				return FMonolithActionResult::Error(FString::Printf(
+				return FailAfterMutation(FString::Printf(
 					TEXT("arg_bindings pin '%s' is not an input pin on the call node '%s' — reject rather than mis-wire"), *PinName, *FuncMethodName));
 			}
 			if (InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
 			{
-				return FMonolithActionResult::Error(FString::Printf(TEXT("arg_bindings pin '%s' is an exec pin — only data input pins are bindable"), *PinName));
+				return FailAfterMutation(FString::Printf(TEXT("arg_bindings pin '%s' is an exec pin — only data input pins are bindable"), *PinName));
 			}
 
 			bool bWantSelf = false;
@@ -2088,11 +2129,12 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 				if (InPin->PinType.PinCategory != UEdGraphSchema_K2::PC_Object &&
 					InPin->PinType.PinCategory != UEdGraphSchema_K2::PC_Interface)
 				{
-					return FMonolithActionResult::Error(FString::Printf(
+					return FailAfterMutation(FString::Printf(
 						TEXT("arg_bindings pin '%s' has self:true but is not an object/interface pin — cannot wire Self"), *PinName));
 				}
 				UK2Node_Self* ArgSelf = NewObject<UK2Node_Self>(FuncGraph);
 				FuncGraph->AddNode(ArgSelf, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+				CreatedNodes.Add(ArgSelf);
 				ArgSelf->CreateNewGuid();
 				ArgSelf->NodePosX = 100;
 				ArgSelf->NodePosY = 300;
@@ -2104,7 +2146,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 				}
 				if (!ArgSelfOut || !Schema->TryCreateConnection(ArgSelfOut, InPin))
 				{
-					return FMonolithActionResult::Error(FString::Printf(TEXT("failed to wire Self into arg pin '%s'"), *PinName));
+					return FailAfterMutation(FString::Printf(TEXT("failed to wire Self into arg pin '%s'"), *PinName));
 				}
 				++Wired;
 			}
@@ -2113,7 +2155,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 				FString LiteralValue;
 				if (!Entry->TryGetStringField(TEXT("value"), LiteralValue))
 				{
-					return FMonolithActionResult::Error(FString::Printf(
+					return FailAfterMutation(FString::Printf(
 						TEXT("arg_bindings pin '%s' has neither a 'value' literal nor 'self:true' — v1a binds literal defaults or self only"), *PinName));
 				}
 				// Literal default: only settable on a non-object data pin (object pins need a wire, not a default).
@@ -2121,13 +2163,13 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 					InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Interface ||
 					InPin->PinType.PinCategory == UEdGraphSchema_K2::PC_Struct)
 				{
-					return FMonolithActionResult::Error(FString::Printf(
+					return FailAfterMutation(FString::Printf(
 						TEXT("arg_bindings pin '%s' is an object/struct pin; v1a sets literal defaults only on scalar/string/enum pins (object inputs require a wire — use self:true or defer to v1b)"), *PinName));
 				}
 				Schema->TrySetDefaultValue(*InPin, LiteralValue);
 				if (InPin->DefaultValue != LiteralValue && InPin->DefaultTextValue.ToString() != LiteralValue)
 				{
-					return FMonolithActionResult::Error(FString::Printf(
+					return FailAfterMutation(FString::Printf(
 						TEXT("arg_bindings literal '%s' was rejected by pin '%s' (incompatible value for its type) — rejecting rather than mis-wiring"), *LiteralValue, *PinName));
 				}
 			}
@@ -2151,12 +2193,12 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	}
 	if (OutputDataPins == 0)
 	{
-		return FMonolithActionResult::Error(FString::Printf(
+		return FailAfterMutation(FString::Printf(
 			TEXT("function '%s' has no non-exec output pin to route into result_target.var — v1a requires a single result output"), *FuncMethodName));
 	}
 	if (OutputDataPins > 1)
 	{
-		return FMonolithActionResult::Error(FString::Printf(
+		return FailAfterMutation(FString::Printf(
 			TEXT("function '%s' has %d output pins; v1a supports a single result output only (multi-output binding is a v1b follow-on)"), *FuncMethodName, OutputDataPins));
 	}
 
@@ -2165,6 +2207,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	UK2Node_VariableSet* SetNode = NewObject<UK2Node_VariableSet>(FuncGraph);
 	SetNode->VariableReference.SetSelfMember(FName(*ResultVar));
 	FuncGraph->AddNode(SetNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+	CreatedNodes.Add(SetNode);
 	SetNode->CreateNewGuid();
 	SetNode->NodePosX = 600;
 	SetNode->NodePosY = 0;
@@ -2181,7 +2224,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 	}
 	if (!SetValuePin)
 	{
-		return FMonolithActionResult::Error(FString::Printf(
+		return FailAfterMutation(FString::Printf(
 			TEXT("VariableSet for '%s' has no value input pin — does the variable exist on the ABP?"), *ResultVar));
 	}
 	bool bResultWired = false;
@@ -2189,7 +2232,7 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 		const FPinConnectionResponse Resp = Schema->CanCreateConnection(ResultPin, SetValuePin);
 		if (Resp.Response == CONNECT_RESPONSE_DISALLOW)
 		{
-			return FMonolithActionResult::Error(FString::Printf(
+			return FailAfterMutation(FString::Printf(
 				TEXT("call result pin (type '%s') is incompatible with variable '%s': %s — reject rather than mis-wire"),
 				*ResultPin->PinType.PinCategory.ToString(), *ResultVar, *Resp.Message.ToString()));
 		}
@@ -2211,24 +2254,25 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 		UEdGraph* AnimGraph = ResolveGraphByName(ABP, AnimGraphName, GraphErr);
 		if (!AnimGraph)
 		{
-			return FMonolithActionResult::Error(GraphErr);
+			return FailAfterMutation(GraphErr);
 		}
 		UEdGraphNode* TargetNode = FindNodeByNameBP(ABP, TargetNodeRef, AnimGraph);
 		if (!TargetNode)
 		{
-			return FMonolithActionResult::Error(FString::Printf(
+			return FailAfterMutation(FString::Printf(
 				TEXT("result_target.node '%s' not found in graph '%s'"), *TargetNodeRef, *AnimGraphName));
 		}
 		UEdGraphPin* TargetPin = FindPinByNameDir(TargetNode, FName(*TargetPinName), EGPD_Input);
 		if (!TargetPin)
 		{
-			return FMonolithActionResult::Error(FString::Printf(
+			return FailAfterMutation(FString::Printf(
 				TEXT("result_target.pin '%s' is not an input pin on node '%s'"), *TargetPinName, *TargetNodeRef));
 		}
 
 		UK2Node_VariableGet* GetNode = NewObject<UK2Node_VariableGet>(AnimGraph);
 		GetNode->VariableReference.SetSelfMember(FName(*ResultVar));
 		AnimGraph->AddNode(GetNode, /*bUserAction=*/false, /*bSelectNewNode=*/false);
+		CreatedNodes.Add(GetNode);
 		GetNode->CreateNewGuid();
 		GetNode->NodePosX = TargetNode->NodePosX - 250;
 		GetNode->NodePosY = TargetNode->NodePosY;

@@ -19,6 +19,7 @@
 #include "MonolithBlueprintEditCradle.h"
 #include "UObject/SavePackage.h"
 #include "UObject/Package.h"
+#include "UObject/UObjectGlobals.h"
 #include "Misc/PackageName.h"
 
 // Forward declaration of Phase 1 handlers (defined at bottom of file).
@@ -586,6 +587,47 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetPropertyAtPath(cons
 			Result.Result->SetStringField(TEXT("resolved_leaf_type"), Resolved.LeafTypeName);
 		}
 		return Result;
+	}
+
+	if (bCreateMissingKeys)
+	{
+		const FMonolithReflectionWalker::FPathResolveResult NoCreateResolved =
+			FMonolithReflectionWalker::ResolvePath(TargetClass, TargetObject, Path, /*bCreateMissingKeys=*/false);
+		if (NoCreateResolved.bTraversedObjectReference && !NoCreateResolved.bOk)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("create_missing_keys cannot safely validate path '%s' because the path descends through a UObject reference before a missing container key; target the referenced object directly"),
+				*Path));
+		}
+
+		UObject* ValidationObject = StaticDuplicateObject(TargetObject, GetTransientPackage());
+		if (!ValidationObject)
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to create transient validation copy before creating missing map keys"));
+		}
+
+		FMonolithReflectionWalker::FPathResolveResult ValidationResolved =
+			FMonolithReflectionWalker::ResolvePath(TargetClass, ValidationObject, Path, /*bCreateMissingKeys=*/true);
+		if (!ValidationResolved.bOk)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("path '%s' did not resolve during create_missing_keys validation: %s"), *Path, *ValidationResolved.Error));
+		}
+
+		FDryRunReport ValidationReport;
+		ValidationReport.bWouldApply = false;
+		void* ValidationScratch = FMemory::Malloc(ValidationResolved.LeafProp->GetSize(), ValidationResolved.LeafProp->GetMinAlignment());
+		ValidationResolved.LeafProp->InitializeValue(ValidationScratch);
+		const FBulkFillFieldWrite ValidationWrite = FMonolithReflectionWalker::WriteLeaf(
+			ValidationResolved.LeafProp, ValidationScratch, JsonVal, nullptr, Spec, ValidationReport, Path);
+		ValidationResolved.LeafProp->DestroyValue(ValidationScratch);
+		FMemory::Free(ValidationScratch);
+		if (!ValidationWrite.bOk)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("write to '%s' (leaf type %s) failed validation before creating missing map keys: %s"),
+				*Path, *ValidationResolved.LeafTypeName, *ValidationWrite.Reason));
+		}
 	}
 
 	// --- Engine edit cradle (matches set_cdo_property / Details-panel write path).

@@ -552,15 +552,8 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 			continue;
 		}
 
-		// Create the bone-setting entry if it doesn't exist yet.
-		if (!bAlreadyHasSetting)
-		{
-			Controller->AddBoneSetting(BoneName, SolverIndex);
-		}
-
 		const UScriptStruct* ConcreteType = Solver->GetBoneSettingsType();
-		FIKRigBoneSettingsBase* Settings = Solver->GetBoneSettings(BoneName);
-		if (!ConcreteType || !Settings)
+		if (!ConcreteType)
 		{
 			if (bHasSolverIndex)
 			{
@@ -572,8 +565,12 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 			continue;
 		}
 
-		// Walk the requested fields, writing each reflectively onto the live
-		// concrete struct. Per-field outcomes are echoed.
+		struct FPreparedBoneSettingField
+		{
+			FProperty* Prop = nullptr;
+			FString ImportText;
+		};
+		TArray<FPreparedBoneSettingField> PreparedFields;
 		TArray<TSharedPtr<FJsonValue>> AppliedFields;
 		TArray<TSharedPtr<FJsonValue>> FailedFields;
 
@@ -632,8 +629,11 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 				ValStr = FieldVal->AsString();
 			}
 
-			void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(Settings);
-			const TCHAR* ImportResult = Prop->ImportText_Direct(*ValStr, ValuePtr, IkRig, PPF_None);
+			void* Scratch = FMemory::Malloc(Prop->GetSize(), Prop->GetMinAlignment());
+			Prop->InitializeValue(Scratch);
+			const TCHAR* ImportResult = Prop->ImportText_Direct(*ValStr, Scratch, IkRig, PPF_None);
+			Prop->DestroyValue(Scratch);
+			FMemory::Free(Scratch);
 			if (!ImportResult)
 			{
 				AddFailure(FString::Printf(
@@ -642,11 +642,61 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 				continue;
 			}
 
-			// Read back the accepted value for the echo (reflective round-trip).
+			FPreparedBoneSettingField Prepared;
+			Prepared.Prop = Prop;
+			Prepared.ImportText = ValStr;
+			PreparedFields.Add(Prepared);
+		}
+
+		if (PreparedFields.Num() == 0)
+		{
+			TSharedPtr<FJsonObject> SolverObj = MakeShared<FJsonObject>();
+			SolverObj->SetNumberField(TEXT("solver_index"), SolverIndex);
+			SolverObj->SetStringField(TEXT("solver_type"), SolverDisplayName(ConcreteType));
+			SolverObj->SetStringField(TEXT("bone_settings_struct"), ConcreteType->GetName());
+			SolverObj->SetArrayField(TEXT("applied"), AppliedFields);
+			if (FailedFields.Num() > 0)
+			{
+				SolverObj->SetArrayField(TEXT("failed"), FailedFields);
+			}
+			SolverResults.Add(MakeShared<FJsonValueObject>(SolverObj));
+			continue;
+		}
+
+		// Create the bone-setting entry only after at least one requested field
+		// proved importable. This avoids dirtying the IK Rig with empty settings
+		// when every field is unknown or invalid.
+		if (!bAlreadyHasSetting)
+		{
+			Controller->AddBoneSetting(BoneName, SolverIndex);
+		}
+
+		FIKRigBoneSettingsBase* Settings = Solver->GetBoneSettings(BoneName);
+		if (!Settings)
+		{
+			if (bHasSolverIndex)
+			{
+				GEditor->EndTransaction();
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Failed to create bone-settings struct for bone '%s' in solver %d."),
+					*BoneNameStr, SolverIndex));
+			}
+			continue;
+		}
+
+		for (const FPreparedBoneSettingField& Prepared : PreparedFields)
+		{
+			void* ValuePtr = Prepared.Prop->ContainerPtrToValuePtr<void>(Settings);
+			const TCHAR* ImportResult = Prepared.Prop->ImportText_Direct(*Prepared.ImportText, ValuePtr, IkRig, PPF_None);
+			if (!ImportResult)
+			{
+				continue;
+			}
+
 			TSharedPtr<FJsonObject> AppliedObj = MakeShared<FJsonObject>();
-			AppliedObj->SetStringField(TEXT("field"), Prop->GetName());
+			AppliedObj->SetStringField(TEXT("field"), Prepared.Prop->GetName());
 			AppliedObj->SetField(TEXT("value"),
-				FMonolithReflectionReader::PropertyToJsonValue(Prop, ValuePtr, IkRig));
+				FMonolithReflectionReader::PropertyToJsonValue(Prepared.Prop, ValuePtr, IkRig));
 			AppliedFields.Add(MakeShared<FJsonValueObject>(AppliedObj));
 		}
 
@@ -660,7 +710,10 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 			SolverObj->SetArrayField(TEXT("failed"), FailedFields);
 		}
 		SolverResults.Add(MakeShared<FJsonValueObject>(SolverObj));
-		++SolversTouched;
+		if (AppliedFields.Num() > 0)
+		{
+			++SolversTouched;
+		}
 	}
 
 	GEditor->EndTransaction();

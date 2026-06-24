@@ -30,7 +30,7 @@ bool FMonolithWaterListBodiesParamGuardTest::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("limit"), TEXT("not_a_number"));
 		const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("water"), TEXT("list_bodies"), Params);
 		TestFalse(TEXT("Should fail with invalid limit type"), Result.bSuccess);
-		TestTrue(TEXT("Error should mention limit"), Result.Error.Contains(TEXT("limit must be a number")));
+		TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit must be a number")));
 	}
 
 	// Test 2: Invalid actor_name_filter type
@@ -39,7 +39,7 @@ bool FMonolithWaterListBodiesParamGuardTest::RunTest(const FString& Parameters)
 		Params->SetBoolField(TEXT("actor_name_filter"), true);
 		const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("water"), TEXT("list_bodies"), Params);
 		TestFalse(TEXT("Should fail with invalid actor_name_filter type"), Result.bSuccess);
-		TestTrue(TEXT("Error should mention actor_name_filter"), Result.Error.Contains(TEXT("actor_name_filter must be a string")));
+		TestTrue(TEXT("Error should mention actor_name_filter"), Result.ErrorMessage.Contains(TEXT("actor_name_filter must be a string")));
 	}
 
 	return true;

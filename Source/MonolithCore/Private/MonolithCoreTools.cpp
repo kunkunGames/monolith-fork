@@ -1042,6 +1042,13 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("action"), TEXT("string"), TEXT("Optional: filter to one action inside namespace. Implies mode='schema' when mode is omitted."))
 				.Optional(TEXT("category"), TEXT("string"), TEXT("Optional: filter actions within the namespace by category (e.g. 'CommonUI' inside 'ui')"))
 				.Optional(TEXT("mode"), TEXT("string"), TEXT("summary for namespace counts, actions for namespace action rows, schema for action param schemas."), TEXT("summary"))
+				.Optional(TEXT("detail"), TEXT("boolean"), TEXT("When true, inline each action's full param schema in namespace action listings."), TEXT("false"))
+				.Optional(TEXT("verbose"), TEXT("boolean"), TEXT("Alias for detail=true, kept for older clients."), TEXT("false"))
+				.Optional(TEXT("filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter over action name or description."))
+				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter. Only used when limit > 0."), TEXT("0"))
+				.Range(TEXT("offset"), 0, 1000000)
+				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. 0 means return every post-filter action."), TEXT("0"))
+				.Range(TEXT("limit"), 0, 1000000)
 				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 				.Build()
 		);
@@ -1642,6 +1649,10 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	if (!FilterAction.IsEmpty() && FilterNamespace.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Parameter 'action' requires 'namespace'"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Mode == TEXT("schema") && FilterAction.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'mode=schema' requires both 'namespace' and 'action'. Use detail=true for full namespace schemas."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();

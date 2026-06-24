@@ -243,7 +243,7 @@ Monolith.uplugin
 - **`monolith_proxy.exe`** — MCP stdio↔HTTP proxy. Keeps your AI session alive across editor restarts. Used by the `.mcp.json` config above.
 - **`monolith_query.exe`** — Offline query tool. Serves the engine source index, project asset index, and the full Reflection Intelligence surface (`decision` / `risk` / `cppreflect` / `network`) without launching UE — byte-identical to the live server, verified by a ship-blocking parity guard. Instant startup; useful for terminal-side lookups and CI when the editor is down.
 
-**1,914 in-tree actions across 62 namespaces** (v0.20.2 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
+**1,914 in-tree actions across 62 namespaces** (v0.20.3 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
 
 ### Tool Reference
 
@@ -280,7 +280,7 @@ Monolith.uplugin
 
 ## Auto-updater
 
-Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, verifies the downloaded zip's SHA256 against the platform-specific release notes marker (`Monolith-SHA256:`, `Monolith-macOS-SHA256:`, or `Monolith-Linux-SHA256:`) if present (otherwise warns and proceeds), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
+Off by default as of v0.14.6. Opt in via **Auto Update Enabled** in Editor Preferences > Plugins > Monolith — checks GitHub Releases on editor startup, selects the matching per-engine asset, verifies the downloaded zip's SHA256 against `Monolith-SHA256-UE5.7:` / `Monolith-SHA256-UE5.8:` when present (legacy `Monolith-SHA256:` remains accepted; otherwise warns and proceeds), swaps the plugin on editor exit (after a Y/N prompt). See [Auto-Updater wiki](https://github.com/tumourlove/monolith/wiki/Auto-Updater).
 
 ---
 

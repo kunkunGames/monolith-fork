@@ -80,6 +80,7 @@ public:
 		FProperty* LeafProp = nullptr;  // Terminal FProperty to write through.
 		void* LeafPtr = nullptr;        // Address of the terminal value inside Container.
 		FString LeafTypeName;           // LeafProp->GetCPPType() — echoed back to the caller.
+		bool bTraversedObjectReference = false; // True if the path dereferenced a UObject property before the leaf.
 	};
 
 	/**

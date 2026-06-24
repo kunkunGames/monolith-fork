@@ -63,6 +63,19 @@ namespace MonolithDiscoverTerseTestDetail
 		return FMonolithToolRegistry::Get().GetActions(TEXT("monolith")).Num();
 	}
 
+	/** Registered schema for monolith.discover, or nullptr if the action is unexpectedly absent. */
+	static TSharedPtr<FJsonObject> DiscoverSchema()
+	{
+		for (const FMonolithActionInfo& Info : FMonolithToolRegistry::Get().GetActions(TEXT("monolith")))
+		{
+			if (Info.Action == TEXT("discover"))
+			{
+				return Info.ParamSchema;
+			}
+		}
+		return nullptr;
+	}
+
 	/** Pull the `actions` array out of a successful discover result, or null. */
 	static const TArray<TSharedPtr<FJsonValue>>* GetActionsArray(const FMonolithActionResult& R)
 	{
@@ -497,6 +510,72 @@ bool FMonolithDiscoverUnknownNamespaceTest::RunTest(const FString& /*Parameters*
 	{
 		TestTrue(TEXT("error mentions the unknown namespace"),
 			R.ErrorMessage.Contains(TEXT("Unknown namespace")));
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: registered schema covers every terse-discover param the handler reads.
+// This catches strict-param regressions where implementation accepts an option
+// but tools/list and STRICT_PARAMS=1 do not know about it.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverRegisteredSchemaCoversTerseParamsTest,
+	"Monolith.Discover.Terse.RegisteredSchemaCoversParams",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverRegisteredSchemaCoversTerseParamsTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	const TSharedPtr<FJsonObject> Schema = DiscoverSchema();
+	TestTrue(TEXT("discover action has a registered param schema"), Schema.IsValid());
+	if (!Schema.IsValid())
+	{
+		return true;
+	}
+
+	const TCHAR* ExpectedParams[] = {
+		TEXT("namespace"),
+		TEXT("action"),
+		TEXT("category"),
+		TEXT("mode"),
+		TEXT("detail"),
+		TEXT("verbose"),
+		TEXT("filter"),
+		TEXT("offset"),
+		TEXT("limit")
+	};
+	for (const TCHAR* ParamName : ExpectedParams)
+	{
+		TestTrue(FString::Printf(TEXT("discover schema declares %s"), ParamName), Schema->HasField(ParamName));
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 10: schema mode must target one action. Namespace-wide schema inlining is
+// detail=true; mode=schema without action used to return terse rows while echoing
+// mode=schema, which is ambiguous for clients.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverSchemaModeRequiresActionTest,
+	"Monolith.Discover.Terse.SchemaModeRequiresAction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverSchemaModeRequiresActionTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+	Params->SetStringField(TEXT("mode"), TEXT("schema"));
+
+	const FMonolithActionResult R = Discover(Params);
+	TestFalse(TEXT("mode=schema without action errors"), R.bSuccess);
+	if (!R.bSuccess)
+	{
+		TestTrue(TEXT("error explains action requirement"), R.ErrorMessage.Contains(TEXT("action")));
 	}
 	return true;
 }

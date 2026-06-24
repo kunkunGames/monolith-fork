@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **CL902 merge hardening** — Tightened several high-risk merge seams before release: `monolith.discover`'s registered schema now includes every implemented terse/pagination parameter and rejects `mode=schema` without an action, `blueprint.set_property_at_path` preflights missing-map-key writes on a transient duplicate before mutating the live CDO, animation mutators now reject invalid/no-op input before dirtying assets where practical, animation docs now reflect the current ~210-action surface, and the release smoke test now fails when an enabled plugin module is missing its shipped Win64 DLL.
 - **Optional-plugin detection no longer false-positives on plugins sharing a name prefix** (e.g. `BlueprintRetarget` was wrongly detected as BlueprintAssist, hard-linking an absent module and breaking the user's build). Tightened the disk-presence globs in MonolithBABridge/MonolithGAS/MonolithLogicDriver/MonolithComboGraph from truncated prefixes (`Blueprin*`, `Gameplaya*`, `LogicDri*`, `ComboGra*`) to full plugin names (`BlueprintAssist*`, `GameplayAbilities*`, `LogicDriver*`, `ComboGraph*`); the trailing `*` still matches versioned install folders. Reported by @k-s-s (#66).
 
 ## [0.20.3] - 2026-06-20

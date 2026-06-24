@@ -8893,11 +8893,12 @@ FMonolithActionResult FMonolithMaterialActions::CreatePbrMaterialFromDisk(const 
 		return FMonolithActionResult::Error(ErrorMsg_TextureFolder, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	TSharedPtr<FJsonObject> MapsObj;
-	FString ErrorMsg_Maps;
-	if (!MonolithParamUtils::GetRequiredObjectParam(Params, TEXT("maps"), MapsObj, ErrorMsg_Maps))
+	const TSharedPtr<FJsonObject>* MapsObjPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("maps"), MapsObjPtr) || !MapsObjPtr || !MapsObjPtr->IsValid())
 	{
-		return FMonolithActionResult::Error(ErrorMsg_Maps, FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(TEXT("Parameter 'maps' must be an object"), FMonolithJsonUtils::ErrInvalidParams);
 	}
+	MapsObj = *MapsObjPtr;
 
 	if (MapsObj->Values.Num() == 0)
 	{

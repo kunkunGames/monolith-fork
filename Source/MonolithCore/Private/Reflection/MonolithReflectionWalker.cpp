@@ -361,6 +361,7 @@ FMonolithReflectionWalker::FPathResolveResult FMonolithReflectionWalker::Resolve
 		}
 		if (FObjectPropertyBase* ObjProp = CastField<FObjectPropertyBase>(ResolvedProp))
 		{
+			Result.bTraversedObjectReference = true;
 			UObject* Pointee = ObjProp->GetObjectPropertyValue(ResolvedPtr);
 			if (!Pointee)
 			{

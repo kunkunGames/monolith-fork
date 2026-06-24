@@ -51,16 +51,20 @@ namespace
 		return false;
 	}
 
-	/** Read a side param ("source"|"target") with a default. */
-	ERetargetSourceOrTarget ReadSide(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, ERetargetSourceOrTarget Default)
+	/** Read a side param ("source"|"target") with a default; reject invalid explicit values. */
+	bool TryReadSide(const TSharedPtr<FJsonObject>& Params, const TCHAR* Key, ERetargetSourceOrTarget Default, ERetargetSourceOrTarget& Out, FString& OutError)
 	{
 		FString SideStr;
-		ERetargetSourceOrTarget Side = Default;
+		Out = Default;
 		if (Params->TryGetStringField(Key, SideStr))
 		{
-			ParseSourceOrTarget(SideStr, Side);
+			if (!ParseSourceOrTarget(SideStr, Out))
+			{
+				OutError = FString::Printf(TEXT("Parameter '%s' must be 'source' or 'target'; got '%s'"), Key, *SideStr);
+				return false;
+			}
 		}
-		return Side;
+		return true;
 	}
 
 	const TCHAR* SideToString(ERetargetSourceOrTarget Side)
@@ -121,9 +125,12 @@ namespace
 	{
 		if (!Obj.IsValid()) { return false; }
 		double X = 0.0, Y = 0.0, Z = 0.0;
-		Obj->TryGetNumberField(TEXT("x"), X);
-		Obj->TryGetNumberField(TEXT("y"), Y);
-		Obj->TryGetNumberField(TEXT("z"), Z);
+		if (!Obj->TryGetNumberField(TEXT("x"), X) ||
+			!Obj->TryGetNumberField(TEXT("y"), Y) ||
+			!Obj->TryGetNumberField(TEXT("z"), Z))
+		{
+			return false;
+		}
 		Out = FVector(X, Y, Z);
 		return true;
 	}
@@ -159,10 +166,13 @@ namespace
 		if (bHasQuat)
 		{
 			double X = 0.0, Y = 0.0, Z = 0.0, W = 1.0;
-			Obj->TryGetNumberField(TEXT("x"), X);
-			Obj->TryGetNumberField(TEXT("y"), Y);
-			Obj->TryGetNumberField(TEXT("z"), Z);
-			Obj->TryGetNumberField(TEXT("w"), W);
+			if (!Obj->TryGetNumberField(TEXT("x"), X) ||
+				!Obj->TryGetNumberField(TEXT("y"), Y) ||
+				!Obj->TryGetNumberField(TEXT("z"), Z) ||
+				!Obj->TryGetNumberField(TEXT("w"), W))
+			{
+				return false;
+			}
 			Out = FQuat(X, Y, Z, W);
 			Out.Normalize();
 			return true;
@@ -173,9 +183,12 @@ namespace
 		if (bHasEuler)
 		{
 			double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
-			Obj->TryGetNumberField(TEXT("pitch"), Pitch);
-			Obj->TryGetNumberField(TEXT("yaw"), Yaw);
-			Obj->TryGetNumberField(TEXT("roll"), Roll);
+			if (!Obj->TryGetNumberField(TEXT("pitch"), Pitch) ||
+				!Obj->TryGetNumberField(TEXT("yaw"), Yaw) ||
+				!Obj->TryGetNumberField(TEXT("roll"), Roll))
+			{
+				return false;
+			}
 			Out = FRotator(Pitch, Yaw, Roll).Quaternion();
 			return true;
 		}
@@ -340,7 +353,12 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleGetRetargetPose(co
 	UIKRetargeterController* Controller = ResolveRetargeterController(AssetPath, Error);
 	if (!Controller) { return FMonolithActionResult::Error(Error); }
 
-	const ERetargetSourceOrTarget Side = ReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target);
+	ERetargetSourceOrTarget Side = ERetargetSourceOrTarget::Target;
+	FString SideError;
+	if (!TryReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target, Side, SideError))
+	{
+		return FMonolithActionResult::Error(SideError);
+	}
 
 	const FName PoseName = Controller->GetCurrentRetargetPoseName(Side);
 	const FIKRetargetPose& Pose = Controller->GetCurrentRetargetPose(Side);
@@ -391,7 +409,12 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetPose(co
 	UIKRetargeterController* Controller = ResolveRetargeterController(AssetPath, Error);
 	if (!Controller) { return FMonolithActionResult::Error(Error); }
 
-	const ERetargetSourceOrTarget Side = ReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target);
+	ERetargetSourceOrTarget Side = ERetargetSourceOrTarget::Target;
+	FString SideError;
+	if (!TryReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target, Side, SideError))
+	{
+		return FMonolithActionResult::Error(SideError);
+	}
 
 	// mode: from_reference | bone_deltas  (from_animation DEFERRED, rejected with a clear message)
 	FString ModeStr = TEXT("bone_deltas");
@@ -414,6 +437,84 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetPose(co
 
 	const FName PoseName = Controller->GetCurrentRetargetPoseName(Side);
 
+	TArray<FName> BonesToReset;
+	struct FPreparedRetargetPoseDelta
+	{
+		FName Bone;
+		FQuat RotationDelta;
+	};
+	TArray<FPreparedRetargetPoseDelta> PreparedDeltas;
+	bool bHasRootDelta = false;
+	FVector RootDelta = FVector::ZeroVector;
+
+	const TSharedPtr<FJsonObject>* RootDeltaPtr = nullptr;
+	if (Params->TryGetObjectField(TEXT("root_translation_delta"), RootDeltaPtr) && RootDeltaPtr->IsValid())
+	{
+		if (!TryReadVector(*RootDeltaPtr, RootDelta))
+		{
+			return FMonolithActionResult::Error(TEXT("root_translation_delta must contain numeric x, y, and z fields"));
+		}
+		bHasRootDelta = true;
+	}
+
+	if (bFromReference)
+	{
+		// Empty bones-to-reset == reset the whole pose to the reference pose.
+		const TArray<TSharedPtr<FJsonValue>>* ResetBonesArr = nullptr;
+		if (Params->TryGetArrayField(TEXT("bones"), ResetBonesArr))
+		{
+			for (const TSharedPtr<FJsonValue>& V : *ResetBonesArr)
+			{
+				FString BoneStr;
+				if (!V.IsValid() || !V->TryGetString(BoneStr) || BoneStr.IsEmpty())
+				{
+					return FMonolithActionResult::Error(TEXT("Each bones entry must be a non-empty string"));
+				}
+				BonesToReset.Add(FName(*BoneStr));
+			}
+		}
+	}
+	else // bBoneDeltas
+	{
+		const TArray<TSharedPtr<FJsonValue>>* DeltasArr = nullptr;
+		const bool bHasDeltasArray = Params->TryGetArrayField(TEXT("bone_deltas"), DeltasArr);
+		if ((!bHasDeltasArray || DeltasArr->Num() == 0) && !bHasRootDelta)
+		{
+			return FMonolithActionResult::Error(TEXT(
+				"mode 'bone_deltas' requires a non-empty 'bone_deltas' array of {bone, rotation:{x,y,z,w}|{pitch,yaw,roll}} entries or root_translation_delta"));
+		}
+
+		if (bHasDeltasArray)
+		{
+			for (const TSharedPtr<FJsonValue>& V : *DeltasArr)
+			{
+				const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
+				if (!V.IsValid() || !V->TryGetObject(EntryPtr) || !EntryPtr->IsValid())
+				{
+					return FMonolithActionResult::Error(TEXT("Each bone_deltas entry must be an object"));
+				}
+				const TSharedPtr<FJsonObject>& Entry = *EntryPtr;
+
+				FString BoneStr;
+				if (!Entry->TryGetStringField(TEXT("bone"), BoneStr) || BoneStr.IsEmpty())
+				{
+					return FMonolithActionResult::Error(TEXT("Each bone_deltas entry requires a non-empty 'bone' field"));
+				}
+
+				const TSharedPtr<FJsonObject>* RotObjPtr = nullptr;
+				FQuat RotationDelta = FQuat::Identity;
+				if (!Entry->TryGetObjectField(TEXT("rotation"), RotObjPtr) || !RotObjPtr->IsValid() ||
+					!TryReadRotationDelta(*RotObjPtr, RotationDelta))
+				{
+					return FMonolithActionResult::Error(FString::Printf(
+						TEXT("bone_deltas entry for '%s' requires rotation as {x,y,z,w} or {pitch,yaw,roll}"), *BoneStr));
+				}
+
+				PreparedDeltas.Add({ FName(*BoneStr), RotationDelta });
+			}
+		}
+	}
+
 	const FScopedTransaction Transaction(FText::FromString(TEXT("Set Retarget Pose")));
 	Controller->GetAsset()->Modify();
 
@@ -422,68 +523,28 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetPose(co
 
 	if (bFromReference)
 	{
-		// Empty bones-to-reset == reset the whole pose to the reference pose.
-		TArray<FName> BonesToReset;
-		const TArray<TSharedPtr<FJsonValue>>* ResetBonesArr = nullptr;
-		if (Params->TryGetArrayField(TEXT("bones"), ResetBonesArr))
-		{
-			for (const TSharedPtr<FJsonValue>& V : *ResetBonesArr)
-			{
-				FString BoneStr;
-				if (V.IsValid() && V->TryGetString(BoneStr) && !BoneStr.IsEmpty())
-				{
-					BonesToReset.Add(FName(*BoneStr));
-				}
-			}
-		}
 		Controller->ResetRetargetPose(PoseName, BonesToReset, Side);
 		BonesWritten = BonesToReset.Num();
 	}
-	else // bBoneDeltas
+	else
 	{
-		const TArray<TSharedPtr<FJsonValue>>* DeltasArr = nullptr;
-		if (!Params->TryGetArrayField(TEXT("bone_deltas"), DeltasArr) || DeltasArr->Num() == 0)
+		for (const FPreparedRetargetPoseDelta& Delta : PreparedDeltas)
 		{
-			return FMonolithActionResult::Error(TEXT(
-				"mode 'bone_deltas' requires a non-empty 'bone_deltas' array of {bone, rotation:{x,y,z,w}|{pitch,yaw,roll}} entries"));
-		}
-
-		for (const TSharedPtr<FJsonValue>& V : *DeltasArr)
-		{
-			const TSharedPtr<FJsonObject>* EntryPtr = nullptr;
-			if (!V.IsValid() || !V->TryGetObject(EntryPtr) || !EntryPtr->IsValid())
-			{
-				continue;
-			}
-			const TSharedPtr<FJsonObject>& Entry = *EntryPtr;
-
-			FString BoneStr;
-			if (!Entry->TryGetStringField(TEXT("bone"), BoneStr) || BoneStr.IsEmpty())
-			{
-				continue;
-			}
-
-			const TSharedPtr<FJsonObject>* RotObjPtr = nullptr;
-			FQuat RotationDelta = FQuat::Identity;
-			if (Entry->TryGetObjectField(TEXT("rotation"), RotObjPtr) && RotObjPtr->IsValid() &&
-				TryReadRotationDelta(*RotObjPtr, RotationDelta))
-			{
-				Controller->SetRotationOffsetForRetargetPoseBone(FName(*BoneStr), RotationDelta, Side);
-				++BonesWritten;
-			}
+			Controller->SetRotationOffsetForRetargetPoseBone(Delta.Bone, Delta.RotationDelta, Side);
+			++BonesWritten;
 		}
 	}
 
 	// Optional root (pelvis) translation delta — applies to both modes.
-	const TSharedPtr<FJsonObject>* RootDeltaPtr = nullptr;
-	if (Params->TryGetObjectField(TEXT("root_translation_delta"), RootDeltaPtr) && RootDeltaPtr->IsValid())
+	if (bHasRootDelta)
 	{
-		FVector RootDelta;
-		if (TryReadVector(*RootDeltaPtr, RootDelta))
-		{
-			Controller->SetRootOffsetInRetargetPose(RootDelta, Side);
-			bRootWritten = true;
-		}
+		Controller->SetRootOffsetInRetargetPose(RootDelta, Side);
+		bRootWritten = true;
+	}
+
+	if (bBoneDeltas && BonesWritten == 0 && !bRootWritten)
+	{
+		return FMonolithActionResult::Error(TEXT("mode 'bone_deltas' produced zero effective writes; provide at least one valid bone_deltas entry or root_translation_delta"));
 	}
 
 	Controller->GetAsset()->MarkPackageDirty();
@@ -807,6 +868,47 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 			"No Pelvis Motion op in the retargeter op stack. Seed default ops on the retargeter first."));
 	}
 
+	double V = 0.0;
+	bool bAnyApplied = false;
+	if (Params->TryGetNumberField(TEXT("scale_horizontal"), V))        { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("scale_vertical"), V))          { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("affect_ik_horizontal"), V))    { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("affect_ik_vertical"), V))      { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("floor_constraint_weight"), V)) { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("rotation_alpha"), V))          { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("translation_alpha"), V))       { bAnyApplied = true; }
+	if (Params->TryGetNumberField(TEXT("blend_to_source_translation"), V)) { bAnyApplied = true; }
+
+	const TSharedPtr<FJsonObject>* OffsetObjPtr = nullptr;
+	bool bHasTranslationOffset = false;
+	FVector TranslationOffset = FVector::ZeroVector;
+	if (Params->TryGetObjectField(TEXT("translation_offset_global"), OffsetObjPtr) && OffsetObjPtr->IsValid())
+	{
+		if (!TryReadVector(*OffsetObjPtr, TranslationOffset))
+		{
+			return FMonolithActionResult::Error(TEXT("translation_offset_global must contain numeric x, y, and z fields"));
+		}
+		bHasTranslationOffset = true;
+		bAnyApplied = true;
+	}
+
+	// Optional pelvis bone reassignment (separate setters on the controller).
+	FString SourcePelvis, TargetPelvis;
+	if (Params->TryGetStringField(TEXT("source_pelvis_bone"), SourcePelvis) && !SourcePelvis.IsEmpty())
+	{
+		bAnyApplied = true;
+	}
+	if (Params->TryGetStringField(TEXT("target_pelvis_bone"), TargetPelvis) && !TargetPelvis.IsEmpty())
+	{
+		bAnyApplied = true;
+	}
+
+	if (!bAnyApplied)
+	{
+		return FMonolithActionResult::Error(TEXT(
+			"No root settings supplied — provide one or more pelvis motion numeric fields, translation_offset_global, source_pelvis_bone, or target_pelvis_bone"));
+	}
+
 	const FScopedTransaction Transaction(FText::FromString(TEXT("Set Retarget Root Settings")));
 	Controller->GetAsset()->Modify();
 
@@ -815,7 +917,6 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 	FIKRetargetOpSettingsBase* PelvisBaseSettings = PelvisOp->GetSettings();
 	FIKRetargetPelvisMotionOpSettings* Settings = static_cast<FIKRetargetPelvisMotionOpSettings*>(PelvisBaseSettings);
 
-	double V = 0.0;
 	if (Params->TryGetNumberField(TEXT("scale_horizontal"), V))        { Settings->ScaleHorizontal = V; }
 	if (Params->TryGetNumberField(TEXT("scale_vertical"), V))          { Settings->ScaleVertical = V; }
 	if (Params->TryGetNumberField(TEXT("affect_ik_horizontal"), V))    { Settings->AffectIKHorizontal = V; }
@@ -824,26 +925,11 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 	if (Params->TryGetNumberField(TEXT("rotation_alpha"), V))          { Settings->RotationAlpha = V; }
 	if (Params->TryGetNumberField(TEXT("translation_alpha"), V))       { Settings->TranslationAlpha = V; }
 	if (Params->TryGetNumberField(TEXT("blend_to_source_translation"), V)) { Settings->BlendToSourceTranslation = V; }
-
-	const TSharedPtr<FJsonObject>* OffsetObjPtr = nullptr;
-	if (Params->TryGetObjectField(TEXT("translation_offset_global"), OffsetObjPtr) && OffsetObjPtr->IsValid())
-	{
-		FVector Offset;
-		if (TryReadVector(*OffsetObjPtr, Offset)) { Settings->TranslationOffsetGlobal = Offset; }
-	}
+	if (bHasTranslationOffset) { Settings->TranslationOffsetGlobal = TranslationOffset; }
+	if (!SourcePelvis.IsEmpty()) { PelvisController->SetSourcePelvisBone(FName(*SourcePelvis)); }
+	if (!TargetPelvis.IsEmpty()) { PelvisController->SetTargetPelvisBone(FName(*TargetPelvis)); }
 
 	PelvisOp->SetSettings(PelvisBaseSettings);
-
-	// Optional pelvis bone reassignment (separate setters on the controller).
-	FString SourcePelvis, TargetPelvis;
-	if (Params->TryGetStringField(TEXT("source_pelvis_bone"), SourcePelvis) && !SourcePelvis.IsEmpty())
-	{
-		PelvisController->SetSourcePelvisBone(FName(*SourcePelvis));
-	}
-	if (Params->TryGetStringField(TEXT("target_pelvis_bone"), TargetPelvis) && !TargetPelvis.IsEmpty())
-	{
-		PelvisController->SetTargetPelvisBone(FName(*TargetPelvis));
-	}
 
 	Controller->GetAsset()->MarkPackageDirty();
 
@@ -907,6 +993,18 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleEnableFootGroundLo
 		"FIKRetargetSpeedPlantingOpSettings::PostLoad without IKRIG_API export, so its settings "
 		"struct cannot be constructed outside the IKRig module. Pending an Epic engine fix."));
 #else
+	FString SnapBone;
+	const bool bWantsSnap = Params->TryGetStringField(TEXT("snap_to_ground_bone"), SnapBone) && !SnapBone.IsEmpty();
+	ERetargetSourceOrTarget SnapSide = ERetargetSourceOrTarget::Target;
+	if (bWantsSnap)
+	{
+		FString SideError;
+		if (!TryReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target, SnapSide, SideError))
+		{
+			return FMonolithActionResult::Error(SideError);
+		}
+	}
+
 	const FScopedTransaction Transaction(FText::FromString(TEXT("Enable Foot Ground Lock")));
 	Controller->GetAsset()->Modify();
 
@@ -960,12 +1058,10 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleEnableFootGroundLo
 	SpeedController->SetSettings(Settings);
 
 	// Optional ground snap on the target skeleton.
-	FString SnapBone;
 	bool bSnapped = false;
-	if (Params->TryGetStringField(TEXT("snap_to_ground_bone"), SnapBone) && !SnapBone.IsEmpty())
+	if (bWantsSnap)
 	{
-		const ERetargetSourceOrTarget Side = ReadSide(Params, TEXT("side"), ERetargetSourceOrTarget::Target);
-		Controller->SnapBoneToGround(FName(*SnapBone), Side);
+		Controller->SnapBoneToGround(FName(*SnapBone), SnapSide);
 		bSnapped = true;
 	}
 

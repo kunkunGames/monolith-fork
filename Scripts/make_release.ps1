@@ -510,13 +510,76 @@ function Invoke-EngineSmoke {
     $Tag = $Engine.Tag
     Write-Host "`n  [$Tag smoke] Post-build hard-link smoke (issue #30 defense)..." -ForegroundColor Yellow
 
+    # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
+    # (not the dev binaries we may have overwritten before zipping).
+    $SmokeDir = Join-Path $env:TEMP "Monolith_Release_${Version}_${Tag}_Smoke"
+    if (Test-Path $SmokeDir) { Remove-Item $SmokeDir -Recurse -Force }
+    New-Item -ItemType Directory -Path $SmokeDir | Out-Null
+    Expand-Archive -Path $Engine.Zip -DestinationPath $SmokeDir -Force
+
+    $SmokePluginDir = Join-Path $SmokeDir "Monolith"
+    if (-not (Test-Path $SmokePluginDir)) {
+        $SmokePluginDir = $SmokeDir
+    }
+    $SmokeUPlugin = Join-Path $SmokePluginDir "Monolith.uplugin"
+    $SmokeWin64 = Join-Path $SmokePluginDir "Binaries\Win64"
+    $SmokeModulesManifest = Join-Path $SmokeWin64 "UnrealEditor.modules"
+    if (-not (Test-Path $SmokeUPlugin)) {
+        Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "`n  [FAIL] [$Tag] Smoke zip is missing Monolith.uplugin." -ForegroundColor Red
+        exit 1
+    }
+    if (-not (Test-Path $SmokeModulesManifest)) {
+        Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "`n  [FAIL] [$Tag] Smoke zip is missing Binaries\Win64\UnrealEditor.modules." -ForegroundColor Red
+        exit 1
+    }
+
+    $UPluginJson = Get-Content -Raw -Path $SmokeUPlugin | ConvertFrom-Json
+    $ModulesJson = Get-Content -Raw -Path $SmokeModulesManifest | ConvertFrom-Json
+    $MissingModuleDlls = @()
+    foreach ($module in $UPluginJson.Modules) {
+        $moduleName = [string]$module.Name
+        if ([string]::IsNullOrWhiteSpace($moduleName) -or $StrippedModules -contains $moduleName) {
+            continue
+        }
+        $expectedDll = "UnrealEditor-$moduleName.dll"
+        $manifestDll = $null
+        if ($ModulesJson.Modules.PSObject.Properties.Name -contains $moduleName) {
+            $manifestDll = [string]$ModulesJson.Modules.$moduleName
+        }
+        if ([string]::IsNullOrWhiteSpace($manifestDll)) {
+            $MissingModuleDlls += [PSCustomObject]@{ Module = $moduleName; Expected = $expectedDll; Reason = "missing UnrealEditor.modules entry" }
+            continue
+        }
+        if ($manifestDll -ne $expectedDll) {
+            $MissingModuleDlls += [PSCustomObject]@{ Module = $moduleName; Expected = $expectedDll; Reason = "manifest points to '$manifestDll'" }
+            continue
+        }
+        if (-not (Test-Path (Join-Path $SmokeWin64 $expectedDll))) {
+            $MissingModuleDlls += [PSCustomObject]@{ Module = $moduleName; Expected = $expectedDll; Reason = "missing DLL in Binaries\Win64" }
+        }
+    }
+    if ($MissingModuleDlls.Count -gt 0) {
+        Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "`n  [FAIL] [$Tag] Release zip is missing required module DLL(s):" -ForegroundColor Red
+        $MissingModuleDlls | ForEach-Object {
+            Write-Host "    $($_.Module): $($_.Expected) ($($_.Reason))" -ForegroundColor Red
+        }
+        Write-Host "`n  The .uplugin/modules manifest and shipped DLL set must agree before publishing." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "    [$Tag] Module DLL completeness gate passed" -ForegroundColor Green
+
     if (-not $DumpbinPath) {
         if ($AllowUnverifiedImports) {
+            Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
             Write-Host "    [$Tag] [WARN] dumpbin.exe not found AND -AllowUnverifiedImports set." -ForegroundColor Yellow
             Write-Host "    [$Tag] [WARN] Hard-link import smoke SKIPPED -- this zip is NOT shippable." -ForegroundColor Yellow
             Write-Host "    [$Tag] [WARN] Imports are UNVERIFIED. Do NOT publish this build (issue #71 risk)." -ForegroundColor Yellow
             return $null  # caller treats null as 'unverified' (no pinned hash)
         } else {
+            Remove-Item $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
             Write-Host "`n  [FAIL] dumpbin.exe not found -- cannot run the mandatory hard-link import smoke." -ForegroundColor Red
             Write-Host "  Install Visual Studio Build Tools (provides dumpbin.exe) and re-run." -ForegroundColor Red
             Write-Host "  Shipping without this check is how issue #71 (MassSpawner/ZoneGraph hard-link) escaped." -ForegroundColor Red
@@ -524,13 +587,6 @@ function Invoke-EngineSmoke {
             exit 1
         }
     }
-
-    # Re-extract the just-built zip into a scratch dir to inspect the actual shipped DLLs
-    # (not the dev binaries we may have overwritten before zipping).
-    $SmokeDir = Join-Path $env:TEMP "Monolith_Release_${Version}_${Tag}_Smoke"
-    if (Test-Path $SmokeDir) { Remove-Item $SmokeDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $SmokeDir | Out-Null
-    Expand-Archive -Path $Engine.Zip -DestinationPath $SmokeDir -Force
 
     $MonolithDlls = @(Get-ChildItem -Path $SmokeDir -Recurse -Filter "UnrealEditor-Monolith*.dll")
     $LeakingDlls = @()

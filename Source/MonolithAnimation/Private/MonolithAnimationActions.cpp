@@ -4965,6 +4965,28 @@ FMonolithActionResult FMonolithAnimationActions::HandleApplyAnimModifier(const T
 	TArray<TSharedPtr<FJsonValue>> Unresolved;
 	int32 AppliedProps = 0;
 
+	if (bHasProperties)
+	{
+		UAnimationModifier* ValidationModifier = NewObject<UAnimationModifier>(GetTransientPackage(), ModifierUClass);
+		if (!ValidationModifier)
+		{
+			return FMonolithActionResult::Error(TEXT("Failed to create validation modifier instance"));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> ValidationUnresolved;
+		const int32 ValidationApplied = ApplyProperties(ValidationModifier, *PropertiesObj, ValidationUnresolved);
+		if (ValidationUnresolved.Num() > 0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("properties contains %d unknown or incompatible modifier field(s); aborting before applying modifier"),
+				ValidationUnresolved.Num()));
+		}
+		if ((*PropertiesObj)->Values.Num() > 0 && ValidationApplied == 0)
+		{
+			return FMonolithActionResult::Error(TEXT("properties was provided but no modifier field could be applied; aborting before applying modifier"));
+		}
+	}
+
 	if (bPersist)
 	{
 		// PERSIST PATH (gotcha 7 MUST-PROVE): register the modifier in the
@@ -5007,6 +5029,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleApplyAnimModifier(const T
 		{
 			Registered->Modify();
 			AppliedProps = ApplyProperties(Registered, *PropertiesObj, Unresolved);
+			if (Unresolved.Num() > 0)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("properties contains %d unknown or incompatible modifier field(s); aborting before applying modifier"),
+					Unresolved.Num()));
+			}
 		}
 		Registered->ApplyToAnimationSequence(Seq);
 		Root->SetBoolField(TEXT("persisted"), true);
@@ -5023,6 +5051,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleApplyAnimModifier(const T
 		if (bHasProperties)
 		{
 			AppliedProps = ApplyProperties(Modifier, *PropertiesObj, Unresolved);
+			if (Unresolved.Num() > 0)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("properties contains %d unknown or incompatible modifier field(s); aborting before applying modifier"),
+					Unresolved.Num()));
+			}
 		}
 		Modifier->ApplyToAnimationSequence(Seq);
 		Root->SetBoolField(TEXT("persisted"), false);
