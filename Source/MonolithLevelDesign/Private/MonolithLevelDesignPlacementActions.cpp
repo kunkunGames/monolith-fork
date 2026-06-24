@@ -1065,12 +1065,14 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::RandomizeTransforms(
 	ParseRange(TEXT("scale_range"), 1, 1, ScaleMin, ScaleMax);
 
 	int32 Seed = 0;
+	if (Params->HasField(TEXT("seed")))
 	{
 		double SeedD;
-		if (Params->TryGetNumberField(TEXT("seed"), SeedD))
+		if (!Params->TryGetNumberField(TEXT("seed"), SeedD))
 		{
-			Seed = static_cast<int32>(SeedD);
+			return FMonolithActionResult::Error(TEXT("Parameter 'seed' must be a number"));
 		}
+		Seed = static_cast<int32>(SeedD);
 	}
 
 	// Resolve actors
@@ -1180,12 +1182,14 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const
 	MonolithMeshUtils::ParseVector(Params, TEXT("center"), Center);
 
 	int32 Limit = 200;
+	if (Params->HasField(TEXT("limit")))
 	{
 		double LimitD;
-		if (Params->TryGetNumberField(TEXT("limit"), LimitD))
+		if (!Params->TryGetNumberField(TEXT("limit"), LimitD))
 		{
-			Limit = FMath::Clamp(static_cast<int32>(LimitD), 1, 10000);
+			return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"));
 		}
+		Limit = FMath::Clamp(static_cast<int32>(LimitD), 1, 10000);
 	}
 
 	// Resolve volume bounds if specified
