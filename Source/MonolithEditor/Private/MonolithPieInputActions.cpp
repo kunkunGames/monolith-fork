@@ -1,4 +1,5 @@
 #include "MonolithPieInputActions.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithPieObjectActions.h"
 #include "MonolithParamSchema.h"
 
@@ -361,7 +362,7 @@ namespace
 		// Path-like: load directly.
 		if (Spec.StartsWith(TEXT("/")))
 		{
-			if (const UInputAction* Action = LoadObject<UInputAction>(nullptr, *Spec))
+			if (const UInputAction* Action = FMonolithAssetUtils::LoadAssetByPath<UInputAction>(Spec))
 			{
 				return Action;
 			}
