@@ -54,3 +54,24 @@ bool FMonolithNiagaraParamGuardBasicEmitterTests::RunTest(const FString& Paramet
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardNiagaraUsageIdTest, "Monolith.ParamGuard.Niagara.UsageId", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardNiagaraUsageIdTest::RunTest(const FString& Parameters)
+{
+	TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("usage_id"), 12345); // Malformed, should be string
+	Params->SetNumberField(TEXT("stage_index"), 0);
+
+	FMonolithActionResult Result = FMonolithNiagaraActions::HandleGetCustomHLSLText(Params);
+	TestFalse(TEXT("Should fail gracefully for missing script_path, but more importantly not crash on node_guid"), Result.bSuccess);
+
+	// Better test:
+	Params->SetStringField(TEXT("script_path"), TEXT("/Some/Path/To/Script"));
+	Params->SetNumberField(TEXT("node_guid"), 12345); // Malformed
+
+	Result = FMonolithNiagaraActions::HandleGetCustomHLSLText(Params);
+	TestFalse(TEXT("Should fail when node_guid is not a string"), Result.bSuccess);
+	TestTrue(TEXT("Error message should mention node_guid must be a string"), Result.ErrorMessage.Contains(TEXT("Parameter 'node_guid' must be a string")));
+
+	return true;
+}

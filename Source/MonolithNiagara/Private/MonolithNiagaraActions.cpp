@@ -2038,9 +2038,29 @@ bool FMonolithNiagaraActions::ResolveSimulationStageSelector(UNiagaraSystem* Sys
 		return false;
 	}
 
-	const FString UsageIdStr = Params->HasField(TEXT("usage_id")) ? Params->GetStringField(TEXT("usage_id")) : FString();
-	const FString StageName = Params->HasField(TEXT("stage_name")) ? Params->GetStringField(TEXT("stage_name")) : FString();
-	const int32 StageIndex = Params->HasField(TEXT("stage_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("stage_index"))) : INDEX_NONE;
+	FString UsageIdStr;
+	if (Params->HasField(TEXT("usage_id")) && !Params->TryGetStringField(TEXT("usage_id"), UsageIdStr))
+	{
+		if (OutError) *OutError = TEXT("Parameter 'usage_id' must be a string");
+		return false;
+	}
+	FString StageName;
+	if (Params->HasField(TEXT("stage_name")) && !Params->TryGetStringField(TEXT("stage_name"), StageName))
+	{
+		if (OutError) *OutError = TEXT("Parameter 'stage_name' must be a string");
+		return false;
+	}
+	int32 StageIndex = INDEX_NONE;
+	if (Params->HasField(TEXT("stage_index")))
+	{
+		double StageIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double))
+		{
+			if (OutError) *OutError = TEXT("Parameter 'stage_index' must be a number");
+			return false;
+		}
+		StageIndex = static_cast<int32>(StageIndex_Double);
+	}
 
 	UNiagaraSimulationStageBase* TargetStage = nullptr;
 	if (!UsageIdStr.IsEmpty())
@@ -2165,8 +2185,23 @@ bool FMonolithNiagaraActions::ResolveEventHandlerSelector(UNiagaraSystem* System
 		return false;
 	}
 
-	const FString UsageIdStr = Params->HasField(TEXT("usage_id")) ? Params->GetStringField(TEXT("usage_id")) : FString();
-	const int32 HandlerIndex = Params->HasField(TEXT("handler_index")) ? static_cast<int32>(Params->GetNumberField(TEXT("handler_index"))) : INDEX_NONE;
+	FString UsageIdStr;
+	if (Params->HasField(TEXT("usage_id")) && !Params->TryGetStringField(TEXT("usage_id"), UsageIdStr))
+	{
+		if (OutError) *OutError = TEXT("Parameter 'usage_id' must be a string");
+		return false;
+	}
+	int32 HandlerIndex = INDEX_NONE;
+	if (Params->HasField(TEXT("handler_index")))
+	{
+		double HandlerIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double))
+		{
+			if (OutError) *OutError = TEXT("Parameter 'handler_index' must be a number");
+			return false;
+		}
+		HandlerIndex = static_cast<int32>(HandlerIndex_Double);
+	}
 
 	const FNiagaraEventScriptProperties* TargetHandler = nullptr;
 	if (!UsageIdStr.IsEmpty())
@@ -4517,7 +4552,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleGraph(const TShare
 FMonolithActionResult FMonolithNiagaraActions::HandleGetCustomHLSLText(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
-	FString NodeGuidStr = Params->HasField(TEXT("node_guid")) ? Params->GetStringField(TEXT("node_guid")) : FString();
+	FString NodeGuidStr;
+	if (Params->HasField(TEXT("node_guid")) && !Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
+		return FMonolithActionResult::Error(TEXT("Parameter 'node_guid' must be a string"));
 
 	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
 	if (!Script) return FMonolithActionResult::Error(TEXT("Failed to load script"));
@@ -4584,7 +4621,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCustomHLSLText(const TSh
 {
 	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
 	FString HlslText = Params->GetStringField(TEXT("hlsl"));
-	FString NodeGuidStr = Params->HasField(TEXT("node_guid")) ? Params->GetStringField(TEXT("node_guid")) : FString();
+	FString NodeGuidStr;
+	if (Params->HasField(TEXT("node_guid")) && !Params->TryGetStringField(TEXT("node_guid"), NodeGuidStr))
+		return FMonolithActionResult::Error(TEXT("Parameter 'node_guid' must be a string"));
 
 	if (HlslText.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required field: hlsl"));
