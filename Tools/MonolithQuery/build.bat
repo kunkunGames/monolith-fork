@@ -13,7 +13,7 @@ for /f "usebackq tokens=*" %%H in (`powershell -NoProfile -ExecutionPolicy Bypas
 echo Source hash: %SOURCE_HASH%
 
 where cl >nul 2>&1
-if %ERRORLEVEL% equ 0 goto :build
+if not errorlevel 1 goto :build
 
 echo cl.exe not found in PATH, attempting to find via vswhere...
 set "VCVARS="
@@ -25,14 +25,14 @@ if not exist "%VCVARS%" (
   exit /b 1
 )
 call "%VCVARS%"
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
   echo FAILED: vcvars64.bat failed
   exit /b 1
 )
 
 :build
 where cl >nul 2>&1
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
   echo cl.exe not found in PATH and vcvars64.bat failed to set it up.
   exit /b 1
 )
@@ -44,7 +44,7 @@ if exist "%OUT_EXE%" del /F /Q "%OUT_EXE%"
 
 echo Building with cl.exe...
 cl /EHsc /std:c++17 /O2 /MT /I ThirdParty /I ..\MonolithProxy\ThirdParty /DSQLITE_ENABLE_FTS5 /DSOURCE_HASH=\"%SOURCE_HASH%\" monolith_query.cpp ThirdParty\sqlite3.c /Fe:"%OUT_EXE%"
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
   echo FAILED: monolith_query.exe build failed
   exit /b 1
 )
@@ -55,7 +55,7 @@ if not exist "%OUT_EXE%" (
 
 if not exist "..\..\Binaries" mkdir "..\..\Binaries"
 copy /Y "%OUT_EXE%" "..\..\Binaries\monolith_query.exe"
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
   echo FAILED: could not copy monolith_query.exe to Plugins\Monolith\Binaries
   exit /b 1
 )
