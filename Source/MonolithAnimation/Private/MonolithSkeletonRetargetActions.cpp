@@ -234,7 +234,12 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslation
 	}
 
 	const FString Preset = Params->GetStringField(TEXT("preset"));
-	const bool bRecursive = Params->HasField(TEXT("recursive")) && Params->GetBoolField(TEXT("recursive"));
+	bool bRecursive = false;
+	if (Params->HasField(TEXT("recursive")))
+	{
+		if (!Params->TryGetBoolField(TEXT("recursive"), bRecursive))
+			return FMonolithActionResult::Error(TEXT("Parameter 'recursive' must be a boolean"));
+	}
 
 	// Validate the preset name up-front (only biped_locomotion supported in v1).
 	const bool bHasPreset = !Preset.IsEmpty();
@@ -492,10 +497,13 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 	// accept the bone (UsesCustomBoneSettings + CanAddBoneSetting).
 	bool bHasSolverIndex = false;
 	int32 RequestedSolverIndex = INDEX_NONE;
-	if (Params->HasTypedField<EJson::Number>(TEXT("solver_index")))
+	if (Params->HasField(TEXT("solver_index")))
 	{
 		bHasSolverIndex = true;
-		RequestedSolverIndex = static_cast<int32>(Params->GetNumberField(TEXT("solver_index")));
+		double TempSolverIndex;
+		if (!Params->TryGetNumberField(TEXT("solver_index"), TempSolverIndex))
+			return FMonolithActionResult::Error(TEXT("Parameter 'solver_index' must be a number"));
+		RequestedSolverIndex = static_cast<int32>(TempSolverIndex);
 		if (RequestedSolverIndex < 0 || RequestedSolverIndex >= NumSolvers)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
@@ -770,10 +778,13 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetIkRigBoneSettin
 
 	bool bHasSolverIndex = false;
 	int32 RequestedSolverIndex = INDEX_NONE;
-	if (Params->HasTypedField<EJson::Number>(TEXT("solver_index")))
+	if (Params->HasField(TEXT("solver_index")))
 	{
 		bHasSolverIndex = true;
-		RequestedSolverIndex = static_cast<int32>(Params->GetNumberField(TEXT("solver_index")));
+		double TempSolverIndex;
+		if (!Params->TryGetNumberField(TEXT("solver_index"), TempSolverIndex))
+			return FMonolithActionResult::Error(TEXT("Parameter 'solver_index' must be a number"));
+		RequestedSolverIndex = static_cast<int32>(TempSolverIndex);
 		if (RequestedSolverIndex < 0 || RequestedSolverIndex >= NumSolvers)
 		{
 			return FMonolithActionResult::Error(FString::Printf(
