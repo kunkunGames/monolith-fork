@@ -56,3 +56,32 @@ bool FMonolithEditorSamplePieTimeseriesMalformedTest::RunTest(const FString& Par
 
 	return true;
 }
+
+#include "MonolithEditorActions.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorGetBuildErrorsMalformedTest, "Monolith.ParamGuard.Editor.GetBuildErrorsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorGetBuildErrorsMalformedTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("since_marker"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleGetBuildErrors(Payload);
+
+		TestFalse(TEXT("Malformed since_marker should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter since_marker"), Result.ErrorMessage.Contains(TEXT("since_marker")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("since_iso"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleGetBuildErrors(Payload);
+
+		TestFalse(TEXT("Malformed since_iso should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter since_iso"), Result.ErrorMessage.Contains(TEXT("since_iso")));
+	}
+
+	return true;
+}

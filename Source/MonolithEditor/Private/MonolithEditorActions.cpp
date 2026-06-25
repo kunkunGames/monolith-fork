@@ -1127,7 +1127,12 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	FString SinceSource = TEXT("last_compile");
 
 	FString SinceMarker;
-	if (Params->TryGetStringField(TEXT("since_marker"), SinceMarker) && !SinceMarker.IsEmpty() && CachedLogCapture)
+	if (Params->HasField(TEXT("since_marker")) && !Params->TryGetStringField(TEXT("since_marker"), SinceMarker))
+	{
+		return FMonolithActionResult::Error(TEXT("since_marker must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	if (!SinceMarker.IsEmpty() && CachedLogCapture)
 	{
 		// Latest entry containing the marker token (any category/verbosity). SearchEntries
 		// returns in ring order, so the last match is the most recent occurrence.
@@ -1148,8 +1153,13 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	else
 	{
 		FString SinceIso;
+		if (Params->HasField(TEXT("since_iso")) && !Params->TryGetStringField(TEXT("since_iso"), SinceIso))
+		{
+			return FMonolithActionResult::Error(TEXT("since_iso must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+
 		double Parsed = 0.0;
-		if (Params->TryGetStringField(TEXT("since_iso"), SinceIso) && !SinceIso.IsEmpty() &&
+		if (!SinceIso.IsEmpty() &&
 			IsoToPlatformSeconds(SinceIso, Parsed))
 		{
 			SinceTimestamp = Parsed;
