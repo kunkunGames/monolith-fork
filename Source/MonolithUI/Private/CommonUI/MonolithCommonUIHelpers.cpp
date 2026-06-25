@@ -93,12 +93,7 @@ namespace MonolithCommonUI
 
 	UWidgetBlueprint* LoadWidgetBlueprintAsset(const FString& WbpPath)
 	{
-		UWidgetBlueprint* Wbp = FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(WbpPath);
-		if (!Wbp)
-		{
-			Wbp = LoadObject<UWidgetBlueprint>(nullptr, *WbpPath);
-		}
-		return Wbp;
+		return FMonolithAssetUtils::LoadAssetByPath<UWidgetBlueprint>(WbpPath);
 	}
 
 	FMonolithActionResult LoadWidgetForMutation(
