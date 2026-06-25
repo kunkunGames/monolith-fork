@@ -915,6 +915,14 @@ FMonolithActionResult FMonolithMeshVolumeActions::SelectActors(const TSharedPtr<
 		bool bHasRadial = (*FilterObj)->TryGetNumberField(TEXT("radius"), Radius);
 		if (bHasRadial)
 		{
+			if (Radius < 0.0)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be >= 0.0, got %f"), Radius));
+			}
+			if (Radius > 50000.0)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), Radius));
+			}
 			MonolithMeshUtils::ParseVector(*FilterObj, TEXT("center"), Center);
 		}
 

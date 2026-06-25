@@ -2,6 +2,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshDecalActions.h"
 #include "MonolithMeshLightingActions.h"
+#include "MonolithMeshVolumeActions.h"
 #include "MonolithMeshSpatialActions.h"
 #include "MonolithMeshSpatialRegistry.h"
 #include "MonolithToolRegistry.h"
@@ -149,6 +150,27 @@ bool FMonolithParamGuardSceneAnalyzeLightTransitionsMalformedParamsTest::RunTest
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("analyze_light_transitions"), Params);
 	TestFalse(TEXT("analyze_light_transitions rejects insufficient path_points parameter"), Result.bSuccess);
 	TestTrue(TEXT("analyze_light_transitions reports the validation error"), Result.ErrorMessage.Contains(TEXT("path_points")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLimitGuardSceneVolumeFilterRadiusTest, "Monolith.LimitGuard.MonolithScene.VolumeFilterRejectsLargeRadius", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLimitGuardSceneVolumeFilterRadiusTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshVolumeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("modify_selection action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("scene"), TEXT("modify_selection")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("sub_action"), TEXT("select"));
+
+	TSharedPtr<FJsonObject> FilterObj = MakeShared<FJsonObject>();
+	FilterObj->SetNumberField(TEXT("radius"), 100000.0); // Pathological radius
+	Params->SetObjectField(TEXT("filter"), FilterObj);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("modify_selection"), Params);
+	TestFalse(TEXT("modify_selection rejects excessively large radius"), Result.bSuccess);
+	TestTrue(TEXT("modify_selection reports the validation error for radius"), Result.ErrorMessage.Contains(TEXT("radius must be <=")));
 
 	return true;
 }
