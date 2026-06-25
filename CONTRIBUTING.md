@@ -156,7 +156,7 @@ public:
 
 ### 2. Register in the subsystem
 
-Add your indexer to `UMonolithIndexSubsystem::Initialize()`:
+Add your indexer to `UMonolithIndexSubsystem::RegisterDefaultIndexers()`:
 
 ```cpp
 RegisterIndexer(MakeShared<FMyIndexer>());
@@ -164,7 +164,7 @@ RegisterIndexer(MakeShared<FMyIndexer>());
 
 ### 3. Add DB tables if needed
 
-If your indexer needs new tables, add the schema in `FMonolithIndexDatabase::CreateSchema()`. Follow the existing pattern with `CREATE TABLE IF NOT EXISTS`.
+If your indexer needs new tables, execute the schema during indexing using `DB.GetRawDatabase()` (or add it to `GCreateTablesSQL` in `FMonolithIndexDatabase.cpp`). Follow the existing pattern with `CREATE TABLE IF NOT EXISTS`.
 
 ---
 
