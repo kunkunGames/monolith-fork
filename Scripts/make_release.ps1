@@ -744,7 +744,11 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     }
     # Strip internal planning, spec, and documentation folders.
     # These are explicitly excluded from the release ZIP as per AGENTS.md rule 19.
-    if ($keep -and ($path -like ".jules/*" -or $path -like ".github/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Docs/plans/*")) {
+    if ($keep -and ($path -like ".jules/*" -or $path -like ".github/*" -or $path -like "CRG/*" -or $path -like "PRD/*" -or $path -like "Docs/plans/*" -or $path -like "Plans/*" -or $path -like "Docs/research/*" -or $path -like "TrainingMemory/*" -or $path -like ".code-review-graph/*")) {
+        $keep = $false
+    }
+    # Exclude developer environment cache directories
+    if ($keep -and ($path -like ".clangd/*" -or $path -like ".mypy_cache/*")) {
         $keep = $false
     }
     # Strip internal testing-execution records (Docs/testing/) -- per-feature test-pass
