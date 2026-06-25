@@ -138,7 +138,7 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 |--------|--------|-------------|
 | `list_widget_events` | `asset_path` | List all bindable events on a Widget Blueprint |
 | `list_widget_properties` | `asset_path`, `widget_name` | List all bindable properties on a widget |
-| `setup_list_view` | `asset_path`, `list_view_name`, `entry_widget_path` | Configure a List View widget with an entry widget class |
+| `setup_list_view` | `asset_path`, `list_widget_name`, `entry_widget_class` | Configure a List View widget with an entry widget class |
 | `get_widget_bindings` | `asset_path` | Get all active property and event bindings on a Widget Blueprint |
 
 **Settings Scaffolding (5)**
@@ -241,7 +241,7 @@ Class-as-data: style creators (`create_common_button_style`, `create_common_text
 
 | Action | Params | Description |
 |--------|--------|-------------|
-| `setup_common_list_view` | `asset_path`, `list_view_name`, `entry_widget_path` | Configure a `UCommonListView` with an entry widget class |
+| `setup_common_list_view` | `wbp_path`, `widget_name`, `entry_class` | Configure a `UCommonListView` with an entry widget class |
 | `create_tab_list_widget` | `save_path` | Scaffold a WBP containing a `UCommonTabListWidgetBase` |
 | `register_tab` | `tab_list_widget`, `tab_id`, `tab_widget` | [RUNTIME] Register a tab with a tab list |
 | `create_button_group` | `group_name` | [RUNTIME] Create a `UCommonButtonGroupBase` for radio-style selection |
