@@ -1619,7 +1619,11 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		return HandleReadFile(FileParams);
 	}
 	bool bIncludeHeader = true;
-	Params->TryGetBoolField(TEXT("include_header"), bIncludeHeader);
+	TSharedPtr<FJsonValue> IncludeHeaderField = Params->TryGetField(TEXT("include_header"));
+	if (IncludeHeaderField.IsValid() && !IncludeHeaderField->TryGetBool(bIncludeHeader))
+	{
+		return FMonolithActionResult::Error(TEXT("'include_header' must be a boolean"), -32602);
+	}
 	int32 MaxLines = 0;
 	if (Params->HasField(TEXT("max_lines")))
 	{
@@ -1631,7 +1635,11 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		MaxLines = FMath::Clamp(static_cast<int32>(RawMaxLines), 1, 1000);
 	}
 	bool bMembersOnly = false;
-	Params->TryGetBoolField(TEXT("members_only"), bMembersOnly);
+	TSharedPtr<FJsonValue> MembersOnlyField = Params->TryGetField(TEXT("members_only"));
+	if (MembersOnlyField.IsValid() && !MembersOnlyField->TryGetBool(bMembersOnly))
+	{
+		return FMonolithActionResult::Error(TEXT("'members_only' must be a boolean"), -32602);
+	}
 
 	// Look up by exact name first, then FTS fallback
 	TArray<FMonolithSourceSymbol> Symbols = DB->GetSymbolsByName(Symbol);
@@ -2089,7 +2097,11 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 	}
 
 	FString Scope = TEXT("all");
-	Params->TryGetStringField(TEXT("scope"), Scope);
+	TSharedPtr<FJsonValue> ScopeField = Params->TryGetField(TEXT("scope"));
+	if (ScopeField.IsValid() && !ScopeField->TryGetString(Scope))
+	{
+		return FMonolithActionResult::Error(TEXT("'scope' must be a string"), -32602);
+	}
 	int32 RequestedLimit = 20;
 	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
 	if (LimitField.IsValid())
@@ -2102,15 +2114,35 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 		RequestedLimit = static_cast<int32>(RawLimit);
 	}
 	FString Mode = TEXT("fts");
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	TSharedPtr<FJsonValue> ModeField = Params->TryGetField(TEXT("mode"));
+	if (ModeField.IsValid() && !ModeField->TryGetString(Mode))
+	{
+		return FMonolithActionResult::Error(TEXT("'mode' must be a string"), -32602);
+	}
 	FString Module;
-	Params->TryGetStringField(TEXT("module"), Module);
+	TSharedPtr<FJsonValue> ModuleField = Params->TryGetField(TEXT("module"));
+	if (ModuleField.IsValid() && !ModuleField->TryGetString(Module))
+	{
+		return FMonolithActionResult::Error(TEXT("'module' must be a string"), -32602);
+	}
 	FString PathFilter;
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	TSharedPtr<FJsonValue> PathFilterField = Params->TryGetField(TEXT("path_filter"));
+	if (PathFilterField.IsValid() && !PathFilterField->TryGetString(PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("'path_filter' must be a string"), -32602);
+	}
 	FString SymbolKind;
-	Params->TryGetStringField(TEXT("symbol_kind"), SymbolKind);
+	TSharedPtr<FJsonValue> SymbolKindField = Params->TryGetField(TEXT("symbol_kind"));
+	if (SymbolKindField.IsValid() && !SymbolKindField->TryGetString(SymbolKind))
+	{
+		return FMonolithActionResult::Error(TEXT("'symbol_kind' must be a string"), -32602);
+	}
 	FString CursorIn;
-	Params->TryGetStringField(TEXT("cursor"), CursorIn);
+	TSharedPtr<FJsonValue> CursorInField = Params->TryGetField(TEXT("cursor"));
+	if (CursorInField.IsValid() && !CursorInField->TryGetString(CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("'cursor' must be a string"), -32602);
+	}
 
 	// Hard cap (plan §3.E): never page past row 1000. Cumulative cap.
 	// When caller asks for `limit > HARD_CAP_ROWS` (e.g. limit=2000), the
@@ -2372,11 +2404,20 @@ FMonolithActionResult FMonolithSourceActions::HandleGetClassHierarchy(const TSha
 		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter cannot be empty"));
 	}
 	FString Direction = TEXT("both");
-	Params->TryGetStringField(TEXT("direction"), Direction);
-	int32 Depth = 1;
-	double RawDepth = 0;
-	if (Params->TryGetNumberField(TEXT("depth"), RawDepth))
+	TSharedPtr<FJsonValue> DirectionField = Params->TryGetField(TEXT("direction"));
+	if (DirectionField.IsValid() && !DirectionField->TryGetString(Direction))
 	{
+		return FMonolithActionResult::Error(TEXT("'direction' must be a string"), -32602);
+	}
+	int32 Depth = 1;
+	TSharedPtr<FJsonValue> DepthField = Params->TryGetField(TEXT("depth"));
+	if (DepthField.IsValid())
+	{
+		double RawDepth = 0;
+		if (!DepthField->TryGetNumber(RawDepth))
+		{
+			return FMonolithActionResult::Error(TEXT("'depth' must be a number"), -32602);
+		}
 		Depth = FMath::Clamp(static_cast<int32>(RawDepth), 1, 100);
 	}
 
