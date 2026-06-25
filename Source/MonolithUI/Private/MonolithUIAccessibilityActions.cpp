@@ -231,6 +231,7 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibili
     Result->SetStringField(TEXT("class_name"), ClassName);
 
     TArray<TSharedPtr<FJsonValue>> Flags;
+    Flags.Reserve(11);
     Flags.Add(MakeShared<FJsonValueString>(TEXT("bReducedMotion")));
     Flags.Add(MakeShared<FJsonValueString>(TEXT("bHighContrast")));
     Flags.Add(MakeShared<FJsonValueString>(TEXT("FontScale")));
