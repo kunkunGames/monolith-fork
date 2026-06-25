@@ -108,3 +108,9 @@ Prevention: Handlers extracting complex sub-parameters nested in optional struct
 **Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
 **Avoid:** Generating branches with `-<number>` suffixes.
 YYYY-MM-DD - [Do not skip type validation on optional nested numeric values] \n\n Malformed input pattern: Using unchecked GetNumberField with HasField inside optional numeric parameters (e.g., duration_seconds, sample_interval, max_samples in Editor actions).\n Learning: Existing code relies on HasField + GetNumberField even in optional fields which silently skips validation and crashes or corrupts data if a malformed type (like a string) is passed.\n Prevention: Replace HasField + GetNumberField with HasField + TryGetNumberField. If the value is present but fails type validation, it MUST return FMonolithActionResult::Error with a clear validation message.
+
+## 2026-06-25 - Use FMonolithActionResult::Error for validation failures
+**Malformed input pattern:** Returning a raw string `TEXT("Invalid type...")` when a parameter type mismatch is detected.
+**Learning:** Returning a raw string from an action handler bypasses the standard RPC error formatting and results in the client receiving a "success" response containing an error string, rather than a structured JSON-RPC error.
+**Prevention:** Always wrap parameter validation failure messages in `FMonolithActionResult::Error(...)` to ensure the server correctly identifies and formats the failure.
+**Avoid:** Merging type-safety PRs that return bare strings or booleans instead of structured `FMonolithActionResult` objects on failure.
