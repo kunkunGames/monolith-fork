@@ -1476,7 +1476,11 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 	TSharedPtr<FJsonObject> Spec;
 	if (Params->HasTypedField<EJson::Object>(TEXT("graph_spec")))
 	{
-		Spec = Params->GetObjectField(TEXT("graph_spec"));
+		const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+		if (Params->TryGetObjectField(TEXT("graph_spec"), SpecPtr) && SpecPtr && SpecPtr->IsValid())
+		{
+			Spec = *SpecPtr;
+		}
 	}
 	else if (Params->HasTypedField<EJson::String>(TEXT("graph_spec")))
 	{
@@ -1485,9 +1489,9 @@ FMonolithActionResult FMonolithMaterialActions::BuildMaterialGraph(const TShared
 		{
 			TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(GraphSpecJson);
 			if (!FJsonSerializer::Deserialize(Reader, Spec) || !Spec.IsValid())
-			{
+		{
 				return FMonolithActionResult::Error(TEXT("Failed to parse graph_spec JSON string"), FMonolithJsonUtils::ErrInvalidParams);
-			}
+		}
 		}
 	}
 	else
@@ -2555,7 +2559,13 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 			if (InputVal && InputVal->TryGetObject(InputObjPtr) && InputObjPtr)
 			{
 				FCustomInput NewInput;
-				NewInput.InputName = *(*InputObjPtr)->GetStringField(TEXT("name"));
+					FString InputNameStr;
+					if (!(*InputObjPtr)->TryGetStringField(TEXT("name"), InputNameStr))
+					{
+						GEditor->EndTransaction();
+						return FMonolithActionResult::Error(TEXT("Custom node input must specify a 'name' string"), FMonolithJsonUtils::ErrInvalidParams);
+					}
+					NewInput.InputName = *InputNameStr;
 				CustomExpr->Inputs.Add(NewInput);
 			}
 		}
@@ -2572,10 +2582,20 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 			if (OutVal && OutVal->TryGetObject(OutObjPtr) && OutObjPtr)
 			{
 				FCustomOutput NewOutput;
-				NewOutput.OutputName = *(*OutObjPtr)->GetStringField(TEXT("name"));
+					FString OutputNameStr;
+					if (!(*OutObjPtr)->TryGetStringField(TEXT("name"), OutputNameStr))
+					{
+						GEditor->EndTransaction();
+						return FMonolithActionResult::Error(TEXT("Custom node additional_output must specify a 'name' string"), FMonolithJsonUtils::ErrInvalidParams);
+					}
+					NewOutput.OutputName = *OutputNameStr;
 				if ((*OutObjPtr)->HasField(TEXT("type")))
 				{
-					NewOutput.OutputType = ParseCustomOutputType((*OutObjPtr)->GetStringField(TEXT("type")));
+					FString OutTypeStr;
+					if ((*OutObjPtr)->TryGetStringField(TEXT("type"), OutTypeStr))
+					{
+						NewOutput.OutputType = ParseCustomOutputType(OutTypeStr);
+					}
 				}
 				CustomExpr->AdditionalOutputs.Add(NewOutput);
 			}
@@ -3667,7 +3687,7 @@ FMonolithActionResult FMonolithMaterialActions::RecompileMaterial(const TSharedP
 	bool bIncludeStats = false;
 	if (Params->HasField(TEXT("include_stats")))
 	{
-		bIncludeStats = Params->GetBoolField(TEXT("include_stats"));
+		Params->TryGetBoolField(TEXT("include_stats"), bIncludeStats);
 	}
 
 	if (bIncludeStats && BaseMat)
@@ -3837,7 +3857,9 @@ FMonolithActionResult FMonolithMaterialActions::GetCompilationStats(const TShare
 
 	// Override is_compiled if we got valid instruction counts — shader map may not be loaded in memory
 	// but stats are cached from a previous compilation. Without this, is_compiled=false is misleading.
-	if (!ResultJson->GetBoolField(TEXT("is_compiled")) && (Stats.NumVertexShaderInstructions > 0 || Stats.NumPixelShaderInstructions > 0))
+	bool bIsCompiled = false;
+	ResultJson->TryGetBoolField(TEXT("is_compiled"), bIsCompiled);
+	if (!bIsCompiled && (Stats.NumVertexShaderInstructions > 0 || Stats.NumPixelShaderInstructions > 0))
 	{
 		ResultJson->SetBoolField(TEXT("is_compiled"), true);
 	}
@@ -7112,7 +7134,11 @@ FMonolithActionResult FMonolithMaterialActions::BuildFunctionGraph(const TShared
 	TSharedPtr<FJsonObject> Spec;
 	if (Params->HasTypedField<EJson::Object>(TEXT("graph_spec")))
 	{
-		Spec = Params->GetObjectField(TEXT("graph_spec"));
+		const TSharedPtr<FJsonObject>* SpecPtr = nullptr;
+		if (Params->TryGetObjectField(TEXT("graph_spec"), SpecPtr) && SpecPtr && SpecPtr->IsValid())
+		{
+			Spec = *SpecPtr;
+		}
 	}
 	else if (Params->HasTypedField<EJson::String>(TEXT("graph_spec")))
 	{
