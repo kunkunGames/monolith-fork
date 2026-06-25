@@ -21,3 +21,9 @@
 **Drift pattern:** MonolithConfig module counts drifted again. 5 new actions were added to the `config` namespace (`list_plugins`, `get_plugin`, `get_cvar`, `find_cvars`, `set_developer_setting`), but the global counts in `Monolith.uplugin`, `README.md`, `Docs/SPEC_CORE.md`, and `Docs/API_REFERENCE.md` were not updated to reflect this (+5 to global count 1634 -> 1639, and config namespace 6 -> 11).
 **Source of truth:** `Source/MonolithConfig/Private/MonolithConfigActions.cpp`.
 **Prevention:** Future code changes adding actions must trigger an action-count audit across the core documentation (`README.md`, `Docs/SPEC_CORE.md`, `Docs/API_REFERENCE.md`) AND `Monolith.uplugin` to keep the global counts consistent across all surfaces.
+
+## 2026-06-25 - Forbid numeric branch evasion
+**Coordination issue:** Sentinel Spec generated multiple branches with large numeric suffixes (e.g., `-9205001164091859769`, `-17364342538815737670`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
