@@ -45,3 +45,9 @@ Prevention: Operations that allocate uncompressed rendering buffers or composite
 **Boundary:** `asset_paths` array length in all audio batch actions.
 **Learning:** `asset_paths` was unbounded across 10+ batch operations like `batch_assign_sound_class`, `batch_assign_attenuation`, `apply_audio_template`, etc. If an extremely large array of assets (e.g. 50,000+ project assets) is passed by a user, iterating and mutating all those assets synchronously in a single undo transaction without yield could cause massive memory spikes and lock up the editor.
 **Prevention:** In `AudioBatchHelpers::ParseAssetPaths`, add a hard cap on `asset_paths.Num()` (e.g. `200` to mirror `batch_execute` standards) to prevent excessive single-action processing load.
+
+## 2026-06-25 - Forbid numeric branch evasion
+**Coordination issue:** LimitGuard generated multiple branches with large numeric suffixes (e.g., `-6365188721292045649`, `-10223219369105163440`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
