@@ -39,6 +39,19 @@ bool FMonolithParamGuardSceneLightingMalformedParamsTest::RunTest(const FString&
 	TestFalse(TEXT("sample_light_levels rejects malformed points parameter"), Result.bSuccess);
 	TestTrue(TEXT("sample_light_levels reports the validation error"), Result.ErrorMessage.Contains(TEXT("points")));
 
+	// Test valid parameter structure
+	TSharedPtr<FJsonObject> ValidParams = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> PointArray;
+	TArray<TSharedPtr<FJsonValue>> PointCoords;
+	PointCoords.Add(MakeShared<FJsonValueNumber>(0.0));
+	PointCoords.Add(MakeShared<FJsonValueNumber>(0.0));
+	PointCoords.Add(MakeShared<FJsonValueNumber>(0.0));
+	PointArray.Add(MakeShared<FJsonValueArray>(PointCoords));
+	ValidParams->SetArrayField(TEXT("points"), PointArray);
+
+	FMonolithActionResult ValidResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("scene"), TEXT("sample_light_levels"), ValidParams);
+	TestTrue(TEXT("sample_light_levels accepts valid points parameter"), ValidResult.bSuccess || (!ValidResult.bSuccess && ValidResult.ErrorMessage.Contains(TEXT("No editor world"))));
+
 	return true;
 }
 
