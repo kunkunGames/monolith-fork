@@ -4194,8 +4194,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCreateStatelessEmitter(cons
 FMonolithActionResult FMonolithNiagaraActions::HandleGetOrderedModules(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ScriptUsage = Params->GetStringField(TEXT("usage"));
+
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' is missing or not a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString ScriptUsage;
+	if (Params->HasField(TEXT("usage")) && !Params->TryGetStringField(TEXT("usage"), ScriptUsage))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'usage' must be a string if provided"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
