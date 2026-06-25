@@ -3038,6 +3038,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RefreshCrgCacheForFiles(const T
 	Input->SetStringField(TEXT("context"), Context);
 	TArray<TSharedPtr<FJsonValue>> FileIdValues;
 	TArray<int64> SortedFileIds = FileIds.Array();
+	FileIdValues.Reserve(SortedFileIds.Num());
 	SortedFileIds.Sort();
 	for (int64 FileId : SortedFileIds)
 	{
