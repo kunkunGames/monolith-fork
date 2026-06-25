@@ -132,3 +132,19 @@ bool FMonolithGuideUnknownSectionTest::RunTest(const FString& /*Parameters*/)
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithGuideInvalidSectionTest,
+	"Monolith.Core.Guide.InvalidSectionParam",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGuideInvalidSectionTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("section"), 42.0); // Wrong type
+	const FMonolithActionResult Result = FMonolithGuideTool::HandleGuide(Params);
+	TestFalse(TEXT("invalid section param type fails"), Result.bSuccess);
+	TestTrue(TEXT("invalid section param type reports error"),
+		Result.ErrorMessage.Contains(TEXT("must be a string")));
+	return true;
+}

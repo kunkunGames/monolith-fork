@@ -214,9 +214,14 @@ FMonolithActionResult FMonolithGuideTool::HandleGuide(const TSharedPtr<FJsonObje
 
 	// Optional section filter.
 	FString RequestedSection;
-	if (Params.IsValid())
+	if (Params.IsValid() && Params->HasField(TEXT("section")))
 	{
-		Params->TryGetStringField(TEXT("section"), RequestedSection);
+		if (!Params->TryGetStringField(TEXT("section"), RequestedSection))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Parameter 'section' must be a string."),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
 		RequestedSection = RequestedSection.TrimStartAndEnd().ToLower();
 	}
 
