@@ -507,6 +507,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetIkRigBoneSettin
 	IkRig->Modify();
 
 	TArray<TSharedPtr<FJsonValue>> SolverResults;
+	SolverResults.Reserve(NumSolvers);
 	int32 SolversTouched = 0;
 
 	for (int32 SolverIndex = 0; SolverIndex < NumSolvers; ++SolverIndex)
@@ -781,6 +782,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetIkRigBoneSettin
 	}
 
 	TArray<TSharedPtr<FJsonValue>> SolverResults;
+	SolverResults.Reserve(NumSolvers);
 
 	for (int32 SolverIndex = 0; SolverIndex < NumSolvers; ++SolverIndex)
 	{
