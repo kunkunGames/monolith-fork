@@ -206,7 +206,7 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
              "Uniqueness check runs against the full WidgetTree before the rename — colliding new_name returns -32602."),
         FMonolithActionHandler::CreateStatic(&MonolithUIActionsPhase2::HandleRenameWidget),
         FParamSchemaBuilder()
-            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"))
+            .RequiredAssetPath(TEXT("wbp_path"), TEXT("Widget Blueprint path (alias: asset_path)"), {TEXT("asset_path")})
             .Required(TEXT("old_name"), TEXT("string"), TEXT("Current widget FName"))
             .Required(TEXT("new_name"), TEXT("string"), TEXT("Target widget FName (must be unique in tree)"))
             .Build(),
