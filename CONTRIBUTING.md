@@ -313,11 +313,11 @@ When preparing a new release of Monolith:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Scripts/make_release.ps1 -Version "X.Y.Z"
    ```
-6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP asset (for the default Windows build, `../Monolith-vX.Y.Z.zip`; for platform builds, also attach the matching `Monolith-vX.Y.Z-macOS.zip` / `Monolith-vX.Y.Z-Linux.zip` assets).
+6. **Publish:** Create a GitHub Release with the new tag and attach the generated ZIP assets (`../Monolith-vX.Y.Z.zip`, `../Monolith-vX.Y.Z-UE5.7.zip`, and `../Monolith-vX.Y.Z-UE5.8.zip`).
    ```bash
-   gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
+   gh release create vX.Y.Z "../Monolith-vX.Y.Z.zip" "../Monolith-vX.Y.Z-UE5.7.zip" "../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
-   **Crucial:** You must copy the exact `Monolith-SHA256: <hash>` output from the release script into the release notes body before publishing. When providing platform-specific release assets, include all applicable markers (`Monolith-SHA256: <hash>`, `Monolith-macOS-SHA256: <hash>`, `Monolith-Linux-SHA256: <hash>`). If a platform's marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
+   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-UE5.7: <hash>` / `Monolith-SHA256-UE5.8: <hash>` and the script also prints legacy `Monolith-SHA256: <hash>` for compatibility. If the matching engine marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
 
 ## Architecture Notes
 
