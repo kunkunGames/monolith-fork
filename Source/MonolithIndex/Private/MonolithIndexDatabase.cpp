@@ -1766,17 +1766,20 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::FindReferences(const FString& Pa
 	TArray<FIndexedDependency> Deps = GetDependenciesForAsset(AssetId);
 	TArray<TSharedPtr<FJsonValue>> DepsArr;
 	DepsArr.Reserve(Deps.Num());
+
+	FSQLitePreparedStatement DepStmt;
+	DepStmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
+
 	for (const auto& Dep : Deps)
 	{
-		FSQLitePreparedStatement Stmt;
-		Stmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
-		Stmt.SetBindingValueByIndex(1, Dep.TargetAssetId);
-		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		DepStmt.Reset();
+		DepStmt.SetBindingValueByIndex(1, Dep.TargetAssetId);
+		if (DepStmt.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
 			auto DepObj = MakeShared<FJsonObject>();
 			FString Path, Class;
-			Stmt.GetColumnValueByIndex(0, Path);
-			Stmt.GetColumnValueByIndex(1, Class);
+			DepStmt.GetColumnValueByIndex(0, Path);
+			DepStmt.GetColumnValueByIndex(1, Class);
 			DepObj->SetStringField(TEXT("path"), Path);
 			DepObj->SetStringField(TEXT("class"), Class);
 			DepObj->SetStringField(TEXT("type"), Dep.DependencyType);
@@ -1789,17 +1792,20 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::FindReferences(const FString& Pa
 	TArray<FIndexedDependency> Refs = GetReferencersOfAsset(AssetId);
 	TArray<TSharedPtr<FJsonValue>> RefsArr;
 	RefsArr.Reserve(Refs.Num());
+
+	FSQLitePreparedStatement RefStmt;
+	RefStmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
+
 	for (const auto& Ref : Refs)
 	{
-		FSQLitePreparedStatement Stmt;
-		Stmt.Create(*Database, TEXT("SELECT package_path, asset_class FROM assets WHERE id = ?;"));
-		Stmt.SetBindingValueByIndex(1, Ref.SourceAssetId);
-		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		RefStmt.Reset();
+		RefStmt.SetBindingValueByIndex(1, Ref.SourceAssetId);
+		if (RefStmt.Step() == ESQLitePreparedStatementStepResult::Row)
 		{
 			auto RefObj = MakeShared<FJsonObject>();
 			FString Path, Class;
-			Stmt.GetColumnValueByIndex(0, Path);
-			Stmt.GetColumnValueByIndex(1, Class);
+			RefStmt.GetColumnValueByIndex(0, Path);
+			RefStmt.GetColumnValueByIndex(1, Class);
 			RefObj->SetStringField(TEXT("path"), Path);
 			RefObj->SetStringField(TEXT("class"), Class);
 			RefObj->SetStringField(TEXT("type"), Ref.DependencyType);
