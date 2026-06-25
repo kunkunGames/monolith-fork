@@ -718,14 +718,20 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleQueryZoneLanes(const TSh
 	}
 
 	FVector Location;
-	Location.X = (*LocationPtr)->GetNumberField(TEXT("x"));
-	Location.Y = (*LocationPtr)->GetNumberField(TEXT("y"));
-	Location.Z = (*LocationPtr)->GetNumberField(TEXT("z"));
+	if (!(*LocationPtr)->TryGetNumberField(TEXT("x"), Location.X) ||
+		!(*LocationPtr)->TryGetNumberField(TEXT("y"), Location.Y) ||
+		!(*LocationPtr)->TryGetNumberField(TEXT("z"), Location.Z))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'location': x, y, and z must be numbers"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double Radius = 1000.0;
 	if (Params->HasField(TEXT("radius")))
 	{
-		Radius = Params->GetNumberField(TEXT("radius"));
+		if (!Params->TryGetNumberField(TEXT("radius"), Radius))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param 'radius': must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	UWorld* World = MonolithAI::GetPIEWorld();
@@ -779,7 +785,12 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 		return FMonolithActionResult::Error(TEXT("Missing required param 'lane_handle'"));
 	}
 
-	int32 LaneIndex = static_cast<int32>(Params->GetNumberField(TEXT("lane_handle")));
+	double LaneHandleDouble = 0.0;
+	if (!Params->TryGetNumberField(TEXT("lane_handle"), LaneHandleDouble))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param 'lane_handle': must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 LaneIndex = static_cast<int32>(LaneHandleDouble);
 
 	UWorld* World = MonolithAI::GetPIEWorld();
 	if (!World)
