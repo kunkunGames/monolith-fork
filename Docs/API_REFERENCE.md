@@ -38,6 +38,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
 | [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
 | [gamefeatures](#gamefeatures) | 5 | Optional GameFeature plugin discovery, inspection, and validation |
+| [interchange](#interchange) | | Optional Interchange framework discovery, validation, and asset import/export operations |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -1403,6 +1404,30 @@ Optional GameFeature plugin discovery, inspection, and validation. **5 actions.*
 | `validate_plugin` | `plugin_name` (required string) |
 
 ---
+
+
+## interchange
+
+Optional Interchange framework discovery, validation, and asset import/export operations.
+
+| Action | Params |
+|--------|--------|
+| `get_supported_formats` | none |
+| `can_import` | `source_file` (required string), `destination_path` (optional string), `allow_external` (optional boolean) |
+| `can_reimport` | `asset_path` (required string) |
+| `get_import_data` | `asset_path` (required string) |
+| `import_asset` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_assets` | `source_files` (required array), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_scene` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_mesh` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_skeletal_mesh` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_texture` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_audio` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `import_with_options` | `source_file` (required string), `destination_path` (required string), `conflict_policy` (required string), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean), `options` (optional object) |
+| `update_reimport_path` | `asset_path` (required string), `source_file` (required string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
+| `reimport_asset` | `asset_path` (required string), `source_file` (optional string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
+| `reimport_assets` | `asset_paths` (required array), `confirm` (optional boolean), `dry_run` (optional boolean) |
+| `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 
 ## combograph
 
