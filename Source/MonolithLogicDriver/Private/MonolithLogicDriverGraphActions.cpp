@@ -216,8 +216,13 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetSMStructure(con
 	int32 Depth = -1;
 	{
 		double TmpDepth = 0.0;
-		if (Params->TryGetNumberField(TEXT("depth"), TmpDepth))
+		const bool bHasDepth = Params->HasField(TEXT("depth"));
+		if (bHasDepth)
 		{
+			if (!Params->TryGetNumberField(TEXT("depth"), TmpDepth))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'depth' must be a number"), -32602);
+			}
 			Depth = static_cast<int32>(TmpDepth);
 		}
 	}
