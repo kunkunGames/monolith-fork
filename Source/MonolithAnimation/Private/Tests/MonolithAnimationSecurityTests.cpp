@@ -197,4 +197,35 @@ bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Param
 	return true;
 }
 
+
+#if WITH_CHOOSER
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithValidateChooserParamGuardTest, "Monolith.ParamGuard.Animation.ValidateChooser", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithValidateChooserParamGuardTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/TestChooser");
+
+	// test expected_context_class
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetNumberField(TEXT("expected_context_class"), 123);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("chooser"), TEXT("validate_chooser"), Params);
+		TestFalse(TEXT("validate_chooser with malformed expected_context_class should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should complain about invalid type for parameter 'expected_context_class'"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'expected_context_class'")));
+	}
+
+	// test expected_result_type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("asset_path"), AssetPath);
+		Params->SetNumberField(TEXT("expected_result_type"), 123);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("chooser"), TEXT("validate_chooser"), Params);
+		TestFalse(TEXT("validate_chooser with malformed expected_result_type should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should complain about invalid type for parameter 'expected_result_type'"), Result.ErrorMessage.Contains(TEXT("Invalid type for parameter 'expected_result_type'")));
+	}
+
+	return true;
+}
+#endif // WITH_CHOOSER
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -1174,10 +1174,16 @@ FMonolithActionResult FMonolithChooserActions::HandleSetEvaluateChooserResultRef
 FMonolithActionResult FMonolithChooserActions::HandleValidateChooser(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString ExpectedContextClass = Params->HasField(TEXT("expected_context_class"))
-		? Params->GetStringField(TEXT("expected_context_class")) : FString();
-	const FString ExpectedResultType = Params->HasField(TEXT("expected_result_type"))
-		? Params->GetStringField(TEXT("expected_result_type")) : FString();
+	FString ExpectedContextClass;
+	if (Params->HasField(TEXT("expected_context_class")) && !Params->TryGetStringField(TEXT("expected_context_class"), ExpectedContextClass))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'expected_context_class'"));
+	}
+	FString ExpectedResultType;
+	if (Params->HasField(TEXT("expected_result_type")) && !Params->TryGetStringField(TEXT("expected_result_type"), ExpectedResultType))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'expected_result_type'"));
+	}
 
 	UChooserTable* Table = FMonolithAssetUtils::LoadAssetByPath<UChooserTable>(AssetPath);
 	if (!Table)
