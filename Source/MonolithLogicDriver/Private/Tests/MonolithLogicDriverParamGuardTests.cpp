@@ -914,4 +914,35 @@ bool FMonolithParamGuardLogicDriverAutoArrangeGraphRejectsMalformedParamsTest::R
 	return true;
 }
 
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.GetNodeConnectionsRejectsMalformedParams
+// Validates that get_node_connections rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverGetNodeConnectionsRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.GetNodeConnectionsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverGetNodeConnectionsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("get_node_connections")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_node_connections"), EmptyParams);
+		TestTrue(TEXT("get_node_connections rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("get_node_connections reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingGuidParams = MakeShared<FJsonObject>();
+		MissingGuidParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_node_connections"), MissingGuidParams);
+		TestTrue(TEXT("get_node_connections rejects missing node_guid"), !Result.bSuccess);
+		TestTrue(TEXT("get_node_connections reports missing node_guid"), Result.ErrorMessage.Contains(TEXT("Missing required param 'node_guid'")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
