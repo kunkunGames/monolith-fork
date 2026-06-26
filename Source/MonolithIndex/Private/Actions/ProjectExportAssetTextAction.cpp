@@ -116,16 +116,27 @@ FString FProjectExportAssetTextAction::GetDescription()
 FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")))
 	{
-		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required"), -32602);
+		if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+		{
+			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
+		}
+	}
+	if (AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required and cannot be empty"), -32602);
 	}
 
 	// Resolve max_bytes (optional). Hard-error if the caller asks past the ceiling.
 	int32 MaxBytes = DefaultMaxBytes;
-	double MaxBytesRaw = 0.0;
-	if (Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesRaw))
+	if (Params->HasField(TEXT("max_bytes")))
 	{
+		double MaxBytesRaw = 0.0;
+		if (!Params->TryGetNumberField(TEXT("max_bytes"), MaxBytesRaw))
+		{
+			return FMonolithActionResult::Error(TEXT("'max_bytes' parameter must be a number"), -32602);
+		}
 		MaxBytes = static_cast<int32>(MaxBytesRaw);
 		if (MaxBytes <= 0)
 		{
