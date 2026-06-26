@@ -16670,6 +16670,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleFindSimilarSystems(const TS
 	Scored.Sort([](const FScored& A, const FScored& B) { return A.Score > B.Score; });
 
 	TArray<TSharedPtr<FJsonValue>> Matches;
+	Matches.Reserve(FMath::Min(Scored.Num(), Limit));
 	for (const FScored& S : Scored)
 	{
 		if (Matches.Num() >= Limit) break;
