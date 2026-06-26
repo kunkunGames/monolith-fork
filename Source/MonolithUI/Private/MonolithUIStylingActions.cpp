@@ -11,6 +11,23 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 
+
+namespace
+{
+    TSharedPtr<FJsonObject> MakeStylingResponse(const FString& WidgetName, int32 PropsSet, bool bCompile, const FString& PropertyName = TEXT(""))
+    {
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("widget"), WidgetName);
+        if (!PropertyName.IsEmpty())
+        {
+            Result->SetStringField(TEXT("property"), PropertyName);
+        }
+        Result->SetNumberField(TEXT("properties_set"), PropsSet);
+        Result->SetBoolField(TEXT("compiled"), bCompile);
+        return Result;
+    }
+}
+
 void FMonolithUIStylingActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
@@ -327,13 +344,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetBrush(const TSharedPtr
     bool bCompile = false;
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
-
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("widget"), WidgetName);
-    Result->SetStringField(TEXT("property"), PropertyName);
-    Result->SetNumberField(TEXT("properties_set"), PropsSet);
-    Result->SetBoolField(TEXT("compiled"), bCompile);
-    return FMonolithActionResult::Success(Result);
+    return FMonolithActionResult::Success(MakeStylingResponse(WidgetName, PropsSet, bCompile, PropertyName));
 }
 
 // --- set_font ---
@@ -465,12 +476,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetFont(const TSharedPtr<
     bool bCompile = false;
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
-
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("widget"), WidgetName);
-    Result->SetNumberField(TEXT("properties_set"), PropsSet);
-    Result->SetBoolField(TEXT("compiled"), bCompile);
-    return FMonolithActionResult::Success(Result);
+    return FMonolithActionResult::Success(MakeStylingResponse(WidgetName, PropsSet, bCompile));
 }
 
 // --- set_color_scheme ---
@@ -742,12 +748,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     bool bCompile = false;
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
-
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("widget"), WidgetName);
-    Result->SetNumberField(TEXT("properties_set"), PropsSet);
-    Result->SetBoolField(TEXT("compiled"), bCompile);
-    return FMonolithActionResult::Success(Result);
+    return FMonolithActionResult::Success(MakeStylingResponse(WidgetName, PropsSet, bCompile));
 }
 
 // --- set_image ---
@@ -865,10 +866,5 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     bool bCompile = false;
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
-
-    TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-    Result->SetStringField(TEXT("widget"), WidgetName);
-    Result->SetNumberField(TEXT("properties_set"), PropsSet);
-    Result->SetBoolField(TEXT("compiled"), bCompile);
-    return FMonolithActionResult::Success(Result);
+    return FMonolithActionResult::Success(MakeStylingResponse(WidgetName, PropsSet, bCompile));
 }
