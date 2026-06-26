@@ -552,6 +552,7 @@ FMonolithActionResult FMonolithMeshValidationActions::BatchValidate(const TShare
 		TArray<TSharedPtr<FJsonValue>> IssueList;
 		if (TArray<FString>* SQLIssueList = SQLIssues.Find(AssetPath))
 		{
+			IssueList.Reserve(SQLIssueList->Num());
 			for (const FString& Issue : *SQLIssueList)
 			{
 				auto IssueEntry = MakeShared<FJsonObject>();
