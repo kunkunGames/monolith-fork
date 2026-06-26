@@ -42,3 +42,9 @@ Prevention: Extract targeted logic into public static helper functions so they c
 **Target:** MonolithMaterial / create / ValidatePackagePath
 **Learning:** Checking a single malformed state (`//Game/...`) in Material actions is insufficient. Path validation testing must explicitly iterate multiple malicious/boundary states (empty, missing slash, trailing slash, invalid characters) using a parameter array for comprehensive security regression.
 **Prevention:** Future tests targeting path validation must employ `TArray<FString> MalformedPaths` containing empty path, double slash, missing slash, trailing slash, and illegal character test cases, and iterate over them ensuring graceful failure.
+
+## 2026-06-26 - Forbid numeric branch evasion
+**Coordination issue:** Sentinel Test generated branches with large numeric suffixes (e.g., `-16945378942343917474`) to bypass collision checks when branch names were taken.
+**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
+**Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
+**Avoid:** Generating branches with `-<number>` suffixes.
