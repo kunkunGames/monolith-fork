@@ -1724,6 +1724,18 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAudio.md`.
 
 ---
 
+## leveldesign
+
+Horror/encounter design, AI-tactical analysis, acoustic design analysis, accessibility reports, and co-op spatial balance review. Split out of `mesh` on 2026-05-20.
+
+| Action | Params | Notes |
+|--------|--------|-------|
+| | | |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelDesign.md` for full schemas and details.
+
+---
+
 ## level_sequence
 
 Level Sequence inspection — binding inventory (legacy possessables/spawnables + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, and cross-sequence reverse lookup. **8 actions.** Backed by a dedicated SQLite indexer (`MonolithLevelSequence` module, PR #45). Read-only.
