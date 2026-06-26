@@ -7044,6 +7044,9 @@ namespace MonolithEditorPieSmoke
 			const TArray<FMonolithLogEntry> Entries = LogCapture->GetEntriesSince(
 				MarkerTimestamp, /*CategoryFilter*/{}, ELogVerbosity::VeryVerbose, FMonolithLogCapture::MaxEntries);
 
+			ActiveBucket.Reserve(Entries.Num());
+			TeardownBucket.Reserve(Entries.Num());
+
 			// #10 first entry containing the teardown marker splits the buckets.
 			bool bInTeardown = false;
 			for (const FMonolithLogEntry& Entry : Entries)
