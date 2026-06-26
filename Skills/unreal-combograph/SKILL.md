@@ -28,7 +28,7 @@ combograph_query({ action: "get_combo_graph_info", mode: "schema" })
 ## Key Parameters
 
 - `asset_path` -- ComboGraph asset path (e.g. `/Game/Combos/CG_LightAttack`)
-- `node_id` -- node identifier | `montage_path` -- animation montage path
+- `node_index` -- index of the node in AllNodes | `animation_asset` -- animation montage or sequence path
 - `save_path` -- destination for new assets | `ability_path` -- gameplay ability path
 
 ## Action Reference
@@ -40,14 +40,14 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | **Read (4)** | | |
 | `list_combo_graphs` | `path_filter`? | List all ComboGraph assets |
 | `get_combo_graph_info` | `asset_path` | Full graph: nodes, edges, entry points, effects |
-| `get_combo_node_effects` | `asset_path`, `node_id` | Gameplay effects on a node |
+| `get_combo_node_effects` | `asset_path`, `node_index` | Gameplay effects on a node |
 | `validate_combo_graph` | `asset_path` | Lint: orphans, missing montages, broken edges, unreachable nodes |
 | **Create (5)** | | |
 | `create_combo_graph` | `save_path` | Create new ComboGraph |
-| `add_combo_node` | `asset_path`, `montage_path`, `node_name`? | Add node with montage |
-| `add_combo_edge` | `asset_path`, `source_node`, `target_node`, `input_type`? | Add transition edge |
-| `set_combo_node_effects` | `asset_path`, `node_id`, `effects` | Set gameplay effects |
-| `set_combo_node_cues` | `asset_path`, `node_id`, `cues` | Set gameplay cues |
+| `add_combo_node` | `asset_path`, `animation_asset`, `node_type`?, `parent_node_index`?, `play_rate`? | Add node with montage |
+| `add_combo_edge` | `asset_path`, `from_node_index`, `to_node_index`, `input_action`?, `trigger_event`?, `transition_behavior`? | Add transition edge |
+| `set_combo_node_effects` | `asset_path`, `node_index`, `effects` | Set gameplay effects |
+| `set_combo_node_cues` | `asset_path`, `node_index`, `cues` | Set gameplay cues |
 | **Scaffold (3)** | | |
 | `create_combo_ability` | `save_path`, `combo_graph`?, `initial_input`?, `parent_class`? | Create Gameplay Ability for ComboGraph |
 | `link_ability_to_combo_graph` | `ability_path`, `combo_graph` | Link existing ability |
@@ -68,9 +68,9 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 ### Create combo from scratch
 ```
 combograph_query({ action: "create_combo_graph", params: { save_path: "/Game/Combos/CG_LightAttack" }})
-combograph_query({ action: "add_combo_node", params: { asset_path: "/Game/Combos/CG_LightAttack", montage_path: "/Game/Animations/AM_Slash_1", node_name: "Slash1" }})
-combograph_query({ action: "add_combo_node", params: { asset_path: "/Game/Combos/CG_LightAttack", montage_path: "/Game/Animations/AM_Slash_2", node_name: "Slash2" }})
-combograph_query({ action: "add_combo_edge", params: { asset_path: "/Game/Combos/CG_LightAttack", source_node: "Slash1", target_node: "Slash2", input_type: "LightAttack" }})
+combograph_query({ action: "add_combo_node", params: { asset_path: "/Game/Combos/CG_LightAttack", animation_asset: "/Game/Animations/AM_Slash_1" }})
+combograph_query({ action: "add_combo_node", params: { asset_path: "/Game/Combos/CG_LightAttack", animation_asset: "/Game/Animations/AM_Slash_2" }})
+combograph_query({ action: "add_combo_edge", params: { asset_path: "/Game/Combos/CG_LightAttack", from_node_index: 0, to_node_index: 1, input_action: "LightAttack" }})
 ```
 
 ### Quick scaffold from montage list

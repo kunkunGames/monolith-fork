@@ -45,9 +45,9 @@ MonolithComboGraph provides MCP coverage of the ComboGraph marketplace plugin. I
   "tree": {
     "fill_kind": "EffectContainers",
     "containers": [
-      {"node_id": "Strike1", "duration": 0.4, "magnitude": 12.0},
-      {"node_id": "Strike2", "duration": 0.5, "magnitude": 18.0},
-      {"node_id": "Finisher", "duration": 0.8, "magnitude": 35.0}
+      {"node_index": 0, "duration": 0.4, "magnitude": 12.0},
+      {"node_index": 1, "duration": 0.5, "magnitude": 18.0},
+      {"node_index": 2, "duration": 0.8, "magnitude": 35.0}
     ]
   },
   "dry_run": true
