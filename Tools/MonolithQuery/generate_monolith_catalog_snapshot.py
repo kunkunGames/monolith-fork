@@ -93,6 +93,67 @@ PROGRESS_ACTIONS = {
     ("source", "rebuild_crg_graph"),
 }
 
+OFFLINE_AVAILABLE_ACTIONS = {
+    "source": {
+        "search_source",
+        "read_source",
+        "find_references",
+        "find_callers",
+        "find_callees",
+        "get_class_hierarchy",
+        "get_module_info",
+        "get_symbol_context",
+        "read_file",
+        "impact_radius",
+        "find_overrides",
+        "health",
+        "repair_fts",
+        "repair_crg_cache",
+        "build_crg_graph",
+        "rebuild_crg_graph",
+        "repair_crg_graph",
+        "search_crg_graph",
+        "crg_graph_health",
+        "risk_score",
+        "review_hotspots",
+        "review_context",
+        "detect_changes",
+        "find_unused",
+        "pre_merge_check",
+        "snapshot",
+        "diff_snapshots",
+        "get_include_path",
+        "get_signature",
+        "check_deprecations",
+        "verify_symbols",
+        "find_example_usage",
+        "lint_header",
+        "generate_class_stub",
+    },
+    "project": {
+        "search",
+        "find_by_type",
+        "find_references",
+        "get_stats",
+        "get_asset_details",
+        "impact_radius",
+        "health",
+        "repair_fts",
+        "repair_crg_cache",
+        "risk_score",
+        "review_hotspots",
+        "review_context",
+        "detect_changes",
+        "find_unused",
+        "pre_merge_check",
+        "snapshot",
+        "diff_snapshots",
+    },
+    "bridge": {"search_asset_symbols"},
+    "console": {"search_objects", "get_object", "health"},
+    "monolith": {"guide", "status", "discover", "find", "get_action_metadata_coverage"},
+}
+
 NAMESPACE_SKILLS = {
     "console": "unreal-console",
     "workflow": "monolith-mcp",
@@ -314,9 +375,20 @@ def mutates_assets(action: str) -> bool:
     return action.startswith(WRITE_PREFIXES)
 
 
+ACTION_FIELD_OVERRIDES = {
+    ("source", "generate_class_stub"): {
+        "mutates_assets": False,
+        "long_running": False,
+    },
+}
+
+
 def action_metadata(namespace: str, action: str, summary: str, source_file: str, line: int) -> dict:
     mutating = mutates_assets(action)
     long_running = any(token in action for token in LONG_RUNNING_TOKENS)
+    overrides = ACTION_FIELD_OVERRIDES.get((namespace, action), {})
+    mutating = overrides.get("mutates_assets", mutating)
+    long_running = overrides.get("long_running", long_running)
     supports_progress = (namespace, action) in PROGRESS_ACTIONS
     proof_anchor = ""
     implementation_status = "live_registry_snapshot"
@@ -375,6 +447,8 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
             f"proof_anchor:{proof_anchor}",
         ]
 
+    available_offline = action in OFFLINE_AVAILABLE_ACTIONS.get(namespace, set())
+
     return {
         "namespace": namespace,
         "action": action,
@@ -383,8 +457,8 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
         "source_file": source_file,
         "source_line": line,
         "source": "cpp_registry_scan",
-        "available_offline": False,
-        "requires_live_editor": True,
+        "available_offline": available_offline,
+        "requires_live_editor": not available_offline,
         "mutates_assets": mutating,
         "writes_logs": True,
         "long_running": long_running,

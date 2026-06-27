@@ -1,0 +1,281 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "emitter_lifecycle",
+  "route_edit_domain": "emitter_lifecycle",
+  "module_id": "asset_authoring.niagara.emitter_lifecycle",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.emitter_lifecycle",
+    "edit": "asset_operation.edit.niagara.emitter_lifecycle",
+    "save": "asset_operation.save.niagara.emitter_lifecycle",
+    "readback_verify": "asset_operation.readback_verify.niagara.emitter_lifecycle"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-538"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-538",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "emitter_lifecycle",
+      "blueprint_type": "",
+      "workflow": "niagara_emitter_lifecycle_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "set_emitter_enabled",
+        "reorder_emitters",
+        "remove_emitter",
+        "save_system",
+        "list_emitters",
+        "export_system_spec",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara System with three emitters, disable one, reorder the topology, remove one emitter, save, and read back the final emitter order and enabled state"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-538",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle"
+          },
+          "contains": [
+            "NS_BenchEmitterLifecycle"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "name": "BenchEmitterA",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "BenchEmitterA",
+            "handle_id"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "name": "BenchEmitterB",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "BenchEmitterB",
+            "handle_id"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "name": "BenchEmitterC",
+            "sim_target": "gpu"
+          },
+          "contains": [
+            "BenchEmitterC",
+            "handle_id"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_emitter_enabled",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "emitter": "BenchEmitterB",
+            "enabled": false
+          },
+          "contains": [
+            "Emitter disabled"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "reorder_emitters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "order": [
+              "BenchEmitterC",
+              "BenchEmitterA",
+              "BenchEmitterB"
+            ]
+          },
+          "contains": [
+            "Emitters reordered"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "remove_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "emitter": "BenchEmitterA"
+          },
+          "contains": [
+            "Emitter removed"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_emitters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle"
+          },
+          "contains": [
+            "count",
+            "2",
+            "BenchEmitterC",
+            "index",
+            "0",
+            "BenchEmitterB",
+            "enabled",
+            "false",
+            "GPUComputeSim",
+            "CPUSim"
+          ],
+          "not_contains": [
+            "BenchEmitterA"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "export_system_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle",
+            "include_values": false
+          },
+          "contains": [
+            "emitters",
+            "BenchEmitterC",
+            "BenchEmitterB",
+            "system_properties"
+          ],
+          "not_contains": [
+            "BenchEmitterA"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterLifecycle"
+          },
+          "contains": [
+            "NS_BenchEmitterLifecycle",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "emitter_lifecycle",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_emitter_lifecycle_roundtrip",
+      "description": "Create a Niagara System with three emitters, disable one, reorder the topology, remove one emitter, save, and read back the final emitter order and enabled state",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/niagara-overview-in-unreal-engine?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/emitters-in-niagara-effects-for-unreal-engine?application_version=5.8",
+        "source: Plugins/Monolith/Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-niagara/SKILL.md",
+        "skill_ref: Plugins/Monolith/Skills/unreal-niagara/references/niagara-actions.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "set_emitter_enabled",
+          "reorder_emitters",
+          "remove_emitter",
+          "save_system",
+          "list_emitters",
+          "export_system_spec",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

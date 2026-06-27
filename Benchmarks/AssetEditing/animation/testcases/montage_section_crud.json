@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "montage_section_crud",
+  "route_edit_domain": "montage_section_crud",
+  "module_id": "asset_authoring.animation.montage_section_crud",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.montage_section_crud",
+    "edit": "asset_operation.edit.animation.montage_section_crud",
+    "save": "asset_operation.save.animation.montage_section_crud",
+    "readback_verify": "asset_operation.readback_verify.animation.montage_section_crud"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-530"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-530",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "montage_section_crud",
+      "blueprint_type": "",
+      "workflow": "animation_montage_section_crud_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_montage",
+        "add_montage_section",
+        "set_section_next",
+        "set_section_time",
+        "delete_montage_section",
+        "save_asset",
+        "get_montage_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-530",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_montage",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "AM_BenchSectionCrud",
+            "SkeletalCube_Skeleton",
+            "section_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_montage_section",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_name": "Intro",
+            "start_time": 0.0
+          },
+          "contains": [
+            "Intro",
+            "index"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_montage_section",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_name": "Loop",
+            "start_time": 0.1
+          },
+          "contains": [
+            "Loop",
+            "index"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_montage_section",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_name": "Outro",
+            "start_time": 0.2
+          },
+          "contains": [
+            "Outro",
+            "index"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_section_next",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_name": "Intro",
+            "next_section_name": "Loop"
+          },
+          "contains": [
+            "Intro",
+            "next_section",
+            "Loop"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_section_time",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_name": "Loop",
+            "new_time": 0.125
+          },
+          "contains": [
+            "Loop",
+            "new_time",
+            "0.125"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "delete_montage_section",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud",
+            "section_index": 3
+          },
+          "contains": [
+            "deleted_section",
+            "Outro",
+            "index",
+            "3"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_montage_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud"
+          },
+          "contains": [
+            "AM_BenchSectionCrud",
+            "SkeletalCube_Skeleton",
+            "Default",
+            "Intro",
+            "Loop",
+            "next_section",
+            "time",
+            "0.125"
+          ],
+          "not_contains": [
+            "Outro"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchSectionCrud"
+          },
+          "contains": [
+            "AM_BenchSectionCrud",
+            "AnimMontage"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "montage_section_crud",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_montage_section_crud_roundtrip",
+      "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-montage-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_montage",
+          "add_montage_section",
+          "set_section_next",
+          "set_section_time",
+          "delete_montage_section",
+          "save_asset",
+          "get_montage_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

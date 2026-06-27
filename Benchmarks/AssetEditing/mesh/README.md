@@ -6,20 +6,20 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 20 |
-| `edit` | 20 |
-| `save` | 20 |
-| `readback_verify` | 20 |
+| `creation_or_import` | 21 |
+| `edit` | 21 |
+| `save` | 21 |
+| `readback_verify` | 21 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 20 |
+| `create_save` | 21 |
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `building_shell_static_mesh` | 1 | `asset_authoring.mesh.building_shell_static_mesh` | `testcases\building_shell_static_mesh.json` |
 | `fix_quality` | 1 | `asset_authoring.mesh.fix_quality` | `testcases\fix_quality.json` |
@@ -28,6 +28,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 | `geometry_handle_save` | 1 | `asset_authoring.mesh.geometry_handle_save` | `testcases\geometry_handle_save.json` |
 | `handle_boolean_remesh_material_ids` | 1 | `asset_authoring.mesh.handle_boolean_remesh_material_ids` | `testcases\handle_boolean_remesh_material_ids.json` |
 | `horror_prop_static_mesh` | 1 | `asset_authoring.mesh.horror_prop_static_mesh` | `testcases\horror_prop_static_mesh.json` |
+| `material_slots_compare` | 1 | `asset_authoring.mesh.material_slots_compare` | `testcases\material_slots_compare.json` |
 | `maze_static_mesh` | 1 | `asset_authoring.mesh.maze_static_mesh` | `testcases\maze_static_mesh.json` |
 | `merge_actors` | 1 | `asset_authoring.mesh.merge_actors` | `testcases\merge_actors.json` |
 | `parametric_static_mesh` | 1 | `asset_authoring.mesh.parametric_static_mesh` | `testcases\parametric_static_mesh.json` |

@@ -5,27 +5,28 @@
   "asset_type": "editor",
   "asset_type_slug": "editor",
   "module_id": "asset_authoring.editor",
-  "task_count": 4,
+  "task_count": 5,
   "operation_counts": {
-    "creation_or_import": 4,
-    "edit": 4,
-    "save": 3,
-    "readback_verify": 4
+    "creation_or_import": 5,
+    "edit": 5,
+    "save": 4,
+    "readback_verify": 5
   },
   "lifecycle_counts": {
     "create": 1,
-    "create_save": 3
+    "create_save": 4
   },
-  "edit_domain_count": 4,
+  "edit_domain_count": 5,
   "task_ids": [
-    "BEB-418",
-    "BEB-427",
-    "BEB-439",
-    "BEB-497"
+    "BEB-424",
+    "BEB-433",
+    "BEB-445",
+    "BEB-503",
+    "BEB-542"
   ],
   "task_refs": [
     {
-      "id": "BEB-418",
+      "id": "BEB-424",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -50,7 +51,7 @@
       "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
     },
     {
-      "id": "BEB-427",
+      "id": "BEB-433",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -81,7 +82,7 @@
       "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
     },
     {
-      "id": "BEB-439",
+      "id": "BEB-445",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -110,7 +111,7 @@
       "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
     },
     {
-      "id": "BEB-497",
+      "id": "BEB-503",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -138,6 +139,35 @@
         "inspect_asset"
       ],
       "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
+    },
+    {
+      "id": "BEB-542",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "texture_flipbook_atlas",
+      "blueprint_type": "",
+      "workflow": "editor_texture_flipbook_atlas_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture",
+        "stitch_flipbook",
+        "save_asset",
+        "get_texture_properties",
+        "inspect_assets_batch"
+      ],
+      "description": "Import a Texture2D through the editor namespace, stitch four PNG frames into a flipbook atlas texture, save both assets, and read back texture metadata"
     }
   ],
   "tasks_file": "tasks.jsonl",
@@ -162,7 +192,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-418"
+        "BEB-424"
       ],
       "case_file": "testcases\\empty_map_asset.json"
     },
@@ -184,7 +214,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-497"
+        "BEB-503"
       ],
       "case_file": "testcases\\map_actor_defaults.json"
     },
@@ -206,7 +236,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-439"
+        "BEB-445"
       ],
       "case_file": "testcases\\nav_harness_map.json"
     },
@@ -228,9 +258,31 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-427"
+        "BEB-433"
       ],
       "case_file": "testcases\\package_dirty_save.json"
+    },
+    {
+      "edit_domain": "texture_flipbook_atlas",
+      "route_edit_domain": "texture_flipbook_atlas",
+      "module_id": "asset_authoring.editor.texture_flipbook_atlas",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.editor.texture_flipbook_atlas",
+        "edit": "asset_operation.edit.editor.texture_flipbook_atlas",
+        "save": "asset_operation.save.editor.texture_flipbook_atlas",
+        "readback_verify": "asset_operation.readback_verify.editor.texture_flipbook_atlas"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-542"
+      ],
+      "case_file": "testcases\\texture_flipbook_atlas.json"
     }
   ]
 }

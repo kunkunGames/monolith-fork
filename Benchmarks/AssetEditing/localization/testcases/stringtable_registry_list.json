@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "localization",
+  "asset_type_slug": "localization",
+  "edit_domain": "stringtable_registry_list",
+  "route_edit_domain": "stringtable_registry_list",
+  "module_id": "asset_authoring.localization.stringtable_registry_list",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_registry_list",
+    "edit": "asset_operation.edit.localization.stringtable_registry_list",
+    "save": "asset_operation.save.localization.stringtable_registry_list",
+    "readback_verify": "asset_operation.readback_verify.localization.stringtable_registry_list"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-534"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-534",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_registry_list",
+      "blueprint_type": "",
+      "workflow": "localization_stringtable_registry_list_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "set_string_metadata",
+        "save_asset",
+        "get_string_table",
+        "list_string_tables",
+        "inspect_asset"
+      ],
+      "description": "Create a StringTable, edit entry text and metadata, save it, then verify the table through both direct and registry-level read-back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-534",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "create_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList",
+            "namespace": "BenchRegistryList",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "ST_BenchRegistryList",
+            "BenchRegistryList"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList",
+            "key": "RegistryButton",
+            "source_string": "Registry List",
+            "metadata": {
+              "Context": "Settings"
+            },
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "RegistryButton",
+            "Registry List"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_metadata",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList",
+            "key": "RegistryButton",
+            "metadata_key": "Screen",
+            "metadata_value": "RegistryPanel",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "RegistryButton",
+            "Screen",
+            "RegistryPanel"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "get_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList",
+            "include_metadata": true
+          },
+          "contains": [
+            "ST_BenchRegistryList",
+            "RegistryButton",
+            "Registry List",
+            "Settings",
+            "RegistryPanel"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "list_string_tables",
+            "path": "/Game/Benchmarks/AssetAuthoring",
+            "include_entries": true,
+            "include_metadata": true,
+            "limit": 50
+          },
+          "contains": [
+            "ST_BenchRegistryList",
+            "RegistryButton",
+            "Registry List",
+            "metadata",
+            "RegistryPanel"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchRegistryList"
+          },
+          "contains": [
+            "ST_BenchRegistryList",
+            "StringTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "stringtable_registry_list",
+      "blueprint_type": "",
+      "domain": "localization",
+      "workflow": "localization_stringtable_registry_list_roundtrip",
+      "description": "Create a StringTable, edit entry text and metadata, save it, then verify the table through both direct and registry-level read-back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/using-string-tables-for-text-in-unreal-engine",
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/BlueprintAPI/Utilities/StringTable?lang=en-US",
+        "source: Plugins/Monolith/Source/MonolithConfig/Private/MonolithLocalizationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-localization/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_string_table",
+          "set_string_entry",
+          "set_string_metadata",
+          "save_asset",
+          "get_string_table",
+          "list_string_tables",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

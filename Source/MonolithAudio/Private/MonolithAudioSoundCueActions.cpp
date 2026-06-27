@@ -1710,62 +1710,20 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 	}
 	const TSharedPtr<FJsonObject>& Spec = *SpecPtr;
 
-	// Validate cue-level property types before CreateEmptySoundCue. That helper
-	// creates, registers, dirties, and saves the package, so post-create
-	// malformed-property failures would leave a partial asset at asset_path.
+	// CreateEmptySoundCue creates, registers, dirties, and saves the package.
+	// Validate the full spec first so malformed input cannot leave a partial
+	// asset that causes later retries to fail with "asset already exists".
+	FString PreCreateError;
+	if (!ValidateSoundCueSpecBeforeCreate(Spec, PreCreateError))
 	{
-		const TSharedPtr<FJsonObject>* PreCueProps = nullptr;
-		if (Spec->TryGetObjectField(TEXT("properties"), PreCueProps) && PreCueProps && PreCueProps->IsValid())
-		{
-			double PreNum;
-			bool PreBool;
-			if ((*PreCueProps)->HasField(TEXT("VolumeMultiplier"))
-				&& !(*PreCueProps)->TryGetNumberField(TEXT("VolumeMultiplier"), PreNum))
-			{
-				return FMonolithActionResult::Error(TEXT("Malformed parameter: VolumeMultiplier must be a number"));
-			}
-			if ((*PreCueProps)->HasField(TEXT("PitchMultiplier"))
-				&& !(*PreCueProps)->TryGetNumberField(TEXT("PitchMultiplier"), PreNum))
-			{
-				return FMonolithActionResult::Error(TEXT("Malformed parameter: PitchMultiplier must be a number"));
-			}
-			if ((*PreCueProps)->HasField(TEXT("bOverrideAttenuation"))
-				&& !(*PreCueProps)->TryGetBoolField(TEXT("bOverrideAttenuation"), PreBool))
-			{
-				return FMonolithActionResult::Error(TEXT("Malformed parameter: bOverrideAttenuation must be a boolean"));
-			}
-			if ((*PreCueProps)->HasField(TEXT("bPrimeOnLoad"))
-				&& !(*PreCueProps)->TryGetBoolField(TEXT("bPrimeOnLoad"), PreBool))
-			{
-				return FMonolithActionResult::Error(TEXT("Malformed parameter: bPrimeOnLoad must be a boolean"));
-			}
-			if ((*PreCueProps)->HasField(TEXT("bExcludeFromRandomNodeBranchCulling"))
-				&& !(*PreCueProps)->TryGetBoolField(TEXT("bExcludeFromRandomNodeBranchCulling"), PreBool))
-			{
-				return FMonolithActionResult::Error(TEXT("Malformed parameter: bExcludeFromRandomNodeBranchCulling must be a boolean"));
-			}
-		}
+		return AudioInvalidParams(PreCreateError);
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("nodes"), NodesArray) && NodesArray)
-	{
-		// 500 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
-		if (NodesArray->Num() > 500)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("nodes array contains %d entries, which exceeds the maximum allowed (500)"), NodesArray->Num()));
-		}
-	}
+	Spec->TryGetArrayField(TEXT("nodes"), NodesArray);
 
 	const TArray<TSharedPtr<FJsonValue>>* ConnsArray = nullptr;
-	if (Spec->TryGetArrayField(TEXT("connections"), ConnsArray) && ConnsArray)
-	{
-		// 1000 is a conservative local maximum to prevent excessive iterations/allocations during Spec processing.
-		if (ConnsArray->Num() > 1000)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("connections array contains %d entries, which exceeds the maximum allowed (1000)"), ConnsArray->Num()));
-		}
-	}
+	Spec->TryGetArrayField(TEXT("connections"), ConnsArray);
 
 	// Create the cue
 	FString Error;
@@ -2360,6 +2318,52 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 		return FMonolithActionResult::Error(FString::Printf(TEXT("bands array contains %d entries, which exceeds the maximum allowed (100)"), BandsArray->Num()));
 	}
 
+	TArray<TSharedPtr<FJsonObject>> BandObjects;
+	TArray<USoundWave*> BandWaves;
+	BandObjects.Reserve(BandsArray->Num());
+	BandWaves.Reserve(BandsArray->Num());
+	const TCHAR* NumericBandFields[] =
+	{
+		TEXT("fade_in_distance_start"),
+		TEXT("fade_in_distance_end"),
+		TEXT("fade_out_distance_start"),
+		TEXT("fade_out_distance_end"),
+		TEXT("volume")
+	};
+
+	for (const TSharedPtr<FJsonValue>& BandVal : *BandsArray)
+	{
+		const TSharedPtr<FJsonObject>* BandObjPtr = nullptr;
+		if (!BandVal.IsValid() || !BandVal->TryGetObject(BandObjPtr) || !BandObjPtr || !BandObjPtr->IsValid())
+		{
+			return AudioInvalidParams(TEXT("Each band must be an object"));
+		}
+		const TSharedPtr<FJsonObject>& BandObj = *BandObjPtr;
+
+		FString WavePath;
+		if (!BandObj->TryGetStringField(TEXT("sound_wave"), WavePath) || WavePath.IsEmpty())
+		{
+			return AudioInvalidParams(TEXT("Each band must have a 'sound_wave' path"));
+		}
+		for (const TCHAR* NumericField : NumericBandFields)
+		{
+			double IgnoredNumber = 0.0;
+			if (BandObj->HasField(NumericField) && !BandObj->TryGetNumberField(NumericField, IgnoredNumber))
+			{
+				return AudioInvalidParams(FString::Printf(TEXT("Malformed parameter: band field '%s' must be a number"), NumericField));
+			}
+		}
+
+		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
+		if (!Wave)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not load SoundWave at '%s'"), *WavePath));
+		}
+
+		BandObjects.Add(BandObj);
+		BandWaves.Add(Wave);
+	}
+
 	FString Error;
 	USoundCue* Cue = CreateEmptySoundCue(AssetPath, Error);
 	if (!Cue) return FMonolithActionResult::Error(Error);
@@ -2373,24 +2377,8 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 
 	// Parse bands and create WavePlayer children
 	TArray<USoundNode*> WavePlayerChildren;
-	for (const auto& BandVal : *BandsArray)
+	for (USoundWave* Wave : BandWaves)
 	{
-		const TSharedPtr<FJsonObject>* BandObjPtr = nullptr;
-		if (!BandVal->TryGetObject(BandObjPtr) || !BandObjPtr) continue;
-		const TSharedPtr<FJsonObject>& BandObj = *BandObjPtr;
-
-		FString WavePath;
-		if (!BandObj->TryGetStringField(TEXT("sound_wave"), WavePath) || WavePath.IsEmpty())
-		{
-			return FMonolithActionResult::Error(TEXT("Each band must have a 'sound_wave' path"));
-		}
-
-		USoundWave* Wave = FMonolithAssetUtils::LoadAssetByPath<USoundWave>(WavePath);
-		if (!Wave)
-		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Could not load SoundWave at '%s'"), *WavePath));
-		}
-
 		USoundNodeWavePlayer* WavePlayer = Cue->ConstructSoundNode<USoundNodeWavePlayer>();
 		if (!WavePlayer)
 		{
@@ -2416,16 +2404,14 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 		{
 			void* ArrayPtr = ArrayProp->ContainerPtrToValuePtr<void>(CrossFadeNode);
 			FScriptArrayHelper ArrayHelper(ArrayProp, ArrayPtr);
-			ArrayHelper.Resize(BandsArray->Num());
+			ArrayHelper.Resize(BandObjects.Num());
 
 			FStructProperty* InnerStruct = CastField<FStructProperty>(ArrayProp->Inner);
 			if (InnerStruct)
 			{
-				for (int32 i = 0; i < BandsArray->Num(); ++i)
+				for (int32 i = 0; i < BandObjects.Num(); ++i)
 				{
-					const TSharedPtr<FJsonObject>* BandObjPtr = nullptr;
-					if (!(*BandsArray)[i]->TryGetObject(BandObjPtr) || !BandObjPtr) continue;
-					const TSharedPtr<FJsonObject>& BandObj = *BandObjPtr;
+					const TSharedPtr<FJsonObject>& BandObj = BandObjects[i];
 
 					void* ElemPtr = ArrayHelper.GetRawPtr(i);
 
@@ -2459,7 +2445,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 
 	auto Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), Cue->GetPathName());
-	Result->SetNumberField(TEXT("band_count"), BandsArray->Num());
+	Result->SetNumberField(TEXT("band_count"), BandObjects.Num());
 	return FMonolithActionResult::Success(Result);
 }
 

@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "blueprint.interface",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
-  "task_count": 552,
+  "task_count": 574,
   "module_count": 4,
   "routing_axes": [
     "category",
@@ -167,7 +167,7 @@
         "BEB-268",
         "BEB-269",
         "BEB-270",
-        "BEB-552"
+        "BEB-574"
       ],
       "task_refs": [
         {
@@ -775,7 +775,7 @@
           "description": "Rename BenchIFaceCanTarget to BenchIFaceCanTargetRenamed on Interface"
         },
         {
-          "id": "BEB-552",
+          "id": "BEB-574",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -800,7 +800,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-552"
+            "BEB-574"
           ],
           "edit_execute": [
             "BEB-226",
@@ -861,7 +861,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ],
           "general": [
             "BEB-007",
@@ -894,7 +894,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ],
           "read_only": [
             "BEB-007",
@@ -929,7 +929,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ],
           "readback_verify": [
             "BEB-007",
@@ -960,7 +960,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ],
           "save": [
             "BEB-235"
@@ -1112,7 +1112,7 @@
         "BEB-268",
         "BEB-269",
         "BEB-270",
-        "BEB-552"
+        "BEB-574"
       ],
       "task_refs": [
         {
@@ -1439,7 +1439,7 @@
           "description": "Rename BenchIFaceCanTarget to BenchIFaceCanTargetRenamed on Interface"
         },
         {
-          "id": "BEB-552",
+          "id": "BEB-574",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1464,7 +1464,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-552"
+            "BEB-574"
           ],
           "edit_execute": [
             "BEB-226",
@@ -1501,7 +1501,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ]
         },
         "by_asset_operation": {
@@ -1520,7 +1520,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ],
           "readback_verify": [
             "BEB-163",
@@ -1537,7 +1537,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-552"
+            "BEB-574"
           ]
         }
       },

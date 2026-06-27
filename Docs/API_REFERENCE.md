@@ -121,6 +121,8 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `action` | string | optional | Filter to a specific action inside `namespace`; most useful with `mode="schema"` |
 | `category` | string | optional | Filter actions within the namespace by category |
 | `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
+| `offset` | integer | optional | Pagination offset applied after category/filter. |
+| `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. |
 
 **Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action.
 
@@ -761,7 +763,9 @@ Search the latest snapshot with FTS5.
 |-----------|------|----------|-------------|
 | `query` | string | optional | FTS query over name, type, help, values, variable type, and set-by source. Empty lists rows by name |
 | `object_type` | string | optional | `all`, `variable`, or `command`. Default: `all` |
-| `limit` | integer | optional | Maximum rows, clamped to 1..5000. Default: `100` |
+| `limit` | integer | optional | Maximum rows. Compact projection is capped at 500 rows; full/detail projection is capped at 200 rows. Default: `100` |
+
+Returns rows in `results` only, plus `returned_count`, `requested_limit`, normalized `limit`, `offset`, `projection`, `detail`, `truncated`, and optional `next_cursor`. The legacy duplicate `objects` row array is intentionally omitted to avoid payload amplification.
 
 ### `console.get_object`
 
@@ -1835,11 +1839,11 @@ Fuzzy, scored, typo-tolerant search over the live AssetRegistry. Ranks assets by
 
 ### `asset.list_supported_asset_enrichers`
 
-List read-only specialized asset enrichers supported by Monolith. *No parameters.*
+List read-only typed asset enrichers supported by Monolith. *No parameters.*
 
 ### `asset.inspect_asset`
 
-Inspect an asset with specialized read-only enrichment when supported.
+Inspect an asset with typed read-only enrichment when supported.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1857,9 +1861,9 @@ Inspect multiple assets with per-row success/error results.
 | `include_references` | boolean | optional | Include reflected object references. Default: `false` |
 | `array_limit` | number | optional | Maximum items per reflected array. Default: `16` |
 
-### `asset.validate_specialized_asset`
+### `asset.validate_typed_asset`
 
-Validate a specialized asset and report warnings without mutation.
+Validate a typed asset and report warnings without mutation.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|

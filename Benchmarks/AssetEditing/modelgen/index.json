@@ -17,12 +17,12 @@
   },
   "edit_domain_count": 2,
   "task_ids": [
-    "BEB-303",
-    "BEB-380"
+    "BEB-307",
+    "BEB-386"
   ],
   "task_refs": [
     {
-      "id": "BEB-303",
+      "id": "BEB-307",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -52,7 +52,7 @@
       "description": "Import a generated-model OBJ through ModelGen, save it as StaticMesh, and verify redacted generation provenance"
     },
     {
-      "id": "BEB-380",
+      "id": "BEB-386",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -106,7 +106,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-380"
+        "BEB-386"
       ],
       "case_file": "testcases\\generated_model_job_lifecycle.json"
     },
@@ -128,7 +128,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-303"
+        "BEB-307"
       ],
       "case_file": "testcases\\generated_static_mesh.json"
     }

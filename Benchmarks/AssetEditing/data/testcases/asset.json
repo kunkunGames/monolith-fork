@@ -24,11 +24,11 @@
     "create_save": 1
   },
   "task_ids": [
-    "BEB-305"
+    "BEB-309"
   ],
   "task_refs": [
     {
-      "id": "BEB-305",
+      "id": "BEB-309",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -59,7 +59,7 @@
   ],
   "tasks": [
     {
-      "id": "BEB-305",
+      "id": "BEB-309",
       "category": "asset_authoring",
       "namespace": "mixed",
       "action": "op_chain",

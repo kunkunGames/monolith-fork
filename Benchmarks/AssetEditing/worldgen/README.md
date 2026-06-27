@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `balcony_static_mesh` | 1 | `asset_authoring.worldgen.balcony_static_mesh` | `testcases\balcony_static_mesh.json` |
 | `blockout_volume_blueprint` | 1 | `asset_authoring.worldgen.blockout_volume_blueprint` | `testcases\blockout_volume_blueprint.json` |

@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `generated_model_job_lifecycle` | 1 | `asset_authoring.modelgen.generated_model_job_lifecycle` | `testcases\generated_model_job_lifecycle.json` |
 | `generated_static_mesh` | 1 | `asset_authoring.modelgen.generated_static_mesh` | `testcases\generated_static_mesh.json` |

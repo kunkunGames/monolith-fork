@@ -1245,7 +1245,8 @@ public:
     void search_source(const Args& args) {
         if (args.positional.empty()) die("search_source requires a query argument");
         std::string q = args.positional[0];
-        int limit = args.opt_int("limit", 20);
+        int requested_limit = args.opt_int("limit", 20);
+        int limit = clamp_int(requested_limit <= 0 ? 20 : requested_limit, 1, 200);
         std::string module = args.opt("module");
         std::string kind = args.opt("kind");
         std::string fts_q = escape_fts(q);
@@ -1718,13 +1719,32 @@ public:
                 "'. Check the path spelling or use source.search_source/read_source to locate an indexed file. "
                 "Reindexing will not fix a missing absolute path. [error_class=path_not_found]");
         } else {
-            // Normalize slashes to backslash for DB lookup
-            std::string normalized = file_path;
-            std::replace(normalized.begin(), normalized.end(), '/', '\\');
+            std::vector<std::string> lookup_paths;
+            auto add_lookup_path = [&lookup_paths](std::string value) {
+                if (std::find(lookup_paths.begin(), lookup_paths.end(), value) == lookup_paths.end())
+                    lookup_paths.push_back(std::move(value));
+            };
+            add_lookup_path(file_path);
+            std::string backslash_path = file_path;
+            std::replace(backslash_path.begin(), backslash_path.end(), '/', '\\');
+            add_lookup_path(backslash_path);
+            std::string slash_path = file_path;
+            std::replace(slash_path.begin(), slash_path.end(), '\\', '/');
+            add_lookup_path(slash_path);
 
-            auto rows = query(db, "SELECT path FROM files WHERE path = ?", {normalized});
-            if (rows.empty())
-                rows = query(db, "SELECT path FROM files WHERE path LIKE ? LIMIT 1", {"%" + normalized});
+            Rows rows;
+            for (const auto& lookup_path : lookup_paths) {
+                rows = query(db, "SELECT path FROM files WHERE path = ?", {lookup_path});
+                if (!rows.empty())
+                    break;
+            }
+            if (rows.empty()) {
+                for (const auto& lookup_path : lookup_paths) {
+                    rows = query(db, "SELECT path FROM files WHERE path LIKE ? LIMIT 1", {"%" + lookup_path});
+                    if (!rows.empty())
+                        break;
+                }
+            }
 
             if (!rows.empty())
                 resolved = rows[0].get("path");
@@ -6038,7 +6058,9 @@ public:
         }
 
         constexpr int max_window = 100000;
-        int limit = clamp_int(args.opt_int("limit", 100), 1, 5000);
+        constexpr int max_compact_limit = 500;
+        constexpr int max_full_limit = 200;
+        int requested_limit = args.opt_int("limit", 100);
         int offset = args.opt_int("offset", 0);
         auto parse_cursor_offset = [&](const std::string& value, int& out) -> bool {
             if (value.empty()) return false;
@@ -6058,10 +6080,6 @@ public:
             die("console search_objects --cursor must be a non-negative numeric offset cursor");
         if (offset < 0 || offset > max_window)
             die("console search_objects --offset must be within 0..100000");
-        const long long required_window = static_cast<long long>(offset) + static_cast<long long>(limit) + 1;
-        if (required_window > max_window + 1LL)
-            die("console search_objects --offset + --limit exceeds the max window");
-        int query_limit = static_cast<int>(required_window);
         auto detail_it = args.options.find("detail");
         if (detail_it != args.options.end() && !detail_it->second.empty() && !is_bool_literal(detail_it->second))
             die("console search_objects --detail must be true or false");
@@ -6075,6 +6093,12 @@ public:
             die("console search_objects --projection must be compact or full");
         }
         projection = detail ? "full" : "compact";
+        int max_limit = detail ? max_full_limit : max_compact_limit;
+        int limit = clamp_int(requested_limit, 1, max_limit);
+        const long long required_window = static_cast<long long>(offset) + static_cast<long long>(limit) + 1;
+        if (required_window > max_window + 1LL)
+            die("console search_objects --offset + --limit exceeds the max window");
+        int query_limit = static_cast<int>(required_window);
         std::string mode = lower_copy(args.opt("mode", "auto"));
         std::string type_filter = args.opt("type");
         if (type_filter.empty()) type_filter = args.opt("object_type");
@@ -6193,15 +6217,17 @@ public:
             {"used_like_fallback", used_like_fallback},
             {"count", results.size()},
             {"returned_count", results.size()},
+            {"requested_limit", requested_limit},
             {"limit", limit},
             {"offset", offset},
             {"projection", projection},
             {"detail", detail},
             {"limits", {
+                {"requested_limit", requested_limit},
                 {"limit", limit},
                 {"offset", offset},
                 {"returned", results.size()},
-                {"max_limit", 5000},
+                {"max_limit", max_limit},
                 {"max_window", max_window},
                 {"projection", projection},
                 {"detail", detail},
@@ -6209,12 +6235,16 @@ public:
             }},
             {"truncated", truncated},
             {"warnings", warnings},
-            {"objects", results},
             {"results", results},
             {"next_actions", warnings.empty()
                 ? json::array({"console.get_object", "console.health"})
                 : json::array({"Use live MCP console.refresh_snapshot to populate EngineSource.db", "console.health", "console.get_object"})},
         };
+        if (limit != requested_limit) {
+            root["normalized_limit_reason"] = detail
+                ? "full projection is capped at 200 rows"
+                : "compact projection is capped at 500 rows";
+        }
         if (truncated)
             root["next_cursor"] = std::to_string(offset + limit);
         print_json(root);

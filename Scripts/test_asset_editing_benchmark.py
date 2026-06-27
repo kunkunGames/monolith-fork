@@ -47,7 +47,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 
 def load_json(path: pathlib.Path) -> Dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(aeb.resolve_plugin_path(path).read_text(encoding="utf-8"))
 
 
 def task_actions(task: Dict[str, Any]) -> Set[str]:
@@ -178,9 +178,9 @@ def test_high_error_recovery_coverage(tasks: List[Dict[str, Any]]) -> None:
 
 
 def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: Dict[str, Any]) -> None:
-    asset_index_path = pathlib.Path(manifest.get("asset_type_index", ""))
-    testset_index_path = pathlib.Path(manifest.get("testset_index", ""))
-    testset_modules_path = pathlib.Path(manifest.get("testset_modules", ""))
+    asset_index_path = aeb.resolve_plugin_path(pathlib.Path(manifest.get("asset_type_index", "")))
+    testset_index_path = aeb.resolve_plugin_path(pathlib.Path(manifest.get("testset_index", "")))
+    testset_modules_path = aeb.resolve_plugin_path(pathlib.Path(manifest.get("testset_modules", "")))
 
     check("asset type index exists", asset_index_path.exists(), str(asset_index_path))
     check("testset index exists", testset_index_path.exists(), str(testset_index_path))
@@ -192,12 +192,26 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
         check("asset_type_count matches index",
               manifest.get("asset_type_count") == len(asset_types),
               f"manifest={manifest.get('asset_type_count')} index={len(asset_types)}")
+        repeated_asset_type_cases: List[str] = []
         for item in asset_types:
-            task_file = pathlib.Path(str(item.get("tasks_file", "")))
+            task_file = aeb.resolve_plugin_path(pathlib.Path(str(item.get("tasks_file", ""))))
             rows = aeb.load_jsonl(task_file) if task_file.exists() else []
             check(f"asset type task count matches {item.get('asset_type')}",
                   task_file.exists() and item.get("task_count") == len(rows),
                   f"file={task_file} count={item.get('task_count')} rows={len(rows)}")
+            type_index_file = aeb.resolve_plugin_path(pathlib.Path(str(item.get("index_file", ""))))
+            if type_index_file.exists():
+                type_index = load_json(type_index_file)
+                domain_slug = aeb.slugify_route(type_index.get("asset_type"))
+                for case in type_index.get("testcases", []):
+                    route_slug = aeb.slugify_route(case.get("route_edit_domain"))
+                    if route_slug == domain_slug or route_slug.startswith(f"{domain_slug}_"):
+                        repeated_asset_type_cases.append(
+                            f"{type_index.get('asset_type')}:{case.get('route_edit_domain')}"
+                        )
+        check("asset type testcase route names do not repeat the AssetType token",
+              not repeated_asset_type_cases,
+              f"repeated={repeated_asset_type_cases[:8]}")
 
     if testset_index_path.exists() and testset_modules_path.exists():
         testset_index = load_json(testset_index_path)
@@ -213,20 +227,191 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
         missing_shards = []
         for shard_info in modules_payload.get("module_shards", {}).values():
             shard = pathlib.Path(str(shard_info.get("file", ""))) if isinstance(shard_info, dict) else pathlib.Path(str(shard_info))
+            shard = aeb.resolve_plugin_path(shard)
             if not shard.exists():
                 missing_shards.append(str(shard))
         check("all split testset module shards exist", not missing_shards,
               f"missing={missing_shards[:5]}")
 
+        repeated_leaf_modules: List[str] = []
+        for module_id in module_lookup:
+            parts = [part for part in str(module_id).split(".") if part]
+            if len(parts) >= 3 and parts[0] == "asset_authoring":
+                domain_slug, edit_slug = parts[1], parts[2]
+            elif len(parts) >= 4 and parts[0] == "asset_operation":
+                domain_slug, edit_slug = parts[2], parts[3]
+            else:
+                continue
+            if edit_slug == domain_slug or edit_slug.startswith(f"{domain_slug}_"):
+                repeated_leaf_modules.append(str(module_id))
+        check("asset route module ids do not repeat the AssetType token",
+              not repeated_leaf_modules,
+              f"repeated={repeated_leaf_modules[:8]}")
+        repeated_tree_keys: List[str] = []
+
+        def collect_repeated_edit_domain_tree_keys(payload: Dict[str, Any], label: str) -> None:
+            tree = payload.get("tree")
+            if not isinstance(tree, dict):
+                return
+            asset_authoring = tree.get("asset_authoring")
+            if isinstance(asset_authoring, dict):
+                domains = asset_authoring.get("domains")
+                if isinstance(domains, dict):
+                    for domain, domain_payload in domains.items():
+                        domain_slug = aeb.slugify_route(domain)
+                        edit_domains = domain_payload.get("edit_domains") if isinstance(domain_payload, dict) else None
+                        if not isinstance(edit_domains, dict):
+                            continue
+                        for edit_key in edit_domains:
+                            edit_slug = aeb.slugify_route(edit_key)
+                            if edit_slug == domain_slug or edit_slug.startswith(f"{domain_slug}_"):
+                                repeated_tree_keys.append(f"{label}:asset_authoring.{domain}.{edit_key}")
+            asset_operation = tree.get("asset_operation")
+            if isinstance(asset_operation, dict):
+                role_domains = asset_operation.get("role_domains")
+                if isinstance(role_domains, dict):
+                    for role, domains in role_domains.items():
+                        if not isinstance(domains, dict):
+                            continue
+                        for domain, domain_payload in domains.items():
+                            domain_slug = aeb.slugify_route(domain)
+                            edit_domains = domain_payload.get("edit_domains") if isinstance(domain_payload, dict) else None
+                            if not isinstance(edit_domains, dict):
+                                continue
+                            for edit_key in edit_domains:
+                                edit_slug = aeb.slugify_route(edit_key)
+                                if edit_slug == domain_slug or edit_slug.startswith(f"{domain_slug}_"):
+                                    repeated_tree_keys.append(
+                                        f"{label}:asset_operation.{role}.{domain}.{edit_key}"
+                                    )
+
+        collect_repeated_edit_domain_tree_keys(testset_index, "index")
+        collect_repeated_edit_domain_tree_keys(modules_payload, "modules")
+        check("asset route tree edit-domain keys do not repeat the AssetType token",
+              not repeated_tree_keys,
+              f"repeated={repeated_tree_keys[:8]}")
+        legacy_asset_authoring_selectors: List[str] = []
+        legacy_asset_operation_selectors: List[str] = []
+        for module_id in module_lookup:
+            parts = [part for part in str(module_id).split(".") if part]
+            if len(parts) >= 3 and parts[0] == "asset_authoring":
+                domain_slug, edit_slug = parts[1], parts[2]
+                if edit_slug != "base":
+                    legacy_asset_authoring_selectors.append(
+                        ".".join(["asset_authoring", domain_slug, f"{domain_slug}_{edit_slug}"])
+                    )
+            elif len(parts) >= 4 and parts[0] == "asset_operation":
+                role_slug, domain_slug, edit_slug = parts[1], parts[2], parts[3]
+                if edit_slug != "base":
+                    legacy_asset_operation_selectors.append(
+                        ".".join(["asset_operation", role_slug, domain_slug, f"{domain_slug}_{edit_slug}"])
+                    )
+
+        bad_legacy_authoring = [
+            selector
+            for selector in legacy_asset_authoring_selectors
+            if aeb.normalize_testset_module_id(selector) not in module_lookup
+        ]
+        bad_legacy_operation = [
+            selector
+            for selector in legacy_asset_operation_selectors
+            if aeb.normalize_testset_module_id(selector) not in module_lookup
+        ]
+        check("legacy asset_authoring duplicate leaf selectors normalize",
+              not bad_legacy_authoring,
+              f"bad={bad_legacy_authoring[:8]}")
+        check("legacy asset_operation duplicate leaf selectors normalize",
+              not bad_legacy_operation,
+              f"bad={bad_legacy_operation[:8]}")
+        check("canonical asset batch_delete route exists",
+              "asset_authoring.asset.batch_delete" in module_lookup)
+        check("canonical asset-operation batch_delete route exists",
+              "asset_operation.edit.asset.batch_delete" in module_lookup)
+
+
+def test_compact_route_helpers() -> None:
+    legacy_authoring_selector = "asset_authoring.asset." + "asset_batch_delete"
+    legacy_operation_selector = "asset_operation.edit.asset." + "asset_batch_delete"
+    legacy_data_selector = "asset_authoring.data." + "data_datatable_strict_rejection"
+    legacy_animation_selector = "asset_operation.edit.animation." + "animation_pose_search_database"
+    canonical_examples = {
+        "asset": {
+            "asset_batch_delete": "batch_delete",
+            "asset_asset_batch_delete": "batch_delete",
+            "asset": "base",
+        },
+        "data": {
+            "data_asset": "asset",
+            "data_datatable_strict_rejection": "datatable_strict_rejection",
+            "data": "base",
+        },
+        "animation": {
+            "animation_pose_search_database": "pose_search_database",
+            "animation_retarget_chain_lifecycle": "retarget_chain_lifecycle",
+        },
+    }
+    for domain, edit_domains in canonical_examples.items():
+        for edit_domain, expected_leaf in edit_domains.items():
+            check(f"{domain}.{edit_domain} route leaf compacts",
+                  aeb.compact_edit_domain_slug(domain, edit_domain) == expected_leaf)
+
+    check("asset edit-domain prefix compacts",
+          aeb.compact_edit_domain_slug("asset", "asset_batch_delete") == "batch_delete")
+    check("repeated asset edit-domain prefixes compact",
+          aeb.compact_edit_domain_slug("asset", "asset_asset_batch_delete") == "batch_delete")
+    check("asset base edit-domain compacts",
+          aeb.compact_edit_domain_slug("asset", "asset") == "base")
+    check("canonical authoring route helper uses compact leaf",
+          aeb.asset_type_case_module_id("asset", "asset_batch_delete") == "asset_authoring.asset.batch_delete")
+    check("canonical asset-operation route helper uses compact leaf",
+          aeb.asset_operation_case_module_ids(
+              "asset",
+              "asset_batch_delete",
+              [{"capabilities": {"asset_operations": ["edit"]}}],
+          ) == {"edit": "asset_operation.edit.asset.batch_delete"})
+    check("canonical data route helper uses compact leaf",
+          aeb.asset_type_case_module_id("data", "data_datatable_strict_rejection")
+          == "asset_authoring.data.datatable_strict_rejection")
+    check("canonical animation route helper uses compact leaf",
+          aeb.asset_type_case_module_id("animation", "animation_pose_search_database")
+          == "asset_authoring.animation.pose_search_database")
+    check("canonical data asset-operation routes use compact leaf",
+          aeb.asset_operation_case_module_ids(
+              "data",
+              "data_datatable_strict_rejection",
+              [{"capabilities": {"asset_operations": ["creation_or_import", "edit", "save", "readback_verify"]}}],
+          ) == {
+              "creation_or_import": "asset_operation.creation_or_import.data.datatable_strict_rejection",
+              "edit": "asset_operation.edit.data.datatable_strict_rejection",
+              "save": "asset_operation.save.data.datatable_strict_rejection",
+              "readback_verify": "asset_operation.readback_verify.data.datatable_strict_rejection",
+          })
+    check("legacy authoring selector normalizes",
+          aeb.normalize_testset_module_id(legacy_authoring_selector) == "asset_authoring.asset.batch_delete")
+    check("legacy asset-operation selector normalizes",
+          aeb.normalize_testset_module_id(legacy_operation_selector) == "asset_operation.edit.asset.batch_delete")
+    check("legacy data selector normalizes",
+          aeb.normalize_testset_module_id(legacy_data_selector)
+          == "asset_authoring.data.datatable_strict_rejection")
+    check("legacy animation selector normalizes",
+          aeb.normalize_testset_module_id(legacy_animation_selector)
+          == "asset_operation.edit.animation.pose_search_database")
+    check("legacy and canonical selector inputs dedupe",
+          aeb.normalize_testset_module_ids([
+              legacy_authoring_selector,
+              "asset_authoring.asset.batch_delete",
+          ]) == ["asset_authoring.asset.batch_delete"])
+
 
 def main() -> int:
-    tasks = aeb.load_jsonl(aeb.DEFAULT_TASKS)
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))
     manifest = load_json(aeb.DEFAULT_MANIFEST)
 
     test_manifest_matches_tasks(tasks, manifest)
     test_task_shape(tasks)
     test_high_error_recovery_coverage(tasks)
     test_asset_type_and_testset_indexes(tasks, manifest)
+    test_compact_route_helpers()
 
     if _FAILURES:
         print(f"\nFAILED: {len(_FAILURES)} AssetEditing benchmark check(s) failed")

@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `state_machine_graph` | 1 | `asset_authoring.logicdriver.state_machine_graph` | `testcases\state_machine_graph.json` |
 

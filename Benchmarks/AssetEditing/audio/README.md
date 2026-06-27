@@ -6,23 +6,24 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 28 |
-| `edit` | 28 |
-| `save` | 28 |
-| `readback_verify` | 28 |
+| `creation_or_import` | 29 |
+| `edit` | 29 |
+| `save` | 29 |
+| `readback_verify` | 29 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 28 |
+| `create_save` | 29 |
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
-| `audio_routing` | 1 | `asset_authoring.audio.routing` | `testcases\routing.json` |
-| `audio_template_batch` | 1 | `asset_authoring.audio.template_batch` | `testcases\template_batch.json` |
+| `routing` | 1 | `asset_authoring.audio.routing` | `testcases\routing.json` |
+| `template_batch` | 1 | `asset_authoring.audio.template_batch` | `testcases\template_batch.json` |
+| `metasound_explicit_connection` | 1 | `asset_authoring.audio.metasound_explicit_connection` | `testcases\metasound_explicit_connection.json` |
 | `metasound_interactive_crossfade` | 1 | `asset_authoring.audio.metasound_interactive_crossfade` | `testcases\metasound_interactive_crossfade.json` |
 | `metasound_looping_ambient_preset` | 1 | `asset_authoring.audio.metasound_looping_ambient_preset` | `testcases\metasound_looping_ambient_preset.json` |
 | `metasound_oneshot_sfx` | 1 | `asset_authoring.audio.metasound_oneshot_sfx` | `testcases\metasound_oneshot_sfx.json` |

@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "bone_track_lifecycle",
+  "route_edit_domain": "bone_track_lifecycle",
+  "module_id": "asset_authoring.animation.bone_track_lifecycle",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.bone_track_lifecycle",
+    "edit": "asset_operation.edit.animation.bone_track_lifecycle",
+    "save": "asset_operation.save.animation.bone_track_lifecycle",
+    "readback_verify": "asset_operation.readback_verify.animation.bone_track_lifecycle"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-532"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-532",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "bone_track_lifecycle",
+      "blueprint_type": "",
+      "workflow": "animation_bone_track_lifecycle_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "get_skeleton_info",
+        "add_bone_track",
+        "set_bone_track_keys",
+        "get_bone_track_keys",
+        "remove_bone_track",
+        "save_asset",
+        "list_bone_tracks",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-532",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchBoneTrackLifecycle",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_skeleton_info",
+            "asset_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "bone_count",
+            "bones"
+          ],
+          "capture": {
+            "lifecycle_bone": "$.bones[0].name"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_bone_track",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle",
+            "bone_name": "${lifecycle_bone}"
+          },
+          "contains": [
+            "${lifecycle_bone}"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_bone_track_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle",
+            "bone_name": "${lifecycle_bone}",
+            "positions_json": "[[0,0,0],[4,0,0],[8,0,0]]",
+            "rotations_json": "[[0,0,0,1],[0,0,0,1],[0,0,0,1]]",
+            "scales_json": "[[1,1,1],[1,1,1],[1,1,1]]"
+          },
+          "contains": [
+            "${lifecycle_bone}",
+            "num_keys",
+            "3"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_bone_track_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle",
+            "bone_name": "${lifecycle_bone}",
+            "start_frame": 0,
+            "end_frame": 2
+          },
+          "contains": [
+            "${lifecycle_bone}",
+            "num_keys",
+            "3",
+            "positions",
+            "8"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "remove_bone_track",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle",
+            "bone_name": "${lifecycle_bone}",
+            "include_children": false
+          },
+          "contains": [
+            "${lifecycle_bone}",
+            "removed"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "list_bone_tracks",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle"
+          },
+          "contains": [
+            "count"
+          ],
+          "not_contains": [
+            "${lifecycle_bone}"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackLifecycle"
+          },
+          "contains": [
+            "A_BenchBoneTrackLifecycle",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "bone_track_lifecycle",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_bone_track_lifecycle_roundtrip",
+      "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/animation-sequences-in-unreal-engine?lang=en-US",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "get_skeleton_info",
+          "add_bone_track",
+          "set_bone_track_keys",
+          "get_bone_track_keys",
+          "remove_bone_track",
+          "save_asset",
+          "list_bone_tracks",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

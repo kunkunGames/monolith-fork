@@ -19,12 +19,12 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
-| `blueprint_asset_types` | 1 | `asset_authoring.blueprint.asset_types` | `testcases\asset_types.json` |
-| `blueprint_duplicate_reparent` | 1 | `asset_authoring.blueprint.duplicate_reparent` | `testcases\duplicate_reparent.json` |
-| `blueprint_spec_builder` | 1 | `asset_authoring.blueprint.spec_builder` | `testcases\spec_builder.json` |
-| `blueprint_timeline_persistence` | 1 | `asset_authoring.blueprint.timeline_persistence` | `testcases\timeline_persistence.json` |
+| `asset_types` | 1 | `asset_authoring.blueprint.asset_types` | `testcases\asset_types.json` |
+| `duplicate_reparent` | 1 | `asset_authoring.blueprint.duplicate_reparent` | `testcases\duplicate_reparent.json` |
+| `spec_builder` | 1 | `asset_authoring.blueprint.spec_builder` | `testcases\spec_builder.json` |
+| `timeline_persistence` | 1 | `asset_authoring.blueprint.timeline_persistence` | `testcases\timeline_persistence.json` |
 
 ## Common Commands
 

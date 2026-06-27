@@ -53,8 +53,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `find_assets` | `query*`, `path=/Game`, `recursive=true`, `class_names?` (array; alias class), `limit=20` (1-100), `threshold?`, `include_tags=false`, `include_score_breakdown=false`, `allow_transposition=true` | Fuzzy, typo-tolerant live AssetRegistry search (sees unsaved assets). |
 | `inspect_asset` | `asset_path*`, `include_references=true`, `array_limit=32` | Read generic/untyped asset details with read-only enrichment. |
 | `inspect_assets_batch` | `asset_paths*` (array), `include_references=false`, `array_limit=16` | Inspect many assets with per-row success/error. |
-| `validate_specialized_asset` | `asset_path*`, `array_limit=32` | Validate a specialized asset; report warnings without mutation. |
-| `list_supported_asset_enrichers` | (none) | List read-only specialized asset enrichers Monolith supports. |
+| `validate_typed_asset` | `asset_path*`, `array_limit=32` | Validate a typed asset; report warnings without mutation. |
+| `list_supported_asset_enrichers` | (none) | List read-only typed asset enrichers Monolith supports. |
 
 ## Common Workflows
 

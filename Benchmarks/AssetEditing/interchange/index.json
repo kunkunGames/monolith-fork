@@ -17,18 +17,18 @@
   },
   "edit_domain_count": 8,
   "task_ids": [
-    "BEB-285",
-    "BEB-286",
-    "BEB-287",
-    "BEB-288",
-    "BEB-352",
-    "BEB-392",
-    "BEB-409",
-    "BEB-416"
+    "BEB-289",
+    "BEB-290",
+    "BEB-291",
+    "BEB-292",
+    "BEB-358",
+    "BEB-398",
+    "BEB-415",
+    "BEB-422"
   ],
   "task_refs": [
     {
-      "id": "BEB-285",
+      "id": "BEB-289",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -57,7 +57,7 @@
       "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
     },
     {
-      "id": "BEB-286",
+      "id": "BEB-290",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -90,7 +90,7 @@
       "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
     },
     {
-      "id": "BEB-287",
+      "id": "BEB-291",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -119,7 +119,7 @@
       "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
     },
     {
-      "id": "BEB-288",
+      "id": "BEB-292",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -149,7 +149,7 @@
       "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
     },
     {
-      "id": "BEB-352",
+      "id": "BEB-358",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -177,7 +177,7 @@
       "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
     },
     {
-      "id": "BEB-392",
+      "id": "BEB-398",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -206,7 +206,7 @@
       "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
     },
     {
-      "id": "BEB-409",
+      "id": "BEB-415",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -236,7 +236,7 @@
       "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
     },
     {
-      "id": "BEB-416",
+      "id": "BEB-422",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -288,7 +288,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-288"
+        "BEB-292"
       ],
       "case_file": "testcases\\audio_import.json"
     },
@@ -310,7 +310,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-352"
+        "BEB-358"
       ],
       "case_file": "testcases\\batch_import.json"
     },
@@ -332,7 +332,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-409"
+        "BEB-415"
       ],
       "case_file": "testcases\\batch_reimport.json"
     },
@@ -354,7 +354,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-416"
+        "BEB-422"
       ],
       "case_file": "testcases\\generic_import.json"
     },
@@ -376,7 +376,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-392"
+        "BEB-398"
       ],
       "case_file": "testcases\\generic_options_import.json"
     },
@@ -398,7 +398,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-287"
+        "BEB-291"
       ],
       "case_file": "testcases\\scene_import.json"
     },
@@ -420,7 +420,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-286"
+        "BEB-290"
       ],
       "case_file": "testcases\\static_mesh_reimport_export.json"
     },
@@ -442,7 +442,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-285"
+        "BEB-289"
       ],
       "case_file": "testcases\\texture_import.json"
     }

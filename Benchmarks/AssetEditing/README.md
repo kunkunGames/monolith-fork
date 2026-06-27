@@ -6,7 +6,7 @@ Measures Monolith MCP asset editing capability across Blueprint graph/class/comp
 
 | File | Purpose |
 |------|---------|
-| `tasks.jsonl` | 552 benchmark tasks across 11 categories |
+| `tasks.jsonl` | 574 benchmark tasks across 11 categories |
 | `manifest.json` | Benchmark metadata, score formula, weights, category counts |
 | `asset_types.json` | Generated AssetType support matrix and links to per-type directories |
 | `[AssetType]\README.md` | Generated summary for one asset type/domain, including supported operations and test cases |
@@ -29,35 +29,37 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | AssetType | Tasks | Test cases | Create/import | Edit | Save | Read-back | Directory |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `ai` | 14 | 14 | 14 | 14 | 14 | 14 | `Benchmarks/AssetEditing/ai` |
-| `animation` | 28 | 28 | 28 | 28 | 28 | 28 | `Benchmarks/AssetEditing/animation` |
-| `asset` | 6 | 6 | 6 | 6 | 6 | 6 | `Benchmarks/AssetEditing/asset` |
-| `audio` | 28 | 28 | 28 | 28 | 28 | 28 | `Benchmarks/AssetEditing/audio` |
+| `animation` | 35 | 35 | 35 | 35 | 35 | 35 | `Benchmarks/AssetEditing/animation` |
+| `asset` | 11 | 11 | 11 | 11 | 11 | 11 | `Benchmarks/AssetEditing/asset` |
+| `audio` | 29 | 29 | 29 | 29 | 29 | 29 | `Benchmarks/AssetEditing/audio` |
 | `blueprint` | 4 | 4 | 4 | 4 | 4 | 4 | `Benchmarks/AssetEditing/blueprint` |
-| `collection` | 4 | 4 | 4 | 4 | 3 | 4 | `Benchmarks/AssetEditing/collection` |
-| `data` | 10 | 10 | 10 | 10 | 10 | 10 | `Benchmarks/AssetEditing/data` |
-| `editor` | 4 | 4 | 4 | 4 | 3 | 4 | `Benchmarks/AssetEditing/editor` |
+| `collection` | 5 | 5 | 5 | 5 | 4 | 5 | `Benchmarks/AssetEditing/collection` |
+| `data` | 12 | 12 | 12 | 12 | 12 | 12 | `Benchmarks/AssetEditing/data` |
+| `editor` | 5 | 5 | 5 | 5 | 4 | 5 | `Benchmarks/AssetEditing/editor` |
 | `gas` | 16 | 16 | 16 | 16 | 16 | 16 | `Benchmarks/AssetEditing/gas` |
 | `hlod` | 2 | 2 | 2 | 2 | 2 | 2 | `Benchmarks/AssetEditing/hlod` |
 | `imagegen` | 5 | 5 | 5 | 5 | 5 | 5 | `Benchmarks/AssetEditing/imagegen` |
 | `input` | 5 | 5 | 5 | 5 | 5 | 5 | `Benchmarks/AssetEditing/input` |
 | `interchange` | 8 | 8 | 8 | 8 | 8 | 8 | `Benchmarks/AssetEditing/interchange` |
 | `level_instance` | 2 | 2 | 2 | 2 | 2 | 2 | `Benchmarks/AssetEditing/level_instance` |
-| `localization` | 5 | 5 | 5 | 5 | 5 | 5 | `Benchmarks/AssetEditing/localization` |
+| `localization` | 6 | 6 | 6 | 6 | 6 | 6 | `Benchmarks/AssetEditing/localization` |
 | `logicdriver` | 1 | 1 | 1 | 1 | 1 | 1 | `Benchmarks/AssetEditing/logicdriver` |
-| `material` | 20 | 20 | 20 | 20 | 20 | 20 | `Benchmarks/AssetEditing/material` |
-| `mesh` | 20 | 20 | 20 | 20 | 20 | 20 | `Benchmarks/AssetEditing/mesh` |
+| `material` | 21 | 21 | 21 | 21 | 21 | 21 | `Benchmarks/AssetEditing/material` |
+| `mesh` | 21 | 21 | 21 | 21 | 21 | 21 | `Benchmarks/AssetEditing/mesh` |
 | `modelgen` | 2 | 2 | 2 | 2 | 2 | 2 | `Benchmarks/AssetEditing/modelgen` |
-| `niagara` | 28 | 28 | 28 | 28 | 28 | 28 | `Benchmarks/AssetEditing/niagara` |
-| `project` | 2 | 2 | 2 | 2 | 2 | 2 | `Benchmarks/AssetEditing/project` |
+| `niagara` | 29 | 29 | 29 | 29 | 29 | 29 | `Benchmarks/AssetEditing/niagara` |
+| `project` | 3 | 3 | 3 | 3 | 3 | 3 | `Benchmarks/AssetEditing/project` |
 | `ui` | 19 | 19 | 19 | 19 | 19 | 19 | `Benchmarks/AssetEditing/ui` |
 | `worldgen` | 9 | 9 | 9 | 9 | 9 | 9 | `Benchmarks/AssetEditing/worldgen` |
 
 ## Task Categories
 
 > **v5.4 (2026-06-26) — AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion:** extends the
-> `asset_authoring` dimension to 242 asset creation/edit/save/read-back chains. New coverage includes
+> `asset_authoring` dimension to 264 asset creation/edit/save/read-back chains. New coverage includes
 > ImageGen deterministic Texture2D provenance, ImageGen MSDF texture/material baking, Interchange
-> typed texture/audio import, Interchange StaticMesh import/reimport/export, Interchange batch
+> typed texture/audio import, Texture2D PNG post-processing, batch-rename dry-run/apply,
+> file-conflict overwrite policy, editor delete guard, DataTable strict rejection, and IKRig
+> retarget-chain lifecycle checks, Interchange StaticMesh import/reimport/export, Interchange batch
 > import, and ModelGen
 > provenance StaticMesh import/collision editing, plus StaticMesh LOD screen-size quality metadata,
 > StaticMesh FBX export, PBR material creation from disk textures, Material graph build/export,
@@ -88,6 +90,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 > batch/layout/replace maintenance, SoundCue primitive graph-edit workflows, Interchange generic
 > option import, SoundWave looping/virtualization batches, Niagara EffectType scalability, AnimSequence
 > root-motion/additive duplication, GeometryScript direct mesh operations, Sound perception binding,
+> project generated-asset cleanup dry-run/apply validation,
 > Material Function metadata/delete-expression maintenance, MIC single-parameter plus batch expression
 > deletion, Material graph clear/import, UISpec build/dump Widget Blueprint workflows,
 > Blueprint FunctionLibrary/MacroLibrary/Interface asset-type authoring, PoseSearch
@@ -97,7 +100,8 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 > Function parameter-group rename, AnimBlueprint state-machine authoring, Motion Matching AnimGraph
 > wiring, Niagara emitter duplicate/rename topology, procedural pipe-network StaticMesh generation,
 > generic Interchange bitmap import, CommonUI styled-button class-as-data styling, blank UWorld map
-> creation, dialog-free Blueprint prefab harvesting, sound-perception unbind cleanup, Niagara HLSL
+> creation, editor Texture2D import plus flipbook-atlas stitching, dialog-free Blueprint prefab harvesting,
+> sound-perception unbind cleanup, Niagara HLSL
 > function script creation, Niagara emitter template/spec create-import flows, Niagara emitter stack
 > clearing, montage-from-section-spec authoring, project saved-asset state/AssetRegistry disk
 > read-back, scoped editor dirty-package save/read-back, saved UMG template Widget Blueprint
@@ -112,9 +116,9 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 > EQS test reorder/remove/duplicate mutation, SmartObject behavior-definition duplication, and
 > Niagara renderer material assignment, Niagara dynamic input add/value/remove read-back, and
 > Niagara curve Data Interface key read-back, Material Layer/Blend asset metadata editing,
-> batch asset inspect/delete lifecycle validation, MetaSound Source graph authoring,
+> batch asset inspect/delete lifecycle validation, typed Texture2D validation/enricher registry read-back, MetaSound Source graph authoring,
 > Material decal-domain setup, UMG ListView entry binding and widget-tree maintenance,
-> Niagara module stack order/enable-state editing, AnimSequence bone-track key authoring,
+> Niagara module stack order/enable-state editing, Niagara emitter disable/reorder/remove lifecycle editing, AnimSequence bone-track key authoring,
 > GeometryScript handle boolean/remesh/material-id editing, procedural structure and terrain
 > StaticMesh generation, generated world-tile Texture2D validation, Texture2D role preset validation,
 > Material preview rendering, GAS ability flag and widget attribute-binding edits, WorldGen
@@ -140,7 +144,13 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 > MID authoring, DataTable dry-run versus strict apply validation, LogicDriver State Machine
 > Blueprint graph authoring, StringTable metadata removal, Enhanced Input duplicate-key conflict validation,
 > Mass Entity Config trait add/remove validation, UMG settings-panel/notification-toast
-> template generation and read-back, and AnimSequence pose-frame data authoring.
+> template generation and read-back, AnimSequence pose-frame data authoring, AnimSequence
+> pose-copy editing, AnimMontage section flow/time/delete editing, BlendSpace sample deletion,
+> AnimSequence bone-track lifecycle edits, notify batch/track/clone workflows, StringTable
+> registry-list read-back, Content Browser collection name validation/unique-name generation,
+> AnimSequence modifier stack persistence/read-back, Material Texture2D preview/contact-sheet/tiling
+> diagnostics, MetaSound explicit node connect/disconnect read-back, StaticMesh material-slot/compare read-back, and bulk CDO schema dry-run/apply
+> validation for raw UObject assets.
 > The generated AssetType directory layer mirrors the `asset_authoring` rows into
 > `AssetEditing\[AssetType]` folders, each with a type README, type-scoped tasks stream, and
 > per-edit-domain JSON case files. The generated `testsets` tree routes the flat suite by category, asset domain/edit domain,
@@ -198,7 +208,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `edit_schema` | 47 | `monolith_discover` | Schema has `planning_signals` + `skill` AND no isError (strict) |
 | `workflow_execute` | 11 | `blueprint_query` | Executed multi-step chains run, compile clean, and read back their end state |
 | `edit_execute` | 113 | `blueprint_query` | Edit call succeeds AND its mutation is observable via read-back; creates run delete-first so the read-back proves THIS run; includes UMG, AnimBP, GAS, ActorComponent, Interface, component/property value, exec- and data-pin wiring, pin literals, and delete round-trips |
-| `asset_authoring` | 242 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
+| `asset_authoring` | 264 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
 | `error_path` | 20 | `blueprint_query` | Server returns a structured `isError` whose message references the **offending identifier** (transport crash = fail; generic-only error = fail) |
 | `duplicate_reject` | 11 | `blueprint_query` | First call CLEANLY creates the entity (delete-reset each run) AND a second identical `add_*` call returns a duplicate-specific `isError` |
 | `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
@@ -299,7 +309,7 @@ python Scripts\asset_editing_benchmark.py generate `
 `generate` keeps `tasks.jsonl` as the canonical full-suite stream and emits
 `asset_types.json`, `AssetEditing\[AssetType]\...` lookup folders, `testsets/index.json`,
 `testsets/modules.json`, and `testsets/module_shards/` for routable subsets. The module manifest
-advertises 1659 generated modules across 38 shard files, so a routed subset can load a small module
+advertises 1791 generated modules across 38 shard files, so a routed subset can load a small module
 payload without parsing the full route tree.
 
 ## Select Test Sets
@@ -446,9 +456,11 @@ route intersection is empty; `run` still rejects empty task selections. Subset s
 metadata, the resolved module routes, parent chains, loaded shard ids, source task SHA, and
 `score_comparable_to_full_run=false`.
 
-Legacy duplicate route selector inputs are normalized before lookup, and generated docs expose only
-the compact canonical routes such as `asset_authoring.asset.batch_delete` and
+Legacy duplicate-prefix route selector inputs are normalized before lookup, and generated docs expose
+only the compact canonical routes such as `asset_authoring.asset.batch_delete` and
 `asset_operation.edit.asset.batch_delete`.
+Canonical route module IDs and generated test case files must use the compact leaf form; repeated
+AssetType tokens are accepted only as legacy selector input and normalize to the compact route.
 
 Most `asset_authoring` rows are `create_save`, but lifecycle routing is explicit rather than inferred:
 the dynamic Content Browser collection query row and blank UWorld map row are `create` only and are

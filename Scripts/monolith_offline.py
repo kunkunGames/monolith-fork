@@ -843,14 +843,23 @@ class SourceActions:
         if os.path.isfile(file_path):
             resolved = file_path
         else:
-            normalized = file_path.replace("/", "\\")
-            row = self.db.execute("SELECT path FROM files WHERE path = ?", (normalized,)).fetchone()
+            lookup_paths = []
+            for candidate in (file_path, file_path.replace("/", "\\"), file_path.replace("\\", "/")):
+                if candidate not in lookup_paths:
+                    lookup_paths.append(candidate)
+
+            row = None
+            for candidate in lookup_paths:
+                row = self.db.execute("SELECT path FROM files WHERE path = ?", (candidate,)).fetchone()
+                if row:
+                    break
+            if not row:
+                for candidate in lookup_paths:
+                    row = self.db.execute("SELECT path FROM files WHERE path LIKE ? LIMIT 1", (f"%{candidate}",)).fetchone()
+                    if row:
+                        break
             if row:
                 resolved = row["path"]
-            else:
-                row = self.db.execute("SELECT path FROM files WHERE path LIKE ? LIMIT 1", (f"%{normalized}",)).fetchone()
-                if row:
-                    resolved = row["path"]
 
         if not resolved:
             print(f"No file found matching '{file_path}'.", file=sys.stderr)

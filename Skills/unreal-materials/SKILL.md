@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Unreal Engine material as
 
 # Unreal Material Workflows
 
-Drives the **material** namespace (material assets, graphs, instances, functions) plus the generic **asset** namespace for texture ingest used by PBR builds. **64 material actions** via `material_query()`; the `asset` namespace adds workflows via `asset_query()` for texture/font ingest, file texture import, asset save/delete, specialized asset inspection, naming validation, and batch rename hygiene.
+Drives the **material** namespace (material assets, graphs, instances, functions) plus the generic **asset** namespace for texture ingest used by PBR builds. **64 material actions** via `material_query()`; the `asset` namespace adds workflows via `asset_query()` for texture/font ingest, file texture import, asset save/delete, typed asset inspection, naming validation, and batch rename hygiene.
 
 Discover first (action names below are a snapshot; the live catalog is authoritative):
 
@@ -141,7 +141,7 @@ Call these with `asset_query()`. Used by PBR builds for the source texture/font 
 | `list_supported_asset_enrichers` | (none) | List available asset enrichers |
 | `inspect_asset` | `asset_path*` `include_references=true` `array_limit=32` | Generic reflected inspection |
 | `inspect_assets_batch` | `asset_paths*` `include_references=false` `array_limit=16` | Batch reflected inspection |
-| `validate_specialized_asset` | `asset_path*` `array_limit=32` | Validate a specialized asset (large-payload warnings) |
+| `validate_typed_asset` | `asset_path*` `array_limit=32` | Validate a typed asset (large-payload warnings) |
 | `find_assets` | `query*` `_validate_types?` `path=/Game` `recursive=true` `class_names?` `limit=20` `threshold?` `include_tags=false` `include_score_breakdown=false` `allow_transposition=true` | Fuzzy live asset find. `class_names` e.g. Texture2D/Blueprint or /Script/Module.Class |
 | `[w] batch_rename_assets` | `asset_paths*` `find?` `replace?` `add_prefix?` `remove_prefix?` `add_suffix?` `remove_suffix?` `dry_run=false` | Batch rename hygiene |
 

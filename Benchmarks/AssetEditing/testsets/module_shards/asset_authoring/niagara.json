@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.niagara",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
-  "task_count": 552,
-  "module_count": 29,
+  "task_count": 574,
+  "module_count": 30,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: niagara",
-      "task_count": 28,
+      "task_count": 29,
       "filters": {
         "category": [
           "asset_authoring"
@@ -50,6 +50,7 @@
         "asset_authoring.niagara.duplicate_diff",
         "asset_authoring.niagara.dynamic_input",
         "asset_authoring.niagara.effect_type_scalability",
+        "asset_authoring.niagara.emitter_lifecycle",
         "asset_authoring.niagara.emitter_properties",
         "asset_authoring.niagara.emitter_template_spec",
         "asset_authoring.niagara.emitter_topology",
@@ -255,6 +256,33 @@
         ],
         "edit_domain": [
           "niagara_effect_type_scalability"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.emitter_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_lifecycle",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "emitter_lifecycle"
         ]
       },
       "module_shard_id": "asset_authoring.niagara",
@@ -852,40 +880,41 @@
           "niagara"
         ]
       },
-      "task_count": 28,
+      "task_count": 29,
       "task_ids": [
-        "BEB-321",
-        "BEB-322",
-        "BEB-323",
-        "BEB-360",
-        "BEB-361",
-        "BEB-362",
-        "BEB-363",
-        "BEB-364",
-        "BEB-377",
-        "BEB-378",
-        "BEB-379",
-        "BEB-394",
-        "BEB-414",
-        "BEB-421",
-        "BEB-422",
-        "BEB-423",
-        "BEB-424",
-        "BEB-434",
-        "BEB-435",
-        "BEB-436",
-        "BEB-437",
-        "BEB-438",
-        "BEB-464",
-        "BEB-467",
-        "BEB-503",
+        "BEB-327",
+        "BEB-328",
+        "BEB-329",
+        "BEB-366",
+        "BEB-367",
+        "BEB-368",
+        "BEB-369",
+        "BEB-370",
+        "BEB-383",
+        "BEB-384",
+        "BEB-385",
+        "BEB-400",
+        "BEB-420",
+        "BEB-427",
+        "BEB-428",
+        "BEB-429",
+        "BEB-430",
+        "BEB-440",
+        "BEB-441",
+        "BEB-442",
+        "BEB-443",
+        "BEB-444",
+        "BEB-470",
+        "BEB-473",
         "BEB-509",
-        "BEB-510",
-        "BEB-511"
+        "BEB-516",
+        "BEB-517",
+        "BEB-518",
+        "BEB-538"
       ],
       "task_refs": [
         {
-          "id": "BEB-321",
+          "id": "BEB-327",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -920,7 +949,7 @@
           "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
         },
         {
-          "id": "BEB-322",
+          "id": "BEB-328",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -953,7 +982,7 @@
           "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back"
         },
         {
-          "id": "BEB-323",
+          "id": "BEB-329",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -986,7 +1015,7 @@
           "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order"
         },
         {
-          "id": "BEB-360",
+          "id": "BEB-366",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1019,7 +1048,7 @@
           "description": "Create a Niagara System, normalize its renderer slot, add a Sprite renderer, configure SubUV, save, and inspect renderer properties"
         },
         {
-          "id": "BEB-361",
+          "id": "BEB-367",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1052,7 +1081,7 @@
           "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
         },
         {
-          "id": "BEB-362",
+          "id": "BEB-368",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1086,7 +1115,7 @@
           "description": "Create a GPU Niagara emitter, add a simulation stage, edit iteration/execute behavior and particle lifetime, save, and read stage metadata back"
         },
         {
-          "id": "BEB-363",
+          "id": "BEB-369",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1118,7 +1147,7 @@
           "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
         },
         {
-          "id": "BEB-364",
+          "id": "BEB-370",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1149,7 +1178,7 @@
           "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
         },
         {
-          "id": "BEB-377",
+          "id": "BEB-383",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1185,7 +1214,7 @@
           "description": "Create a Niagara System, add Mesh and Ribbon renderers, assign an engine StaticMesh, configure a ribbon trail and spawn shape, then read renderer and module metadata back"
         },
         {
-          "id": "BEB-378",
+          "id": "BEB-384",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1220,7 +1249,7 @@
           "description": "Create a Niagara HLSL module, add it to an emitter, capture the returned module GUID, duplicate that module, edit the duplicate input, save, and read both GUIDs back"
         },
         {
-          "id": "BEB-379",
+          "id": "BEB-385",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1255,7 +1284,7 @@
           "description": "Create two Niagara HLSL modules, add both to an emitter, move one module ahead of the other, disable the remaining module, save, and read stack order/state back"
         },
         {
-          "id": "BEB-394",
+          "id": "BEB-400",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1285,7 +1314,7 @@
           "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
         },
         {
-          "id": "BEB-414",
+          "id": "BEB-420",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1317,7 +1346,7 @@
           "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
         },
         {
-          "id": "BEB-421",
+          "id": "BEB-427",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1346,7 +1375,7 @@
           "description": "Create a reusable Niagara function script from HLSL, save it, and read back the generated graph plus CustomHlsl body"
         },
         {
-          "id": "BEB-422",
+          "id": "BEB-428",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1378,7 +1407,7 @@
           "description": "Create a Niagara emitter template asset, build a new system from a JSON spec that consumes the template, save it, and export the authored spec back"
         },
         {
-          "id": "BEB-423",
+          "id": "BEB-429",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1410,7 +1439,7 @@
           "description": "Create a Niagara System, import a JSON spec into it from a self-created emitter template, save, and verify overwrite-spec topology"
         },
         {
-          "id": "BEB-424",
+          "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1443,7 +1472,7 @@
           "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
         },
         {
-          "id": "BEB-434",
+          "id": "BEB-440",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1473,7 +1502,7 @@
           "description": "Create a Niagara System, edit emitter data through direct property aliases, save, and read each property back"
         },
         {
-          "id": "BEB-435",
+          "id": "BEB-441",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1507,7 +1536,7 @@
           "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
         },
         {
-          "id": "BEB-436",
+          "id": "BEB-442",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1541,7 +1570,7 @@
           "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
         },
         {
-          "id": "BEB-437",
+          "id": "BEB-443",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1580,7 +1609,7 @@
           "description": "Create a Niagara module stack, attach an engine Add_Float dynamic input to a module input, edit its value, remove it, save, and read back the final literal input state"
         },
         {
-          "id": "BEB-438",
+          "id": "BEB-444",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1616,7 +1645,7 @@
           "description": "Create a Niagara module with a curve data-interface input, assign curve keys, save the system, and read DI keys back through module and system inspection"
         },
         {
-          "id": "BEB-464",
+          "id": "BEB-470",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1646,7 +1675,7 @@
           "description": "Create a Niagara System, add two user parameters, remove one stale parameter, save, and verify only the kept parameter remains"
         },
         {
-          "id": "BEB-467",
+          "id": "BEB-473",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1676,7 +1705,7 @@
           "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
         },
         {
-          "id": "BEB-503",
+          "id": "BEB-509",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1707,7 +1736,7 @@
           "description": "Create a Niagara System and EffectType asset, assign the EffectType to the system, save both assets, and verify the relationship plus scalability metadata"
         },
         {
-          "id": "BEB-509",
+          "id": "BEB-516",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1742,7 +1771,7 @@
           "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
         },
         {
-          "id": "BEB-510",
+          "id": "BEB-517",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1773,7 +1802,7 @@
           "description": "Create a Niagara Parameter Collection, add kept and retired parameters, remove the retired parameter, save, and verify the final collection state"
         },
         {
-          "id": "BEB-511",
+          "id": "BEB-518",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1802,279 +1831,321 @@
             "inspect_asset"
           ],
           "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
+        },
+        {
+          "id": "BEB-538",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "emitter_lifecycle",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_emitter_enabled",
+            "reorder_emitters",
+            "remove_emitter",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System with three emitters, disable one, reorder the topology, remove one emitter, save, and read back the final emitter order and enabled state"
         }
       ],
       "groups": {
         "by_edit_domain": {
           "curve_di_key_edit": [
-            "BEB-509"
+            "BEB-516"
           ],
           "custom_hlsl_update": [
-            "BEB-467"
+            "BEB-473"
+          ],
+          "emitter_lifecycle": [
+            "BEB-538"
           ],
           "niagara_clear_emitter_modules": [
-            "BEB-424"
+            "BEB-430"
           ],
           "niagara_data_interface_curve": [
-            "BEB-438"
+            "BEB-444"
           ],
           "niagara_duplicate_diff": [
-            "BEB-363"
+            "BEB-369"
           ],
           "niagara_dynamic_input": [
-            "BEB-437"
+            "BEB-443"
           ],
           "niagara_effect_type_scalability": [
-            "BEB-394"
+            "BEB-400"
           ],
           "niagara_emitter_properties": [
-            "BEB-434"
+            "BEB-440"
           ],
           "niagara_emitter_template_spec": [
-            "BEB-422"
+            "BEB-428"
           ],
           "niagara_emitter_topology": [
-            "BEB-414"
+            "BEB-420"
           ],
           "niagara_event_handler_metadata": [
-            "BEB-364"
+            "BEB-370"
           ],
           "niagara_hlsl_function": [
-            "BEB-421"
+            "BEB-427"
           ],
           "niagara_import_system_spec": [
-            "BEB-423"
+            "BEB-429"
           ],
           "niagara_mesh_ribbon_renderer": [
-            "BEB-377"
+            "BEB-383"
           ],
           "niagara_module_duplicate_capture": [
-            "BEB-378"
+            "BEB-384"
           ],
           "niagara_module_script": [
-            "BEB-323"
+            "BEB-329"
           ],
           "niagara_module_stack_state": [
-            "BEB-379"
+            "BEB-385"
           ],
           "niagara_renderer_material": [
-            "BEB-436"
+            "BEB-442"
           ],
           "niagara_renderer_property_binding": [
-            "BEB-435"
+            "BEB-441"
           ],
           "niagara_sidecar_assets": [
-            "BEB-322"
+            "BEB-328"
           ],
           "niagara_sim_stage_lifetime": [
-            "BEB-362"
+            "BEB-368"
           ],
           "niagara_sprite_renderer_subuv": [
-            "BEB-360"
+            "BEB-366"
           ],
           "niagara_system": [
-            "BEB-321"
+            "BEB-327"
           ],
           "niagara_user_parameters": [
-            "BEB-361"
+            "BEB-367"
           ],
           "npc_parameter_remove": [
-            "BEB-510"
+            "BEB-517"
           ],
           "system_effect_type_assignment": [
-            "BEB-503"
+            "BEB-509"
           ],
           "system_timing": [
-            "BEB-511"
+            "BEB-518"
           ],
           "user_parameter_remove": [
-            "BEB-464"
+            "BEB-470"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ],
           "edit": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ],
           "readback_verify": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ],
           "save": [
-            "BEB-321",
-            "BEB-322",
-            "BEB-323",
-            "BEB-360",
-            "BEB-361",
-            "BEB-362",
-            "BEB-363",
-            "BEB-364",
-            "BEB-377",
-            "BEB-378",
-            "BEB-379",
-            "BEB-394",
-            "BEB-414",
-            "BEB-421",
-            "BEB-422",
-            "BEB-423",
-            "BEB-424",
-            "BEB-434",
-            "BEB-435",
-            "BEB-436",
-            "BEB-437",
-            "BEB-438",
-            "BEB-464",
-            "BEB-467",
-            "BEB-503",
+            "BEB-327",
+            "BEB-328",
+            "BEB-329",
+            "BEB-366",
+            "BEB-367",
+            "BEB-368",
+            "BEB-369",
+            "BEB-370",
+            "BEB-383",
+            "BEB-384",
+            "BEB-385",
+            "BEB-400",
+            "BEB-420",
+            "BEB-427",
+            "BEB-428",
+            "BEB-429",
+            "BEB-430",
+            "BEB-440",
+            "BEB-441",
+            "BEB-442",
+            "BEB-443",
+            "BEB-444",
+            "BEB-470",
+            "BEB-473",
             "BEB-509",
-            "BEB-510",
-            "BEB-511"
+            "BEB-516",
+            "BEB-517",
+            "BEB-518",
+            "BEB-538"
           ]
         }
       },
@@ -2087,6 +2158,7 @@
         "asset_authoring.niagara.duplicate_diff",
         "asset_authoring.niagara.dynamic_input",
         "asset_authoring.niagara.effect_type_scalability",
+        "asset_authoring.niagara.emitter_lifecycle",
         "asset_authoring.niagara.emitter_properties",
         "asset_authoring.niagara.emitter_template_spec",
         "asset_authoring.niagara.emitter_topology",
@@ -2139,11 +2211,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-424"
+        "BEB-430"
       ],
       "task_refs": [
         {
-          "id": "BEB-424",
+          "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2179,26 +2251,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-424"
+            "BEB-430"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-424"
+            "BEB-430"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-424"
+            "BEB-430"
           ],
           "edit": [
-            "BEB-424"
+            "BEB-430"
           ],
           "readback_verify": [
-            "BEB-424"
+            "BEB-430"
           ],
           "save": [
-            "BEB-424"
+            "BEB-430"
           ]
         }
       },
@@ -2234,11 +2306,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-509"
+        "BEB-516"
       ],
       "task_refs": [
         {
-          "id": "BEB-509",
+          "id": "BEB-516",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2276,26 +2348,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-509"
+            "BEB-516"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-509"
+            "BEB-516"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-509"
+            "BEB-516"
           ],
           "edit": [
-            "BEB-509"
+            "BEB-516"
           ],
           "readback_verify": [
-            "BEB-509"
+            "BEB-516"
           ],
           "save": [
-            "BEB-509"
+            "BEB-516"
           ]
         }
       },
@@ -2331,11 +2403,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-467"
+        "BEB-473"
       ],
       "task_refs": [
         {
-          "id": "BEB-467",
+          "id": "BEB-473",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2368,26 +2440,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-467"
+            "BEB-473"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-467"
+            "BEB-473"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-467"
+            "BEB-473"
           ],
           "edit": [
-            "BEB-467"
+            "BEB-473"
           ],
           "readback_verify": [
-            "BEB-467"
+            "BEB-473"
           ],
           "save": [
-            "BEB-467"
+            "BEB-473"
           ]
         }
       },
@@ -2423,11 +2495,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-438"
+        "BEB-444"
       ],
       "task_refs": [
         {
-          "id": "BEB-438",
+          "id": "BEB-444",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2466,26 +2538,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-438"
+            "BEB-444"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-438"
+            "BEB-444"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-438"
+            "BEB-444"
           ],
           "edit": [
-            "BEB-438"
+            "BEB-444"
           ],
           "readback_verify": [
-            "BEB-438"
+            "BEB-444"
           ],
           "save": [
-            "BEB-438"
+            "BEB-444"
           ]
         }
       },
@@ -2521,11 +2593,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-363"
+        "BEB-369"
       ],
       "task_refs": [
         {
-          "id": "BEB-363",
+          "id": "BEB-369",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2560,26 +2632,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-363"
+            "BEB-369"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-363"
+            "BEB-369"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-363"
+            "BEB-369"
           ],
           "edit": [
-            "BEB-363"
+            "BEB-369"
           ],
           "readback_verify": [
-            "BEB-363"
+            "BEB-369"
           ],
           "save": [
-            "BEB-363"
+            "BEB-369"
           ]
         }
       },
@@ -2615,11 +2687,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-437"
+        "BEB-443"
       ],
       "task_refs": [
         {
-          "id": "BEB-437",
+          "id": "BEB-443",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2661,26 +2733,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-437"
+            "BEB-443"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-437"
+            "BEB-443"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-437"
+            "BEB-443"
           ],
           "edit": [
-            "BEB-437"
+            "BEB-443"
           ],
           "readback_verify": [
-            "BEB-437"
+            "BEB-443"
           ],
           "save": [
-            "BEB-437"
+            "BEB-443"
           ]
         }
       },
@@ -2716,11 +2788,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-394"
+        "BEB-400"
       ],
       "task_refs": [
         {
-          "id": "BEB-394",
+          "id": "BEB-400",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2753,26 +2825,121 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-394"
+            "BEB-400"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-394"
+            "BEB-400"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-394"
+            "BEB-400"
           ],
           "edit": [
-            "BEB-394"
+            "BEB-400"
           ],
           "readback_verify": [
-            "BEB-394"
+            "BEB-400"
           ],
           "save": [
-            "BEB-394"
+            "BEB-400"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.emitter_lifecycle": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.emitter_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_lifecycle",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "emitter_lifecycle"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-538"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-538",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "emitter_lifecycle",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_emitter_enabled",
+            "reorder_emitters",
+            "remove_emitter",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System with three emitters, disable one, reorder the topology, remove one emitter, save, and read back the final emitter order and enabled state"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-538"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-538"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-538"
+          ],
+          "edit": [
+            "BEB-538"
+          ],
+          "readback_verify": [
+            "BEB-538"
+          ],
+          "save": [
+            "BEB-538"
           ]
         }
       },
@@ -2808,11 +2975,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-434"
+        "BEB-440"
       ],
       "task_refs": [
         {
-          "id": "BEB-434",
+          "id": "BEB-440",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2845,26 +3012,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-434"
+            "BEB-440"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-434"
+            "BEB-440"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-434"
+            "BEB-440"
           ],
           "edit": [
-            "BEB-434"
+            "BEB-440"
           ],
           "readback_verify": [
-            "BEB-434"
+            "BEB-440"
           ],
           "save": [
-            "BEB-434"
+            "BEB-440"
           ]
         }
       },
@@ -2900,11 +3067,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-422"
+        "BEB-428"
       ],
       "task_refs": [
         {
-          "id": "BEB-422",
+          "id": "BEB-428",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2939,26 +3106,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-422"
+            "BEB-428"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-422"
+            "BEB-428"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-422"
+            "BEB-428"
           ],
           "edit": [
-            "BEB-422"
+            "BEB-428"
           ],
           "readback_verify": [
-            "BEB-422"
+            "BEB-428"
           ],
           "save": [
-            "BEB-422"
+            "BEB-428"
           ]
         }
       },
@@ -2994,11 +3161,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-414"
+        "BEB-420"
       ],
       "task_refs": [
         {
-          "id": "BEB-414",
+          "id": "BEB-420",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3033,26 +3200,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-414"
+            "BEB-420"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-414"
+            "BEB-420"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-414"
+            "BEB-420"
           ],
           "edit": [
-            "BEB-414"
+            "BEB-420"
           ],
           "readback_verify": [
-            "BEB-414"
+            "BEB-420"
           ],
           "save": [
-            "BEB-414"
+            "BEB-420"
           ]
         }
       },
@@ -3088,11 +3255,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-364"
+        "BEB-370"
       ],
       "task_refs": [
         {
-          "id": "BEB-364",
+          "id": "BEB-370",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3126,26 +3293,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-364"
+            "BEB-370"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-364"
+            "BEB-370"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-364"
+            "BEB-370"
           ],
           "edit": [
-            "BEB-364"
+            "BEB-370"
           ],
           "readback_verify": [
-            "BEB-364"
+            "BEB-370"
           ],
           "save": [
-            "BEB-364"
+            "BEB-370"
           ]
         }
       },
@@ -3181,11 +3348,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-421"
+        "BEB-427"
       ],
       "task_refs": [
         {
-          "id": "BEB-421",
+          "id": "BEB-427",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3217,26 +3384,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-421"
+            "BEB-427"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-421"
+            "BEB-427"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-421"
+            "BEB-427"
           ],
           "edit": [
-            "BEB-421"
+            "BEB-427"
           ],
           "readback_verify": [
-            "BEB-421"
+            "BEB-427"
           ],
           "save": [
-            "BEB-421"
+            "BEB-427"
           ]
         }
       },
@@ -3272,11 +3439,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-423"
+        "BEB-429"
       ],
       "task_refs": [
         {
-          "id": "BEB-423",
+          "id": "BEB-429",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3311,26 +3478,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-423"
+            "BEB-429"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-423"
+            "BEB-429"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-423"
+            "BEB-429"
           ],
           "edit": [
-            "BEB-423"
+            "BEB-429"
           ],
           "readback_verify": [
-            "BEB-423"
+            "BEB-429"
           ],
           "save": [
-            "BEB-423"
+            "BEB-429"
           ]
         }
       },
@@ -3366,11 +3533,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-377"
+        "BEB-383"
       ],
       "task_refs": [
         {
-          "id": "BEB-377",
+          "id": "BEB-383",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3409,26 +3576,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-377"
+            "BEB-383"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-377"
+            "BEB-383"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-377"
+            "BEB-383"
           ],
           "edit": [
-            "BEB-377"
+            "BEB-383"
           ],
           "readback_verify": [
-            "BEB-377"
+            "BEB-383"
           ],
           "save": [
-            "BEB-377"
+            "BEB-383"
           ]
         }
       },
@@ -3464,11 +3631,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-378"
+        "BEB-384"
       ],
       "task_refs": [
         {
-          "id": "BEB-378",
+          "id": "BEB-384",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3506,26 +3673,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-378"
+            "BEB-384"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-378"
+            "BEB-384"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-378"
+            "BEB-384"
           ],
           "edit": [
-            "BEB-378"
+            "BEB-384"
           ],
           "readback_verify": [
-            "BEB-378"
+            "BEB-384"
           ],
           "save": [
-            "BEB-378"
+            "BEB-384"
           ]
         }
       },
@@ -3561,11 +3728,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-323"
+        "BEB-329"
       ],
       "task_refs": [
         {
-          "id": "BEB-323",
+          "id": "BEB-329",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3601,26 +3768,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-323"
+            "BEB-329"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-323"
+            "BEB-329"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-323"
+            "BEB-329"
           ],
           "edit": [
-            "BEB-323"
+            "BEB-329"
           ],
           "readback_verify": [
-            "BEB-323"
+            "BEB-329"
           ],
           "save": [
-            "BEB-323"
+            "BEB-329"
           ]
         }
       },
@@ -3656,11 +3823,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-379"
+        "BEB-385"
       ],
       "task_refs": [
         {
-          "id": "BEB-379",
+          "id": "BEB-385",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3698,26 +3865,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-379"
+            "BEB-385"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-379"
+            "BEB-385"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-379"
+            "BEB-385"
           ],
           "edit": [
-            "BEB-379"
+            "BEB-385"
           ],
           "readback_verify": [
-            "BEB-379"
+            "BEB-385"
           ],
           "save": [
-            "BEB-379"
+            "BEB-385"
           ]
         }
       },
@@ -3753,11 +3920,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-510"
+        "BEB-517"
       ],
       "task_refs": [
         {
-          "id": "BEB-510",
+          "id": "BEB-517",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3791,26 +3958,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-510"
+            "BEB-517"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-510"
+            "BEB-517"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-510"
+            "BEB-517"
           ],
           "edit": [
-            "BEB-510"
+            "BEB-517"
           ],
           "readback_verify": [
-            "BEB-510"
+            "BEB-517"
           ],
           "save": [
-            "BEB-510"
+            "BEB-517"
           ]
         }
       },
@@ -3846,11 +4013,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-436"
+        "BEB-442"
       ],
       "task_refs": [
         {
-          "id": "BEB-436",
+          "id": "BEB-442",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3887,26 +4054,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-436"
+            "BEB-442"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-436"
+            "BEB-442"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-436"
+            "BEB-442"
           ],
           "edit": [
-            "BEB-436"
+            "BEB-442"
           ],
           "readback_verify": [
-            "BEB-436"
+            "BEB-442"
           ],
           "save": [
-            "BEB-436"
+            "BEB-442"
           ]
         }
       },
@@ -3942,11 +4109,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-435"
+        "BEB-441"
       ],
       "task_refs": [
         {
-          "id": "BEB-435",
+          "id": "BEB-441",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3983,26 +4150,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-435"
+            "BEB-441"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-435"
+            "BEB-441"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-435"
+            "BEB-441"
           ],
           "edit": [
-            "BEB-435"
+            "BEB-441"
           ],
           "readback_verify": [
-            "BEB-435"
+            "BEB-441"
           ],
           "save": [
-            "BEB-435"
+            "BEB-441"
           ]
         }
       },
@@ -4038,11 +4205,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-322"
+        "BEB-328"
       ],
       "task_refs": [
         {
-          "id": "BEB-322",
+          "id": "BEB-328",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4078,26 +4245,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-322"
+            "BEB-328"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-322"
+            "BEB-328"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-322"
+            "BEB-328"
           ],
           "edit": [
-            "BEB-322"
+            "BEB-328"
           ],
           "readback_verify": [
-            "BEB-322"
+            "BEB-328"
           ],
           "save": [
-            "BEB-322"
+            "BEB-328"
           ]
         }
       },
@@ -4133,11 +4300,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-362"
+        "BEB-368"
       ],
       "task_refs": [
         {
-          "id": "BEB-362",
+          "id": "BEB-368",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4174,26 +4341,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-362"
+            "BEB-368"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-362"
+            "BEB-368"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-362"
+            "BEB-368"
           ],
           "edit": [
-            "BEB-362"
+            "BEB-368"
           ],
           "readback_verify": [
-            "BEB-362"
+            "BEB-368"
           ],
           "save": [
-            "BEB-362"
+            "BEB-368"
           ]
         }
       },
@@ -4229,11 +4396,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-360"
+        "BEB-366"
       ],
       "task_refs": [
         {
-          "id": "BEB-360",
+          "id": "BEB-366",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4269,26 +4436,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-360"
+            "BEB-366"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-360"
+            "BEB-366"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-360"
+            "BEB-366"
           ],
           "edit": [
-            "BEB-360"
+            "BEB-366"
           ],
           "readback_verify": [
-            "BEB-360"
+            "BEB-366"
           ],
           "save": [
-            "BEB-360"
+            "BEB-366"
           ]
         }
       },
@@ -4324,11 +4491,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-321"
+        "BEB-327"
       ],
       "task_refs": [
         {
-          "id": "BEB-321",
+          "id": "BEB-327",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4366,26 +4533,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-321"
+            "BEB-327"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-321"
+            "BEB-327"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-321"
+            "BEB-327"
           ],
           "edit": [
-            "BEB-321"
+            "BEB-327"
           ],
           "readback_verify": [
-            "BEB-321"
+            "BEB-327"
           ],
           "save": [
-            "BEB-321"
+            "BEB-327"
           ]
         }
       },
@@ -4421,11 +4588,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-503"
+        "BEB-509"
       ],
       "task_refs": [
         {
-          "id": "BEB-503",
+          "id": "BEB-509",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4459,26 +4626,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-503"
+            "BEB-509"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-503"
+            "BEB-509"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-503"
+            "BEB-509"
           ],
           "edit": [
-            "BEB-503"
+            "BEB-509"
           ],
           "readback_verify": [
-            "BEB-503"
+            "BEB-509"
           ],
           "save": [
-            "BEB-503"
+            "BEB-509"
           ]
         }
       },
@@ -4514,11 +4681,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-511"
+        "BEB-518"
       ],
       "task_refs": [
         {
-          "id": "BEB-511",
+          "id": "BEB-518",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4552,26 +4719,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-511"
+            "BEB-518"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-511"
+            "BEB-518"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-511"
+            "BEB-518"
           ],
           "edit": [
-            "BEB-511"
+            "BEB-518"
           ],
           "readback_verify": [
-            "BEB-511"
+            "BEB-518"
           ],
           "save": [
-            "BEB-511"
+            "BEB-518"
           ]
         }
       },
@@ -4607,11 +4774,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-464"
+        "BEB-470"
       ],
       "task_refs": [
         {
-          "id": "BEB-464",
+          "id": "BEB-470",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4644,26 +4811,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-464"
+            "BEB-470"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-464"
+            "BEB-470"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-464"
+            "BEB-470"
           ],
           "edit": [
-            "BEB-464"
+            "BEB-470"
           ],
           "readback_verify": [
-            "BEB-464"
+            "BEB-470"
           ],
           "save": [
-            "BEB-464"
+            "BEB-470"
           ]
         }
       },
@@ -4699,11 +4866,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-361"
+        "BEB-367"
       ],
       "task_refs": [
         {
-          "id": "BEB-361",
+          "id": "BEB-367",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4739,26 +4906,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-361"
+            "BEB-367"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-361"
+            "BEB-367"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-361"
+            "BEB-367"
           ],
           "edit": [
-            "BEB-361"
+            "BEB-367"
           ],
           "readback_verify": [
-            "BEB-361"
+            "BEB-367"
           ],
           "save": [
-            "BEB-361"
+            "BEB-367"
           ]
         }
       },

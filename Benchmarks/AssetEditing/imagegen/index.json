@@ -17,15 +17,15 @@
   },
   "edit_domain_count": 5,
   "task_ids": [
-    "BEB-283",
-    "BEB-284",
-    "BEB-344",
-    "BEB-376",
-    "BEB-455"
+    "BEB-287",
+    "BEB-288",
+    "BEB-350",
+    "BEB-382",
+    "BEB-461"
   ],
   "task_refs": [
     {
-      "id": "BEB-283",
+      "id": "BEB-287",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -53,7 +53,7 @@
       "description": "Generate a deterministic Texture2D through ImageGen, save it, and verify redacted generation provenance"
     },
     {
-      "id": "BEB-284",
+      "id": "BEB-288",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -82,7 +82,7 @@
       "description": "Validate an MSDF-ready SVG, bake an MSDF Texture2D plus preview material, save it, and inspect texture/provenance"
     },
     {
-      "id": "BEB-344",
+      "id": "BEB-350",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -110,7 +110,7 @@
       "description": "Import externally generated PNG bytes as a Texture2D through ImageGen provenance, save, and inspect provenance/read-back"
     },
     {
-      "id": "BEB-376",
+      "id": "BEB-382",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -136,7 +136,7 @@
       "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source"
     },
     {
-      "id": "BEB-455",
+      "id": "BEB-461",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -187,7 +187,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-344"
+        "BEB-350"
       ],
       "case_file": "testcases\\generated_image_import.json"
     },
@@ -209,7 +209,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-283"
+        "BEB-287"
       ],
       "case_file": "testcases\\generated_texture.json"
     },
@@ -231,7 +231,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-455"
+        "BEB-461"
       ],
       "case_file": "testcases\\generated_world_tile_texture.json"
     },
@@ -253,7 +253,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-284"
+        "BEB-288"
       ],
       "case_file": "testcases\\msdf_texture.json"
     },
@@ -275,7 +275,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-376"
+        "BEB-382"
       ],
       "case_file": "testcases\\svg_source_boundary.json"
     }

@@ -2,17 +2,19 @@
 
 ## v5.4 (2026-06-26) — AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion
 
-The current generated static suite has **552 tasks across 11 categories**. The new work expands
-`asset_authoring` to **242** asset creation/edit/save/read-back chains for high-ROI UE asset types beyond
-Blueprint graph edits: Texture file import metadata, ImageGen Texture2D/MSDF provenance assets,
+The current generated static suite has **574 tasks across 11 categories**. The new work expands
+`asset_authoring` to **264** asset creation/edit/save/read-back chains for high-ROI UE asset types beyond
+Blueprint graph edits: Texture file import metadata and conflict-policy validation, editor delete
+guard read-back, ImageGen Texture2D/MSDF provenance assets,
 Interchange texture/audio and StaticMesh import/reimport/export, Interchange batch import, ModelGen
 StaticMesh provenance import, Font, StringTable CSV import, StaticMesh OBJ import/collision/LOD
-screen-size metadata, StaticMesh FBX export, PBR material creation from disk textures, Material
+screen-size metadata, StaticMesh FBX export, StaticMesh material-slot/compare read-back,
+PBR material creation from disk textures, Material
 Function, Material Function Instance overrides, Material Instance duplicate/reparent/clear flows,
 animation core assets, BlendSpace sample bake, AimOffset axis editing, IK Rig/Retargeter metadata and retarget pose/root settings,
-audio routing/template/spec assets, Niagara sidecars, EQS, Chooser Tables, GAS
+audio routing/template/spec assets, explicit MetaSound node connect/disconnect workflows, Niagara sidecars, EQS, Chooser Tables, GAS
 Ability/Cue/TargetActor assets, Material graph build/export, CommonUI text-block authoring,
-AnimMontage sections/slots, AnimSequence curve/sync metadata, Niagara HLSL module stack insertion,
+AnimMontage sections/slots, AnimSequence curve/sync metadata, Material texture preview/contact-sheet/tiling diagnostics, Niagara HLSL module stack insertion,
 BehaviorTree spec-build, BehaviorTree Task/Decorator/Service Blueprint assets, GAS Enhanced Input
 binding smoke, parameterized Material Instance overrides, CommonUI input-action DataTables,
 GameplayEffect template duplication, AIController perception config, HLODLayer config,
@@ -35,6 +37,7 @@ assignment, SoundWave compression/rename batch maintenance, Material expression 
 batch/layout/replace maintenance, SoundCue primitive graph-edit workflows, Interchange generic
 option import, SoundWave looping/virtualization batches, Niagara EffectType scalability, AnimSequence
 root-motion/additive duplication, GeometryScript direct mesh operations, Sound perception binding,
+project generated-asset cleanup dry-run/apply validation,
 Material Function metadata/delete-expression maintenance, MIC single-parameter plus batch expression
 delete, Material graph clear/import, UISpec build/dump Widget Blueprint workflows,
 Blueprint FunctionLibrary/MacroLibrary/Interface asset-type authoring, PoseSearch NormalizationSet
@@ -59,9 +62,9 @@ Interchange typed scene import, and path-based raw UObject asset property editin
 EQS test reorder/remove/duplicate mutation, SmartObject behavior-definition duplication,
 Niagara renderer material assignment, Niagara dynamic input add/value/remove read-back,
 Niagara curve Data Interface key read-back, Material Layer/Blend asset metadata editing,
-batch asset inspect/delete lifecycle validation, MetaSound Source graph authoring,
+batch asset inspect/delete lifecycle validation, typed Texture2D validation/enricher registry read-back, MetaSound Source graph authoring,
 Material decal-domain setup, UMG ListView entry binding and widget-tree maintenance,
-Niagara module stack order/enable-state editing, AnimSequence bone-track key authoring,
+Niagara module stack order/enable-state editing, Niagara emitter disable/reorder/remove lifecycle editing, AnimSequence bone-track key authoring,
 GeometryScript handle boolean/remesh/material-id editing, procedural structure and terrain
 StaticMesh generation, generated world-tile Texture2D validation, Texture2D role preset validation,
 Material preview rendering, GAS ability flag and widget attribute-binding edits, WorldGen street/roof/building
@@ -89,7 +92,12 @@ box-shadow MID authoring, DataTable dry-run versus strict apply validation, Anim
 pose-frame data authoring, StringTable metadata
 removal, LogicDriver State Machine Blueprint graph authoring, Enhanced Input duplicate-key
 conflict validation, Mass Entity Config trait add/remove validation, and UMG settings-panel plus
-notification-toast template generation/read-back.
+notification-toast template generation/read-back, plus AnimSequence pose-copy editing,
+AnimMontage section flow/time/delete editing, BlendSpace sample deletion, AnimSequence
+bone-track lifecycle edits, IKRig retarget-chain lifecycle edits, notify batch/track/clone
+workflows, StringTable registry-list read-back, Content Browser collection name
+validation/unique-name generation, DataTable strict rejection, and bulk CDO schema
+dry-run/apply validation for raw UObject assets.
 The generated `asset_types.json` plus `AssetEditing\[AssetType]` directories now expose
 human-browsable AssetType support, type-scoped task streams, and per-edit-domain JSON case files.
 The generated `testsets/index.json`, `testsets/modules.json`, and `testsets/module_shards/` files expose routable modules
@@ -114,13 +122,13 @@ until their live action, portable benchmark fixture, and cleanup contracts are p
 
 | Field | Value |
 |-------|-------|
-| Generated tasks | 552 |
-| Generated `asset_authoring` tasks | 242 |
+| Generated tasks | 574 |
+| Generated `asset_authoring` tasks | 264 |
 | Static generation | `python Plugins\Monolith\Scripts\asset_editing_benchmark.py generate` |
 | Generated AssetType slices | 23 directories under `Benchmarks\AssetEditing\[AssetType]`, plus `asset_types.json`, each with type README, scoped `tasks.jsonl`, `index.json`, and `testcases\*.json` files |
-| Generated test-set modules | 1659 modules split across 38 shard files in `Benchmarks\AssetEditing\testsets\module_shards`, including 92 `asset_operation_domain` modules and 966 `asset_operation_edit_domain` leaves |
-| Latest static addendum | Added `BEB-512` UMG box-shadow MID authoring, `BEB-513` native UMG `set_image`/`set_brush`/`set_font` styling read-back, `BEB-514` DataTable dry-run/strict-apply validation, `BEB-515` LogicDriver State Machine graph authoring, `BEB-516` StringTable metadata removal, `BEB-517` Enhanced Input duplicate-key conflict validation, `BEB-518` Mass Entity Config trait add/remove validation, `BEB-519` UMG settings-panel/notification-toast template generation, and `BEB-520` AnimSequence pose-frame data authoring. The regenerated current asset-authoring range is `BEB-279..BEB-520`; use `tasks.jsonl`, `asset_types.json`, `testsets/index.json`, and `testsets/module_shards/` as the canonical ID map. Repeated domain prefixes are compacted in route module ids, for example `asset_authoring.asset.batch_delete`, `asset_authoring.asset.texture_role_presets`, and `asset_operation.edit.asset.batch_delete`; legacy duplicate selector inputs are normalized before lookup. |
-| Live status | The latest full live scored run is still the 375-task pre-rename historical baseline below; previously appended focused rows passed the listed historical `Saved\Monolith\Benchmarks\AssetEditing\...` smoke runs. The current `BEB-279..BEB-520` AssetEditing authoring range plus the generated workflow/asset-operation/lifecycle/operation-semantics routing tree are statically generated and pending focused live smoke/full live rerun evidence. |
+| Generated test-set modules | 1791 modules split across 38 shard files in `Benchmarks\AssetEditing\testsets\module_shards`, including 92 `asset_operation_domain` modules and 1054 `asset_operation_edit_domain` leaves |
+| Latest static addendum | Added `BEB-283` Texture2D PNG post-processing/processed-PNG read-back, `BEB-284` batch rename dry-run/apply validation, `BEB-285` Texture2D file-conflict overwrite policy, `BEB-286` editor delete guard read-back, `BEB-320` IKRig retarget-chain lifecycle editing, `BEB-513` project generated-asset cleanup dry-run/apply validation, `BEB-522` DataTable strict rejection, bulk CDO schema dry-run/apply validation, AnimSequence pose-frame and pose-copy editing, AnimMontage section flow/time/delete editing, BlendSpace sample deletion, AnimSequence bone-track lifecycle editing, notify batch/track/clone editing, StringTable registry-list read-back, Content Browser collection name validation/unique-name generation, AnimSequence modifier stack persistence/read-back, Texture2D typed validation/enricher registry read-back, Niagara emitter disable/reorder/remove lifecycle read-back, Material Texture2D preview/contact-sheet/tiling diagnostics, MetaSound explicit node connect/disconnect read-back, StaticMesh material-slot/compare read-back, and `BEB-542` editor Texture2D import plus flipbook-atlas stitching. The regenerated current asset-authoring range is `BEB-279..BEB-542`; use `tasks.jsonl`, `asset_types.json`, `testsets/index.json`, and `testsets/module_shards/` as the canonical ID map. Repeated domain prefixes are compacted in route module ids, for example `asset_authoring.asset.batch_delete`, `asset_authoring.data.asset_bulk_cdo_schema`, and `asset_operation.edit.asset.batch_delete`; legacy duplicate selector inputs are normalized before lookup and generated docs expose only compact canonical routes. |
+| Live status | The latest full live scored run is still the 375-task pre-rename historical baseline below; previously appended focused rows passed the listed historical `Saved\Monolith\Benchmarks\AssetEditing\...` smoke runs. The current `BEB-279..BEB-542` AssetEditing authoring range plus the generated workflow/asset-operation/lifecycle/operation-semantics routing tree are statically generated and pending focused live smoke/full live rerun evidence. |
 
 ### Historical pre-rename v5.4 live scored run
 
@@ -183,7 +191,7 @@ Monolith MCP 0.20.3:
 
 The v5.1 live 1.000 remains useful historical evidence for the Blueprint graph hardening. The
 v5.3 run above is the previous full scored 362-task UE 5.8 baseline; v5.4's latest full scored
-baseline is 375 tasks, while the generated suite is now 552 tasks pending a full live rerun for the
+baseline is 375 tasks, while the generated suite is now 574 tasks pending a full live rerun for the
 post-baseline asset-authoring addendum.
 
 ## v5.1 (2026-06-18) — adversarial hardening + practical expansion
@@ -312,6 +320,6 @@ python Scripts\asset_editing_benchmark.py run `
   --jobs 4
 ```
 
-Expected on a healthy live editor: 552 tasks loaded and all eleven rates at or near 1.0. A near-1.0
+Expected on a healthy live editor: 574 tasks loaded and all eleven rates at or near 1.0. A near-1.0
 here now *means* the server actually performs, wires, compiles-clean, creates/edits/saves common UE
 asset types, rejects bad input, and guards duplicates — not merely that it replied without error.

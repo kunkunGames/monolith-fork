@@ -1,4 +1,4 @@
-# BlueprintEditing Benchmark v5.1 — Adversarial Hardening + Interface-Resolver Fix
+# AssetEditing Benchmark v5.1 — Adversarial Hardening + Interface-Resolver Fix
 
 | Field | Value |
 |-------|-------|
@@ -13,7 +13,7 @@
 
 ## 1. Scope
 
-Adversarially audit the `Benchmarks/BlueprintEditing` benchmark + test set, maximize its practical
+Adversarially audit the `Benchmarks/AssetEditing` benchmark + test set, maximize its practical
 and anti-gaming value, run it against the live editor, and reflect the results into Monolith.
 
 ## 2. Method
@@ -24,7 +24,7 @@ and anti-gaming value, run it against the live editor, and reflect the results i
 2. **Empirical baseline** — `setup_fixtures` + a 295-task run against the live editor
    (`baseline-v5-pre` = **0.967**). All 9 failures were benchmark/contract defects, not server gaps.
 3. **Implementation** — scoring-engine hardening + practical-coverage expansion + reweight in
-   `Scripts/blueprint_editing_benchmark.py`; the `ResolveInterfaceClass` handler fix in
+   `Scripts/asset_editing_benchmark.py`; the `ResolveInterfaceClass` handler fix in
    `Source/MonolithBlueprint`. 305 tasks, 10 categories.
 4. **Build + live validation** — the project editor target rebuilt (UBT); the interface resolver and the
    `negative_compile` break mechanism validated with direct MCP calls; full scored run.
@@ -59,7 +59,7 @@ benchmark/contract defects that depressed the baseline were fixed.
 | `ResolveInterfaceClass` — resolve Blueprint Interface assets by path/short name for `implement_interface`, `get_interface_functions`, `remove_interface` | `Source/MonolithBlueprint/Private/{MonolithBlueprintInternal.h, MonolithBlueprintGraphActions.cpp, MonolithBlueprintActions.cpp}` |
 | **`duplicate_component` guard** — reject an explicit `new_name` collision instead of silently suffixing (`Y`→`Y_1`); auto-`_Copy` default still suffixes (found + verified live) | `Source/MonolithBlueprint/Private/MonolithBlueprintComponentActions.cpp` |
 | **`remove_event_dispatcher` / `set_event_dispatcher_params` `name` alias** — `dispatcher_name` made `Optional` + `name` registered as an alias (the schema-validation layer rejected the call before the handler's fallback ran; registration change required) | `Source/MonolithBlueprint/Private/MonolithBlueprintGraphActions.cpp` |
-| Benchmark v5.1 (hardening, expansion, reweight, defect fixes) | `Scripts/blueprint_editing_benchmark.py`, `Benchmarks/BlueprintEditing/*` |
+| Benchmark v5.1 (hardening, expansion, reweight, defect fixes) | `Scripts/asset_editing_benchmark.py`, `Benchmarks/AssetEditing/*` |
 | Module spec sync | `Docs/specs/SPEC_MonolithBlueprint.md` |
 | Deferred items + corrected claims | `Docs/TODO.md` |
 
@@ -89,6 +89,6 @@ found and corrected two issues, applying the verify-don't-assume rule to my own 
 
 ## 6. Verification gate
 
-`python Scripts/blueprint_editing_benchmark.py run --label v5.1 --skip-preflight` after a fresh boot +
+`python Scripts/asset_editing_benchmark.py run --label v5.1 --skip-preflight` after a fresh boot +
 `setup_fixtures` → 305 tasks, score 1.000, 0 transport errors, 0 failures. Re-run on a fresh editor
 boot (or after fixture reset) for an idempotent number.

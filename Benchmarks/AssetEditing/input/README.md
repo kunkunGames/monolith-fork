@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `axis2d_movement_mapping` | 1 | `asset_authoring.input.axis2d_movement_mapping` | `testcases\axis2d_movement_mapping.json` |
 | `axis3d_mapping` | 1 | `asset_authoring.input.axis3d_mapping` | `testcases\axis3d_mapping.json` |

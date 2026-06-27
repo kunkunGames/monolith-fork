@@ -71,13 +71,41 @@ RECENCY_WEIGHTS = {
 }
 SYNTHETIC_ARGUMENT_MARKERS = (
     "__test_",
+    "__missing_console_test.db",
+    "queryhashmismatchprobe",
     "paramguard",
     "/game/tests/monolith",
+    "/game/temp/test",
     "d:/monolithoutside",
     "outsideproject",
     "malformedpath",
+    "badpathtest",
+    "collisionalias",
+    "source/doesnotexist/missing.h",
+    "sc_graphbadpath",
+    "sc_testcrossfade",
+    "sc_validsource",
+    "sm_testsoundmix",
+    "sw_testtestwave",
+    "sw_collision",
+    "/game/tests/audio",
+    "/game/temp/someclass",
+    "/game/temp/somewave",
+    "testlimitspeccue",
+    "testmaxchildrencue",
+    "testmalformed",
     "testlimitspecmetasound",
 )
+
+SYNTHETIC_ACTION_IDS = {
+    # ActionGuidance intentionally probes typo/unknown-action recovery. These
+    # rows should validate routing hints, not inflate operational high-error ROI.
+    "monolith.monolih_discover",
+    "monolith.statux",
+    "monolith.guid",
+    "maerial.any_action",
+    "xyzzy_qwerty_fnord.plover",
+}
 
 SEVERITY_RANK = {
     "info": 0,
@@ -1536,6 +1564,8 @@ def classify_noise(
     tool_lower = tool_name.lower()
     if ns_action in {"monolith.status", "mcp.monolith_status"} or action.lower() == "monolith_status":
         return "heartbeat"
+    if ns_action in SYNTHETIC_ACTION_IDS:
+        return "synthetic_test"
     if "__missing_action" in ns_action or "__cc05" in ns_action or namespace.startswith("__") or action.startswith("__"):
         return "synthetic_test"
     if is_synthetic_param_guard_fixture(namespace, action, call or {}, message):
@@ -1621,7 +1651,7 @@ def is_synthetic_param_guard_fixture(
     args_blob = stable_json(args).lower() if args is not None else ""
     message_lower = (message or "").lower()
 
-    if any(marker in args_blob for marker in SYNTHETIC_ARGUMENT_MARKERS):
+    if any(marker in args_blob or marker in message_lower for marker in SYNTHETIC_ARGUMENT_MARKERS):
         return True
 
     if namespace == "gas":

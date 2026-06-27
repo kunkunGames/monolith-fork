@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "editor",
+  "asset_type_slug": "editor",
+  "edit_domain": "texture_flipbook_atlas",
+  "route_edit_domain": "texture_flipbook_atlas",
+  "module_id": "asset_authoring.editor.texture_flipbook_atlas",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.editor.texture_flipbook_atlas",
+    "edit": "asset_operation.edit.editor.texture_flipbook_atlas",
+    "save": "asset_operation.save.editor.texture_flipbook_atlas",
+    "readback_verify": "asset_operation.readback_verify.editor.texture_flipbook_atlas"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-542"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-542",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "texture_flipbook_atlas",
+      "blueprint_type": "",
+      "workflow": "editor_texture_flipbook_atlas_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture",
+        "stitch_flipbook",
+        "save_asset",
+        "get_texture_properties",
+        "inspect_assets_batch"
+      ],
+      "description": "Import a Texture2D through the editor namespace, stitch four PNG frames into a flipbook atlas texture, save both assets, and read back texture metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-542",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchEditorImport",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchFlipbookAtlas"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "editor_query",
+          "args": {
+            "action": "import_texture",
+            "source_path": "__ASSET_AUTHORING_EDITOR_TEXTURE_PNG__",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchEditorImport",
+            "settings": {
+              "srgb": true,
+              "tiling": false,
+              "max_size": 64,
+              "lod_group": "TEXTUREGROUP_Effects"
+            }
+          },
+          "contains": [
+            "success",
+            "true",
+            "T_BenchEditorImport",
+            "size_x",
+            "2",
+            "size_y",
+            "2"
+          ]
+        },
+        {
+          "tool": "editor_query",
+          "args": {
+            "action": "stitch_flipbook",
+            "frame_paths": [
+              "__ASSET_AUTHORING_FLIPBOOK_FRAME_A_PNG__",
+              "__ASSET_AUTHORING_FLIPBOOK_FRAME_B_PNG__",
+              "__ASSET_AUTHORING_FLIPBOOK_FRAME_C_PNG__",
+              "__ASSET_AUTHORING_FLIPBOOK_FRAME_D_PNG__"
+            ],
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/T_BenchFlipbookAtlas",
+            "grid": [
+              2,
+              2
+            ],
+            "srgb": true,
+            "no_mipmaps": true,
+            "delete_sources": false,
+            "lod_group": "TEXTUREGROUP_Effects"
+          },
+          "contains": [
+            "success",
+            "true",
+            "T_BenchFlipbookAtlas",
+            "frame_count",
+            "4",
+            "frame_width",
+            "2",
+            "frame_height",
+            "2",
+            "resolution"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchEditorImport"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchFlipbookAtlas"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchEditorImport"
+          },
+          "contains": [
+            "T_BenchEditorImport",
+            "Texture2D",
+            "TEXTUREGROUP_Effects",
+            "true"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchFlipbookAtlas"
+          },
+          "contains": [
+            "T_BenchFlipbookAtlas",
+            "Texture2D",
+            "TEXTUREGROUP_Effects",
+            "TA_Clamp"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchEditorImport",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchFlipbookAtlas"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "T_BenchEditorImport",
+            "Texture2D",
+            "T_BenchFlipbookAtlas",
+            "source_width",
+            "4",
+            "source_height",
+            "4"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "texture_flipbook_atlas",
+      "blueprint_type": "",
+      "domain": "editor",
+      "workflow": "editor_texture_flipbook_atlas_roundtrip",
+      "description": "Import a Texture2D through the editor namespace, stitch four PNG frames into a flipbook atlas texture, save both assets, and read back texture metadata",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/texture-asset-editor-in-unreal-engine?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/paper-2d-in-unreal-engine?application_version=5.8",
+        "source: Plugins/Monolith/Source/MonolithEditor/Private/MonolithEditorActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture",
+          "stitch_flipbook",
+          "save_asset",
+          "get_texture_properties",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

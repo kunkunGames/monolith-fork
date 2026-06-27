@@ -487,7 +487,7 @@ namespace
 
 		if (!Def)
 		{
-			AddWarning(TEXT("unsupported_type"), TEXT("No specialized enricher is registered for this asset class."));
+			AddWarning(TEXT("unsupported_type"), TEXT("No typed enricher is registered for this asset class."));
 			return Warnings;
 		}
 
@@ -651,12 +651,12 @@ namespace
 void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
 	Registry.RegisterAction(TEXT("asset"), TEXT("list_supported_asset_enrichers"),
-		TEXT("List read-only specialized asset enrichers supported by Monolith."),
+		TEXT("List read-only typed asset enrichers supported by Monolith."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ListSupportedAssetEnrichers),
 		FParamSchemaBuilder().Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("inspect_asset"),
-		TEXT("Inspect an asset with specialized read-only enrichment when supported."),
+		TEXT("Inspect an asset with typed read-only enrichment when supported."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::InspectAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to inspect"))
@@ -673,9 +673,9 @@ void FMonolithAssetInspectionActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Maximum items per reflected array"), TEXT("16"))
 			.Build());
 
-	Registry.RegisterAction(TEXT("asset"), TEXT("validate_specialized_asset"),
-		TEXT("Validate a specialized asset and report warnings without mutation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ValidateSpecializedAsset),
+	Registry.RegisterAction(TEXT("asset"), TEXT("validate_typed_asset"),
+		TEXT("Validate a typed asset and report warnings without mutation."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetInspectionActions::ValidateTypedAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to validate"))
 			.Optional(TEXT("array_limit"), TEXT("number"), TEXT("Array cap used when evaluating large payload warnings"), TEXT("32"))
@@ -784,7 +784,7 @@ FMonolithActionResult FMonolithAssetInspectionActions::InspectAssetsBatch(const 
 	return FMonolithActionResult::Success(Result);
 }
 
-FMonolithActionResult FMonolithAssetInspectionActions::ValidateSpecializedAsset(const TSharedPtr<FJsonObject>& Params)
+FMonolithActionResult FMonolithAssetInspectionActions::ValidateTypedAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath, Error;
 	UObject* Asset = LoadAssetFromParams(Params, AssetPath, Error);

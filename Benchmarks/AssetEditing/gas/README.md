@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `ability_input_binding` | 1 | `asset_authoring.gas.ability_input_binding` | `testcases\ability_input_binding.json` |
 | `ability_spec_builder` | 1 | `asset_authoring.gas.ability_spec_builder` | `testcases\ability_spec_builder.json` |

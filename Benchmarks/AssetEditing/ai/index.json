@@ -17,24 +17,24 @@
   },
   "edit_domain_count": 14,
   "task_ids": [
-    "BEB-324",
-    "BEB-325",
-    "BEB-326",
-    "BEB-327",
-    "BEB-328",
-    "BEB-339",
-    "BEB-349",
-    "BEB-351",
-    "BEB-382",
-    "BEB-383",
-    "BEB-384",
-    "BEB-433",
-    "BEB-508",
-    "BEB-518"
+    "BEB-330",
+    "BEB-331",
+    "BEB-332",
+    "BEB-333",
+    "BEB-334",
+    "BEB-345",
+    "BEB-355",
+    "BEB-357",
+    "BEB-388",
+    "BEB-389",
+    "BEB-390",
+    "BEB-439",
+    "BEB-515",
+    "BEB-526"
   ],
   "task_refs": [
     {
-      "id": "BEB-324",
+      "id": "BEB-330",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -66,7 +66,7 @@
       "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both"
     },
     {
-      "id": "BEB-325",
+      "id": "BEB-331",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -98,7 +98,7 @@
       "description": "Create an EQS query, add a generator and scored/filtering test, save it, and inspect the query options"
     },
     {
-      "id": "BEB-326",
+      "id": "BEB-332",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -131,7 +131,7 @@
       "description": "Create an EQS query, add two tests, reorder and remove tests, duplicate the query, save both assets, and inspect the edited structure"
     },
     {
-      "id": "BEB-327",
+      "id": "BEB-333",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -160,7 +160,7 @@
       "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout"
     },
     {
-      "id": "BEB-328",
+      "id": "BEB-334",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -190,7 +190,7 @@
       "description": "Create BehaviorTree Task/Decorator/Service Blueprint assets, save them, and verify their parent classes"
     },
     {
-      "id": "BEB-339",
+      "id": "BEB-345",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -226,7 +226,7 @@
       "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config"
     },
     {
-      "id": "BEB-349",
+      "id": "BEB-355",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -257,7 +257,7 @@
       "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back"
     },
     {
-      "id": "BEB-351",
+      "id": "BEB-357",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -288,7 +288,7 @@
       "description": "Create a child Blackboard without a parent, assign its parent via set_bb_parent, save, and verify inherited/local keys"
     },
     {
-      "id": "BEB-382",
+      "id": "BEB-388",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -320,7 +320,7 @@
       "description": "Create a StateTree asset, add and rename a root state, compile, save, and inspect the tree structure"
     },
     {
-      "id": "BEB-383",
+      "id": "BEB-389",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -351,7 +351,7 @@
       "description": "Create a SmartObjectDefinition, add and configure a slot, save, and read slot metadata back"
     },
     {
-      "id": "BEB-384",
+      "id": "BEB-390",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -382,7 +382,7 @@
       "description": "Create a SmartObjectDefinition, add a slot behavior definition, duplicate the definition, save both assets, and inspect behavior metadata"
     },
     {
-      "id": "BEB-433",
+      "id": "BEB-439",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -416,7 +416,7 @@
       "description": "Create a BehaviorTree with direct node, decorator, service, property, and delete edits, then read the exact authored graph back"
     },
     {
-      "id": "BEB-508",
+      "id": "BEB-515",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -445,7 +445,7 @@
       "description": "Build an EQS query from a declarative generator/test/scoring/filter spec, save it, and verify the materialized query graph"
     },
     {
-      "id": "BEB-518",
+      "id": "BEB-526",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -500,7 +500,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-339"
+        "BEB-345"
       ],
       "case_file": "testcases\\controller_perception.json"
     },
@@ -522,7 +522,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-324"
+        "BEB-330"
       ],
       "case_file": "testcases\\behavior_tree.json"
     },
@@ -544,7 +544,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-433"
+        "BEB-439"
       ],
       "case_file": "testcases\\behavior_tree_granular_edit.json"
     },
@@ -566,7 +566,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-328"
+        "BEB-334"
       ],
       "case_file": "testcases\\behavior_tree_node_blueprints.json"
     },
@@ -588,7 +588,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-327"
+        "BEB-333"
       ],
       "case_file": "testcases\\behavior_tree_spec.json"
     },
@@ -610,7 +610,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-349"
+        "BEB-355"
       ],
       "case_file": "testcases\\blackboard_inheritance_duplicate.json"
     },
@@ -632,7 +632,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-351"
+        "BEB-357"
       ],
       "case_file": "testcases\\blackboard_set_parent.json"
     },
@@ -654,7 +654,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-325"
+        "BEB-331"
       ],
       "case_file": "testcases\\eqs_query.json"
     },
@@ -676,7 +676,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-326"
+        "BEB-332"
       ],
       "case_file": "testcases\\eqs_query_mutation.json"
     },
@@ -698,7 +698,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-508"
+        "BEB-515"
       ],
       "case_file": "testcases\\eqs_spec_builder.json"
     },
@@ -720,7 +720,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-518"
+        "BEB-526"
       ],
       "case_file": "testcases\\mass_entity_config.json"
     },
@@ -742,7 +742,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-384"
+        "BEB-390"
       ],
       "case_file": "testcases\\smart_object_behavior_duplicate.json"
     },
@@ -764,7 +764,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-383"
+        "BEB-389"
       ],
       "case_file": "testcases\\smart_object_definition.json"
     },
@@ -786,7 +786,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-382"
+        "BEB-388"
       ],
       "case_file": "testcases\\state_tree.json"
     }

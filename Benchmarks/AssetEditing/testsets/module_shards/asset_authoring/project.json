@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.project",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json",
-  "task_count": 552,
-  "module_count": 3,
+  "task_count": 574,
+  "module_count": 4,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: project",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -43,9 +43,37 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json",
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
+        "asset_authoring.project.cleanup_generated_assets",
         "asset_authoring.project.index_details_text",
         "asset_authoring.project.saved_asset_state"
       ]
+    },
+    {
+      "module_id": "asset_authoring.project.cleanup_generated_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "project",
+        "cleanup_generated_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: project/cleanup_generated_assets",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "project"
+        ],
+        "edit_domain": [
+          "cleanup_generated_assets"
+        ]
+      },
+      "module_shard_id": "asset_authoring.project",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json",
+      "parent_module_id": "asset_authoring.project",
+      "child_module_ids": []
     },
     {
       "module_id": "asset_authoring.project.index_details_text",
@@ -124,14 +152,15 @@
           "project"
         ]
       },
-      "task_count": 2,
+      "task_count": 3,
       "task_ids": [
-        "BEB-426",
-        "BEB-506"
+        "BEB-432",
+        "BEB-512",
+        "BEB-513"
       ],
       "task_refs": [
         {
-          "id": "BEB-426",
+          "id": "BEB-432",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -159,7 +188,7 @@
           "description": "Import two Texture2D assets, force an AssetRegistry refresh, then verify saved disk state through the project namespace and batch asset inspection"
         },
         {
-          "id": "BEB-506",
+          "id": "BEB-512",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -188,53 +217,181 @@
             "export_asset_text"
           ],
           "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export"
+        },
+        {
+          "id": "BEB-513",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "project",
+          "edit_domain": "cleanup_generated_assets",
+          "blueprint_type": "",
+          "workflow": "project_generated_cleanup_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "refresh_assets",
+            "cleanup_generated_assets",
+            "inspect_assets_batch"
+          ],
+          "description": "Create a disposable Texture2D under the cleanup action allowlist, refresh asset visibility, dry-run cleanup, apply cleanup, and verify the asset is gone"
         }
       ],
       "groups": {
         "by_edit_domain": {
+          "cleanup_generated_assets": [
+            "BEB-513"
+          ],
           "index_details_text": [
-            "BEB-506"
+            "BEB-512"
           ],
           "saved_asset_state": [
-            "BEB-426"
+            "BEB-432"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ],
           "edit": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ],
           "readback_verify": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ],
           "save": [
-            "BEB-426",
-            "BEB-506"
+            "BEB-432",
+            "BEB-512",
+            "BEB-513"
           ]
         }
       },
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
+        "asset_authoring.project.cleanup_generated_assets",
         "asset_authoring.project.index_details_text",
         "asset_authoring.project.saved_asset_state"
       ],
+      "module_shard_id": "asset_authoring.project",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json"
+    },
+    "asset_authoring.project.cleanup_generated_assets": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.project.cleanup_generated_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "project",
+        "cleanup_generated_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: project/cleanup_generated_assets",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "project"
+        ],
+        "edit_domain": [
+          "cleanup_generated_assets"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-513"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-513",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "project",
+          "edit_domain": "cleanup_generated_assets",
+          "blueprint_type": "",
+          "workflow": "project_generated_cleanup_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "refresh_assets",
+            "cleanup_generated_assets",
+            "inspect_assets_batch"
+          ],
+          "description": "Create a disposable Texture2D under the cleanup action allowlist, refresh asset visibility, dry-run cleanup, apply cleanup, and verify the asset is gone"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-513"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-513"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-513"
+          ],
+          "edit": [
+            "BEB-513"
+          ],
+          "readback_verify": [
+            "BEB-513"
+          ],
+          "save": [
+            "BEB-513"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.project",
+      "child_module_ids": [],
       "module_shard_id": "asset_authoring.project",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json"
     },
@@ -265,11 +422,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-506"
+        "BEB-512"
       ],
       "task_refs": [
         {
-          "id": "BEB-506",
+          "id": "BEB-512",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -303,26 +460,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-506"
+            "BEB-512"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-506"
+            "BEB-512"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-506"
+            "BEB-512"
           ],
           "edit": [
-            "BEB-506"
+            "BEB-512"
           ],
           "readback_verify": [
-            "BEB-506"
+            "BEB-512"
           ],
           "save": [
-            "BEB-506"
+            "BEB-512"
           ]
         }
       },
@@ -358,11 +515,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-426"
+        "BEB-432"
       ],
       "task_refs": [
         {
-          "id": "BEB-426",
+          "id": "BEB-432",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -393,26 +550,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-426"
+            "BEB-432"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-426"
+            "BEB-432"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-426"
+            "BEB-432"
           ],
           "edit": [
-            "BEB-426"
+            "BEB-432"
           ],
           "readback_verify": [
-            "BEB-426"
+            "BEB-432"
           ],
           "save": [
-            "BEB-426"
+            "BEB-432"
           ]
         }
       },

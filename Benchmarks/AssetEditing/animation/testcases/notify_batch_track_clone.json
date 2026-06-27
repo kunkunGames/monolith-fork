@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "notify_batch_track_clone",
+  "route_edit_domain": "notify_batch_track_clone",
+  "module_id": "asset_authoring.animation.notify_batch_track_clone",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.notify_batch_track_clone",
+    "edit": "asset_operation.edit.animation.notify_batch_track_clone",
+    "save": "asset_operation.save.animation.notify_batch_track_clone",
+    "readback_verify": "asset_operation.readback_verify.animation.notify_batch_track_clone"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-533"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-533",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "notify_batch_track_clone",
+      "blueprint_type": "",
+      "workflow": "animation_notify_batch_track_clone_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "bulk_add_notify",
+        "add_notify",
+        "set_notify_track",
+        "clone_notify_setup",
+        "save_asset",
+        "get_sequence_notifies",
+        "inspect_assets_batch"
+      ],
+      "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-533",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchNotifyBatchSource",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchNotifyBatchTarget",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "bulk_add_notify",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget"
+            ],
+            "notify_class": "AnimNotify_PlaySound",
+            "time": 0.0,
+            "time_mode": "absolute",
+            "track_name": "BenchSharedA"
+          },
+          "contains": [
+            "success",
+            "true",
+            "succeeded",
+            "2",
+            "AnimNotify_PlaySound"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_notify",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+            "notify_class": "AnimNotify_ResetDynamics",
+            "time": 0.0,
+            "track_name": "BenchSharedB"
+          },
+          "contains": [
+            "AnimNotify_ResetDynamics",
+            "BenchSharedB"
+          ],
+          "capture": {
+            "source_second_notify": "$.index"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_notify_track",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+            "notify_index": 0,
+            "track_index": 1
+          },
+          "contains": [
+            "notify_index",
+            "0",
+            "new_track_index",
+            "1",
+            "BenchSharedB"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "clone_notify_setup",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget",
+            "replace_existing": true
+          },
+          "contains": [
+            "A_BenchNotifyBatchSource",
+            "A_BenchNotifyBatchTarget",
+            "cloned_count",
+            "2",
+            "target_notify_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_notifies",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource"
+          },
+          "contains": [
+            "count",
+            "2",
+            "AnimNotify_PlaySound",
+            "AnimNotify_ResetDynamics",
+            "BenchSharedB"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_notifies",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget"
+          },
+          "contains": [
+            "count",
+            "2",
+            "AnimNotify_PlaySound",
+            "AnimNotify_ResetDynamics",
+            "BenchSharedB"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchSource",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyBatchTarget"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "A_BenchNotifyBatchSource",
+            "A_BenchNotifyBatchTarget",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "notify_batch_track_clone",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_notify_batch_track_clone_roundtrip",
+      "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/animation-notifies-in-unreal-engine?lang=en-US",
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/BlueprintAPI/AnimationBlueprintLibrary/NotifyEvents/CopyAnimNotifiesfromSequence?lang=en-US",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "bulk_add_notify",
+          "add_notify",
+          "set_notify_track",
+          "clone_notify_setup",
+          "save_asset",
+          "get_sequence_notifies",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

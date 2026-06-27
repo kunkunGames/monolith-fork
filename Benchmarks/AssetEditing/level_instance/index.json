@@ -17,12 +17,12 @@
   },
   "edit_domain_count": 2,
   "task_ids": [
-    "BEB-419",
-    "BEB-489"
+    "BEB-425",
+    "BEB-495"
   ],
   "task_refs": [
     {
-      "id": "BEB-419",
+      "id": "BEB-425",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -52,7 +52,7 @@
       "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
     },
     {
-      "id": "BEB-489",
+      "id": "BEB-495",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -107,7 +107,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-419"
+        "BEB-425"
       ],
       "case_file": "testcases\\blueprint_prefab.json"
     },
@@ -129,7 +129,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-489"
+        "BEB-495"
       ],
       "case_file": "testcases\\prefab_placement.json"
     }

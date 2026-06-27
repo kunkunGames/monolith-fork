@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.gas",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
-  "task_count": 552,
+  "task_count": 574,
   "module_count": 17,
   "routing_axes": [
     "category",
@@ -518,26 +518,26 @@
       },
       "task_count": 16,
       "task_ids": [
-        "BEB-329",
-        "BEB-330",
-        "BEB-331",
-        "BEB-332",
-        "BEB-333",
         "BEB-335",
+        "BEB-336",
+        "BEB-337",
         "BEB-338",
-        "BEB-350",
-        "BEB-429",
-        "BEB-430",
-        "BEB-457",
-        "BEB-458",
-        "BEB-469",
+        "BEB-339",
+        "BEB-341",
+        "BEB-344",
+        "BEB-356",
+        "BEB-435",
+        "BEB-436",
+        "BEB-463",
+        "BEB-464",
         "BEB-475",
-        "BEB-482",
-        "BEB-507"
+        "BEB-481",
+        "BEB-488",
+        "BEB-514"
       ],
       "task_refs": [
         {
-          "id": "BEB-329",
+          "id": "BEB-335",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -566,7 +566,7 @@
           "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
         },
         {
-          "id": "BEB-330",
+          "id": "BEB-336",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -602,7 +602,7 @@
           "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect"
         },
         {
-          "id": "BEB-331",
+          "id": "BEB-337",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -637,7 +637,7 @@
           "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state"
         },
         {
-          "id": "BEB-332",
+          "id": "BEB-338",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -666,7 +666,7 @@
           "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata"
         },
         {
-          "id": "BEB-333",
+          "id": "BEB-339",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -697,7 +697,7 @@
           "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag onto the effect, save both assets, and reverse-lookup the trigger"
         },
         {
-          "id": "BEB-335",
+          "id": "BEB-341",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -726,7 +726,7 @@
           "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class"
         },
         {
-          "id": "BEB-338",
+          "id": "BEB-344",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -757,7 +757,7 @@
           "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects"
         },
         {
-          "id": "BEB-350",
+          "id": "BEB-356",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -786,7 +786,7 @@
           "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
         },
         {
-          "id": "BEB-429",
+          "id": "BEB-435",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -815,7 +815,7 @@
           "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
         },
         {
-          "id": "BEB-430",
+          "id": "BEB-436",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -846,7 +846,7 @@
           "description": "Create an Actor Blueprint, add an ASC, set its replication mode, save, and read back component defaults plus validation metadata"
         },
         {
-          "id": "BEB-457",
+          "id": "BEB-463",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -875,7 +875,7 @@
           "description": "Create a GameplayAbility Blueprint, edit persisted ability behavior flags on the CDO, save it, and read the flags back"
         },
         {
-          "id": "BEB-458",
+          "id": "BEB-464",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -906,7 +906,7 @@
           "description": "Create a Widget Blueprint ProgressBar, bind it to native GAS Health/MaxHealth attributes, save it, and read persisted binding metadata back"
         },
         {
-          "id": "BEB-469",
+          "id": "BEB-475",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -938,7 +938,7 @@
           "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
         },
         {
-          "id": "BEB-475",
+          "id": "BEB-481",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -971,7 +971,7 @@
           "description": "Create a GameplayAbility and cost GameplayEffect, edit ability tag containers, cost, and gameplay-event triggers, save both assets, and read the ability metadata back"
         },
         {
-          "id": "BEB-482",
+          "id": "BEB-488",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1004,7 +1004,7 @@
           "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
         },
         {
-          "id": "BEB-507",
+          "id": "BEB-514",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1038,166 +1038,166 @@
       "groups": {
         "by_edit_domain": {
           "ability_input_binding": [
-            "BEB-331"
+            "BEB-337"
           ],
           "ability_spec_builder": [
-            "BEB-507"
+            "BEB-514"
           ],
           "ability_tags_cost_triggers": [
-            "BEB-475"
+            "BEB-481"
           ],
           "asc_replication_mode": [
-            "BEB-430"
+            "BEB-436"
           ],
           "attribute_init_datatable": [
-            "BEB-429"
+            "BEB-435"
           ],
           "effect_modifier_crud": [
-            "BEB-469"
+            "BEB-475"
           ],
           "gameplay_ability": [
-            "BEB-330"
+            "BEB-336"
           ],
           "gameplay_ability_flags": [
-            "BEB-457"
+            "BEB-463"
           ],
           "gameplay_cue_effect_link": [
-            "BEB-333"
+            "BEB-339"
           ],
           "gameplay_cue_notify": [
-            "BEB-332"
-          ],
-          "gameplay_cue_unlink_lifecycle": [
-            "BEB-482"
-          ],
-          "gameplay_effect": [
-            "BEB-329"
-          ],
-          "gameplay_effect_spec_builder": [
-            "BEB-350"
-          ],
-          "gameplay_effect_template": [
             "BEB-338"
           ],
-          "target_actor": [
+          "gameplay_cue_unlink_lifecycle": [
+            "BEB-488"
+          ],
+          "gameplay_effect": [
             "BEB-335"
           ],
+          "gameplay_effect_spec_builder": [
+            "BEB-356"
+          ],
+          "gameplay_effect_template": [
+            "BEB-344"
+          ],
+          "target_actor": [
+            "BEB-341"
+          ],
           "widget_attribute_binding": [
-            "BEB-458"
+            "BEB-464"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ],
           "edit": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ],
           "readback_verify": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ],
           "save": [
-            "BEB-329",
-            "BEB-330",
-            "BEB-331",
-            "BEB-332",
-            "BEB-333",
             "BEB-335",
+            "BEB-336",
+            "BEB-337",
             "BEB-338",
-            "BEB-350",
-            "BEB-429",
-            "BEB-430",
-            "BEB-457",
-            "BEB-458",
-            "BEB-469",
+            "BEB-339",
+            "BEB-341",
+            "BEB-344",
+            "BEB-356",
+            "BEB-435",
+            "BEB-436",
+            "BEB-463",
+            "BEB-464",
             "BEB-475",
-            "BEB-482",
-            "BEB-507"
+            "BEB-481",
+            "BEB-488",
+            "BEB-514"
           ]
         }
       },
@@ -1250,11 +1250,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-331"
+        "BEB-337"
       ],
       "task_refs": [
         {
-          "id": "BEB-331",
+          "id": "BEB-337",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1292,26 +1292,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-331"
+            "BEB-337"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-331"
+            "BEB-337"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-331"
+            "BEB-337"
           ],
           "edit": [
-            "BEB-331"
+            "BEB-337"
           ],
           "readback_verify": [
-            "BEB-331"
+            "BEB-337"
           ],
           "save": [
-            "BEB-331"
+            "BEB-337"
           ]
         }
       },
@@ -1347,11 +1347,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-507"
+        "BEB-514"
       ],
       "task_refs": [
         {
-          "id": "BEB-507",
+          "id": "BEB-514",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1385,26 +1385,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-507"
+            "BEB-514"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-507"
+            "BEB-514"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-507"
+            "BEB-514"
           ],
           "edit": [
-            "BEB-507"
+            "BEB-514"
           ],
           "readback_verify": [
-            "BEB-507"
+            "BEB-514"
           ],
           "save": [
-            "BEB-507"
+            "BEB-514"
           ]
         }
       },
@@ -1440,11 +1440,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-475"
+        "BEB-481"
       ],
       "task_refs": [
         {
-          "id": "BEB-475",
+          "id": "BEB-481",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1480,26 +1480,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-475"
+            "BEB-481"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-475"
+            "BEB-481"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-475"
+            "BEB-481"
           ],
           "edit": [
-            "BEB-475"
+            "BEB-481"
           ],
           "readback_verify": [
-            "BEB-475"
+            "BEB-481"
           ],
           "save": [
-            "BEB-475"
+            "BEB-481"
           ]
         }
       },
@@ -1535,11 +1535,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-430"
+        "BEB-436"
       ],
       "task_refs": [
         {
-          "id": "BEB-430",
+          "id": "BEB-436",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1573,26 +1573,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-430"
+            "BEB-436"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-430"
+            "BEB-436"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-430"
+            "BEB-436"
           ],
           "edit": [
-            "BEB-430"
+            "BEB-436"
           ],
           "readback_verify": [
-            "BEB-430"
+            "BEB-436"
           ],
           "save": [
-            "BEB-430"
+            "BEB-436"
           ]
         }
       },
@@ -1628,11 +1628,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-429"
+        "BEB-435"
       ],
       "task_refs": [
         {
-          "id": "BEB-429",
+          "id": "BEB-435",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1664,26 +1664,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-429"
+            "BEB-435"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-429"
+            "BEB-435"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-429"
+            "BEB-435"
           ],
           "edit": [
-            "BEB-429"
+            "BEB-435"
           ],
           "readback_verify": [
-            "BEB-429"
+            "BEB-435"
           ],
           "save": [
-            "BEB-429"
+            "BEB-435"
           ]
         }
       },
@@ -1719,11 +1719,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-469"
+        "BEB-475"
       ],
       "task_refs": [
         {
-          "id": "BEB-469",
+          "id": "BEB-475",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1758,26 +1758,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-469"
+            "BEB-475"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-469"
+            "BEB-475"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-469"
+            "BEB-475"
           ],
           "edit": [
-            "BEB-469"
+            "BEB-475"
           ],
           "readback_verify": [
-            "BEB-469"
+            "BEB-475"
           ],
           "save": [
-            "BEB-469"
+            "BEB-475"
           ]
         }
       },
@@ -1813,11 +1813,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-330"
+        "BEB-336"
       ],
       "task_refs": [
         {
-          "id": "BEB-330",
+          "id": "BEB-336",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1856,26 +1856,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-330"
+            "BEB-336"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-330"
+            "BEB-336"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-330"
+            "BEB-336"
           ],
           "edit": [
-            "BEB-330"
+            "BEB-336"
           ],
           "readback_verify": [
-            "BEB-330"
+            "BEB-336"
           ],
           "save": [
-            "BEB-330"
+            "BEB-336"
           ]
         }
       },
@@ -1911,11 +1911,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-457"
+        "BEB-463"
       ],
       "task_refs": [
         {
-          "id": "BEB-457",
+          "id": "BEB-463",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1947,26 +1947,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-457"
+            "BEB-463"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-457"
+            "BEB-463"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-457"
+            "BEB-463"
           ],
           "edit": [
-            "BEB-457"
+            "BEB-463"
           ],
           "readback_verify": [
-            "BEB-457"
+            "BEB-463"
           ],
           "save": [
-            "BEB-457"
+            "BEB-463"
           ]
         }
       },
@@ -2002,11 +2002,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-333"
+        "BEB-339"
       ],
       "task_refs": [
         {
-          "id": "BEB-333",
+          "id": "BEB-339",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2040,26 +2040,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-333"
+            "BEB-339"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-333"
+            "BEB-339"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-333"
+            "BEB-339"
           ],
           "edit": [
-            "BEB-333"
+            "BEB-339"
           ],
           "readback_verify": [
-            "BEB-333"
+            "BEB-339"
           ],
           "save": [
-            "BEB-333"
+            "BEB-339"
           ]
         }
       },
@@ -2095,11 +2095,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-332"
+        "BEB-338"
       ],
       "task_refs": [
         {
-          "id": "BEB-332",
+          "id": "BEB-338",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2131,26 +2131,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-332"
+            "BEB-338"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-332"
+            "BEB-338"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-332"
+            "BEB-338"
           ],
           "edit": [
-            "BEB-332"
+            "BEB-338"
           ],
           "readback_verify": [
-            "BEB-332"
+            "BEB-338"
           ],
           "save": [
-            "BEB-332"
+            "BEB-338"
           ]
         }
       },
@@ -2186,11 +2186,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-482"
+        "BEB-488"
       ],
       "task_refs": [
         {
-          "id": "BEB-482",
+          "id": "BEB-488",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2226,26 +2226,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-482"
+            "BEB-488"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-482"
+            "BEB-488"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-482"
+            "BEB-488"
           ],
           "edit": [
-            "BEB-482"
+            "BEB-488"
           ],
           "readback_verify": [
-            "BEB-482"
+            "BEB-488"
           ],
           "save": [
-            "BEB-482"
+            "BEB-488"
           ]
         }
       },
@@ -2281,11 +2281,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-329"
+        "BEB-335"
       ],
       "task_refs": [
         {
-          "id": "BEB-329",
+          "id": "BEB-335",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2317,26 +2317,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-329"
+            "BEB-335"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-329"
+            "BEB-335"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-329"
+            "BEB-335"
           ],
           "edit": [
-            "BEB-329"
+            "BEB-335"
           ],
           "readback_verify": [
-            "BEB-329"
+            "BEB-335"
           ],
           "save": [
-            "BEB-329"
+            "BEB-335"
           ]
         }
       },
@@ -2372,11 +2372,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-350"
+        "BEB-356"
       ],
       "task_refs": [
         {
-          "id": "BEB-350",
+          "id": "BEB-356",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2408,26 +2408,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-350"
+            "BEB-356"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-350"
+            "BEB-356"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-350"
+            "BEB-356"
           ],
           "edit": [
-            "BEB-350"
+            "BEB-356"
           ],
           "readback_verify": [
-            "BEB-350"
+            "BEB-356"
           ],
           "save": [
-            "BEB-350"
+            "BEB-356"
           ]
         }
       },
@@ -2463,11 +2463,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-338"
+        "BEB-344"
       ],
       "task_refs": [
         {
-          "id": "BEB-338",
+          "id": "BEB-344",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2501,26 +2501,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-338"
+            "BEB-344"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-338"
+            "BEB-344"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-338"
+            "BEB-344"
           ],
           "edit": [
-            "BEB-338"
+            "BEB-344"
           ],
           "readback_verify": [
-            "BEB-338"
+            "BEB-344"
           ],
           "save": [
-            "BEB-338"
+            "BEB-344"
           ]
         }
       },
@@ -2556,11 +2556,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-335"
+        "BEB-341"
       ],
       "task_refs": [
         {
-          "id": "BEB-335",
+          "id": "BEB-341",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2592,26 +2592,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-335"
+            "BEB-341"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-335"
+            "BEB-341"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-335"
+            "BEB-341"
           ],
           "edit": [
-            "BEB-335"
+            "BEB-341"
           ],
           "readback_verify": [
-            "BEB-335"
+            "BEB-341"
           ],
           "save": [
-            "BEB-335"
+            "BEB-341"
           ]
         }
       },
@@ -2647,11 +2647,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-458"
+        "BEB-464"
       ],
       "task_refs": [
         {
-          "id": "BEB-458",
+          "id": "BEB-464",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2685,26 +2685,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-458"
+            "BEB-464"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-458"
+            "BEB-464"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-458"
+            "BEB-464"
           ],
           "edit": [
-            "BEB-458"
+            "BEB-464"
           ],
           "readback_verify": [
-            "BEB-458"
+            "BEB-464"
           ],
           "save": [
-            "BEB-458"
+            "BEB-464"
           ]
         }
       },

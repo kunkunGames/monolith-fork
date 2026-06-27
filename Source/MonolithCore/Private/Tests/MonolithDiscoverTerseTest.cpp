@@ -8,7 +8,7 @@
 //   - `verbose=true` is an accepted alias for `detail=true`.
 //   - `filter` substring-matches name OR description (case-insensitive).
 //   - Default returns a bounded action page with total/cursor metadata.
-//   - Pagination supports offset/limit; explicit limit=0 = ALL; out-of-range clamps.
+//   - Pagination supports offset/limit; explicit limit=0 is normalized to the default page; out-of-range clamps.
 //   - Unknown namespace still errors.
 //
 // Lives under Private/Tests/ for the same UBT auto-include reason as the other
@@ -397,7 +397,7 @@ bool FMonolithDiscoverDefaultPageTest::RunTest(const FString& /*Parameters*/)
 
 // ---------------------------------------------------------------------------
 // Test 6: pagination — offset:1,limit:1 => exactly 1 action, total=full count,
-// next cursor present when more remain; explicit limit:0 returns ALL;
+// next cursor present when more remain; explicit limit:0 stays bounded;
 // out-of-range offset/limit clamp without error.
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -473,7 +473,7 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 		}
 	}
 
-	// limit:0 returns ALL (explicit no-cap sentinel).
+	// limit:0 is accepted for older callers, but stays bounded to the default page.
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
@@ -485,26 +485,38 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 		TestNotNull(TEXT("actions array present"), Arr);
 		if (Arr)
 		{
-			TestEqual(TEXT("limit:0 returns ALL actions"), Arr->Num(), Full);
+			TestEqual(TEXT("limit:0 returns default bounded page"), Arr->Num(), FMath::Min(50, Full));
 		}
 		if (R.Result.IsValid())
 		{
-			TestFalse(TEXT("limit:0 emits no next_offset"), R.Result->HasField(TEXT("next_offset")));
-			TestFalse(TEXT("limit:0 emits no next_cursor"), R.Result->HasField(TEXT("next_cursor")));
+			if (Full > 50)
+			{
+				TestTrue(TEXT("limit:0 emits next_offset when more remain"), R.Result->HasField(TEXT("next_offset")));
+				TestTrue(TEXT("limit:0 emits next_cursor when more remain"), R.Result->HasField(TEXT("next_cursor")));
+			}
+			else
+			{
+				TestFalse(TEXT("limit:0 emits no next_offset when default page reaches end"), R.Result->HasField(TEXT("next_offset")));
+				TestFalse(TEXT("limit:0 emits no next_cursor when default page reaches end"), R.Result->HasField(TEXT("next_cursor")));
+			}
 			bool bTruncated = true;
 			TestTrue(TEXT("limit:0 truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
-			TestFalse(TEXT("limit:0 is not truncated"), bTruncated);
+			TestEqual(TEXT("limit:0 truncated reflects default page remainder"), bTruncated, Full > 50);
 
 			const TSharedPtr<FJsonObject>* Limits = nullptr;
 			TestTrue(TEXT("limit:0 limits object present"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
 			if (Limits)
 			{
 				int32 LimitValue = -1;
+				int32 RequestedLimitValue = -1;
 				int32 ReturnedValue = -1;
 				(*Limits)->TryGetNumberField(TEXT("limit"), LimitValue);
+				(*Limits)->TryGetNumberField(TEXT("requested_limit"), RequestedLimitValue);
 				(*Limits)->TryGetNumberField(TEXT("returned"), ReturnedValue);
-				TestEqual(TEXT("limits.limit preserves explicit all sentinel"), LimitValue, 0);
-				TestEqual(TEXT("limits.returned reports full list"), ReturnedValue, Full);
+				TestEqual(TEXT("limits.limit reports normalized default"), LimitValue, 50);
+				TestEqual(TEXT("limits.requested_limit preserves caller value"), RequestedLimitValue, 0);
+				TestEqual(TEXT("limits.returned reports bounded page length"), ReturnedValue, FMath::Min(50, Full));
+				TestTrue(TEXT("limit:0 reports normalization reason"), (*Limits)->HasTypedField<EJson::String>(TEXT("normalized_limit_reason")));
 			}
 		}
 	}

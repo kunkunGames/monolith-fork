@@ -72,13 +72,14 @@ bool FSourceConsoleSnapshotSearchAndHealthTest::RunTest(const FString& Parameter
 
 	TSharedPtr<FJsonObject> Search = DB.SearchConsoleObjects(TEXT("shadow quality"), TEXT("variable"), 10);
 	TestTrue(TEXT("Console FTS search succeeds"), Search.IsValid() && Search->GetBoolField(TEXT("ok")));
-	const TArray<TSharedPtr<FJsonValue>>* Objects = nullptr;
-	TestTrue(TEXT("Console FTS search returns objects array"), Search->TryGetArrayField(TEXT("objects"), Objects) && Objects != nullptr);
-	TestTrue(TEXT("Console FTS search returns matching row"), Objects && Objects->Num() == 1);
-	if (Objects && Objects->Num() == 1)
+	const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+	TestFalse(TEXT("Console FTS search omits legacy objects array"), Search->HasField(TEXT("objects")));
+	TestTrue(TEXT("Console FTS search returns results array"), Search->TryGetArrayField(TEXT("results"), Results) && Results != nullptr);
+	TestTrue(TEXT("Console FTS search returns matching row"), Results && Results->Num() == 1);
+	if (Results && Results->Num() == 1)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		TestTrue(TEXT("Console FTS row is object"), (*Objects)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
+		TestTrue(TEXT("Console FTS row is object"), (*Results)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
 		if (Obj && Obj->IsValid())
 		{
 			TestEqual(TEXT("Console FTS row name"), (*Obj)->GetStringField(TEXT("name")), FString(TEXT("r.MonolithTestShadowQuality")));
@@ -90,12 +91,12 @@ bool FSourceConsoleSnapshotSearchAndHealthTest::RunTest(const FString& Parameter
 
 	TSharedPtr<FJsonObject> DetailSearch = DB.SearchConsoleObjects(TEXT("shadow quality"), TEXT("variable"), 10, true);
 	TestTrue(TEXT("Console detail search succeeds"), DetailSearch.IsValid() && DetailSearch->GetBoolField(TEXT("ok")));
-	const TArray<TSharedPtr<FJsonValue>>* DetailObjects = nullptr;
-	TestTrue(TEXT("Console detail search returns objects array"), DetailSearch->TryGetArrayField(TEXT("objects"), DetailObjects) && DetailObjects != nullptr);
-	if (DetailObjects && DetailObjects->Num() == 1)
+	const TArray<TSharedPtr<FJsonValue>>* DetailResults = nullptr;
+	TestTrue(TEXT("Console detail search returns results array"), DetailSearch->TryGetArrayField(TEXT("results"), DetailResults) && DetailResults != nullptr);
+	if (DetailResults && DetailResults->Num() == 1)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		TestTrue(TEXT("Console detail row is object"), (*DetailObjects)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
+		TestTrue(TEXT("Console detail row is object"), (*DetailResults)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
 		if (Obj && Obj->IsValid())
 		{
 			TestTrue(TEXT("Console detail row includes full help"), (*Obj)->HasField(TEXT("help")));
@@ -115,16 +116,16 @@ bool FSourceConsoleSnapshotSearchAndHealthTest::RunTest(const FString& Parameter
 	TestEqual(TEXT("Console page 1 offset"), static_cast<int32>(Page1->GetIntegerField(TEXT("offset"))), 1);
 	TestTrue(TEXT("Console page 1 is truncated"), Page1->GetBoolField(TEXT("truncated")));
 	TestEqual(TEXT("Console page 1 next cursor"), Page1->GetStringField(TEXT("next_cursor")), FString(TEXT("2")));
-	const TArray<TSharedPtr<FJsonValue>>* Page0Objects = nullptr;
-	const TArray<TSharedPtr<FJsonValue>>* Page1Objects = nullptr;
-	TestTrue(TEXT("Console page 0 returns objects array"), Page0->TryGetArrayField(TEXT("objects"), Page0Objects) && Page0Objects != nullptr);
-	TestTrue(TEXT("Console page 1 returns objects array"), Page1->TryGetArrayField(TEXT("objects"), Page1Objects) && Page1Objects != nullptr);
-	if (Page0Objects && Page1Objects && Page0Objects->Num() == 1 && Page1Objects->Num() == 1)
+	const TArray<TSharedPtr<FJsonValue>>* Page0Results = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Page1Results = nullptr;
+	TestTrue(TEXT("Console page 0 returns results array"), Page0->TryGetArrayField(TEXT("results"), Page0Results) && Page0Results != nullptr);
+	TestTrue(TEXT("Console page 1 returns results array"), Page1->TryGetArrayField(TEXT("results"), Page1Results) && Page1Results != nullptr);
+	if (Page0Results && Page1Results && Page0Results->Num() == 1 && Page1Results->Num() == 1)
 	{
 		const TSharedPtr<FJsonObject>* Page0Obj = nullptr;
 		const TSharedPtr<FJsonObject>* Page1Obj = nullptr;
-		TestTrue(TEXT("Console page 0 row is object"), (*Page0Objects)[0]->TryGetObject(Page0Obj) && Page0Obj && Page0Obj->IsValid());
-		TestTrue(TEXT("Console page 1 row is object"), (*Page1Objects)[0]->TryGetObject(Page1Obj) && Page1Obj && Page1Obj->IsValid());
+		TestTrue(TEXT("Console page 0 row is object"), (*Page0Results)[0]->TryGetObject(Page0Obj) && Page0Obj && Page0Obj->IsValid());
+		TestTrue(TEXT("Console page 1 row is object"), (*Page1Results)[0]->TryGetObject(Page1Obj) && Page1Obj && Page1Obj->IsValid());
 		if (Page0Obj && Page1Obj && Page0Obj->IsValid() && Page1Obj->IsValid())
 		{
 			TestNotEqual(TEXT("Console offset changes the returned row"), (*Page0Obj)->GetStringField(TEXT("name")), (*Page1Obj)->GetStringField(TEXT("name")));
@@ -136,15 +137,23 @@ bool FSourceConsoleSnapshotSearchAndHealthTest::RunTest(const FString& Parameter
 	TestFalse(TEXT("Console final page is not truncated"), Page2->GetBoolField(TEXT("truncated")));
 	TestFalse(TEXT("Console final page omits next cursor"), Page2->HasField(TEXT("next_cursor")));
 
+	TSharedPtr<FJsonObject> CompactCap = DB.SearchConsoleObjects(TEXT(""), TEXT("all"), 5000, false, 0);
+	TestTrue(TEXT("Console compact cap search succeeds"), CompactCap.IsValid() && CompactCap->GetBoolField(TEXT("ok")));
+	TestEqual(TEXT("Console compact search cap is exposed"), static_cast<int32>(CompactCap->GetIntegerField(TEXT("limit"))), 500);
+	TestEqual(TEXT("Console compact search requested limit is exposed"), static_cast<int32>(CompactCap->GetIntegerField(TEXT("requested_limit"))), 5000);
+	TSharedPtr<FJsonObject> FullCap = DB.SearchConsoleObjects(TEXT(""), TEXT("all"), 5000, true, 0);
+	TestTrue(TEXT("Console full cap search succeeds"), FullCap.IsValid() && FullCap->GetBoolField(TEXT("ok")));
+	TestEqual(TEXT("Console full search cap is exposed"), static_cast<int32>(FullCap->GetIntegerField(TEXT("limit"))), 200);
+
 	TSharedPtr<FJsonObject> DottedNameSearch = DB.SearchConsoleObjects(TEXT("r.MonolithTestShadowQuality"), TEXT("variable"), 10);
 	TestTrue(TEXT("Console search supports dotted CVar names"), DottedNameSearch.IsValid() && DottedNameSearch->GetBoolField(TEXT("ok")));
-	const TArray<TSharedPtr<FJsonValue>>* DottedObjects = nullptr;
-	TestTrue(TEXT("Dotted CVar search returns objects array"), DottedNameSearch->TryGetArrayField(TEXT("objects"), DottedObjects) && DottedObjects != nullptr);
-	TestTrue(TEXT("Dotted CVar search returns at least one row"), DottedObjects && DottedObjects->Num() >= 1);
-	if (DottedObjects && DottedObjects->Num() > 0)
+	const TArray<TSharedPtr<FJsonValue>>* DottedResults = nullptr;
+	TestTrue(TEXT("Dotted CVar search returns results array"), DottedNameSearch->TryGetArrayField(TEXT("results"), DottedResults) && DottedResults != nullptr);
+	TestTrue(TEXT("Dotted CVar search returns at least one row"), DottedResults && DottedResults->Num() >= 1);
+	if (DottedResults && DottedResults->Num() > 0)
 	{
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		TestTrue(TEXT("Dotted CVar search row is object"), (*DottedObjects)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
+		TestTrue(TEXT("Dotted CVar search row is object"), (*DottedResults)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
 		if (Obj && Obj->IsValid())
 		{
 			TestEqual(TEXT("Dotted CVar exact match ranks first"), (*Obj)->GetStringField(TEXT("name")), FString(TEXT("r.MonolithTestShadowQuality")));
@@ -173,13 +182,13 @@ bool FSourceConsoleSnapshotSearchAndHealthTest::RunTest(const FString& Parameter
 		TSharedPtr<FJsonObject> FtsMissingSearch = DB.SearchConsoleObjects(TEXT("r.MonolithTestShadowQuality"), TEXT("variable"), 10);
 		TestTrue(TEXT("Console search falls back to LIKE when FTS table is missing"), FtsMissingSearch.IsValid() && FtsMissingSearch->GetBoolField(TEXT("ok")));
 		TestTrue(TEXT("Console search reports LIKE fallback"), FtsMissingSearch.IsValid() && FtsMissingSearch->GetBoolField(TEXT("used_like_fallback")));
-		const TArray<TSharedPtr<FJsonValue>>* FallbackObjects = nullptr;
-		TestTrue(TEXT("FTS-missing search returns objects array"), FtsMissingSearch->TryGetArrayField(TEXT("objects"), FallbackObjects) && FallbackObjects != nullptr);
-		TestTrue(TEXT("FTS-missing search returns matching row"), FallbackObjects && FallbackObjects->Num() >= 1);
-		if (FallbackObjects && FallbackObjects->Num() > 0)
+		const TArray<TSharedPtr<FJsonValue>>* FallbackResults = nullptr;
+		TestTrue(TEXT("FTS-missing search returns results array"), FtsMissingSearch->TryGetArrayField(TEXT("results"), FallbackResults) && FallbackResults != nullptr);
+		TestTrue(TEXT("FTS-missing search returns matching row"), FallbackResults && FallbackResults->Num() >= 1);
+		if (FallbackResults && FallbackResults->Num() > 0)
 		{
 			const TSharedPtr<FJsonObject>* Obj = nullptr;
-			TestTrue(TEXT("FTS-missing first row is object"), (*FallbackObjects)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
+			TestTrue(TEXT("FTS-missing first row is object"), (*FallbackResults)[0]->TryGetObject(Obj) && Obj && Obj->IsValid());
 			if (Obj && Obj->IsValid())
 			{
 				TestEqual(TEXT("FTS-missing exact match ranks first"), (*Obj)->GetStringField(TEXT("name")), FString(TEXT("r.MonolithTestShadowQuality")));

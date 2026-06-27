@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.level_instance",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/level_instance.json",
-  "task_count": 552,
+  "task_count": 574,
   "module_count": 3,
   "routing_axes": [
     "category",
@@ -126,12 +126,12 @@
       },
       "task_count": 2,
       "task_ids": [
-        "BEB-419",
-        "BEB-489"
+        "BEB-425",
+        "BEB-495"
       ],
       "task_refs": [
         {
-          "id": "BEB-419",
+          "id": "BEB-425",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -161,7 +161,7 @@
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
         },
         {
-          "id": "BEB-489",
+          "id": "BEB-495",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -196,40 +196,40 @@
       "groups": {
         "by_edit_domain": {
           "blueprint_prefab": [
-            "BEB-419"
+            "BEB-425"
           ],
           "prefab_placement": [
-            "BEB-489"
+            "BEB-495"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ],
           "edit": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ],
           "readback_verify": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ],
           "save": [
-            "BEB-419",
-            "BEB-489"
+            "BEB-425",
+            "BEB-495"
           ]
         }
       },
@@ -268,11 +268,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-419"
+        "BEB-425"
       ],
       "task_refs": [
         {
-          "id": "BEB-419",
+          "id": "BEB-425",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -305,26 +305,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-419"
+            "BEB-425"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-419"
+            "BEB-425"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-419"
+            "BEB-425"
           ],
           "edit": [
-            "BEB-419"
+            "BEB-425"
           ],
           "readback_verify": [
-            "BEB-419"
+            "BEB-425"
           ],
           "save": [
-            "BEB-419"
+            "BEB-425"
           ]
         }
       },
@@ -360,11 +360,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-489"
+        "BEB-495"
       ],
       "task_refs": [
         {
-          "id": "BEB-489",
+          "id": "BEB-495",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -399,26 +399,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-489"
+            "BEB-495"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-489"
+            "BEB-495"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-489"
+            "BEB-495"
           ],
           "edit": [
-            "BEB-489"
+            "BEB-495"
           ],
           "readback_verify": [
-            "BEB-489"
+            "BEB-495"
           ],
           "save": [
-            "BEB-489"
+            "BEB-495"
           ]
         }
       },

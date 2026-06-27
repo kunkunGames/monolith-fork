@@ -19,9 +19,9 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
-| `ai_controller_perception` | 1 | `asset_authoring.ai.controller_perception` | `testcases\controller_perception.json` |
+| `controller_perception` | 1 | `asset_authoring.ai.controller_perception` | `testcases\controller_perception.json` |
 | `behavior_tree` | 1 | `asset_authoring.ai.behavior_tree` | `testcases\behavior_tree.json` |
 | `behavior_tree_granular_edit` | 1 | `asset_authoring.ai.behavior_tree_granular_edit` | `testcases\behavior_tree_granular_edit.json` |
 | `behavior_tree_node_blueprints` | 1 | `asset_authoring.ai.behavior_tree_node_blueprints` | `testcases\behavior_tree_node_blueprints.json` |

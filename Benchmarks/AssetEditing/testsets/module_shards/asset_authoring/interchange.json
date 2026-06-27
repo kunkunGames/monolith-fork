@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.interchange",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
-  "task_count": 552,
+  "task_count": 574,
   "module_count": 9,
   "routing_axes": [
     "category",
@@ -294,18 +294,18 @@
       },
       "task_count": 8,
       "task_ids": [
-        "BEB-285",
-        "BEB-286",
-        "BEB-287",
-        "BEB-288",
-        "BEB-352",
-        "BEB-392",
-        "BEB-409",
-        "BEB-416"
+        "BEB-289",
+        "BEB-290",
+        "BEB-291",
+        "BEB-292",
+        "BEB-358",
+        "BEB-398",
+        "BEB-415",
+        "BEB-422"
       ],
       "task_refs": [
         {
-          "id": "BEB-285",
+          "id": "BEB-289",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -334,7 +334,7 @@
           "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
         },
         {
-          "id": "BEB-286",
+          "id": "BEB-290",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -367,7 +367,7 @@
           "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
         },
         {
-          "id": "BEB-287",
+          "id": "BEB-291",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -396,7 +396,7 @@
           "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
         },
         {
-          "id": "BEB-288",
+          "id": "BEB-292",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -426,7 +426,7 @@
           "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
         },
         {
-          "id": "BEB-352",
+          "id": "BEB-358",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -454,7 +454,7 @@
           "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
         },
         {
-          "id": "BEB-392",
+          "id": "BEB-398",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -483,7 +483,7 @@
           "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
         },
         {
-          "id": "BEB-409",
+          "id": "BEB-415",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -513,7 +513,7 @@
           "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
         },
         {
-          "id": "BEB-416",
+          "id": "BEB-422",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -545,94 +545,94 @@
       "groups": {
         "by_edit_domain": {
           "interchange_audio_import": [
-            "BEB-288"
+            "BEB-292"
           ],
           "interchange_batch_import": [
-            "BEB-352"
+            "BEB-358"
           ],
           "interchange_batch_reimport": [
-            "BEB-409"
+            "BEB-415"
           ],
           "interchange_generic_import": [
-            "BEB-416"
+            "BEB-422"
           ],
           "interchange_generic_options_import": [
-            "BEB-392"
+            "BEB-398"
           ],
           "interchange_scene_import": [
-            "BEB-287"
+            "BEB-291"
           ],
           "interchange_static_mesh_reimport_export": [
-            "BEB-286"
+            "BEB-290"
           ],
           "interchange_texture_import": [
-            "BEB-285"
+            "BEB-289"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ],
           "edit": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ],
           "readback_verify": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ],
           "save": [
-            "BEB-285",
-            "BEB-286",
-            "BEB-287",
-            "BEB-288",
-            "BEB-352",
-            "BEB-392",
-            "BEB-409",
-            "BEB-416"
+            "BEB-289",
+            "BEB-290",
+            "BEB-291",
+            "BEB-292",
+            "BEB-358",
+            "BEB-398",
+            "BEB-415",
+            "BEB-422"
           ]
         }
       },
@@ -677,11 +677,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-288"
+        "BEB-292"
       ],
       "task_refs": [
         {
-          "id": "BEB-288",
+          "id": "BEB-292",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -714,26 +714,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-288"
+            "BEB-292"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-288"
+            "BEB-292"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-288"
+            "BEB-292"
           ],
           "edit": [
-            "BEB-288"
+            "BEB-292"
           ],
           "readback_verify": [
-            "BEB-288"
+            "BEB-292"
           ],
           "save": [
-            "BEB-288"
+            "BEB-292"
           ]
         }
       },
@@ -769,11 +769,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-352"
+        "BEB-358"
       ],
       "task_refs": [
         {
-          "id": "BEB-352",
+          "id": "BEB-358",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -804,26 +804,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-352"
+            "BEB-358"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-352"
+            "BEB-358"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-352"
+            "BEB-358"
           ],
           "edit": [
-            "BEB-352"
+            "BEB-358"
           ],
           "readback_verify": [
-            "BEB-352"
+            "BEB-358"
           ],
           "save": [
-            "BEB-352"
+            "BEB-358"
           ]
         }
       },
@@ -859,11 +859,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-409"
+        "BEB-415"
       ],
       "task_refs": [
         {
-          "id": "BEB-409",
+          "id": "BEB-415",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -896,26 +896,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-409"
+            "BEB-415"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-409"
+            "BEB-415"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-409"
+            "BEB-415"
           ],
           "edit": [
-            "BEB-409"
+            "BEB-415"
           ],
           "readback_verify": [
-            "BEB-409"
+            "BEB-415"
           ],
           "save": [
-            "BEB-409"
+            "BEB-415"
           ]
         }
       },
@@ -951,11 +951,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-416"
+        "BEB-422"
       ],
       "task_refs": [
         {
-          "id": "BEB-416",
+          "id": "BEB-422",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -987,26 +987,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-416"
+            "BEB-422"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-416"
+            "BEB-422"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-416"
+            "BEB-422"
           ],
           "edit": [
-            "BEB-416"
+            "BEB-422"
           ],
           "readback_verify": [
-            "BEB-416"
+            "BEB-422"
           ],
           "save": [
-            "BEB-416"
+            "BEB-422"
           ]
         }
       },
@@ -1042,11 +1042,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-392"
+        "BEB-398"
       ],
       "task_refs": [
         {
-          "id": "BEB-392",
+          "id": "BEB-398",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1078,26 +1078,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-392"
+            "BEB-398"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-392"
+            "BEB-398"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-392"
+            "BEB-398"
           ],
           "edit": [
-            "BEB-392"
+            "BEB-398"
           ],
           "readback_verify": [
-            "BEB-392"
+            "BEB-398"
           ],
           "save": [
-            "BEB-392"
+            "BEB-398"
           ]
         }
       },
@@ -1133,11 +1133,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-287"
+        "BEB-291"
       ],
       "task_refs": [
         {
-          "id": "BEB-287",
+          "id": "BEB-291",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1169,26 +1169,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-287"
+            "BEB-291"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-287"
+            "BEB-291"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-287"
+            "BEB-291"
           ],
           "edit": [
-            "BEB-287"
+            "BEB-291"
           ],
           "readback_verify": [
-            "BEB-287"
+            "BEB-291"
           ],
           "save": [
-            "BEB-287"
+            "BEB-291"
           ]
         }
       },
@@ -1224,11 +1224,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-286"
+        "BEB-290"
       ],
       "task_refs": [
         {
-          "id": "BEB-286",
+          "id": "BEB-290",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1264,26 +1264,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-286"
+            "BEB-290"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-286"
+            "BEB-290"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-286"
+            "BEB-290"
           ],
           "edit": [
-            "BEB-286"
+            "BEB-290"
           ],
           "readback_verify": [
-            "BEB-286"
+            "BEB-290"
           ],
           "save": [
-            "BEB-286"
+            "BEB-290"
           ]
         }
       },
@@ -1319,11 +1319,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-285"
+        "BEB-289"
       ],
       "task_refs": [
         {
-          "id": "BEB-285",
+          "id": "BEB-289",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1355,26 +1355,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-285"
+            "BEB-289"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-285"
+            "BEB-289"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-285"
+            "BEB-289"
           ],
           "edit": [
-            "BEB-285"
+            "BEB-289"
           ],
           "readback_verify": [
-            "BEB-285"
+            "BEB-289"
           ],
           "save": [
-            "BEB-285"
+            "BEB-289"
           ]
         }
       },

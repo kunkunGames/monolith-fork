@@ -1,0 +1,359 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "texture_preview_tiling",
+  "route_edit_domain": "texture_preview_tiling",
+  "module_id": "asset_authoring.material.texture_preview_tiling",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.texture_preview_tiling",
+    "edit": "asset_operation.edit.material.texture_preview_tiling",
+    "save": "asset_operation.save.material.texture_preview_tiling",
+    "readback_verify": "asset_operation.readback_verify.material.texture_preview_tiling"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-539"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-539",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "texture_preview_tiling",
+      "blueprint_type": "",
+      "workflow": "texture_preview_tiling_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture",
+        "create_material",
+        "build_material_graph",
+        "save_material",
+        "preview_texture",
+        "preview_textures",
+        "check_tiling_quality",
+        "get_full_connection_graph",
+        "get_texture_properties",
+        "inspect_assets_batch"
+      ],
+      "description": "Import two Texture2D assets, wire them into a Material graph, save the material, render single and contact-sheet texture previews, and read back tiling-quality diagnostics"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-539",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "import_texture",
+            "source_file": "__ASSET_AUTHORING_PBR_BASECOLOR_BMP__",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo",
+            "compression": "Default",
+            "srgb": true,
+            "lod_group": "World",
+            "replace_existing": true
+          },
+          "contains": [
+            "T_BenchPreviewAlbedo",
+            "compression_settings",
+            "srgb",
+            "true",
+            "TEXTUREGROUP_World"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "import_texture",
+            "source_file": "__ASSET_AUTHORING_PBR_ROUGHNESS_BMP__",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness",
+            "compression": "Grayscale",
+            "srgb": false,
+            "lod_group": "WorldSpecular",
+            "replace_existing": true
+          },
+          "contains": [
+            "T_BenchPreviewRoughness",
+            "compression_settings",
+            "srgb",
+            "false",
+            "TEXTUREGROUP_WorldSpecular"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchTexturePreviewTiling",
+            "DefaultLit",
+            "Surface"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "PreviewAlbedo",
+                  "class": "TextureSample",
+                  "props": {
+                    "Texture": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo"
+                  },
+                  "pos": [
+                    -520,
+                    -120
+                  ]
+                },
+                {
+                  "id": "PreviewRoughness",
+                  "class": "TextureSample",
+                  "props": {
+                    "Texture": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness"
+                  },
+                  "pos": [
+                    -520,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "PreviewAlbedo",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "PreviewRoughness",
+                  "from_pin": "R",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "connections_made"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "preview_texture",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo",
+            "resolution": 64
+          },
+          "contains": [
+            "T_BenchPreviewAlbedo",
+            "file_path",
+            "preview_width",
+            "64",
+            "preview_height",
+            "64",
+            "Texture2D",
+            "srgb",
+            "true",
+            "recommended_sampler_type"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "preview_textures",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness"
+            ],
+            "per_texture_size": 64
+          },
+          "contains": [
+            "texture_count",
+            "2",
+            "successful_renders",
+            "2",
+            "sheet_width",
+            "128",
+            "sheet_height",
+            "64",
+            "contact_sheet_2x1_2.png"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "check_tiling_quality",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling"
+          },
+          "contains": [
+            "texture_sample_count",
+            "2",
+            "tiling_issue_count",
+            "2",
+            "has_anti_tiling",
+            "false",
+            "T_BenchPreviewAlbedo",
+            "T_BenchPreviewRoughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling"
+          },
+          "contains": [
+            "PreviewAlbedo",
+            "PreviewRoughness",
+            "BaseColor",
+            "Roughness",
+            "T_BenchPreviewAlbedo",
+            "T_BenchPreviewRoughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness"
+          },
+          "contains": [
+            "T_BenchPreviewRoughness",
+            "Texture2D",
+            "srgb",
+            "false",
+            "TEXTUREGROUP_WorldSpecular",
+            "recommended_sampler_type"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchTexturePreviewTiling",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewAlbedo",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchPreviewRoughness"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "M_BenchTexturePreviewTiling",
+            "Material",
+            "T_BenchPreviewAlbedo",
+            "Texture2D",
+            "T_BenchPreviewRoughness"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "texture_preview_tiling",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "texture_preview_tiling_roundtrip",
+      "description": "Import two Texture2D assets, wire them into a Material graph, save the material, render single and contact-sheet texture previews, and read back tiling-quality diagnostics",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/material-editor-ui-in-unreal-engine?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/material-expressions-in-unreal-engine?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/texture-asset-editor-in-unreal-engine?application_version=5.8",
+        "source: Plugins/Monolith/Source/MonolithMaterial/Private/MonolithMaterialActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-materials/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture",
+          "create_material",
+          "build_material_graph",
+          "save_material",
+          "preview_texture",
+          "preview_textures",
+          "check_tiling_quality",
+          "get_full_connection_graph",
+          "get_texture_properties",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.animation",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
-  "task_count": 552,
-  "module_count": 29,
+  "task_count": 574,
+  "module_count": 36,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: animation",
-      "task_count": 28,
+      "task_count": 35,
       "filters": {
         "category": [
           "asset_authoring"
@@ -48,9 +48,11 @@
         "asset_authoring.animation.anim_blueprint_state_machine",
         "asset_authoring.animation.blendspace_1d_aimoffset_1d",
         "asset_authoring.animation.blendspace_interpolation",
+        "asset_authoring.animation.blendspace_sample_delete",
         "asset_authoring.animation.blendspace_sample_edit",
         "asset_authoring.animation.blendspace_samples",
         "asset_authoring.animation.bone_track_keys",
+        "asset_authoring.animation.bone_track_lifecycle",
         "asset_authoring.animation.chooser_context_class",
         "asset_authoring.animation.chooser_result_reference_rewrite",
         "asset_authoring.animation.chooser_table",
@@ -60,16 +62,21 @@
         "asset_authoring.animation.ik_retargeter_pose_settings",
         "asset_authoring.animation.ikrig_retargeter",
         "asset_authoring.animation.ikrig_solver_stack",
+        "asset_authoring.animation.modifier_stack",
         "asset_authoring.animation.montage",
         "asset_authoring.animation.montage_blend_slot",
         "asset_authoring.animation.montage_from_sections",
+        "asset_authoring.animation.montage_section_crud",
+        "asset_authoring.animation.notify_batch_track_clone",
         "asset_authoring.animation.notify_point_crud",
         "asset_authoring.animation.notify_state_timing",
         "asset_authoring.animation.pose_search_database",
         "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.retarget_chain_lifecycle",
         "asset_authoring.animation.sequence_curve_marker_cleanup",
         "asset_authoring.animation.sequence_events",
         "asset_authoring.animation.sequence_from_poses",
+        "asset_authoring.animation.sequence_pose_copy",
         "asset_authoring.animation.sequence_root_additive_duplicate"
       ]
     },
@@ -209,6 +216,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.animation.blendspace_sample_delete",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_sample_delete"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_sample_delete",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_sample_delete"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.animation.blendspace_sample_edit",
       "route": [
         "AssetEditing",
@@ -282,6 +316,33 @@
         ],
         "edit_domain": [
           "bone_track_keys"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.bone_track_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "bone_track_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/bone_track_lifecycle",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "bone_track_lifecycle"
         ]
       },
       "module_shard_id": "asset_authoring.animation",
@@ -533,6 +594,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.animation.modifier_stack",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "modifier_stack"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/modifier_stack",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "modifier_stack"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.animation.montage",
       "route": [
         "AssetEditing",
@@ -606,6 +694,60 @@
         ],
         "edit_domain": [
           "montage_from_sections"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.montage_section_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_section_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_section_crud",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_section_crud"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.notify_batch_track_clone",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_batch_track_clone"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_batch_track_clone",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_batch_track_clone"
         ]
       },
       "module_shard_id": "asset_authoring.animation",
@@ -722,6 +864,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.animation.retarget_chain_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "retarget_chain_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/retarget_chain_lifecycle",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_lifecycle"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.animation.sequence_curve_marker_cleanup",
       "route": [
         "AssetEditing",
@@ -795,6 +964,33 @@
         ],
         "edit_domain": [
           "sequence_from_poses"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.sequence_pose_copy",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_pose_copy"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_pose_copy",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_pose_copy"
         ]
       },
       "module_shard_id": "asset_authoring.animation",
@@ -852,40 +1048,47 @@
           "animation"
         ]
       },
-      "task_count": 28,
+      "task_count": 35,
       "task_ids": [
-        "BEB-309",
-        "BEB-310",
-        "BEB-311",
-        "BEB-312",
-        "BEB-313",
         "BEB-314",
         "BEB-315",
-        "BEB-334",
-        "BEB-353",
-        "BEB-354",
-        "BEB-365",
-        "BEB-385",
-        "BEB-386",
-        "BEB-395",
-        "BEB-403",
-        "BEB-404",
-        "BEB-412",
-        "BEB-413",
-        "BEB-425",
+        "BEB-316",
+        "BEB-317",
+        "BEB-318",
+        "BEB-319",
+        "BEB-320",
+        "BEB-321",
+        "BEB-340",
+        "BEB-359",
+        "BEB-360",
+        "BEB-371",
+        "BEB-391",
+        "BEB-392",
+        "BEB-401",
+        "BEB-409",
+        "BEB-410",
+        "BEB-418",
+        "BEB-419",
         "BEB-431",
-        "BEB-432",
-        "BEB-444",
-        "BEB-451",
-        "BEB-493",
-        "BEB-494",
-        "BEB-495",
-        "BEB-502",
-        "BEB-520"
+        "BEB-437",
+        "BEB-438",
+        "BEB-450",
+        "BEB-457",
+        "BEB-499",
+        "BEB-500",
+        "BEB-501",
+        "BEB-508",
+        "BEB-528",
+        "BEB-529",
+        "BEB-530",
+        "BEB-531",
+        "BEB-532",
+        "BEB-533",
+        "BEB-536"
       ],
       "task_refs": [
         {
-          "id": "BEB-309",
+          "id": "BEB-314",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -917,7 +1120,7 @@
           "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata"
         },
         {
-          "id": "BEB-310",
+          "id": "BEB-315",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -948,7 +1151,7 @@
           "description": "Create three AnimSequences and a BlendSpace, add non-collinear samples, bake runtime triangulation, save, and inspect samples"
         },
         {
-          "id": "BEB-311",
+          "id": "BEB-316",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -977,7 +1180,7 @@
           "description": "Create an AimOffset BlendSpace, edit both axes, save, and inspect axis metadata"
         },
         {
-          "id": "BEB-312",
+          "id": "BEB-317",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1009,7 +1212,7 @@
           "description": "Create an AnimSequence and Montage from the engine skeletal cube skeleton, add slot/sections/segment, save, and inspect montage layout"
         },
         {
-          "id": "BEB-313",
+          "id": "BEB-318",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1041,7 +1244,7 @@
           "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back"
         },
         {
-          "id": "BEB-314",
+          "id": "BEB-319",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1072,7 +1275,39 @@
           "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata"
         },
         {
-          "id": "BEB-315",
+          "id": "BEB-320",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "retarget_chain_lifecycle",
+          "blueprint_type": "",
+          "workflow": "animation_retarget_chain_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "get_skeleton_info",
+            "add_retarget_chain",
+            "set_retarget_chain_bones",
+            "remove_retarget_chain",
+            "save_asset",
+            "get_ikrig_info",
+            "inspect_asset"
+          ],
+          "description": "Create an IKRig asset, capture a valid skeleton bone, add and rename a retarget chain, remove a second chain, save, and read back the chain list"
+        },
+        {
+          "id": "BEB-321",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1105,7 +1340,7 @@
           "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back"
         },
         {
-          "id": "BEB-334",
+          "id": "BEB-340",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1137,7 +1372,7 @@
           "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells"
         },
         {
-          "id": "BEB-353",
+          "id": "BEB-359",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1169,7 +1404,7 @@
           "description": "Create a Chooser Table row that selects one Texture2D, rewrite the result asset reference to another Texture2D, save, and inspect the compiled chooser"
         },
         {
-          "id": "BEB-354",
+          "id": "BEB-360",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1202,7 +1437,7 @@
           "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference"
         },
         {
-          "id": "BEB-365",
+          "id": "BEB-371",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1235,7 +1470,7 @@
           "description": "Create a PoseSearch schema/database, add and edit an animation database entry, save, and read database metadata back"
         },
         {
-          "id": "BEB-385",
+          "id": "BEB-391",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1265,7 +1500,7 @@
           "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata"
         },
         {
-          "id": "BEB-386",
+          "id": "BEB-392",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1296,7 +1531,7 @@
           "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata"
         },
         {
-          "id": "BEB-395",
+          "id": "BEB-401",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1327,7 +1562,7 @@
           "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back"
         },
         {
-          "id": "BEB-403",
+          "id": "BEB-409",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1362,7 +1597,7 @@
           "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back"
         },
         {
-          "id": "BEB-404",
+          "id": "BEB-410",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1394,7 +1629,7 @@
           "description": "Create a Chooser Table with a class context entry, retarget the context object class, save, and inspect/validate the new context class"
         },
         {
-          "id": "BEB-412",
+          "id": "BEB-418",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1427,7 +1662,7 @@
           "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back"
         },
         {
-          "id": "BEB-413",
+          "id": "BEB-419",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1462,7 +1697,7 @@
           "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
         },
         {
-          "id": "BEB-425",
+          "id": "BEB-431",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1491,7 +1726,7 @@
           "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
         },
         {
-          "id": "BEB-431",
+          "id": "BEB-437",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1521,7 +1756,7 @@
           "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
         },
         {
-          "id": "BEB-432",
+          "id": "BEB-438",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1553,7 +1788,7 @@
           "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
         },
         {
-          "id": "BEB-444",
+          "id": "BEB-450",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1584,7 +1819,7 @@
           "description": "Create a BlendSpace with three samples, edit one sample's position and animation, save it, and verify the edited sample data"
         },
         {
-          "id": "BEB-451",
+          "id": "BEB-457",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1615,7 +1850,7 @@
           "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
         },
         {
-          "id": "BEB-493",
+          "id": "BEB-499",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1644,7 +1879,7 @@
           "description": "Create a BlendSpace, edit its interpolation mode and triangulation preference, save it, and verify authored interpolation metadata"
         },
         {
-          "id": "BEB-494",
+          "id": "BEB-500",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1675,7 +1910,7 @@
           "description": "Create an AnimMontage, add and rename a slot, edit blend timings, save it, and verify slot plus blend metadata"
         },
         {
-          "id": "BEB-495",
+          "id": "BEB-501",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1705,7 +1940,7 @@
           "description": "Create an IKRig asset, add and remove a solver stack entry, save it, and verify the solver stack read-back"
         },
         {
-          "id": "BEB-502",
+          "id": "BEB-508",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1740,7 +1975,7 @@
           "description": "Create an AnimSequence, add curve and sync-marker metadata, rename the marker, remove both authored items, save, and verify cleanup"
         },
         {
-          "id": "BEB-520",
+          "id": "BEB-528",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1769,279 +2004,532 @@
             "inspect_asset"
           ],
           "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
+        },
+        {
+          "id": "BEB-529",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_pose_copy",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_pose_copy_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_skeleton_info",
+            "build_sequence_from_poses",
+            "save_asset",
+            "copy_bone_pose_between_sequences",
+            "get_sequence_info",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_assets_batch"
+          ],
+          "description": "Create source and destination AnimSequences, copy evaluated bone pose keys into the destination sequence, save it, and read the copied keys back"
+        },
+        {
+          "id": "BEB-530",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_section_crud",
+          "blueprint_type": "",
+          "workflow": "animation_montage_section_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_montage",
+            "add_montage_section",
+            "set_section_next",
+            "set_section_time",
+            "delete_montage_section",
+            "save_asset",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back"
+        },
+        {
+          "id": "BEB-531",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_sample_delete",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_delete_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "delete_blendspace_sample",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout"
+        },
+        {
+          "id": "BEB-532",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "bone_track_lifecycle",
+          "blueprint_type": "",
+          "workflow": "animation_bone_track_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "get_skeleton_info",
+            "add_bone_track",
+            "set_bone_track_keys",
+            "get_bone_track_keys",
+            "remove_bone_track",
+            "save_asset",
+            "list_bone_tracks",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup"
+        },
+        {
+          "id": "BEB-533",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_batch_track_clone",
+          "blueprint_type": "",
+          "workflow": "animation_notify_batch_track_clone_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "bulk_add_notify",
+            "add_notify",
+            "set_notify_track",
+            "clone_notify_setup",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_assets_batch"
+          ],
+          "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back"
+        },
+        {
+          "id": "BEB-536",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "modifier_stack",
+          "blueprint_type": "",
+          "workflow": "animation_modifier_stack_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "apply_anim_modifier",
+            "save_asset",
+            "list_anim_modifiers",
+            "get_sequence_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, persist an engine AnimationModifier into its modifier stack, save it, and read the saved modifier metadata back"
         }
       ],
       "groups": {
         "by_edit_domain": {
           "aim_offset_axis": [
-            "BEB-311"
+            "BEB-316"
           ],
           "anim_blueprint_motion_matching": [
-            "BEB-413"
+            "BEB-419"
           ],
           "anim_blueprint_state_machine": [
-            "BEB-412"
+            "BEB-418"
           ],
           "animation_core": [
-            "BEB-309"
-          ],
-          "animation_sequence_events": [
-            "BEB-313"
-          ],
-          "blendspace_1d_aimoffset_1d": [
-            "BEB-385"
-          ],
-          "blendspace_interpolation": [
-            "BEB-493"
-          ],
-          "blendspace_sample_edit": [
-            "BEB-444"
-          ],
-          "blendspace_samples": [
-            "BEB-310"
-          ],
-          "bone_track_keys": [
-            "BEB-451"
-          ],
-          "chooser_context_class": [
-            "BEB-404"
-          ],
-          "chooser_result_reference_rewrite": [
-            "BEB-353"
-          ],
-          "chooser_table": [
-            "BEB-334"
-          ],
-          "chooser_tree_duplicate_remap": [
-            "BEB-354"
-          ],
-          "composite_mirror_table": [
-            "BEB-386"
-          ],
-          "ik_retargeter_pose_settings": [
-            "BEB-315"
-          ],
-          "ikrig_retargeter": [
             "BEB-314"
           ],
+          "animation_sequence_events": [
+            "BEB-318"
+          ],
+          "blendspace_1d_aimoffset_1d": [
+            "BEB-391"
+          ],
+          "blendspace_interpolation": [
+            "BEB-499"
+          ],
+          "blendspace_sample_delete": [
+            "BEB-531"
+          ],
+          "blendspace_sample_edit": [
+            "BEB-450"
+          ],
+          "blendspace_samples": [
+            "BEB-315"
+          ],
+          "bone_track_keys": [
+            "BEB-457"
+          ],
+          "bone_track_lifecycle": [
+            "BEB-532"
+          ],
+          "chooser_context_class": [
+            "BEB-410"
+          ],
+          "chooser_result_reference_rewrite": [
+            "BEB-359"
+          ],
+          "chooser_table": [
+            "BEB-340"
+          ],
+          "chooser_tree_duplicate_remap": [
+            "BEB-360"
+          ],
+          "composite_mirror_table": [
+            "BEB-392"
+          ],
+          "ik_retargeter_pose_settings": [
+            "BEB-321"
+          ],
+          "ikrig_retargeter": [
+            "BEB-319"
+          ],
           "ikrig_solver_stack": [
-            "BEB-495"
+            "BEB-501"
+          ],
+          "modifier_stack": [
+            "BEB-536"
           ],
           "montage": [
-            "BEB-312"
+            "BEB-317"
           ],
           "montage_blend_slot": [
-            "BEB-494"
+            "BEB-500"
           ],
           "montage_from_sections": [
-            "BEB-425"
-          ],
-          "notify_point_crud": [
             "BEB-431"
           ],
+          "montage_section_crud": [
+            "BEB-530"
+          ],
+          "notify_batch_track_clone": [
+            "BEB-533"
+          ],
+          "notify_point_crud": [
+            "BEB-437"
+          ],
           "notify_state_timing": [
-            "BEB-432"
+            "BEB-438"
           ],
           "pose_search_database": [
-            "BEB-365"
+            "BEB-371"
           ],
           "pose_search_normalization_set": [
-            "BEB-403"
+            "BEB-409"
+          ],
+          "retarget_chain_lifecycle": [
+            "BEB-320"
           ],
           "sequence_curve_marker_cleanup": [
-            "BEB-502"
+            "BEB-508"
           ],
           "sequence_from_poses": [
-            "BEB-520"
+            "BEB-528"
+          ],
+          "sequence_pose_copy": [
+            "BEB-529"
           ],
           "sequence_root_additive_duplicate": [
-            "BEB-395"
+            "BEB-401"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ],
           "edit": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ],
           "readback_verify": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ],
           "save": [
-            "BEB-309",
-            "BEB-310",
-            "BEB-311",
-            "BEB-312",
-            "BEB-313",
             "BEB-314",
             "BEB-315",
-            "BEB-334",
-            "BEB-353",
-            "BEB-354",
-            "BEB-365",
-            "BEB-385",
-            "BEB-386",
-            "BEB-395",
-            "BEB-403",
-            "BEB-404",
-            "BEB-412",
-            "BEB-413",
-            "BEB-425",
+            "BEB-316",
+            "BEB-317",
+            "BEB-318",
+            "BEB-319",
+            "BEB-320",
+            "BEB-321",
+            "BEB-340",
+            "BEB-359",
+            "BEB-360",
+            "BEB-371",
+            "BEB-391",
+            "BEB-392",
+            "BEB-401",
+            "BEB-409",
+            "BEB-410",
+            "BEB-418",
+            "BEB-419",
             "BEB-431",
-            "BEB-432",
-            "BEB-444",
-            "BEB-451",
-            "BEB-493",
-            "BEB-494",
-            "BEB-495",
-            "BEB-502",
-            "BEB-520"
+            "BEB-437",
+            "BEB-438",
+            "BEB-450",
+            "BEB-457",
+            "BEB-499",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-528",
+            "BEB-529",
+            "BEB-530",
+            "BEB-531",
+            "BEB-532",
+            "BEB-533",
+            "BEB-536"
           ]
         }
       },
@@ -2052,9 +2540,11 @@
         "asset_authoring.animation.anim_blueprint_state_machine",
         "asset_authoring.animation.blendspace_1d_aimoffset_1d",
         "asset_authoring.animation.blendspace_interpolation",
+        "asset_authoring.animation.blendspace_sample_delete",
         "asset_authoring.animation.blendspace_sample_edit",
         "asset_authoring.animation.blendspace_samples",
         "asset_authoring.animation.bone_track_keys",
+        "asset_authoring.animation.bone_track_lifecycle",
         "asset_authoring.animation.chooser_context_class",
         "asset_authoring.animation.chooser_result_reference_rewrite",
         "asset_authoring.animation.chooser_table",
@@ -2064,16 +2554,21 @@
         "asset_authoring.animation.ik_retargeter_pose_settings",
         "asset_authoring.animation.ikrig_retargeter",
         "asset_authoring.animation.ikrig_solver_stack",
+        "asset_authoring.animation.modifier_stack",
         "asset_authoring.animation.montage",
         "asset_authoring.animation.montage_blend_slot",
         "asset_authoring.animation.montage_from_sections",
+        "asset_authoring.animation.montage_section_crud",
+        "asset_authoring.animation.notify_batch_track_clone",
         "asset_authoring.animation.notify_point_crud",
         "asset_authoring.animation.notify_state_timing",
         "asset_authoring.animation.pose_search_database",
         "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.retarget_chain_lifecycle",
         "asset_authoring.animation.sequence_curve_marker_cleanup",
         "asset_authoring.animation.sequence_events",
         "asset_authoring.animation.sequence_from_poses",
+        "asset_authoring.animation.sequence_pose_copy",
         "asset_authoring.animation.sequence_root_additive_duplicate"
       ],
       "module_shard_id": "asset_authoring.animation",
@@ -2106,11 +2601,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-311"
+        "BEB-316"
       ],
       "task_refs": [
         {
-          "id": "BEB-311",
+          "id": "BEB-316",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2142,26 +2637,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-311"
+            "BEB-316"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-311"
+            "BEB-316"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-311"
+            "BEB-316"
           ],
           "edit": [
-            "BEB-311"
+            "BEB-316"
           ],
           "readback_verify": [
-            "BEB-311"
+            "BEB-316"
           ],
           "save": [
-            "BEB-311"
+            "BEB-316"
           ]
         }
       },
@@ -2197,11 +2692,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-413"
+        "BEB-419"
       ],
       "task_refs": [
         {
-          "id": "BEB-413",
+          "id": "BEB-419",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2239,26 +2734,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-413"
+            "BEB-419"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-413"
+            "BEB-419"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-413"
+            "BEB-419"
           ],
           "edit": [
-            "BEB-413"
+            "BEB-419"
           ],
           "readback_verify": [
-            "BEB-413"
+            "BEB-419"
           ],
           "save": [
-            "BEB-413"
+            "BEB-419"
           ]
         }
       },
@@ -2294,11 +2789,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-412"
+        "BEB-418"
       ],
       "task_refs": [
         {
-          "id": "BEB-412",
+          "id": "BEB-418",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2334,26 +2829,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-412"
+            "BEB-418"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-412"
+            "BEB-418"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-412"
+            "BEB-418"
           ],
           "edit": [
-            "BEB-412"
+            "BEB-418"
           ],
           "readback_verify": [
-            "BEB-412"
+            "BEB-418"
           ],
           "save": [
-            "BEB-412"
+            "BEB-418"
           ]
         }
       },
@@ -2389,11 +2884,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-385"
+        "BEB-391"
       ],
       "task_refs": [
         {
-          "id": "BEB-385",
+          "id": "BEB-391",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2426,26 +2921,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-385"
+            "BEB-391"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-385"
+            "BEB-391"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-385"
+            "BEB-391"
           ],
           "edit": [
-            "BEB-385"
+            "BEB-391"
           ],
           "readback_verify": [
-            "BEB-385"
+            "BEB-391"
           ],
           "save": [
-            "BEB-385"
+            "BEB-391"
           ]
         }
       },
@@ -2481,11 +2976,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-493"
+        "BEB-499"
       ],
       "task_refs": [
         {
-          "id": "BEB-493",
+          "id": "BEB-499",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2517,26 +3012,119 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-493"
+            "BEB-499"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-493"
+            "BEB-499"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-493"
+            "BEB-499"
           ],
           "edit": [
-            "BEB-493"
+            "BEB-499"
           ],
           "readback_verify": [
-            "BEB-493"
+            "BEB-499"
           ],
           "save": [
-            "BEB-493"
+            "BEB-499"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.blendspace_sample_delete": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.blendspace_sample_delete",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_sample_delete"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_sample_delete",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_sample_delete"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-531"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-531",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_sample_delete",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_delete_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "delete_blendspace_sample",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-531"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-531"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-531"
+          ],
+          "edit": [
+            "BEB-531"
+          ],
+          "readback_verify": [
+            "BEB-531"
+          ],
+          "save": [
+            "BEB-531"
           ]
         }
       },
@@ -2572,11 +3160,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-444"
+        "BEB-450"
       ],
       "task_refs": [
         {
-          "id": "BEB-444",
+          "id": "BEB-450",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2610,26 +3198,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-444"
+            "BEB-450"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-444"
+            "BEB-450"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-444"
+            "BEB-450"
           ],
           "edit": [
-            "BEB-444"
+            "BEB-450"
           ],
           "readback_verify": [
-            "BEB-444"
+            "BEB-450"
           ],
           "save": [
-            "BEB-444"
+            "BEB-450"
           ]
         }
       },
@@ -2665,11 +3253,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-310"
+        "BEB-315"
       ],
       "task_refs": [
         {
-          "id": "BEB-310",
+          "id": "BEB-315",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2703,26 +3291,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-310"
+            "BEB-315"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-310"
+            "BEB-315"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-310"
+            "BEB-315"
           ],
           "edit": [
-            "BEB-310"
+            "BEB-315"
           ],
           "readback_verify": [
-            "BEB-310"
+            "BEB-315"
           ],
           "save": [
-            "BEB-310"
+            "BEB-315"
           ]
         }
       },
@@ -2758,11 +3346,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-451"
+        "BEB-457"
       ],
       "task_refs": [
         {
-          "id": "BEB-451",
+          "id": "BEB-457",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2796,26 +3384,121 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-451"
+            "BEB-457"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-451"
+            "BEB-457"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-451"
+            "BEB-457"
           ],
           "edit": [
-            "BEB-451"
+            "BEB-457"
           ],
           "readback_verify": [
-            "BEB-451"
+            "BEB-457"
           ],
           "save": [
-            "BEB-451"
+            "BEB-457"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.bone_track_lifecycle": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.bone_track_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "bone_track_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/bone_track_lifecycle",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "bone_track_lifecycle"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-532"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-532",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "bone_track_lifecycle",
+          "blueprint_type": "",
+          "workflow": "animation_bone_track_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "get_skeleton_info",
+            "add_bone_track",
+            "set_bone_track_keys",
+            "get_bone_track_keys",
+            "remove_bone_track",
+            "save_asset",
+            "list_bone_tracks",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-532"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-532"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-532"
+          ],
+          "edit": [
+            "BEB-532"
+          ],
+          "readback_verify": [
+            "BEB-532"
+          ],
+          "save": [
+            "BEB-532"
           ]
         }
       },
@@ -2851,11 +3534,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-404"
+        "BEB-410"
       ],
       "task_refs": [
         {
-          "id": "BEB-404",
+          "id": "BEB-410",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2890,26 +3573,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-404"
+            "BEB-410"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-404"
+            "BEB-410"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-404"
+            "BEB-410"
           ],
           "edit": [
-            "BEB-404"
+            "BEB-410"
           ],
           "readback_verify": [
-            "BEB-404"
+            "BEB-410"
           ],
           "save": [
-            "BEB-404"
+            "BEB-410"
           ]
         }
       },
@@ -2945,11 +3628,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-353"
+        "BEB-359"
       ],
       "task_refs": [
         {
-          "id": "BEB-353",
+          "id": "BEB-359",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2984,26 +3667,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-353"
+            "BEB-359"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-353"
+            "BEB-359"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-353"
+            "BEB-359"
           ],
           "edit": [
-            "BEB-353"
+            "BEB-359"
           ],
           "readback_verify": [
-            "BEB-353"
+            "BEB-359"
           ],
           "save": [
-            "BEB-353"
+            "BEB-359"
           ]
         }
       },
@@ -3039,11 +3722,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-334"
+        "BEB-340"
       ],
       "task_refs": [
         {
-          "id": "BEB-334",
+          "id": "BEB-340",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3078,26 +3761,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-334"
+            "BEB-340"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-334"
+            "BEB-340"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-334"
+            "BEB-340"
           ],
           "edit": [
-            "BEB-334"
+            "BEB-340"
           ],
           "readback_verify": [
-            "BEB-334"
+            "BEB-340"
           ],
           "save": [
-            "BEB-334"
+            "BEB-340"
           ]
         }
       },
@@ -3133,11 +3816,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-354"
+        "BEB-360"
       ],
       "task_refs": [
         {
-          "id": "BEB-354",
+          "id": "BEB-360",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3173,26 +3856,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-354"
+            "BEB-360"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-354"
+            "BEB-360"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-354"
+            "BEB-360"
           ],
           "edit": [
-            "BEB-354"
+            "BEB-360"
           ],
           "readback_verify": [
-            "BEB-354"
+            "BEB-360"
           ],
           "save": [
-            "BEB-354"
+            "BEB-360"
           ]
         }
       },
@@ -3228,11 +3911,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-386"
+        "BEB-392"
       ],
       "task_refs": [
         {
-          "id": "BEB-386",
+          "id": "BEB-392",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3266,26 +3949,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-386"
+            "BEB-392"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-386"
+            "BEB-392"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-386"
+            "BEB-392"
           ],
           "edit": [
-            "BEB-386"
+            "BEB-392"
           ],
           "readback_verify": [
-            "BEB-386"
+            "BEB-392"
           ],
           "save": [
-            "BEB-386"
+            "BEB-392"
           ]
         }
       },
@@ -3321,11 +4004,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-309"
+        "BEB-314"
       ],
       "task_refs": [
         {
-          "id": "BEB-309",
+          "id": "BEB-314",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3360,26 +4043,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-309"
+            "BEB-314"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-309"
+            "BEB-314"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-309"
+            "BEB-314"
           ],
           "edit": [
-            "BEB-309"
+            "BEB-314"
           ],
           "readback_verify": [
-            "BEB-309"
+            "BEB-314"
           ],
           "save": [
-            "BEB-309"
+            "BEB-314"
           ]
         }
       },
@@ -3415,11 +4098,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-315"
+        "BEB-321"
       ],
       "task_refs": [
         {
-          "id": "BEB-315",
+          "id": "BEB-321",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3455,26 +4138,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-315"
+            "BEB-321"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-315"
+            "BEB-321"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-315"
+            "BEB-321"
           ],
           "edit": [
-            "BEB-315"
+            "BEB-321"
           ],
           "readback_verify": [
-            "BEB-315"
+            "BEB-321"
           ],
           "save": [
-            "BEB-315"
+            "BEB-321"
           ]
         }
       },
@@ -3510,11 +4193,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-314"
+        "BEB-319"
       ],
       "task_refs": [
         {
-          "id": "BEB-314",
+          "id": "BEB-319",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3548,26 +4231,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-314"
+            "BEB-319"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-314"
+            "BEB-319"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-314"
+            "BEB-319"
           ],
           "edit": [
-            "BEB-314"
+            "BEB-319"
           ],
           "readback_verify": [
-            "BEB-314"
+            "BEB-319"
           ],
           "save": [
-            "BEB-314"
+            "BEB-319"
           ]
         }
       },
@@ -3603,11 +4286,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-495"
+        "BEB-501"
       ],
       "task_refs": [
         {
-          "id": "BEB-495",
+          "id": "BEB-501",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3640,26 +4323,118 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-495"
+            "BEB-501"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-495"
+            "BEB-501"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-495"
+            "BEB-501"
           ],
           "edit": [
-            "BEB-495"
+            "BEB-501"
           ],
           "readback_verify": [
-            "BEB-495"
+            "BEB-501"
           ],
           "save": [
-            "BEB-495"
+            "BEB-501"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.modifier_stack": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.modifier_stack",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "modifier_stack"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/modifier_stack",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "modifier_stack"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-536"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-536",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "modifier_stack",
+          "blueprint_type": "",
+          "workflow": "animation_modifier_stack_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "apply_anim_modifier",
+            "save_asset",
+            "list_anim_modifiers",
+            "get_sequence_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, persist an engine AnimationModifier into its modifier stack, save it, and read the saved modifier metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-536"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-536"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-536"
+          ],
+          "edit": [
+            "BEB-536"
+          ],
+          "readback_verify": [
+            "BEB-536"
+          ],
+          "save": [
+            "BEB-536"
           ]
         }
       },
@@ -3695,11 +4470,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-312"
+        "BEB-317"
       ],
       "task_refs": [
         {
-          "id": "BEB-312",
+          "id": "BEB-317",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3734,26 +4509,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-312"
+            "BEB-317"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-312"
+            "BEB-317"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-312"
+            "BEB-317"
           ],
           "edit": [
-            "BEB-312"
+            "BEB-317"
           ],
           "readback_verify": [
-            "BEB-312"
+            "BEB-317"
           ],
           "save": [
-            "BEB-312"
+            "BEB-317"
           ]
         }
       },
@@ -3789,11 +4564,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-494"
+        "BEB-500"
       ],
       "task_refs": [
         {
-          "id": "BEB-494",
+          "id": "BEB-500",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3827,26 +4602,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-494"
+            "BEB-500"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-494"
+            "BEB-500"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-494"
+            "BEB-500"
           ],
           "edit": [
-            "BEB-494"
+            "BEB-500"
           ],
           "readback_verify": [
-            "BEB-494"
+            "BEB-500"
           ],
           "save": [
-            "BEB-494"
+            "BEB-500"
           ]
         }
       },
@@ -3882,11 +4657,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-425"
+        "BEB-431"
       ],
       "task_refs": [
         {
-          "id": "BEB-425",
+          "id": "BEB-431",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3918,26 +4693,214 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-425"
+            "BEB-431"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-425"
+            "BEB-431"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-425"
+            "BEB-431"
           ],
           "edit": [
-            "BEB-425"
+            "BEB-431"
           ],
           "readback_verify": [
-            "BEB-425"
+            "BEB-431"
           ],
           "save": [
-            "BEB-425"
+            "BEB-431"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.montage_section_crud": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.montage_section_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_section_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_section_crud",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_section_crud"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-530"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-530",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_section_crud",
+          "blueprint_type": "",
+          "workflow": "animation_montage_section_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_montage",
+            "add_montage_section",
+            "set_section_next",
+            "set_section_time",
+            "delete_montage_section",
+            "save_asset",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-530"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-530"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-530"
+          ],
+          "edit": [
+            "BEB-530"
+          ],
+          "readback_verify": [
+            "BEB-530"
+          ],
+          "save": [
+            "BEB-530"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.notify_batch_track_clone": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.notify_batch_track_clone",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_batch_track_clone"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_batch_track_clone",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_batch_track_clone"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-533"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-533",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_batch_track_clone",
+          "blueprint_type": "",
+          "workflow": "animation_notify_batch_track_clone_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "bulk_add_notify",
+            "add_notify",
+            "set_notify_track",
+            "clone_notify_setup",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_assets_batch"
+          ],
+          "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-533"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-533"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-533"
+          ],
+          "edit": [
+            "BEB-533"
+          ],
+          "readback_verify": [
+            "BEB-533"
+          ],
+          "save": [
+            "BEB-533"
           ]
         }
       },
@@ -3973,11 +4936,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-431"
+        "BEB-437"
       ],
       "task_refs": [
         {
-          "id": "BEB-431",
+          "id": "BEB-437",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4010,26 +4973,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-431"
+            "BEB-437"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-431"
+            "BEB-437"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-431"
+            "BEB-437"
           ],
           "edit": [
-            "BEB-431"
+            "BEB-437"
           ],
           "readback_verify": [
-            "BEB-431"
+            "BEB-437"
           ],
           "save": [
-            "BEB-431"
+            "BEB-437"
           ]
         }
       },
@@ -4065,11 +5028,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-432"
+        "BEB-438"
       ],
       "task_refs": [
         {
-          "id": "BEB-432",
+          "id": "BEB-438",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4104,26 +5067,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-432"
+            "BEB-438"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-432"
+            "BEB-438"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-432"
+            "BEB-438"
           ],
           "edit": [
-            "BEB-432"
+            "BEB-438"
           ],
           "readback_verify": [
-            "BEB-432"
+            "BEB-438"
           ],
           "save": [
-            "BEB-432"
+            "BEB-438"
           ]
         }
       },
@@ -4159,11 +5122,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-365"
+        "BEB-371"
       ],
       "task_refs": [
         {
-          "id": "BEB-365",
+          "id": "BEB-371",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4199,26 +5162,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-365"
+            "BEB-371"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-365"
+            "BEB-371"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-365"
+            "BEB-371"
           ],
           "edit": [
-            "BEB-365"
+            "BEB-371"
           ],
           "readback_verify": [
-            "BEB-365"
+            "BEB-371"
           ],
           "save": [
-            "BEB-365"
+            "BEB-371"
           ]
         }
       },
@@ -4254,11 +5217,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-403"
+        "BEB-409"
       ],
       "task_refs": [
         {
-          "id": "BEB-403",
+          "id": "BEB-409",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4296,26 +5259,120 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-403"
+            "BEB-409"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-403"
+            "BEB-409"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-403"
+            "BEB-409"
           ],
           "edit": [
-            "BEB-403"
+            "BEB-409"
           ],
           "readback_verify": [
-            "BEB-403"
+            "BEB-409"
           ],
           "save": [
-            "BEB-403"
+            "BEB-409"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.retarget_chain_lifecycle": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.retarget_chain_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "retarget_chain_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/retarget_chain_lifecycle",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_lifecycle"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-320"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-320",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "retarget_chain_lifecycle",
+          "blueprint_type": "",
+          "workflow": "animation_retarget_chain_lifecycle_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "get_skeleton_info",
+            "add_retarget_chain",
+            "set_retarget_chain_bones",
+            "remove_retarget_chain",
+            "save_asset",
+            "get_ikrig_info",
+            "inspect_asset"
+          ],
+          "description": "Create an IKRig asset, capture a valid skeleton bone, add and rename a retarget chain, remove a second chain, save, and read back the chain list"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-320"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-320"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-320"
+          ],
+          "edit": [
+            "BEB-320"
+          ],
+          "readback_verify": [
+            "BEB-320"
+          ],
+          "save": [
+            "BEB-320"
           ]
         }
       },
@@ -4351,11 +5408,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-502"
+        "BEB-508"
       ],
       "task_refs": [
         {
-          "id": "BEB-502",
+          "id": "BEB-508",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4393,26 +5450,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-502"
+            "BEB-508"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-502"
+            "BEB-508"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-502"
+            "BEB-508"
           ],
           "edit": [
-            "BEB-502"
+            "BEB-508"
           ],
           "readback_verify": [
-            "BEB-502"
+            "BEB-508"
           ],
           "save": [
-            "BEB-502"
+            "BEB-508"
           ]
         }
       },
@@ -4448,11 +5505,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-313"
+        "BEB-318"
       ],
       "task_refs": [
         {
-          "id": "BEB-313",
+          "id": "BEB-318",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4487,26 +5544,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-313"
+            "BEB-318"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-313"
+            "BEB-318"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-313"
+            "BEB-318"
           ],
           "edit": [
-            "BEB-313"
+            "BEB-318"
           ],
           "readback_verify": [
-            "BEB-313"
+            "BEB-318"
           ],
           "save": [
-            "BEB-313"
+            "BEB-318"
           ]
         }
       },
@@ -4542,11 +5599,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-520"
+        "BEB-528"
       ],
       "task_refs": [
         {
-          "id": "BEB-520",
+          "id": "BEB-528",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4580,26 +5637,120 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-520"
+            "BEB-528"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-520"
+            "BEB-528"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-520"
+            "BEB-528"
           ],
           "edit": [
-            "BEB-520"
+            "BEB-528"
           ],
           "readback_verify": [
-            "BEB-520"
+            "BEB-528"
           ],
           "save": [
-            "BEB-520"
+            "BEB-528"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.sequence_pose_copy": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.sequence_pose_copy",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_pose_copy"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_pose_copy",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_pose_copy"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-529"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-529",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_pose_copy",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_pose_copy_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_skeleton_info",
+            "build_sequence_from_poses",
+            "save_asset",
+            "copy_bone_pose_between_sequences",
+            "get_sequence_info",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_assets_batch"
+          ],
+          "description": "Create source and destination AnimSequences, copy evaluated bone pose keys into the destination sequence, save it, and read the copied keys back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-529"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-529"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-529"
+          ],
+          "edit": [
+            "BEB-529"
+          ],
+          "readback_verify": [
+            "BEB-529"
+          ],
+          "save": [
+            "BEB-529"
           ]
         }
       },
@@ -4635,11 +5786,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-395"
+        "BEB-401"
       ],
       "task_refs": [
         {
-          "id": "BEB-395",
+          "id": "BEB-401",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4673,26 +5824,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-395"
+            "BEB-401"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-395"
+            "BEB-401"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-395"
+            "BEB-401"
           ],
           "edit": [
-            "BEB-395"
+            "BEB-401"
           ],
           "readback_verify": [
-            "BEB-395"
+            "BEB-401"
           ],
           "save": [
-            "BEB-395"
+            "BEB-401"
           ]
         }
       },

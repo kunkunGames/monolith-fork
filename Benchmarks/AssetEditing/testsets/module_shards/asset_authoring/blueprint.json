@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.blueprint",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/blueprint.json",
-  "task_count": 552,
+  "task_count": 574,
   "module_count": 5,
   "routing_axes": [
     "category",
@@ -182,14 +182,14 @@
       },
       "task_count": 4,
       "task_ids": [
-        "BEB-347",
-        "BEB-402",
-        "BEB-406",
-        "BEB-407"
+        "BEB-353",
+        "BEB-408",
+        "BEB-412",
+        "BEB-413"
       ],
       "task_refs": [
         {
-          "id": "BEB-347",
+          "id": "BEB-353",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -220,7 +220,7 @@
           "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back"
         },
         {
-          "id": "BEB-402",
+          "id": "BEB-408",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -254,7 +254,7 @@
           "description": "Create Blueprint FunctionLibrary, MacroLibrary, and Interface assets, apply type-specific graph edits, save them, and read back asset type metadata"
         },
         {
-          "id": "BEB-406",
+          "id": "BEB-412",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -285,7 +285,7 @@
           "description": "Create an Actor Blueprint asset, duplicate it, reparent the copy to Pawn, save both assets, and read the copied parent metadata back"
         },
         {
-          "id": "BEB-407",
+          "id": "BEB-413",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -320,58 +320,58 @@
       "groups": {
         "by_edit_domain": {
           "blueprint_asset_types": [
-            "BEB-402"
+            "BEB-408"
           ],
           "blueprint_duplicate_reparent": [
-            "BEB-406"
+            "BEB-412"
           ],
           "blueprint_spec_builder": [
-            "BEB-347"
+            "BEB-353"
           ],
           "blueprint_timeline_persistence": [
-            "BEB-407"
+            "BEB-413"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ],
           "edit": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ],
           "readback_verify": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ],
           "save": [
-            "BEB-347",
-            "BEB-402",
-            "BEB-406",
-            "BEB-407"
+            "BEB-353",
+            "BEB-408",
+            "BEB-412",
+            "BEB-413"
           ]
         }
       },
@@ -412,11 +412,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-402"
+        "BEB-408"
       ],
       "task_refs": [
         {
-          "id": "BEB-402",
+          "id": "BEB-408",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -453,26 +453,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-402"
+            "BEB-408"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-402"
+            "BEB-408"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-402"
+            "BEB-408"
           ],
           "edit": [
-            "BEB-402"
+            "BEB-408"
           ],
           "readback_verify": [
-            "BEB-402"
+            "BEB-408"
           ],
           "save": [
-            "BEB-402"
+            "BEB-408"
           ]
         }
       },
@@ -508,11 +508,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-406"
+        "BEB-412"
       ],
       "task_refs": [
         {
-          "id": "BEB-406",
+          "id": "BEB-412",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -546,26 +546,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-406"
+            "BEB-412"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-406"
+            "BEB-412"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-406"
+            "BEB-412"
           ],
           "edit": [
-            "BEB-406"
+            "BEB-412"
           ],
           "readback_verify": [
-            "BEB-406"
+            "BEB-412"
           ],
           "save": [
-            "BEB-406"
+            "BEB-412"
           ]
         }
       },
@@ -601,11 +601,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-347"
+        "BEB-353"
       ],
       "task_refs": [
         {
-          "id": "BEB-347",
+          "id": "BEB-353",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -639,26 +639,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-347"
+            "BEB-353"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-347"
+            "BEB-353"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-347"
+            "BEB-353"
           ],
           "edit": [
-            "BEB-347"
+            "BEB-353"
           ],
           "readback_verify": [
-            "BEB-347"
+            "BEB-353"
           ],
           "save": [
-            "BEB-347"
+            "BEB-353"
           ]
         }
       },
@@ -694,11 +694,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-407"
+        "BEB-413"
       ],
       "task_refs": [
         {
-          "id": "BEB-407",
+          "id": "BEB-413",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -733,26 +733,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-407"
+            "BEB-413"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-407"
+            "BEB-413"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-407"
+            "BEB-413"
           ],
           "edit": [
-            "BEB-407"
+            "BEB-413"
           ],
           "readback_verify": [
-            "BEB-407"
+            "BEB-413"
           ],
           "save": [
-            "BEB-407"
+            "BEB-413"
           ]
         }
       },

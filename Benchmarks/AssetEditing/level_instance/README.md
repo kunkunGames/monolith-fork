@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `blueprint_prefab` | 1 | `asset_authoring.level_instance.blueprint_prefab` | `testcases\blueprint_prefab.json` |
 | `prefab_placement` | 1 | `asset_authoring.level_instance.prefab_placement` | `testcases\prefab_placement.json` |

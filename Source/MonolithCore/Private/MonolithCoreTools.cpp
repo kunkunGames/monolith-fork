@@ -1490,9 +1490,9 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("detail"), TEXT("boolean"), TEXT("When true, inline each action's full param schema in namespace action listings."), TEXT("false"))
 				.Optional(TEXT("verbose"), TEXT("boolean"), TEXT("Alias for detail=true, kept for older clients."), TEXT("false"))
 				.Optional(TEXT("filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter over action name or description."))
-				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter. Only used when limit > 0."), TEXT("0"))
+				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter."), TEXT("0"))
 				.Range(TEXT("offset"), 0, 1000000)
-				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. Defaults to 50; explicit 0 keeps the legacy full-list behavior."), TEXT("50"))
+				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. Defaults to 50; values below 1 are normalized to the default to keep discovery bounded."), TEXT("50"))
 				.Range(TEXT("limit"), 0, 1000)
 				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 				.Build()
@@ -2235,23 +2235,23 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			});
 		}
 
-		// P0.5: namespace action listings are bounded by default. Explicit limit=0
-		// remains a legacy full-list escape hatch for callers that truly need it.
+		// P0.5: namespace action listings stay bounded. Older callers sometimes
+		// send limit=0 as a full-list sentinel; accept it but normalize to the
+		// default page to prevent large registry dumps.
 		const int32 TotalCount = Actions.Num();
+		constexpr int32 DefaultLimit = 50;
+		constexpr int32 MaxLimit = 1000;
 		int32 Offset = 0;
-		int32 Limit = 50;
+		int32 RequestedLimit = DefaultLimit;
 		Params->TryGetNumberField(TEXT("offset"), Offset);
-		Params->TryGetNumberField(TEXT("limit"), Limit);
+		Params->TryGetNumberField(TEXT("limit"), RequestedLimit);
 		Offset = FMath::Clamp(Offset, 0, 1000000);
-		Limit = FMath::Clamp(Limit, 0, 1000);
+		const int32 Limit = RequestedLimit <= 0
+			? DefaultLimit
+			: FMath::Clamp(RequestedLimit, 1, MaxLimit);
 
-		int32 SliceStart = 0;
-		int32 SliceEnd = TotalCount;
-		if (Limit > 0)
-		{
-			SliceStart = FMath::Clamp(Offset, 0, TotalCount);
-			SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
-		}
+		const int32 SliceStart = FMath::Clamp(Offset, 0, TotalCount);
+		const int32 SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
 
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
 		Result->SetStringField(TEXT("mode"), Mode);
@@ -2291,16 +2291,22 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			}
 			Result->SetArrayField(TEXT("actions"), ActionArray);
 			Result->SetNumberField(TEXT("total"), TotalCount);
-			Result->SetBoolField(TEXT("truncated"), Limit > 0 && SliceEnd < TotalCount);
+			Result->SetBoolField(TEXT("truncated"), SliceEnd < TotalCount);
 			TSharedPtr<FJsonObject> LimitsObj = MakeShared<FJsonObject>();
-			LimitsObj->SetNumberField(TEXT("default_limit"), 50);
-			LimitsObj->SetNumberField(TEXT("max_limit"), 1000);
+			LimitsObj->SetNumberField(TEXT("default_limit"), DefaultLimit);
+			LimitsObj->SetNumberField(TEXT("max_limit"), MaxLimit);
 			LimitsObj->SetNumberField(TEXT("limit"), Limit);
+			LimitsObj->SetNumberField(TEXT("requested_limit"), RequestedLimit);
 			LimitsObj->SetNumberField(TEXT("offset"), SliceStart);
 			LimitsObj->SetNumberField(TEXT("total"), TotalCount);
 			LimitsObj->SetNumberField(TEXT("returned"), ActionArray.Num());
+			if (RequestedLimit <= 0)
+			{
+				LimitsObj->SetStringField(TEXT("normalized_limit_reason"),
+					TEXT("limit values below 1 are normalized to default_limit to keep discovery responses bounded."));
+			}
 			Result->SetObjectField(TEXT("limits"), LimitsObj);
-			if (Limit > 0 && SliceEnd < TotalCount)
+			if (SliceEnd < TotalCount)
 			{
 				const int32 NextOffset = SliceStart + Limit;
 				Result->SetNumberField(TEXT("next_offset"), NextOffset);

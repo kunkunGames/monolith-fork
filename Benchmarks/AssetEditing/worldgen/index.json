@@ -17,19 +17,19 @@
   },
   "edit_domain_count": 9,
   "task_ids": [
-    "BEB-345",
-    "BEB-459",
-    "BEB-460",
-    "BEB-461",
-    "BEB-476",
-    "BEB-477",
-    "BEB-478",
-    "BEB-479",
-    "BEB-480"
+    "BEB-351",
+    "BEB-465",
+    "BEB-466",
+    "BEB-467",
+    "BEB-482",
+    "BEB-483",
+    "BEB-484",
+    "BEB-485",
+    "BEB-486"
   ],
   "task_refs": [
     {
-      "id": "BEB-345",
+      "id": "BEB-351",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -58,7 +58,7 @@
       "description": "Create the reusable WorldGen blockout-volume Blueprint asset, save it, and verify its authoring variables"
     },
     {
-      "id": "BEB-459",
+      "id": "BEB-465",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -86,7 +86,7 @@
       "description": "Generate street StaticMesh geometry with road, sidewalk, and curb parameters, save it, and inspect the generated mesh"
     },
     {
-      "id": "BEB-460",
+      "id": "BEB-466",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -114,7 +114,7 @@
       "description": "Generate a gable-roof StaticMesh from a footprint polygon, save it, and verify the generated mesh asset"
     },
     {
-      "id": "BEB-461",
+      "id": "BEB-467",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -142,7 +142,7 @@
       "description": "Generate a room-grid building StaticMesh with authored room metadata, save it, and inspect the generated mesh"
     },
     {
-      "id": "BEB-476",
+      "id": "BEB-482",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -172,7 +172,7 @@
       "description": "Generate a balcony StaticMesh with authored railing parameters, save it, and inspect the generated mesh asset"
     },
     {
-      "id": "BEB-477",
+      "id": "BEB-483",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -202,7 +202,7 @@
       "description": "Generate a covered porch StaticMesh with columns, roof, steps, and railings, save it, and inspect the generated mesh asset"
     },
     {
-      "id": "BEB-478",
+      "id": "BEB-484",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -232,7 +232,7 @@
       "description": "Generate a multi-floor fire escape StaticMesh with landings, stairs, railings, and ladder metadata, save it, and inspect the generated mesh asset"
     },
     {
-      "id": "BEB-479",
+      "id": "BEB-485",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -262,7 +262,7 @@
       "description": "Generate an accessible ramp connector StaticMesh with slope and landing parameters, save it, and inspect the generated mesh asset"
     },
     {
-      "id": "BEB-480",
+      "id": "BEB-486",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -315,7 +315,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-476"
+        "BEB-482"
       ],
       "case_file": "testcases\\balcony_static_mesh.json"
     },
@@ -337,7 +337,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-345"
+        "BEB-351"
       ],
       "case_file": "testcases\\blockout_volume_blueprint.json"
     },
@@ -359,7 +359,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-461"
+        "BEB-467"
       ],
       "case_file": "testcases\\building_static_mesh.json"
     },
@@ -381,7 +381,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-478"
+        "BEB-484"
       ],
       "case_file": "testcases\\fire_escape_static_mesh.json"
     },
@@ -403,7 +403,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-477"
+        "BEB-483"
       ],
       "case_file": "testcases\\porch_static_mesh.json"
     },
@@ -425,7 +425,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-480"
+        "BEB-486"
       ],
       "case_file": "testcases\\railing_path_static_mesh.json"
     },
@@ -447,7 +447,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-479"
+        "BEB-485"
       ],
       "case_file": "testcases\\ramp_connector_static_mesh.json"
     },
@@ -469,7 +469,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-460"
+        "BEB-466"
       ],
       "case_file": "testcases\\roof_static_mesh.json"
     },
@@ -491,7 +491,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-459"
+        "BEB-465"
       ],
       "case_file": "testcases\\street_static_mesh.json"
     }

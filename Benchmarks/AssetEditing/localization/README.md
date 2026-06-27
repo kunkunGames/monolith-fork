@@ -6,26 +6,27 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 5 |
-| `edit` | 5 |
-| `save` | 5 |
-| `readback_verify` | 5 |
+| `creation_or_import` | 6 |
+| `edit` | 6 |
+| `save` | 6 |
+| `readback_verify` | 6 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 5 |
+| `create_save` | 6 |
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `stringtable` | 1 | `asset_authoring.localization.stringtable` | `testcases\stringtable.json` |
 | `stringtable_blueprint_bulk` | 1 | `asset_authoring.localization.stringtable_blueprint_bulk` | `testcases\stringtable_blueprint_bulk.json` |
 | `stringtable_csv` | 1 | `asset_authoring.localization.stringtable_csv` | `testcases\stringtable_csv.json` |
 | `stringtable_export_remove` | 1 | `asset_authoring.localization.stringtable_export_remove` | `testcases\stringtable_export_remove.json` |
 | `stringtable_metadata_remove` | 1 | `asset_authoring.localization.stringtable_metadata_remove` | `testcases\stringtable_metadata_remove.json` |
+| `stringtable_registry_list` | 1 | `asset_authoring.localization.stringtable_registry_list` | `testcases\stringtable_registry_list.json` |
 
 ## Common Commands
 

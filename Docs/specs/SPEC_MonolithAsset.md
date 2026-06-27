@@ -11,7 +11,7 @@
 
 ## 1. Scope
 
-`MonolithAsset` owns generic asset workflows that are not specific to one content domain: Texture2D/font ingest, file texture import, asset save/delete lifecycle operations, naming/rename hygiene, and specialized read-only asset inspection.
+`MonolithAsset` owns generic asset workflows that are not specific to one content domain: Texture2D/font ingest, file texture import, asset save/delete lifecycle operations, naming/rename hygiene, and typed read-only asset inspection.
 
 This module keeps asset-level actions out of `MonolithUI`, `MonolithMesh`, and `MonolithMaterial` so those modules can focus on their native domains.
 
@@ -33,10 +33,10 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
 | `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with optional prefix guard, dry-run validation, non-interactive editor closing, and optional force deletion. |
 | `validate_naming_conventions` | `FMonolithAssetHygieneActions` | Scan assets under a content path and report prefix-rule violations. |
-| `list_supported_asset_enrichers` | `FMonolithAssetInspectionActions` | List specialized read-only enrichers supported by `inspect_asset`. |
-| `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with specialized enrichment and optional reflected references. |
+| `list_supported_asset_enrichers` | `FMonolithAssetInspectionActions` | List typed read-only enrichers supported by `inspect_asset`. |
+| `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with typed enrichment and optional reflected references. |
 | `inspect_assets_batch` | `FMonolithAssetInspectionActions` | Inspect multiple assets with per-row success/error results. |
-| `validate_specialized_asset` | `FMonolithAssetInspectionActions` | Validate a specialized asset and report warnings without mutation. |
+| `validate_typed_asset` | `FMonolithAssetInspectionActions` | Validate a typed asset and report warnings without mutation. |
 | `batch_rename_assets` | `FMonolithAssetHygieneActions` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
 | `find_assets` | `FMonolithAssetFindActions` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`; ranks by asset name/path/class (and optional tags) via the shared MonolithCore `FMonolithFuzzyMatch` engine, with `allow_transposition` controlling Damerau adjacent-swap tolerance. |
 
@@ -65,7 +65,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Font ingest | `Public/MonolithAssetFontIngestActions.h`, `Private/MonolithAssetFontIngestActions.cpp` | Uses UE 5.7-safe `UFont::GetMutableInternalCompositeFont()` for composite-font writes. |
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
-| Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former specialized asset inspection surface, now independent from `MonolithMaterial`. |
+| Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former typed asset inspection surface, now independent from `MonolithMaterial`. |
 | Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights and the `allow_transposition` option. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
 
 ## 8. Texture Role Pipeline
@@ -85,13 +85,13 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 For opaque-background generated images, alpha extraction first classifies pixels similar to the sampled edge background color, then flood-fills only those candidate pixels that are connected to an image edge. Disconnected interior pixels that resemble the background color remain opaque so highlights, pale hair, and enclosed details are not erased by global color keying.
 
-The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `settings.alpha_from_edge_background=false` disables generated alpha extraction, `settings.tile_seam_harmonize=false` disables world-tile seam harmonization, and `return_processed_png=true` returns the imported post-processing result as `processed_png_b64`. `asset.inspect_asset` and `asset.validate_specialized_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
+The action result includes `texture_role`, `settings_applied`, and `validation`. Validation is non-destructive and returns warnings instead of failing the import unless normal parameter validation fails. `settings.alpha_from_edge_background=false` disables generated alpha extraction, `settings.tile_seam_harmonize=false` disables world-tile seam harmonization, and `return_processed_png=true` returns the imported post-processing result as `processed_png_b64`. `asset.inspect_asset` and `asset.validate_typed_asset` recognize `Texture2D` assets and report generated texture-role settings from `Monolith.Generated.texture_role` metadata.
 
 ## 9. Verification
 
 | Gate | Requirement |
 |------|-------------|
-| Source stale scan | No old UI ingest action names, old UI ingest classes, or old specialized-asset inspection class names remain in source. |
+| Source stale scan | No old UI ingest action names, old UI ingest classes, or old typed-asset inspection class names remain in source. |
 | Build | Run the primary `<Project>Editor` UBT command after closing any editor process that locks Monolith DLLs. |
 | Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 12 actions owned by `MonolithAsset`. |
 | Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, `allow_transposition` must flow into `ScoreCandidate`, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |

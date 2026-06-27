@@ -1,0 +1,356 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "metasound_explicit_connection",
+  "route_edit_domain": "metasound_explicit_connection",
+  "module_id": "asset_authoring.audio.metasound_explicit_connection",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.metasound_explicit_connection",
+    "edit": "asset_operation.edit.audio.metasound_explicit_connection",
+    "save": "asset_operation.save.audio.metasound_explicit_connection",
+    "readback_verify": "asset_operation.readback_verify.audio.metasound_explicit_connection"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-540"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-540",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "metasound_explicit_connection",
+      "blueprint_type": "",
+      "workflow": "audio_metasound_explicit_connection_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_metasound_source",
+        "add_metasound_interface",
+        "add_metasound_node",
+        "find_metasound_node_outputs",
+        "find_metasound_node_inputs",
+        "connect_metasound_nodes",
+        "list_metasound_connections",
+        "disconnect_metasound_nodes",
+        "save_asset",
+        "get_metasound_graph",
+        "validate_metasound",
+        "inspect_asset"
+      ],
+      "description": "Create a MetaSound Source, add two graph nodes by alias, discover their pins, connect and disconnect the nodes by pin name, save it, and verify the final graph"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-540",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_metasound_source",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "format": "Mono",
+            "one_shot": true
+          },
+          "contains": [
+            "MS_BenchExplicitConnect",
+            "format",
+            "Mono",
+            "one_shot",
+            "true",
+            "audio_outputs"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "add_metasound_interface",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "interface_name": "UE.Attenuation"
+          },
+          "contains": [
+            "success",
+            "true",
+            "interface",
+            "UE.Attenuation"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "add_metasound_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "node_class": [
+              "UE",
+              "Sine",
+              "Audio"
+            ],
+            "node_id": "BenchSine"
+          },
+          "contains": [
+            "node_handle",
+            "node_id",
+            "BenchSine",
+            "node_id_alias_registered",
+            "true"
+          ],
+          "capture": {
+            "sine_node": "$.node_handle"
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "add_metasound_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "node_class": [
+              "UE",
+              "Multiply",
+              "Audio Float"
+            ],
+            "node_id": "BenchGain"
+          },
+          "contains": [
+            "node_handle",
+            "node_id",
+            "BenchGain",
+            "node_id_alias_registered",
+            "true"
+          ],
+          "capture": {
+            "gain_node": "$.node_handle"
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_metasound_node_outputs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "node_id_or_handle": "BenchSine"
+          },
+          "contains": [
+            "BenchSine",
+            "outputs",
+            "Audio",
+            "vertex_id"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_metasound_node_inputs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "node_id_or_handle": "BenchGain"
+          },
+          "contains": [
+            "BenchGain",
+            "inputs",
+            "Audio",
+            "Float",
+            "vertex_id"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "connect_metasound_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "from_node": "BenchSine",
+            "from_output": "Audio",
+            "to_node": "BenchGain",
+            "to_input": "Audio"
+          },
+          "contains": [
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "list_metasound_connections",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          },
+          "contains": [
+            "connections",
+            "count",
+            "1",
+            "${sine_node}",
+            "${gain_node}"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "disconnect_metasound_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect",
+            "from_node": "BenchSine",
+            "from_output": "Audio",
+            "to_node": "BenchGain",
+            "to_input": "Audio"
+          },
+          "contains": [
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "list_metasound_connections",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          },
+          "contains": [
+            "connections",
+            "count",
+            "0"
+          ],
+          "not_contains": [
+            "${sine_node}",
+            "${gain_node}"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          },
+          "contains": [
+            "MS_BenchExplicitConnect",
+            "nodes",
+            "edges",
+            "node_count",
+            "edge_count",
+            "BenchSine",
+            "BenchGain"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "validate_metasound",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          },
+          "contains": [
+            "MS_BenchExplicitConnect",
+            "valid",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchExplicitConnect"
+          },
+          "contains": [
+            "MS_BenchExplicitConnect"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "metasound_explicit_connection",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_metasound_explicit_connection_roundtrip",
+      "description": "Create a MetaSound Source, add two graph nodes by alias, discover their pins, connect and disconnect the nodes by pin name, save it, and verify the final graph",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/metasounds-the-next-generation-sound-sources-in-unreal-engine?application_version=5.8",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundIntrospectionActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-audio/SKILL.md",
+        "skill_ref: Plugins/Monolith/Skills/unreal-audio/references/actions.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_metasound_source",
+          "add_metasound_interface",
+          "add_metasound_node",
+          "find_metasound_node_outputs",
+          "find_metasound_node_inputs",
+          "connect_metasound_nodes",
+          "list_metasound_connections",
+          "disconnect_metasound_nodes",
+          "save_asset",
+          "get_metasound_graph",
+          "validate_metasound",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -2,14 +2,14 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "generated_at": "2026-06-27T13:47:55.383703+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.editor",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json",
-  "task_count": 552,
-  "module_count": 5,
+  "task_count": 574,
+  "module_count": 6,
   "routing_axes": [
     "category",
     "domain",
@@ -30,7 +30,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: editor",
-      "task_count": 4,
+      "task_count": 5,
       "filters": {
         "category": [
           "asset_authoring"
@@ -46,7 +46,8 @@
         "asset_authoring.editor.empty_map_asset",
         "asset_authoring.editor.map_actor_defaults",
         "asset_authoring.editor.nav_harness_map",
-        "asset_authoring.editor.package_dirty_save"
+        "asset_authoring.editor.package_dirty_save",
+        "asset_authoring.editor.texture_flipbook_atlas"
       ]
     },
     {
@@ -156,6 +157,33 @@
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json",
       "parent_module_id": "asset_authoring.editor",
       "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.editor.texture_flipbook_atlas",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "editor",
+        "texture_flipbook_atlas"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: editor/texture_flipbook_atlas",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "editor"
+        ],
+        "edit_domain": [
+          "texture_flipbook_atlas"
+        ]
+      },
+      "module_shard_id": "asset_authoring.editor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json",
+      "parent_module_id": "asset_authoring.editor",
+      "child_module_ids": []
     }
   ],
   "modules": {
@@ -180,16 +208,17 @@
           "editor"
         ]
       },
-      "task_count": 4,
+      "task_count": 5,
       "task_ids": [
-        "BEB-418",
-        "BEB-427",
-        "BEB-439",
-        "BEB-497"
+        "BEB-424",
+        "BEB-433",
+        "BEB-445",
+        "BEB-503",
+        "BEB-542"
       ],
       "task_refs": [
         {
-          "id": "BEB-418",
+          "id": "BEB-424",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -214,7 +243,7 @@
           "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
         },
         {
-          "id": "BEB-427",
+          "id": "BEB-433",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -245,7 +274,7 @@
           "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
         },
         {
-          "id": "BEB-439",
+          "id": "BEB-445",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -274,7 +303,7 @@
           "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
         },
         {
-          "id": "BEB-497",
+          "id": "BEB-503",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -302,66 +331,104 @@
             "inspect_asset"
           ],
           "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
+        },
+        {
+          "id": "BEB-542",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "editor",
+          "edit_domain": "texture_flipbook_atlas",
+          "blueprint_type": "",
+          "workflow": "editor_texture_flipbook_atlas_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture",
+            "stitch_flipbook",
+            "save_asset",
+            "get_texture_properties",
+            "inspect_assets_batch"
+          ],
+          "description": "Import a Texture2D through the editor namespace, stitch four PNG frames into a flipbook atlas texture, save both assets, and read back texture metadata"
         }
       ],
       "groups": {
         "by_edit_domain": {
           "empty_map_asset": [
-            "BEB-418"
+            "BEB-424"
           ],
           "map_actor_defaults": [
-            "BEB-497"
+            "BEB-503"
           ],
           "nav_harness_map": [
-            "BEB-439"
+            "BEB-445"
           ],
           "package_dirty_save": [
-            "BEB-427"
+            "BEB-433"
+          ],
+          "texture_flipbook_atlas": [
+            "BEB-542"
           ]
         },
         "by_operation_semantics": {
           "create": [
-            "BEB-418"
+            "BEB-424"
           ],
           "create_save": [
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-418"
+            "BEB-424"
           ],
           "create_save": [
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-418",
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-424",
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ],
           "edit": [
-            "BEB-418",
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-424",
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ],
           "readback_verify": [
-            "BEB-418",
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-424",
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ],
           "save": [
-            "BEB-427",
-            "BEB-439",
-            "BEB-497"
+            "BEB-433",
+            "BEB-445",
+            "BEB-503",
+            "BEB-542"
           ]
         }
       },
@@ -370,7 +437,8 @@
         "asset_authoring.editor.empty_map_asset",
         "asset_authoring.editor.map_actor_defaults",
         "asset_authoring.editor.nav_harness_map",
-        "asset_authoring.editor.package_dirty_save"
+        "asset_authoring.editor.package_dirty_save",
+        "asset_authoring.editor.texture_flipbook_atlas"
       ],
       "module_shard_id": "asset_authoring.editor",
       "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json"
@@ -402,11 +470,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-418"
+        "BEB-424"
       ],
       "task_refs": [
         {
-          "id": "BEB-418",
+          "id": "BEB-424",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -434,23 +502,23 @@
       "groups": {
         "by_operation_semantics": {
           "create": [
-            "BEB-418"
+            "BEB-424"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-418"
+            "BEB-424"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-418"
+            "BEB-424"
           ],
           "edit": [
-            "BEB-418"
+            "BEB-424"
           ],
           "readback_verify": [
-            "BEB-418"
+            "BEB-424"
           ]
         }
       },
@@ -486,11 +554,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-497"
+        "BEB-503"
       ],
       "task_refs": [
         {
-          "id": "BEB-497",
+          "id": "BEB-503",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -523,26 +591,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-497"
+            "BEB-503"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-497"
+            "BEB-503"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-497"
+            "BEB-503"
           ],
           "edit": [
-            "BEB-497"
+            "BEB-503"
           ],
           "readback_verify": [
-            "BEB-497"
+            "BEB-503"
           ],
           "save": [
-            "BEB-497"
+            "BEB-503"
           ]
         }
       },
@@ -578,11 +646,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-439"
+        "BEB-445"
       ],
       "task_refs": [
         {
-          "id": "BEB-439",
+          "id": "BEB-445",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -614,26 +682,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-439"
+            "BEB-445"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-439"
+            "BEB-445"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-439"
+            "BEB-445"
           ],
           "edit": [
-            "BEB-439"
+            "BEB-445"
           ],
           "readback_verify": [
-            "BEB-439"
+            "BEB-445"
           ],
           "save": [
-            "BEB-439"
+            "BEB-445"
           ]
         }
       },
@@ -669,11 +737,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-427"
+        "BEB-433"
       ],
       "task_refs": [
         {
-          "id": "BEB-427",
+          "id": "BEB-433",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -707,26 +775,117 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-427"
+            "BEB-433"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-427"
+            "BEB-433"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-427"
+            "BEB-433"
           ],
           "edit": [
-            "BEB-427"
+            "BEB-433"
           ],
           "readback_verify": [
-            "BEB-427"
+            "BEB-433"
           ],
           "save": [
-            "BEB-427"
+            "BEB-433"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.editor",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.editor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json"
+    },
+    "asset_authoring.editor.texture_flipbook_atlas": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.editor.texture_flipbook_atlas",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "editor",
+        "texture_flipbook_atlas"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: editor/texture_flipbook_atlas",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "editor"
+        ],
+        "edit_domain": [
+          "texture_flipbook_atlas"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-542"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-542",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "editor",
+          "edit_domain": "texture_flipbook_atlas",
+          "blueprint_type": "",
+          "workflow": "editor_texture_flipbook_atlas_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture",
+            "stitch_flipbook",
+            "save_asset",
+            "get_texture_properties",
+            "inspect_assets_batch"
+          ],
+          "description": "Import a Texture2D through the editor namespace, stitch four PNG frames into a flipbook atlas texture, save both assets, and read back texture metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-542"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-542"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-542"
+          ],
+          "edit": [
+            "BEB-542"
+          ],
+          "readback_verify": [
+            "BEB-542"
+          ],
+          "save": [
+            "BEB-542"
           ]
         }
       },

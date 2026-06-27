@@ -17,14 +17,14 @@
   },
   "edit_domain_count": 4,
   "task_ids": [
-    "BEB-347",
-    "BEB-402",
-    "BEB-406",
-    "BEB-407"
+    "BEB-353",
+    "BEB-408",
+    "BEB-412",
+    "BEB-413"
   ],
   "task_refs": [
     {
-      "id": "BEB-347",
+      "id": "BEB-353",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -55,7 +55,7 @@
       "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back"
     },
     {
-      "id": "BEB-402",
+      "id": "BEB-408",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -89,7 +89,7 @@
       "description": "Create Blueprint FunctionLibrary, MacroLibrary, and Interface assets, apply type-specific graph edits, save them, and read back asset type metadata"
     },
     {
-      "id": "BEB-406",
+      "id": "BEB-412",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -120,7 +120,7 @@
       "description": "Create an Actor Blueprint asset, duplicate it, reparent the copy to Pawn, save both assets, and read the copied parent metadata back"
     },
     {
-      "id": "BEB-407",
+      "id": "BEB-413",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -175,7 +175,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-402"
+        "BEB-408"
       ],
       "case_file": "testcases\\asset_types.json"
     },
@@ -197,7 +197,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-406"
+        "BEB-412"
       ],
       "case_file": "testcases\\duplicate_reparent.json"
     },
@@ -219,7 +219,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-347"
+        "BEB-353"
       ],
       "case_file": "testcases\\spec_builder.json"
     },
@@ -241,7 +241,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-407"
+        "BEB-413"
       ],
       "case_file": "testcases\\timeline_persistence.json"
     }

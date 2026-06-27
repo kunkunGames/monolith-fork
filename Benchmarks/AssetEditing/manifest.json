@@ -3,10 +3,10 @@
   "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
   "primary_score": "asset_editing_score",
   "expected_namespace": "blueprint-plus-asset-authoring",
-  "generated_at": "2026-06-27T10:36:21.029590+00:00",
-  "task_count": 552,
+  "generated_at": "2026-06-27T13:47:56.108021+00:00",
+  "task_count": 574,
   "category_counts": {
-    "asset_authoring": 242,
+    "asset_authoring": 264,
     "duplicate_reject": 11,
     "edit_execute": 113,
     "edit_schema": 47,
@@ -67,7 +67,7 @@
   "base_edit_execute_tasks_per_type": 10,
   "additional_edit_execute_tasks": 43,
   "additional_edit_execute_specs": 28,
-  "asset_authoring_tasks": 242,
+  "asset_authoring_tasks": 264,
   "edit_execute_tasks_per_type": {
     "Actor": 20,
     "ActorComponent": 16,
@@ -108,7 +108,7 @@
   "testset_module_storage": "split_shards",
   "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
   "testset_module_shard_count": 38,
-  "testset_module_count": 1659,
+  "testset_module_count": 1791,
   "testset_routing_axes": [
     "category",
     "domain",
@@ -146,16 +146,16 @@
       "asset_type": "animation",
       "asset_type_slug": "animation",
       "module_id": "asset_authoring.animation",
-      "task_count": 28,
-      "edit_domain_count": 28,
+      "task_count": 35,
+      "edit_domain_count": 35,
       "operation_counts": {
-        "creation_or_import": 28,
-        "edit": 28,
-        "save": 28,
-        "readback_verify": 28
+        "creation_or_import": 35,
+        "edit": 35,
+        "save": 35,
+        "readback_verify": 35
       },
       "lifecycle_counts": {
-        "create_save": 28
+        "create_save": 35
       },
       "directory": "Benchmarks/AssetEditing/animation",
       "index_file": "Benchmarks/AssetEditing/animation/index.json",
@@ -166,16 +166,16 @@
       "asset_type": "asset",
       "asset_type_slug": "asset",
       "module_id": "asset_authoring.asset",
-      "task_count": 6,
-      "edit_domain_count": 6,
+      "task_count": 11,
+      "edit_domain_count": 11,
       "operation_counts": {
-        "creation_or_import": 6,
-        "edit": 6,
-        "save": 6,
-        "readback_verify": 6
+        "creation_or_import": 11,
+        "edit": 11,
+        "save": 11,
+        "readback_verify": 11
       },
       "lifecycle_counts": {
-        "create_save": 6
+        "create_save": 11
       },
       "directory": "Benchmarks/AssetEditing/asset",
       "index_file": "Benchmarks/AssetEditing/asset/index.json",
@@ -186,16 +186,16 @@
       "asset_type": "audio",
       "asset_type_slug": "audio",
       "module_id": "asset_authoring.audio",
-      "task_count": 28,
-      "edit_domain_count": 28,
+      "task_count": 29,
+      "edit_domain_count": 29,
       "operation_counts": {
-        "creation_or_import": 28,
-        "edit": 28,
-        "save": 28,
-        "readback_verify": 28
+        "creation_or_import": 29,
+        "edit": 29,
+        "save": 29,
+        "readback_verify": 29
       },
       "lifecycle_counts": {
-        "create_save": 28
+        "create_save": 29
       },
       "directory": "Benchmarks/AssetEditing/audio",
       "index_file": "Benchmarks/AssetEditing/audio/index.json",
@@ -226,17 +226,17 @@
       "asset_type": "collection",
       "asset_type_slug": "collection",
       "module_id": "asset_authoring.collection",
-      "task_count": 4,
-      "edit_domain_count": 4,
+      "task_count": 5,
+      "edit_domain_count": 5,
       "operation_counts": {
-        "creation_or_import": 4,
-        "edit": 4,
-        "save": 3,
-        "readback_verify": 4
+        "creation_or_import": 5,
+        "edit": 5,
+        "save": 4,
+        "readback_verify": 5
       },
       "lifecycle_counts": {
         "create": 1,
-        "create_save": 3
+        "create_save": 4
       },
       "directory": "Benchmarks/AssetEditing/collection",
       "index_file": "Benchmarks/AssetEditing/collection/index.json",
@@ -247,16 +247,16 @@
       "asset_type": "data",
       "asset_type_slug": "data",
       "module_id": "asset_authoring.data",
-      "task_count": 10,
-      "edit_domain_count": 10,
+      "task_count": 12,
+      "edit_domain_count": 12,
       "operation_counts": {
-        "creation_or_import": 10,
-        "edit": 10,
-        "save": 10,
-        "readback_verify": 10
+        "creation_or_import": 12,
+        "edit": 12,
+        "save": 12,
+        "readback_verify": 12
       },
       "lifecycle_counts": {
-        "create_save": 10
+        "create_save": 12
       },
       "directory": "Benchmarks/AssetEditing/data",
       "index_file": "Benchmarks/AssetEditing/data/index.json",
@@ -267,17 +267,17 @@
       "asset_type": "editor",
       "asset_type_slug": "editor",
       "module_id": "asset_authoring.editor",
-      "task_count": 4,
-      "edit_domain_count": 4,
+      "task_count": 5,
+      "edit_domain_count": 5,
       "operation_counts": {
-        "creation_or_import": 4,
-        "edit": 4,
-        "save": 3,
-        "readback_verify": 4
+        "creation_or_import": 5,
+        "edit": 5,
+        "save": 4,
+        "readback_verify": 5
       },
       "lifecycle_counts": {
         "create": 1,
-        "create_save": 3
+        "create_save": 4
       },
       "directory": "Benchmarks/AssetEditing/editor",
       "index_file": "Benchmarks/AssetEditing/editor/index.json",
@@ -408,16 +408,16 @@
       "asset_type": "localization",
       "asset_type_slug": "localization",
       "module_id": "asset_authoring.localization",
-      "task_count": 5,
-      "edit_domain_count": 5,
+      "task_count": 6,
+      "edit_domain_count": 6,
       "operation_counts": {
-        "creation_or_import": 5,
-        "edit": 5,
-        "save": 5,
-        "readback_verify": 5
+        "creation_or_import": 6,
+        "edit": 6,
+        "save": 6,
+        "readback_verify": 6
       },
       "lifecycle_counts": {
-        "create_save": 5
+        "create_save": 6
       },
       "directory": "Benchmarks/AssetEditing/localization",
       "index_file": "Benchmarks/AssetEditing/localization/index.json",
@@ -448,16 +448,16 @@
       "asset_type": "material",
       "asset_type_slug": "material",
       "module_id": "asset_authoring.material",
-      "task_count": 20,
-      "edit_domain_count": 20,
+      "task_count": 21,
+      "edit_domain_count": 21,
       "operation_counts": {
-        "creation_or_import": 20,
-        "edit": 20,
-        "save": 20,
-        "readback_verify": 20
+        "creation_or_import": 21,
+        "edit": 21,
+        "save": 21,
+        "readback_verify": 21
       },
       "lifecycle_counts": {
-        "create_save": 20
+        "create_save": 21
       },
       "directory": "Benchmarks/AssetEditing/material",
       "index_file": "Benchmarks/AssetEditing/material/index.json",
@@ -468,16 +468,16 @@
       "asset_type": "mesh",
       "asset_type_slug": "mesh",
       "module_id": "asset_authoring.mesh",
-      "task_count": 20,
-      "edit_domain_count": 20,
+      "task_count": 21,
+      "edit_domain_count": 21,
       "operation_counts": {
-        "creation_or_import": 20,
-        "edit": 20,
-        "save": 20,
-        "readback_verify": 20
+        "creation_or_import": 21,
+        "edit": 21,
+        "save": 21,
+        "readback_verify": 21
       },
       "lifecycle_counts": {
-        "create_save": 20
+        "create_save": 21
       },
       "directory": "Benchmarks/AssetEditing/mesh",
       "index_file": "Benchmarks/AssetEditing/mesh/index.json",
@@ -508,16 +508,16 @@
       "asset_type": "niagara",
       "asset_type_slug": "niagara",
       "module_id": "asset_authoring.niagara",
-      "task_count": 28,
-      "edit_domain_count": 28,
+      "task_count": 29,
+      "edit_domain_count": 29,
       "operation_counts": {
-        "creation_or_import": 28,
-        "edit": 28,
-        "save": 28,
-        "readback_verify": 28
+        "creation_or_import": 29,
+        "edit": 29,
+        "save": 29,
+        "readback_verify": 29
       },
       "lifecycle_counts": {
-        "create_save": 28
+        "create_save": 29
       },
       "directory": "Benchmarks/AssetEditing/niagara",
       "index_file": "Benchmarks/AssetEditing/niagara/index.json",
@@ -528,16 +528,16 @@
       "asset_type": "project",
       "asset_type_slug": "project",
       "module_id": "asset_authoring.project",
-      "task_count": 2,
-      "edit_domain_count": 2,
+      "task_count": 3,
+      "edit_domain_count": 3,
       "operation_counts": {
-        "creation_or_import": 2,
-        "edit": 2,
-        "save": 2,
-        "readback_verify": 2
+        "creation_or_import": 3,
+        "edit": 3,
+        "save": 3,
+        "readback_verify": 3
       },
       "lifecycle_counts": {
-        "create_save": 2
+        "create_save": 3
       },
       "directory": "Benchmarks/AssetEditing/project",
       "index_file": "Benchmarks/AssetEditing/project/index.json",

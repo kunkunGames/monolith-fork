@@ -2053,7 +2053,10 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::SearchConsoleObjects(
 	const bool bHasFts = TableExistsLocked(*Database, TEXT("console_objects_fts"));
 
 	constexpr int32 MaxConsoleSearchWindow = 100000;
-	const int32 SafeLimit = FMath::Clamp(Limit, 1, 5000);
+	constexpr int32 MaxCompactConsoleSearchLimit = 500;
+	constexpr int32 MaxFullConsoleSearchLimit = 200;
+	const int32 EffectiveMaxLimit = bDetail ? MaxFullConsoleSearchLimit : MaxCompactConsoleSearchLimit;
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, EffectiveMaxLimit);
 	const int32 SafeOffset = FMath::Clamp(Offset, 0, MaxConsoleSearchWindow);
 	const int32 QueryWindow = FMath::Min(MaxConsoleSearchWindow + 1, SafeOffset + SafeLimit + 1);
 	const FString FilterType = ObjectType.Equals(TEXT("all"), ESearchCase::IgnoreCase) ? TEXT("") : ObjectType.ToLower();
@@ -2185,21 +2188,28 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::SearchConsoleObjects(
 	Root->SetStringField(TEXT("query"), Query);
 	Root->SetStringField(TEXT("object_type"), FilterType.IsEmpty() ? TEXT("all") : FilterType);
 	Root->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Root->SetNumberField(TEXT("requested_limit"), Limit);
 	Root->SetNumberField(TEXT("limit"), SafeLimit);
 	Root->SetNumberField(TEXT("offset"), SafeOffset);
 	Root->SetStringField(TEXT("projection"), bDetail ? TEXT("full") : TEXT("compact"));
 	Root->SetBoolField(TEXT("detail"), bDetail);
+	if (SafeLimit != Limit)
+	{
+		Root->SetStringField(TEXT("normalized_limit_reason"), bDetail
+			? TEXT("full projection is capped at 200 rows")
+			: TEXT("compact projection is capped at 500 rows"));
+	}
 	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("requested_limit"), Limit);
 	Limits->SetNumberField(TEXT("limit"), SafeLimit);
 	Limits->SetNumberField(TEXT("offset"), SafeOffset);
 	Limits->SetNumberField(TEXT("returned"), Rows.Num());
-	Limits->SetNumberField(TEXT("max_limit"), 5000);
+	Limits->SetNumberField(TEXT("max_limit"), EffectiveMaxLimit);
 	Limits->SetNumberField(TEXT("max_window"), MaxConsoleSearchWindow);
 	Limits->SetStringField(TEXT("projection"), bDetail ? TEXT("full") : TEXT("compact"));
 	Limits->SetBoolField(TEXT("detail"), bDetail);
 	Limits->SetBoolField(TEXT("truncated"), bTruncated);
 	Root->SetObjectField(TEXT("limits"), Limits);
-	Root->SetArrayField(TEXT("objects"), Rows);
 	Root->SetArrayField(TEXT("results"), Rows);
 	Root->SetBoolField(TEXT("truncated"), bTruncated);
 	if (bTruncated)

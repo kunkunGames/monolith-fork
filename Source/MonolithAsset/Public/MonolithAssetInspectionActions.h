@@ -12,5 +12,5 @@ private:
 	static FMonolithActionResult ListSupportedAssetEnrichers(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult InspectAsset(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult InspectAssetsBatch(const TSharedPtr<FJsonObject>& Params);
-	static FMonolithActionResult ValidateSpecializedAsset(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ValidateTypedAsset(const TSharedPtr<FJsonObject>& Params);
 };

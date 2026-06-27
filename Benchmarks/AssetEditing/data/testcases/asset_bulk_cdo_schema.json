@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "data_asset_bulk_cdo_schema",
+  "route_edit_domain": "asset_bulk_cdo_schema",
+  "module_id": "asset_authoring.data.asset_bulk_cdo_schema",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.asset_bulk_cdo_schema",
+    "edit": "asset_operation.edit.data.asset_bulk_cdo_schema",
+    "save": "asset_operation.save.data.asset_bulk_cdo_schema",
+    "readback_verify": "asset_operation.readback_verify.data.asset_bulk_cdo_schema"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-311"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-311",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "data_asset_bulk_cdo_schema",
+      "blueprint_type": "",
+      "workflow": "dataasset_bulk_cdo_schema_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_data_asset",
+        "describe_cdo_schema",
+        "set_cdo_properties",
+        "save_asset",
+        "get_cdo_properties",
+        "inspect_asset"
+      ],
+      "description": "Create a raw UObject asset, describe its writable CDO schema, dry-run and apply a bulk property update, save it, and read values back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-311",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_data_asset",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface",
+            "class_name": "PhysicalMaterial"
+          },
+          "contains": [
+            "PM_BenchBulkSurface",
+            "PhysicalMaterial"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "describe_cdo_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface"
+          },
+          "contains": [
+            "PM_BenchBulkSurface",
+            "PhysicalMaterial",
+            "Friction",
+            "Restitution"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface",
+            "properties": {
+              "Friction": 0.58,
+              "Restitution": 0.22
+            },
+            "dry_run": true,
+            "strict": true
+          },
+          "contains": [
+            "would_apply",
+            "false",
+            "field_writes",
+            "Friction",
+            "Restitution"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface",
+            "properties": {
+              "Friction": 0.58,
+              "Restitution": 0.22
+            },
+            "strict": true
+          },
+          "contains": [
+            "would_apply",
+            "true",
+            "field_writes",
+            "Friction",
+            "Restitution"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface",
+            "name_pattern": "Friction"
+          },
+          "contains": [
+            "Friction",
+            "0.58"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface",
+            "name_pattern": "Restitution"
+          },
+          "contains": [
+            "Restitution",
+            "0.22"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchBulkSurface"
+          },
+          "contains": [
+            "PM_BenchBulkSurface",
+            "PhysicalMaterial"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "data_asset_bulk_cdo_schema",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "dataasset_bulk_cdo_schema_roundtrip",
+      "description": "Create a raw UObject asset, describe its writable CDO schema, dry-run and apply a bulk property update, save it, and read values back",
+      "reference_context": [
+        "source: Plugins/Monolith/Source/MonolithBlueprint/Private/MonolithBlueprintCDOActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithBlueprint/Private/MonolithBlueprintStructActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_data_asset",
+          "describe_cdo_schema",
+          "set_cdo_properties",
+          "save_asset",
+          "get_cdo_properties",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

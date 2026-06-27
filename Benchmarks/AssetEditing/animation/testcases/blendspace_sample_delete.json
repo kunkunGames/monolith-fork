@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "blendspace_sample_delete",
+  "route_edit_domain": "blendspace_sample_delete",
+  "module_id": "asset_authoring.animation.blendspace_sample_delete",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.blendspace_sample_delete",
+    "edit": "asset_operation.edit.animation.blendspace_sample_delete",
+    "save": "asset_operation.save.animation.blendspace_sample_delete",
+    "readback_verify": "asset_operation.readback_verify.animation.blendspace_sample_delete"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-531"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-531",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "blendspace_sample_delete",
+      "blueprint_type": "",
+      "workflow": "animation_blendspace_sample_delete_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "create_blend_space",
+        "add_blendspace_sample",
+        "delete_blendspace_sample",
+        "save_asset",
+        "get_blend_space_info",
+        "inspect_asset"
+      ],
+      "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-531",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteIdle",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteLeft",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteRight",
+              "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteIdle",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchBSDeleteIdle",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteLeft",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchBSDeleteLeft",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteRight",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchBSDeleteRight",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_blend_space",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "axis_x_name": "Speed",
+            "axis_x_min": 0,
+            "axis_x_max": 600,
+            "axis_y_name": "Direction",
+            "axis_y_min": -180,
+            "axis_y_max": 180
+          },
+          "contains": [
+            "BS_BenchSampleDelete",
+            "SkeletalCube_Skeleton",
+            "Speed",
+            "Direction"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_blendspace_sample",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteIdle",
+            "x": 0,
+            "y": 0
+          },
+          "contains": [
+            "A_BenchBSDeleteIdle",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_blendspace_sample",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteLeft",
+            "x": 300,
+            "y": -90
+          },
+          "contains": [
+            "A_BenchBSDeleteLeft",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_blendspace_sample",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBSDeleteRight",
+            "x": 300,
+            "y": 90
+          },
+          "contains": [
+            "A_BenchBSDeleteRight",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "delete_blendspace_sample",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete",
+            "sample_index": 2
+          },
+          "contains": [
+            "deleted_index",
+            "2",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_blend_space_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete"
+          },
+          "contains": [
+            "BS_BenchSampleDelete",
+            "sample_count",
+            "2",
+            "A_BenchBSDeleteIdle",
+            "A_BenchBSDeleteLeft"
+          ],
+          "not_contains": [
+            "A_BenchBSDeleteRight"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSampleDelete"
+          },
+          "contains": [
+            "BS_BenchSampleDelete",
+            "BlendSpace"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blendspace_sample_delete",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_blendspace_sample_delete_roundtrip",
+      "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/unreal-engine/blend-spaces-in-unreal-engine?lang=en-US",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "create_blend_space",
+          "add_blendspace_sample",
+          "delete_blendspace_sample",
+          "save_asset",
+          "get_blend_space_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

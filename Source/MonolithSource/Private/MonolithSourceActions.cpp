@@ -1406,14 +1406,34 @@ FMonolithSourceActions::FResolveReadResult FMonolithSourceActions::ResolveAndRea
 	}
 	else
 	{
-		// Normalize separators to backslashes to match DB-stored paths.
-		FString NormalizedPath = RequestedPath;
-		NormalizedPath.ReplaceInline(TEXT("/"), TEXT("\\"));
+		TArray<FString> LookupPaths;
+		LookupPaths.AddUnique(RequestedPath);
+		FString BackslashPath = RequestedPath;
+		BackslashPath.ReplaceInline(TEXT("/"), TEXT("\\"));
+		LookupPaths.AddUnique(BackslashPath);
+		FString SlashPath = RequestedPath;
+		SlashPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+		LookupPaths.AddUnique(SlashPath);
 
-		TOptional<FMonolithSourceFile> F = DB->FindFileByPath(NormalizedPath);
+		TOptional<FMonolithSourceFile> F;
+		for (const FString& LookupPath : LookupPaths)
+		{
+			F = DB->FindFileByPath(LookupPath);
+			if (F.IsSet())
+			{
+				break;
+			}
+		}
 		if (!F.IsSet())
 		{
-			F = DB->FindFileBySuffix(NormalizedPath);
+			for (const FString& LookupPath : LookupPaths)
+			{
+				F = DB->FindFileBySuffix(LookupPath);
+				if (F.IsSet())
+				{
+					break;
+				}
+			}
 		}
 		if (F.IsSet())
 		{

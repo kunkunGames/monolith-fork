@@ -103,7 +103,7 @@ Both keep their public signatures and outputs; existing tests are the parity gua
 - `path` must normalize to a mounted Unreal long package path such as `/Game` or another mounted content root. Invalid paths return `-32602` instead of silently falling back to `/Game`.
 - `class_names` accepts class object paths (`/Script/Engine.Texture2D`), asset class paths (`/Script/Engine.Blueprint`), and short names (`Texture2D`, `Blueprint`). Short names are resolved before adding `FTopLevelAssetPath` values to `FARFilter.ClassPaths`.
 - Unknown `class_names` entries are invalid params (`-32602`) with an `unknown_class_names` array in the error details. Do not ignore misspelled filters.
-- `Blueprint` means the `UBlueprint` asset class. It does not mean "any generated class whose parent is a Blueprint class." `WidgetBlueprint`, `AnimBlueprint`, and similar specialized asset classes must be requested explicitly or reached through `bRecursiveClasses` when Unreal's class hierarchy supports it.
+- `Blueprint` means the `UBlueprint` asset class. It does not mean "any generated class whose parent is a Blueprint class." `WidgetBlueprint`, `AnimBlueprint`, and similar dedicated asset classes must be requested explicitly or reached through `bRecursiveClasses` when Unreal's class hierarchy supports it.
 - `class` is a schema alias for `class_names`; the existing `FParamSchemaBuilder` alias flow rewrites it before handler validation.
 - Schema type strings must stay within the current validator vocabulary (`array`, `integer`, `boolean`, etc.). Element-level checks for `class_names` are handler-owned unless the shared validator is extended in the same change.
 
@@ -149,7 +149,7 @@ For each trimmed entry:
 
 This intentionally avoids a hand-maintained short-name→path table: the engine's `UClass` registry is the single source of truth, so new/plugin asset classes work without spec edits, and the resolver stays consistent with the rest of the codebase. `NativeFirst` disambiguates the rare case of two classes sharing a short name. The previous static table is removed because it duplicated engine-owned knowledge, would rot on every new asset class, and contradicted the consolidation goal.
 
-`Blueprint` resolves to `UBlueprint` and filters assets whose **asset class** is `UBlueprint`; specialized Blueprint asset classes (`WidgetBlueprint`, `AnimBlueprint`) must be passed by their own name and are reached as subclasses only when `bRecursiveClasses` and the class hierarchy support it.
+`Blueprint` resolves to `UBlueprint` and filters assets whose **asset class** is `UBlueprint`; dedicated Blueprint asset classes (`WidgetBlueprint`, `AnimBlueprint`) must be passed by their own name and are reached as subclasses only when `bRecursiveClasses` and the class hierarchy support it.
 
 ### 4.2 Scoring policy (asset corpus, Search intent)
 

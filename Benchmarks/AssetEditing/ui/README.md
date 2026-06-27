@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `box_shadow_mid` | 1 | `asset_authoring.ui.box_shadow_mid` | `testcases\box_shadow_mid.json` |
 | `commonui_action_widget_binding` | 1 | `asset_authoring.ui.commonui_action_widget_binding` | `testcases\commonui_action_widget_binding.json` |

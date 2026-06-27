@@ -6,21 +6,22 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 2 |
-| `edit` | 2 |
-| `save` | 2 |
-| `readback_verify` | 2 |
+| `creation_or_import` | 3 |
+| `edit` | 3 |
+| `save` | 3 |
+| `readback_verify` | 3 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 2 |
+| `create_save` | 3 |
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
+| `cleanup_generated_assets` | 1 | `asset_authoring.project.cleanup_generated_assets` | `testcases\cleanup_generated_assets.json` |
 | `index_details_text` | 1 | `asset_authoring.project.index_details_text` | `testcases\index_details_text.json` |
 | `saved_asset_state` | 1 | `asset_authoring.project.saved_asset_state` | `testcases\saved_asset_state.json` |
 

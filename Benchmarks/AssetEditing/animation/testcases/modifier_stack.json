@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "modifier_stack",
+  "route_edit_domain": "modifier_stack",
+  "module_id": "asset_authoring.animation.modifier_stack",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.modifier_stack",
+    "edit": "asset_operation.edit.animation.modifier_stack",
+    "save": "asset_operation.save.animation.modifier_stack",
+    "readback_verify": "asset_operation.readback_verify.animation.modifier_stack"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-536"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-536",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "modifier_stack",
+      "blueprint_type": "",
+      "workflow": "animation_modifier_stack_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "apply_anim_modifier",
+        "save_asset",
+        "list_anim_modifiers",
+        "get_sequence_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, persist an engine AnimationModifier into its modifier stack, save it, and read the saved modifier metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-536",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchAnimModifierStack",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "apply_anim_modifier",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack",
+            "modifier_class": "AnimationModifier",
+            "persist": true
+          },
+          "contains": [
+            "A_BenchAnimModifierStack",
+            "AnimationModifier",
+            "persisted",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "list_anim_modifiers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack"
+          },
+          "contains": [
+            "A_BenchAnimModifierStack",
+            "AnimationModifier",
+            "count",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack"
+          },
+          "contains": [
+            "A_BenchAnimModifierStack",
+            "AnimSequence",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchAnimModifierStack"
+          },
+          "contains": [
+            "A_BenchAnimModifierStack",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "modifier_stack",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_modifier_stack_roundtrip",
+      "description": "Create an AnimSequence, persist an engine AnimationModifier into its modifier stack, save it, and read the saved modifier metadata back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-modifiers-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "apply_anim_modifier",
+          "save_asset",
+          "list_anim_modifiers",
+          "get_sequence_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

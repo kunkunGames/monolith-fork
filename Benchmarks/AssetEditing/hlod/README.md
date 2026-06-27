@@ -19,9 +19,9 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
-| `hlod_layer` | 1 | `asset_authoring.hlod.layer` | `testcases\layer.json` |
+| `layer` | 1 | `asset_authoring.hlod.layer` | `testcases\layer.json` |
 | `mesh_setup_layer` | 1 | `asset_authoring.hlod.mesh_setup_layer` | `testcases\mesh_setup_layer.json` |
 
 ## Common Commands

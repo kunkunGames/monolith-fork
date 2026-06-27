@@ -19,7 +19,7 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 ## Test Cases
 
-| Edit domain | Tasks | Module | Case file |
+| Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `generated_image_import` | 1 | `asset_authoring.imagegen.generated_image_import` | `testcases\generated_image_import.json` |
 | `generated_texture` | 1 | `asset_authoring.imagegen.generated_texture` | `testcases\generated_texture.json` |
