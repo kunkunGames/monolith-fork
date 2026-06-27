@@ -6167,9 +6167,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveIKSolver(const TSha
 	UIKRigController* C = UIKRigController::GetController(Asset);
 	if (!C) return FMonolithActionResult::Error(TEXT("Failed to get IKRigController"));
 
-	if (!Params->HasField(TEXT("solver_index")))
-		return FMonolithActionResult::Error(TEXT("solver_index is required"));
-	const int32 SolverIndex = static_cast<int32>(Params->GetNumberField(TEXT("solver_index")));
+	double SolverIndexRaw = 0;
+	if (!Params->TryGetNumberField(TEXT("solver_index"), SolverIndexRaw))
+		return FMonolithActionResult::Error(TEXT("Parameter \'solver_index\' must be a number"));
+	const int32 SolverIndex = static_cast<int32>(SolverIndexRaw);
 
 	const int32 NumSolvers = C->GetNumSolvers();
 	if (SolverIndex < 0 || SolverIndex >= NumSolvers)
@@ -8633,7 +8634,10 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildStateMachine(const T
 		{
 			continue;
 		}
-		FString StateName = (*StateObj)->GetStringField(TEXT("name"));
+
+		FString StateName;
+		if (!(*StateObj)->TryGetStringField(TEXT("name"), StateName))
+			return FMonolithActionResult::Error(TEXT("Parameter \'name\' in states array must be a string"));
 
 		TSharedPtr<FJsonObject> Rep = MakeShared<FJsonObject>();
 		Rep->SetStringField(TEXT("name"), StateName);
@@ -8659,7 +8663,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildStateMachine(const T
 		// Optional animation wiring.
 		if ((*StateObj)->HasField(TEXT("animation")))
 		{
-			FString AnimPath = (*StateObj)->GetStringField(TEXT("animation"));
+			FString AnimPath;
+			if (!(*StateObj)->TryGetStringField(TEXT("animation"), AnimPath))
+				return FMonolithActionResult::Error(TEXT("Parameter \'animation\' in states array must be a string"));
 			if (!AnimPath.IsEmpty())
 			{
 				UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AnimPath);
