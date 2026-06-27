@@ -13329,7 +13329,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandlePreviewSystem(const TShared
 FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -13403,16 +13405,26 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString PropertyName = Params->GetStringField(TEXT("property"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'property' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid()) return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
 	int32 HandlerIndex = -1;
-	double HandlerIndex_Double = HandlerIndex;
-	if (Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double)) HandlerIndex = static_cast<int32>(HandlerIndex_Double);
-	FString UsageIdStr = FString();
-	Params->TryGetStringField(TEXT("usage_id"), UsageIdStr);
+	if (Params->HasField(TEXT("handler_index")))
+	{
+		double HandlerIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double))
+			return FMonolithActionResult::Error(TEXT("Parameter 'handler_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		HandlerIndex = static_cast<int32>(HandlerIndex_Double);
+	}
+	FString UsageIdStr;
+	if (Params->HasField(TEXT("usage_id")) && !Params->TryGetStringField(TEXT("usage_id"), UsageIdStr))
+		return FMonolithActionResult::Error(TEXT("Parameter 'usage_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (HandlerIndex < 0 && UsageIdStr.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide handler_index or usage_id"));
@@ -13537,13 +13549,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetEventHandlerProperty(con
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	int32 HandlerIndex = -1;
-	double HandlerIndex_Double = HandlerIndex;
-	if (Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double)) HandlerIndex = static_cast<int32>(HandlerIndex_Double);
-	FString UsageIdStr = FString();
-	Params->TryGetStringField(TEXT("usage_id"), UsageIdStr);
+	if (Params->HasField(TEXT("handler_index")))
+	{
+		double HandlerIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("handler_index"), HandlerIndex_Double))
+			return FMonolithActionResult::Error(TEXT("Parameter 'handler_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		HandlerIndex = static_cast<int32>(HandlerIndex_Double);
+	}
+	FString UsageIdStr;
+	if (Params->HasField(TEXT("usage_id")) && !Params->TryGetStringField(TEXT("usage_id"), UsageIdStr))
+		return FMonolithActionResult::Error(TEXT("Parameter 'usage_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (HandlerIndex < 0 && UsageIdStr.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide handler_index or usage_id"));
@@ -13611,7 +13631,9 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveEventHandler(const TS
 FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -13711,16 +13733,26 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const T
 FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString PropertyName = Params->GetStringField(TEXT("property"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property"), PropertyName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'property' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid()) return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
 	int32 StageIndex = -1;
-	double StageIndex_Double = StageIndex;
-	if (Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double)) StageIndex = static_cast<int32>(StageIndex_Double);
-	FString StageName = FString();
-	Params->TryGetStringField(TEXT("stage_name"), StageName);
+	if (Params->HasField(TEXT("stage_index")))
+	{
+		double StageIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double))
+			return FMonolithActionResult::Error(TEXT("Parameter 'stage_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		StageIndex = static_cast<int32>(StageIndex_Double);
+	}
+	FString StageName;
+	if (Params->HasField(TEXT("stage_name")) && !Params->TryGetStringField(TEXT("stage_name"), StageName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'stage_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (StageIndex < 0 && StageName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide stage_index or stage_name"));
@@ -13877,13 +13909,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetSimulationStageProperty(
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	int32 StageIndex = -1;
-	double StageIndex_Double = StageIndex;
-	if (Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double)) StageIndex = static_cast<int32>(StageIndex_Double);
-	FString StageName = FString();
-	Params->TryGetStringField(TEXT("stage_name"), StageName);
+	if (Params->HasField(TEXT("stage_index")))
+	{
+		double StageIndex_Double;
+		if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndex_Double))
+			return FMonolithActionResult::Error(TEXT("Parameter 'stage_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		StageIndex = static_cast<int32>(StageIndex_Double);
+	}
+	FString StageName;
+	if (Params->HasField(TEXT("stage_name")) && !Params->TryGetStringField(TEXT("stage_name"), StageName))
+		return FMonolithActionResult::Error(TEXT("Parameter 'stage_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (StageIndex < 0 && StageName.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Must provide stage_index or stage_name"));
@@ -13950,8 +13990,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveSimulationStage(const
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleOutputParameters(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid))
+		return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
