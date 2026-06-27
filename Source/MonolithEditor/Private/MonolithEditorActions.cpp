@@ -7903,6 +7903,7 @@ namespace MonolithEditorPieSmoke
 				}
 
 				TArray<TSharedPtr<FJsonValue>> ActorArr;
+				ActorArr.Reserve(Entry.Actors.Num());
 				for (const FPieSmokeSpawnedActorResult& A : Entry.Actors)
 				{
 					TSharedPtr<FJsonObject> AObj = MakeShared<FJsonObject>();
