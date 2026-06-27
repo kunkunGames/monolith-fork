@@ -1489,13 +1489,51 @@ FMonolithActionResult FMonolithMeshFacadeActions::ApplyHorrorDamage(const TShare
 	}
 
 	// Parse params
-	float DamageLevel = Params->HasField(TEXT("damage_level")) ? static_cast<float>(Params->GetNumberField(TEXT("damage_level"))) : 0.5f;
+	double TmpVal = 0.0;
+	float DamageLevel = 0.5f;
+	if (Params->HasField(TEXT("damage_level")))
+	{
+		if (!Params->TryGetNumberField(TEXT("damage_level"), TmpVal))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'damage_level', must be a number"));
+		DamageLevel = static_cast<float>(TmpVal);
+	}
 	DamageLevel = FMath::Clamp(DamageLevel, 0.0f, 1.0f);
-	int32 Seed = Params->HasField(TEXT("seed")) ? static_cast<int32>(Params->GetNumberField(TEXT("seed"))) : 42;
-	float BoardedFraction = Params->HasField(TEXT("boarded_windows")) ? static_cast<float>(Params->GetNumberField(TEXT("boarded_windows"))) : 0.3f;
-	float BrokenFraction = Params->HasField(TEXT("broken_glass")) ? static_cast<float>(Params->GetNumberField(TEXT("broken_glass"))) : 0.2f;
-	bool bRustStains = !Params->HasField(TEXT("rust_stains")) || Params->GetBoolField(TEXT("rust_stains"));
-	bool bCracks = !Params->HasField(TEXT("cracks")) || Params->GetBoolField(TEXT("cracks"));
+
+	int32 Seed = 42;
+	if (Params->HasField(TEXT("seed")))
+	{
+		if (!Params->TryGetNumberField(TEXT("seed"), TmpVal))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed', must be a number"));
+		Seed = static_cast<int32>(TmpVal);
+	}
+
+	float BoardedFraction = 0.3f;
+	if (Params->HasField(TEXT("boarded_windows")))
+	{
+		if (!Params->TryGetNumberField(TEXT("boarded_windows"), TmpVal))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'boarded_windows', must be a number"));
+		BoardedFraction = static_cast<float>(TmpVal);
+	}
+
+	float BrokenFraction = 0.2f;
+	if (Params->HasField(TEXT("broken_glass")))
+	{
+		if (!Params->TryGetNumberField(TEXT("broken_glass"), TmpVal))
+			return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'broken_glass', must be a number"));
+		BrokenFraction = static_cast<float>(TmpVal);
+	}
+
+	bool bRustStains = true;
+	if (Params->HasField(TEXT("rust_stains")) && !Params->TryGetBoolField(TEXT("rust_stains"), bRustStains))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'rust_stains', must be a boolean"));
+	}
+
+	bool bCracks = true;
+	if (Params->HasField(TEXT("cracks")) && !Params->TryGetBoolField(TEXT("cracks"), bCracks))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'cracks', must be a boolean"));
+	}
 
 	// Get the actor's bounds to estimate facade dimensions
 	FBox ActorBounds = TargetActor->GetComponentsBoundingBox();

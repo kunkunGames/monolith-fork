@@ -266,4 +266,37 @@ bool FMonolithParamGuardWorldGenScatterSurfaceTest::RunTest(const FString& Param
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenHorrorDamageMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.ApplyHorrorDamageRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenHorrorDamageMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshFacadeActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("apply_horror_damage action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("apply_horror_damage")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("target_actor"), TEXT("TestFacadeActor"));
+
+	// Add malformed damage_level
+	Params->SetStringField(TEXT("damage_level"), TEXT("extreme"));
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("apply_horror_damage"), Params);
+	TestFalse(TEXT("apply_horror_damage rejects malformed damage_level parameter"), Result.bSuccess);
+	TestTrue(TEXT("apply_horror_damage reports the validation error for damage_level"), Result.ErrorMessage.Contains(TEXT("damage_level")));
+
+	// Add malformed seed
+	Params->RemoveField(TEXT("damage_level"));
+	Params->SetStringField(TEXT("seed"), TEXT("random"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("apply_horror_damage"), Params);
+	TestFalse(TEXT("apply_horror_damage rejects malformed seed parameter"), Result.bSuccess);
+	TestTrue(TEXT("apply_horror_damage reports the validation error for seed"), Result.ErrorMessage.Contains(TEXT("seed")));
+
+	// Add malformed cracks
+	Params->RemoveField(TEXT("seed"));
+	Params->SetStringField(TEXT("cracks"), TEXT("true"));
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("apply_horror_damage"), Params);
+	TestFalse(TEXT("apply_horror_damage rejects malformed cracks parameter"), Result.bSuccess);
+	TestTrue(TEXT("apply_horror_damage reports the validation error for cracks"), Result.ErrorMessage.Contains(TEXT("cracks")));
+
+	return true;
+}
+
 #endif // WITH_GEOMETRYSCRIPT

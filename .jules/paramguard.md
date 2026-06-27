@@ -114,3 +114,7 @@ YYYY-MM-DD - [Do not skip type validation on optional nested numeric values] \n\
 **Learning:** Returning a raw string from an action handler bypasses the standard RPC error formatting and results in the client receiving a "success" response containing an error string, rather than a structured JSON-RPC error.
 **Prevention:** Always wrap parameter validation failure messages in `FMonolithActionResult::Error(...)` to ensure the server correctly identifies and formats the failure.
 **Avoid:** Merging type-safety PRs that return bare strings or booleans instead of structured `FMonolithActionResult` objects on failure.
+## YYYY-MM-DD - Reject malformed string types in apply_horror_damage
+**Malformed input pattern:** Using `HasField` combined with direct unchecked cast and `GetNumberField` or `GetBoolField` inside `apply_horror_damage` action in `MonolithMeshFacadeActions.cpp`.
+**Learning:** Checking for field existence with `HasField` does not guarantee the type of the value returned by `GetNumberField` or `GetBoolField`. Malformed JSON specifying string fields or other incorrect types for dimensions or mesh characteristics will trigger unhandled assertions and crashes.
+**Prevention:** Handlers extracting complex sub-parameters nested in optional structs or procedural options must extract parameters using `TryGet*Field`. When extracting numeric configurations, the method must return an error gracefully rather than forcing the engine assertion to occur.
