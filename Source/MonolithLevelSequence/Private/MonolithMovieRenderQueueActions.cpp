@@ -162,12 +162,18 @@ TSharedPtr<FJsonObject> QueueToJson(UMoviePipelineQueue* Queue, UMoviePipelineQu
 
 bool GetOneBasedIndex(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 Max, int32& OutZeroBased, FString& OutError)
 {
-	int32 OneBased = 0;
-	if (!Params->TryGetNumberField(FieldName, OneBased))
+	double OneBasedDouble = 0.0;
+	if (Params->HasField(FieldName) && !Params->TryGetNumberField(FieldName, OneBasedDouble))
+	{
+		OutError = FString::Printf(TEXT("Invalid type for '%s', expected a number."), FieldName);
+		return false;
+	}
+	if (!Params->HasField(FieldName))
 	{
 		OutError = FString::Printf(TEXT("%s is required"), FieldName);
 		return false;
 	}
+	int32 OneBased = static_cast<int32>(OneBasedDouble);
 	if (OneBased < 1 || OneBased > Max)
 	{
 		OutError = FString::Printf(TEXT("%s %d is out of range (1-%d)"), FieldName, OneBased, Max);
@@ -343,7 +349,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::LoadQueue(const TSharedP
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.TrimStartAndEnd().IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for 'asset_path', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.TrimStartAndEnd().IsEmpty())
 	{
 		return ErrorInvalidParams(TEXT("asset_path is required"));
 	}
@@ -390,7 +400,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::SaveQueue(const TSharedP
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.TrimStartAndEnd().IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for 'asset_path', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.TrimStartAndEnd().IsEmpty())
 	{
 		return ErrorInvalidParams(TEXT("asset_path is required"));
 	}
@@ -470,7 +484,11 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::AddJob(const TSharedPtr<
 	}
 
 	FString SequencePath;
-	if (!Params->TryGetStringField(TEXT("sequence_path"), SequencePath) || SequencePath.TrimStartAndEnd().IsEmpty())
+	if (Params->HasField(TEXT("sequence_path")) && !Params->TryGetStringField(TEXT("sequence_path"), SequencePath))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for 'sequence_path', expected a string."));
+	}
+	if (!Params->HasField(TEXT("sequence_path")) || SequencePath.TrimStartAndEnd().IsEmpty())
 	{
 		return ErrorInvalidParams(TEXT("sequence_path is required"));
 	}
