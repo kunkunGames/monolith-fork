@@ -12064,10 +12064,12 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchRetargetAnimations(c
 	Root->SetNumberField(TEXT("retarget_op_count"), C->GetNumRetargetOps());
 
 	TArray<TSharedPtr<FJsonValue>> CreatedArr;
+	CreatedArr.Reserve(CreatedPaths.Num());
 	for (const FString& P : CreatedPaths) CreatedArr.Add(MakeShared<FJsonValueString>(P));
 	Root->SetArrayField(TEXT("created_assets"), CreatedArr);
 
 	TArray<TSharedPtr<FJsonValue>> SkippedArr;
+	SkippedArr.Reserve(SkippedSources.Num());
 	for (const FString& P : SkippedSources) SkippedArr.Add(MakeShared<FJsonValueString>(P));
 	Root->SetArrayField(TEXT("skipped_sources"), SkippedArr);
 
