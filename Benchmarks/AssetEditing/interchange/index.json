@@ -21,10 +21,10 @@
     "BEB-290",
     "BEB-291",
     "BEB-292",
-    "BEB-358",
-    "BEB-398",
-    "BEB-415",
-    "BEB-422"
+    "BEB-360",
+    "BEB-401",
+    "BEB-418",
+    "BEB-425"
   ],
   "task_refs": [
     {
@@ -149,7 +149,7 @@
       "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
     },
     {
-      "id": "BEB-358",
+      "id": "BEB-360",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -177,7 +177,7 @@
       "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
     },
     {
-      "id": "BEB-398",
+      "id": "BEB-401",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -206,7 +206,7 @@
       "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
     },
     {
-      "id": "BEB-415",
+      "id": "BEB-418",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -236,7 +236,7 @@
       "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
     },
     {
-      "id": "BEB-422",
+      "id": "BEB-425",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -310,7 +310,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-358"
+        "BEB-360"
       ],
       "case_file": "testcases\\batch_import.json"
     },
@@ -332,7 +332,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-415"
+        "BEB-418"
       ],
       "case_file": "testcases\\batch_reimport.json"
     },
@@ -354,7 +354,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-422"
+        "BEB-425"
       ],
       "case_file": "testcases\\generic_import.json"
     },
@@ -376,7 +376,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-398"
+        "BEB-401"
       ],
       "case_file": "testcases\\generic_options_import.json"
     },

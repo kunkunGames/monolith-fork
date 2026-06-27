@@ -1671,9 +1671,36 @@ def is_synthetic_param_guard_fixture(
     if namespace == "input" and action == "create_input_action" and isinstance(args, dict):
         return args.get("asset_path") == "/Game/GAS/Input/IA_ParamGuard"
 
+    if namespace == "worldgen" and action == "scatter_props" and isinstance(args, dict):
+        volume_name = str(args.get("volume_name") or "")
+        asset_paths = args.get("asset_paths")
+        count = args.get("count")
+        collision_mode = str(args.get("collision_mode") or "")
+        has_test_prop = isinstance(asset_paths, list) and asset_paths == ["/Game/TestProp"]
+        if not args and "missing required param" in message_lower and "volume_name" in message_lower:
+            return True
+        if volume_name == "TestVolume" and (
+            "missing required param" in message_lower
+            or (has_test_prop and count == 0)
+            or (has_test_prop and count == 5 and collision_mode == "invalid_mode")
+        ):
+            return True
+
     if namespace == "material" and action == "create_function_instance" and isinstance(args, dict):
         if args.get("parent") == "/Game/ParentFunction":
             return "malformedpath" in args_blob or "testfunctioninstance" in args_blob or "package path is empty" in message_lower
+
+    if namespace == "material" and action == "move_expression" and isinstance(args, dict):
+        if args.get("asset_path") == "/Game/DoesNotMatter":
+            if args.get("pos_x") is True or args.get("expression_name") == 123:
+                return True
+            expressions = args.get("expressions")
+            if isinstance(expressions, list) and len(expressions) == 1 and isinstance(expressions[0], dict):
+                expr = expressions[0]
+                if expr == {"x": 100}:
+                    return True
+                if expr.get("name") == "MyExpr" and expr.get("x") == "100":
+                    return True
 
     if namespace == "imagegen" and isinstance(args, dict):
         if action == "generate_svg":

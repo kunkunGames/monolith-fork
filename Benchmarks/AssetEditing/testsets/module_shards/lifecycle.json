@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "lifecycle",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/lifecycle.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 3,
   "routing_axes": [
     "category",
@@ -50,7 +50,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 262,
+      "task_count": 265,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -103,12 +103,12 @@
       },
       "task_count": 2,
       "task_ids": [
-        "BEB-352",
-        "BEB-424"
+        "BEB-354",
+        "BEB-427"
       ],
       "task_refs": [
         {
-          "id": "BEB-352",
+          "id": "BEB-354",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -136,7 +136,7 @@
           "description": "Create a dynamic Content Browser collection, edit its project asset query, color it, and read the query back"
         },
         {
-          "id": "BEB-424",
+          "id": "BEB-427",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -164,44 +164,44 @@
       "groups": {
         "by_category": {
           "asset_authoring": [
-            "BEB-352",
-            "BEB-424"
+            "BEB-354",
+            "BEB-427"
           ]
         },
         "by_domain": {
           "collection": [
-            "BEB-352"
+            "BEB-354"
           ],
           "editor": [
-            "BEB-424"
+            "BEB-427"
           ]
         },
         "by_edit_domain": {
           "content_browser_dynamic_collection": [
-            "BEB-352"
+            "BEB-354"
           ],
           "empty_map_asset": [
-            "BEB-424"
+            "BEB-427"
           ]
         },
         "by_blueprint_type": {
           "general": [
-            "BEB-352",
-            "BEB-424"
+            "BEB-354",
+            "BEB-427"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-352",
-            "BEB-424"
+            "BEB-354",
+            "BEB-427"
           ],
           "edit": [
-            "BEB-352",
-            "BEB-424"
+            "BEB-354",
+            "BEB-427"
           ],
           "readback_verify": [
-            "BEB-352",
-            "BEB-424"
+            "BEB-354",
+            "BEB-427"
           ]
         }
       },
@@ -228,7 +228,7 @@
           "create_save"
         ]
       },
-      "task_count": 262,
+      "task_count": 265,
       "task_ids": [
         "BEB-279",
         "BEB-280",
@@ -303,8 +303,8 @@
         "BEB-349",
         "BEB-350",
         "BEB-351",
+        "BEB-352",
         "BEB-353",
-        "BEB-354",
         "BEB-355",
         "BEB-356",
         "BEB-357",
@@ -374,9 +374,9 @@
         "BEB-421",
         "BEB-422",
         "BEB-423",
+        "BEB-424",
         "BEB-425",
         "BEB-426",
-        "BEB-427",
         "BEB-428",
         "BEB-429",
         "BEB-430",
@@ -491,7 +491,10 @@
         "BEB-539",
         "BEB-540",
         "BEB-541",
-        "BEB-542"
+        "BEB-542",
+        "BEB-543",
+        "BEB-544",
+        "BEB-545"
       ],
       "task_refs": [
         {
@@ -1766,6 +1769,74 @@
           "tool": "monolith_query",
           "action": "op_chain",
           "domain": "animation",
+          "edit_domain": "retarget_chain_mapping",
+          "blueprint_type": "",
+          "workflow": "animation_retarget_chain_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "get_skeleton_info",
+            "add_retarget_chain",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "set_retarget_chain_mapping",
+            "save_asset",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create source and target IKRig chains, assign them to an IK Retargeter, clear auto mappings, set an explicit chain mapping, save, and read the mapping back"
+        },
+        {
+          "id": "BEB-322",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "retarget_chain_settings",
+          "blueprint_type": "",
+          "workflow": "animation_retarget_chain_settings_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "get_skeleton_info",
+            "add_retarget_chain",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "set_retarget_chain_mapping",
+            "set_retarget_chain_settings",
+            "save_asset",
+            "get_retarget_chain_settings",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create source and target IKRig chains, assign them to an IK Retargeter, map the target chain, edit FK retarget-chain settings, save, and read those settings back"
+        },
+        {
+          "id": "BEB-323",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
           "edit_domain": "ik_retargeter_pose_settings",
           "blueprint_type": "",
           "workflow": "animation_ik_retargeter_pose_settings_roundtrip",
@@ -1793,7 +1864,7 @@
           "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back"
         },
         {
-          "id": "BEB-322",
+          "id": "BEB-324",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1827,7 +1898,7 @@
           "description": "Create a test SoundWave, SoundClass, and SoundCue, assign class metadata, save, validate, and read references back"
         },
         {
-          "id": "BEB-323",
+          "id": "BEB-325",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1857,7 +1928,7 @@
           "description": "Create a SoundWave-backed SoundCue, delete the cue through the audio namespace, and verify the source wave remains while the cue is gone"
         },
         {
-          "id": "BEB-324",
+          "id": "BEB-326",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1893,7 +1964,7 @@
           "description": "Create attenuation, mix, concurrency, and submix assets, edit routing settings, save, and read each value back"
         },
         {
-          "id": "BEB-325",
+          "id": "BEB-327",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1923,7 +1994,7 @@
           "description": "Build a SoundCue graph from a declarative spec with two WavePlayers feeding a Mixer, save it, and validate references"
         },
         {
-          "id": "BEB-326",
+          "id": "BEB-328",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1956,7 +2027,7 @@
           "description": "Apply a batch audio template to a generated SoundWave, save it, and read back routing/compression/looping fields"
         },
         {
-          "id": "BEB-327",
+          "id": "BEB-329",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1991,7 +2062,7 @@
           "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
         },
         {
-          "id": "BEB-328",
+          "id": "BEB-330",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2024,7 +2095,7 @@
           "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back"
         },
         {
-          "id": "BEB-329",
+          "id": "BEB-331",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2057,7 +2128,7 @@
           "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order"
         },
         {
-          "id": "BEB-330",
+          "id": "BEB-332",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2089,7 +2160,7 @@
           "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both"
         },
         {
-          "id": "BEB-331",
+          "id": "BEB-333",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2121,7 +2192,7 @@
           "description": "Create an EQS query, add a generator and scored/filtering test, save it, and inspect the query options"
         },
         {
-          "id": "BEB-332",
+          "id": "BEB-334",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2154,7 +2225,7 @@
           "description": "Create an EQS query, add two tests, reorder and remove tests, duplicate the query, save both assets, and inspect the edited structure"
         },
         {
-          "id": "BEB-333",
+          "id": "BEB-335",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2183,7 +2254,7 @@
           "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout"
         },
         {
-          "id": "BEB-334",
+          "id": "BEB-336",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2213,7 +2284,7 @@
           "description": "Create BehaviorTree Task/Decorator/Service Blueprint assets, save them, and verify their parent classes"
         },
         {
-          "id": "BEB-335",
+          "id": "BEB-337",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2242,7 +2313,7 @@
           "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
         },
         {
-          "id": "BEB-336",
+          "id": "BEB-338",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2278,7 +2349,7 @@
           "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect"
         },
         {
-          "id": "BEB-337",
+          "id": "BEB-339",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2313,7 +2384,7 @@
           "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state"
         },
         {
-          "id": "BEB-338",
+          "id": "BEB-340",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2342,7 +2413,7 @@
           "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata"
         },
         {
-          "id": "BEB-339",
+          "id": "BEB-341",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2373,7 +2444,7 @@
           "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag onto the effect, save both assets, and reverse-lookup the trigger"
         },
         {
-          "id": "BEB-340",
+          "id": "BEB-342",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2405,7 +2476,7 @@
           "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells"
         },
         {
-          "id": "BEB-341",
+          "id": "BEB-343",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2434,7 +2505,7 @@
           "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class"
         },
         {
-          "id": "BEB-342",
+          "id": "BEB-344",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2465,7 +2536,7 @@
           "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back"
         },
         {
-          "id": "BEB-343",
+          "id": "BEB-345",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2494,7 +2565,7 @@
           "description": "Create a CommonUI input-action DataTable, add keyboard/gamepad glyph rows, save, and read the rows back"
         },
         {
-          "id": "BEB-344",
+          "id": "BEB-346",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2525,7 +2596,7 @@
           "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects"
         },
         {
-          "id": "BEB-345",
+          "id": "BEB-347",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2561,7 +2632,7 @@
           "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config"
         },
         {
-          "id": "BEB-346",
+          "id": "BEB-348",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2590,7 +2661,7 @@
           "description": "Create a World Partition HLODLayer asset, reconfigure cell/loading settings, save, and inspect the reflected HLOD layer"
         },
         {
-          "id": "BEB-347",
+          "id": "BEB-349",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2623,7 +2694,7 @@
           "description": "Create a local Content Browser collection, add a generated Texture2D member, color it, and verify membership"
         },
         {
-          "id": "BEB-348",
+          "id": "BEB-350",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2654,7 +2725,7 @@
           "description": "Create a Widget Blueprint, add a TextBlock, author a multi-key UWidgetAnimation, save, and read animation tracks back"
         },
         {
-          "id": "BEB-349",
+          "id": "BEB-351",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2690,7 +2761,7 @@
           "description": "Create a Widget Blueprint, author Bezier and spring animation tracks, add timed animation events, bind a widget event to an animation, save, and read animation tracks back"
         },
         {
-          "id": "BEB-350",
+          "id": "BEB-352",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2718,7 +2789,7 @@
           "description": "Import externally generated PNG bytes as a Texture2D through ImageGen provenance, save, and inspect provenance/read-back"
         },
         {
-          "id": "BEB-351",
+          "id": "BEB-353",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2747,7 +2818,7 @@
           "description": "Create the reusable WorldGen blockout-volume Blueprint asset, save it, and verify its authoring variables"
         },
         {
-          "id": "BEB-353",
+          "id": "BEB-355",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2778,7 +2849,7 @@
           "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back"
         },
         {
-          "id": "BEB-354",
+          "id": "BEB-356",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2813,7 +2884,7 @@
           "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set"
         },
         {
-          "id": "BEB-355",
+          "id": "BEB-357",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2844,7 +2915,7 @@
           "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back"
         },
         {
-          "id": "BEB-356",
+          "id": "BEB-358",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2873,7 +2944,7 @@
           "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
         },
         {
-          "id": "BEB-357",
+          "id": "BEB-359",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2904,7 +2975,7 @@
           "description": "Create a child Blackboard without a parent, assign its parent via set_bb_parent, save, and verify inherited/local keys"
         },
         {
-          "id": "BEB-358",
+          "id": "BEB-360",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2932,7 +3003,7 @@
           "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
         },
         {
-          "id": "BEB-359",
+          "id": "BEB-361",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2964,7 +3035,7 @@
           "description": "Create a Chooser Table row that selects one Texture2D, rewrite the result asset reference to another Texture2D, save, and inspect the compiled chooser"
         },
         {
-          "id": "BEB-360",
+          "id": "BEB-362",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -2997,7 +3068,7 @@
           "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference"
         },
         {
-          "id": "BEB-361",
+          "id": "BEB-363",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3026,7 +3097,7 @@
           "description": "Create a procedural SoundWave, batch-edit core SoundWave properties, save it, then read volume and pitch back"
         },
         {
-          "id": "BEB-362",
+          "id": "BEB-364",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3057,7 +3128,7 @@
           "description": "Create parent/child SoundClass assets and a SoundMix ducking adjuster, save them, then read hierarchy and mix timing back"
         },
         {
-          "id": "BEB-363",
+          "id": "BEB-365",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3087,7 +3158,7 @@
           "description": "Create root and child SoundSubmix assets, reparent the child and set output volume, save both, then read hierarchy back"
         },
         {
-          "id": "BEB-364",
+          "id": "BEB-366",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3117,7 +3188,7 @@
           "description": "Create two SoundWaves, build a weighted-random SoundCue template, save it, then inspect graph nodes and wave references"
         },
         {
-          "id": "BEB-365",
+          "id": "BEB-367",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3147,7 +3218,7 @@
           "description": "Create near/far SoundWaves, build a DistanceCrossFade SoundCue template, save it, then inspect crossfade bands and references"
         },
         {
-          "id": "BEB-366",
+          "id": "BEB-368",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3180,7 +3251,7 @@
           "description": "Create a Niagara System, normalize its renderer slot, add a Sprite renderer, configure SubUV, save, and inspect renderer properties"
         },
         {
-          "id": "BEB-367",
+          "id": "BEB-369",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3213,7 +3284,7 @@
           "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
         },
         {
-          "id": "BEB-368",
+          "id": "BEB-370",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3247,7 +3318,7 @@
           "description": "Create a GPU Niagara emitter, add a simulation stage, edit iteration/execute behavior and particle lifetime, save, and read stage metadata back"
         },
         {
-          "id": "BEB-369",
+          "id": "BEB-371",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3279,7 +3350,7 @@
           "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
         },
         {
-          "id": "BEB-370",
+          "id": "BEB-372",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3310,7 +3381,7 @@
           "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
         },
         {
-          "id": "BEB-371",
+          "id": "BEB-373",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3343,7 +3414,38 @@
           "description": "Create a PoseSearch schema/database, add and edit an animation database entry, save, and read database metadata back"
         },
         {
-          "id": "BEB-372",
+          "id": "BEB-374",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "pose_search_schema_channels",
+          "blueprint_type": "",
+          "workflow": "animation_pose_search_schema_channels_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_skeleton_info",
+            "create_pose_search_schema",
+            "add_schema_channel",
+            "configure_schema_channel",
+            "save_asset",
+            "get_pose_search_schema",
+            "inspect_asset"
+          ],
+          "description": "Create a PoseSearch Schema, add Pose and Trajectory channels, configure sampled bones and trajectory samples, save, and read the channel data back"
+        },
+        {
+          "id": "BEB-375",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3373,7 +3475,7 @@
           "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back"
         },
         {
-          "id": "BEB-373",
+          "id": "BEB-376",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3403,7 +3505,7 @@
           "description": "Create two synthetic SoundWave assets, build a layered mixer SoundCue with per-layer volumes, save it, and read the graph back"
         },
         {
-          "id": "BEB-374",
+          "id": "BEB-377",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3433,7 +3535,7 @@
           "description": "Create a looping ambient SoundCue with Looping, Delay, Random, WavePlayer nodes, save it, and read the graph back"
         },
         {
-          "id": "BEB-375",
+          "id": "BEB-378",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3465,7 +3567,7 @@
           "description": "Create a Switch SoundCue, duplicate it, save both assets, and verify the duplicated graph and wave references"
         },
         {
-          "id": "BEB-376",
+          "id": "BEB-379",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3496,7 +3598,7 @@
           "description": "Create a static Content Browser collection, add two Texture2D assets, remove one, and verify remaining membership"
         },
         {
-          "id": "BEB-377",
+          "id": "BEB-380",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3528,7 +3630,7 @@
           "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back"
         },
         {
-          "id": "BEB-378",
+          "id": "BEB-381",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3562,7 +3664,7 @@
           "description": "Create two SoundWave assets, batch-assign shared class/attenuation/submix/looping settings, save both, and read back both routed assets"
         },
         {
-          "id": "BEB-379",
+          "id": "BEB-382",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3594,7 +3696,7 @@
           "description": "Create and edit a SoundConcurrency asset, batch-attach it to two SoundWaves, save all assets, and read the concurrency settings and registry entry back"
         },
         {
-          "id": "BEB-380",
+          "id": "BEB-383",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3624,7 +3726,7 @@
           "description": "Create two SoundWaves, batch-edit compression fields, batch-rename through the audio namespace, save renamed assets, and read compression plus registry names back"
         },
         {
-          "id": "BEB-381",
+          "id": "BEB-384",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3654,7 +3756,7 @@
           "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table"
         },
         {
-          "id": "BEB-382",
+          "id": "BEB-385",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3680,7 +3782,7 @@
           "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source"
         },
         {
-          "id": "BEB-383",
+          "id": "BEB-386",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3716,7 +3818,7 @@
           "description": "Create a Niagara System, add Mesh and Ribbon renderers, assign an engine StaticMesh, configure a ribbon trail and spawn shape, then read renderer and module metadata back"
         },
         {
-          "id": "BEB-384",
+          "id": "BEB-387",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3751,7 +3853,7 @@
           "description": "Create a Niagara HLSL module, add it to an emitter, capture the returned module GUID, duplicate that module, edit the duplicate input, save, and read both GUIDs back"
         },
         {
-          "id": "BEB-385",
+          "id": "BEB-388",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3786,7 +3888,7 @@
           "description": "Create two Niagara HLSL modules, add both to an emitter, move one module ahead of the other, disable the remaining module, save, and read stack order/state back"
         },
         {
-          "id": "BEB-386",
+          "id": "BEB-389",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3817,7 +3919,7 @@
           "description": "Submit a local deterministic ModelGen job, capture its job id, read and resolve the job artifact, import it as StaticMesh, save, and verify provenance"
         },
         {
-          "id": "BEB-387",
+          "id": "BEB-390",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3845,7 +3947,7 @@
           "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back"
         },
         {
-          "id": "BEB-388",
+          "id": "BEB-391",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3877,7 +3979,7 @@
           "description": "Create a StateTree asset, add and rename a root state, compile, save, and inspect the tree structure"
         },
         {
-          "id": "BEB-389",
+          "id": "BEB-392",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3908,7 +4010,7 @@
           "description": "Create a SmartObjectDefinition, add and configure a slot, save, and read slot metadata back"
         },
         {
-          "id": "BEB-390",
+          "id": "BEB-393",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3939,7 +4041,7 @@
           "description": "Create a SmartObjectDefinition, add a slot behavior definition, duplicate the definition, save both assets, and inspect behavior metadata"
         },
         {
-          "id": "BEB-391",
+          "id": "BEB-394",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -3969,7 +4071,7 @@
           "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata"
         },
         {
-          "id": "BEB-392",
+          "id": "BEB-395",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4000,7 +4102,7 @@
           "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata"
         },
         {
-          "id": "BEB-393",
+          "id": "BEB-396",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4032,7 +4134,7 @@
           "description": "Create a GeometryScript mesh handle, subdivide it, compute UVs, save it as StaticMesh, release the handle, and inspect the saved asset"
         },
         {
-          "id": "BEB-394",
+          "id": "BEB-397",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4060,7 +4162,7 @@
           "description": "Generate a parametric chair StaticMesh, save it under the benchmark folder, and inspect the generated mesh"
         },
         {
-          "id": "BEB-395",
+          "id": "BEB-398",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4097,7 +4199,7 @@
           "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back"
         },
         {
-          "id": "BEB-396",
+          "id": "BEB-399",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4132,7 +4234,7 @@
           "description": "Create SoundWaves and an empty SoundCue, add/connect/set/remove graph nodes through primitive actions, save it, and validate the resulting graph"
         },
         {
-          "id": "BEB-397",
+          "id": "BEB-400",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4168,7 +4270,7 @@
           "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back"
         },
         {
-          "id": "BEB-398",
+          "id": "BEB-401",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4197,7 +4299,7 @@
           "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
         },
         {
-          "id": "BEB-399",
+          "id": "BEB-402",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4227,7 +4329,7 @@
           "description": "Create two SoundWaves, batch-enable looping and PlayWhenSilent virtualization, save both, and verify looping plus the native VirtualizationMode enum read-back"
         },
         {
-          "id": "BEB-400",
+          "id": "BEB-403",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4257,7 +4359,7 @@
           "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
         },
         {
-          "id": "BEB-401",
+          "id": "BEB-404",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4288,7 +4390,7 @@
           "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back"
         },
         {
-          "id": "BEB-402",
+          "id": "BEB-405",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4324,7 +4426,7 @@
           "description": "Create a GeometryScript mesh handle, run plane-cut, normal recompute, smoothing, and collision generation, save it as StaticMesh, and inspect geometry/collision"
         },
         {
-          "id": "BEB-403",
+          "id": "BEB-406",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4354,7 +4456,7 @@
           "description": "Create a SoundWave, bind Monolith perception user data, save it, and read back exact hearing/noise settings"
         },
         {
-          "id": "BEB-404",
+          "id": "BEB-407",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4388,7 +4490,7 @@
           "description": "Create a Material Function, edit library metadata, layout and update it, delete an unconnected expression, save it, and read metadata/graph back"
         },
         {
-          "id": "BEB-405",
+          "id": "BEB-408",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4421,7 +4523,7 @@
           "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back"
         },
         {
-          "id": "BEB-406",
+          "id": "BEB-409",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4454,7 +4556,7 @@
           "description": "Create a Material graph, clear every expression, import a replacement graph through import_material_graph merge mode, save, and read the imported topology back"
         },
         {
-          "id": "BEB-407",
+          "id": "BEB-410",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4483,7 +4585,7 @@
           "description": "Build a Widget Blueprint from a UISpec document, save it, dump the UISpec back, and verify the generated widget tree"
         },
         {
-          "id": "BEB-408",
+          "id": "BEB-411",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4517,7 +4619,7 @@
           "description": "Create Blueprint FunctionLibrary, MacroLibrary, and Interface assets, apply type-specific graph edits, save them, and read back asset type metadata"
         },
         {
-          "id": "BEB-409",
+          "id": "BEB-412",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4552,7 +4654,7 @@
           "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back"
         },
         {
-          "id": "BEB-410",
+          "id": "BEB-413",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4584,7 +4686,7 @@
           "description": "Create a Chooser Table with a class context entry, retarget the context object class, save, and inspect/validate the new context class"
         },
         {
-          "id": "BEB-411",
+          "id": "BEB-414",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4615,7 +4717,7 @@
           "description": "Create a parametric StaticMesh, generate and persist a StaticMesh LOD chain, save it, and read the LOD chain back"
         },
         {
-          "id": "BEB-412",
+          "id": "BEB-415",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4646,7 +4748,7 @@
           "description": "Create an Actor Blueprint asset, duplicate it, reparent the copy to Pawn, save both assets, and read the copied parent metadata back"
         },
         {
-          "id": "BEB-413",
+          "id": "BEB-416",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4678,7 +4780,7 @@
           "description": "Create an Actor Blueprint, add a Timeline node plus float track keys, save it, and read the persisted timeline data back"
         },
         {
-          "id": "BEB-414",
+          "id": "BEB-417",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4714,7 +4816,7 @@
           "description": "Create a Widget Blueprint, apply CanvasPanel slot edits, set allowlisted TextBlock properties, expose widget variables, save, and read back tree/properties/variables"
         },
         {
-          "id": "BEB-415",
+          "id": "BEB-418",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4744,7 +4846,7 @@
           "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
         },
         {
-          "id": "BEB-416",
+          "id": "BEB-419",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4772,7 +4874,7 @@
           "description": "Import a Texture2D through the material namespace with normal-map settings, save it, and read compression/sRGB/LOD metadata back"
         },
         {
-          "id": "BEB-417",
+          "id": "BEB-420",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4803,7 +4905,7 @@
           "description": "Create a Material Function with a grouped scalar parameter, rename the function parameter group, save it, and export graph metadata to verify the new group"
         },
         {
-          "id": "BEB-418",
+          "id": "BEB-421",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4836,7 +4938,7 @@
           "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back"
         },
         {
-          "id": "BEB-419",
+          "id": "BEB-422",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4871,7 +4973,7 @@
           "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
         },
         {
-          "id": "BEB-420",
+          "id": "BEB-423",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4903,7 +5005,7 @@
           "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
         },
         {
-          "id": "BEB-421",
+          "id": "BEB-424",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4932,7 +5034,7 @@
           "description": "Generate a procedural pipe-network StaticMesh, save it under the benchmark folder, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-422",
+          "id": "BEB-425",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4961,7 +5063,7 @@
           "description": "Import a Texture2D through the generic Interchange import_asset entrypoint, save it, and read back import source metadata"
         },
         {
-          "id": "BEB-423",
+          "id": "BEB-426",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -4996,7 +5098,7 @@
           "description": "Create a Widget Blueprint, convert a Button to CommonButtonBase, create/apply a CommonButtonStyle, save it, and audit styled CommonUI state"
         },
         {
-          "id": "BEB-425",
+          "id": "BEB-428",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5026,7 +5128,7 @@
           "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
         },
         {
-          "id": "BEB-426",
+          "id": "BEB-429",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5057,7 +5159,7 @@
           "description": "Create a SoundWave, bind and then remove Monolith perception user data, save it, and verify the binding is absent"
         },
         {
-          "id": "BEB-427",
+          "id": "BEB-430",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5086,7 +5188,7 @@
           "description": "Create a reusable Niagara function script from HLSL, save it, and read back the generated graph plus CustomHlsl body"
         },
         {
-          "id": "BEB-428",
+          "id": "BEB-431",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5118,7 +5220,7 @@
           "description": "Create a Niagara emitter template asset, build a new system from a JSON spec that consumes the template, save it, and export the authored spec back"
         },
         {
-          "id": "BEB-429",
+          "id": "BEB-432",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5150,7 +5252,7 @@
           "description": "Create a Niagara System, import a JSON spec into it from a self-created emitter template, save, and verify overwrite-spec topology"
         },
         {
-          "id": "BEB-430",
+          "id": "BEB-433",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5183,7 +5285,7 @@
           "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
         },
         {
-          "id": "BEB-431",
+          "id": "BEB-434",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5212,7 +5314,7 @@
           "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
         },
         {
-          "id": "BEB-432",
+          "id": "BEB-435",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5240,7 +5342,7 @@
           "description": "Import two Texture2D assets, force an AssetRegistry refresh, then verify saved disk state through the project namespace and batch asset inspection"
         },
         {
-          "id": "BEB-433",
+          "id": "BEB-436",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5271,7 +5373,7 @@
           "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
         },
         {
-          "id": "BEB-434",
+          "id": "BEB-437",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5305,7 +5407,7 @@
           "description": "Create saved UMG template Widget Blueprints for menu, dialog, loading, inventory, save slots, and HUD element layouts, then read each generated tree back"
         },
         {
-          "id": "BEB-435",
+          "id": "BEB-438",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5334,7 +5436,7 @@
           "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
         },
         {
-          "id": "BEB-436",
+          "id": "BEB-439",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5365,7 +5467,7 @@
           "description": "Create an Actor Blueprint, add an ASC, set its replication mode, save, and read back component defaults plus validation metadata"
         },
         {
-          "id": "BEB-437",
+          "id": "BEB-440",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5395,7 +5497,7 @@
           "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
         },
         {
-          "id": "BEB-438",
+          "id": "BEB-441",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5427,7 +5529,7 @@
           "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
         },
         {
-          "id": "BEB-439",
+          "id": "BEB-442",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5461,7 +5563,7 @@
           "description": "Create a BehaviorTree with direct node, decorator, service, property, and delete edits, then read the exact authored graph back"
         },
         {
-          "id": "BEB-440",
+          "id": "BEB-443",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5491,7 +5593,7 @@
           "description": "Create a Niagara System, edit emitter data through direct property aliases, save, and read each property back"
         },
         {
-          "id": "BEB-441",
+          "id": "BEB-444",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5525,7 +5627,7 @@
           "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
         },
         {
-          "id": "BEB-442",
+          "id": "BEB-445",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5559,7 +5661,7 @@
           "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
         },
         {
-          "id": "BEB-443",
+          "id": "BEB-446",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5598,7 +5700,7 @@
           "description": "Create a Niagara module stack, attach an engine Add_Float dynamic input to a module input, edit its value, remove it, save, and read back the final literal input state"
         },
         {
-          "id": "BEB-444",
+          "id": "BEB-447",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5634,7 +5736,7 @@
           "description": "Create a Niagara module with a curve data-interface input, assign curve keys, save the system, and read DI keys back through module and system inspection"
         },
         {
-          "id": "BEB-445",
+          "id": "BEB-448",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5663,7 +5765,7 @@
           "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
         },
         {
-          "id": "BEB-446",
+          "id": "BEB-449",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5692,7 +5794,7 @@
           "description": "Spawn two temporary StaticMeshActors, generate and save a proxy StaticMesh asset from them, clean up the scene, and inspect the mesh"
         },
         {
-          "id": "BEB-447",
+          "id": "BEB-450",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5721,7 +5823,7 @@
           "description": "Spawn temporary StaticMeshActors, run the public merge_actors workflow to create a StaticMesh asset, clean up the scene actors, and inspect the merged mesh"
         },
         {
-          "id": "BEB-448",
+          "id": "BEB-451",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5758,7 +5860,7 @@
           "description": "Create a dialog Widget Blueprint, convert text and border widgets to CommonUI variants, create CommonText/CommonBorder style assets, apply them, save, and read back the styled tree"
         },
         {
-          "id": "BEB-449",
+          "id": "BEB-452",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5799,7 +5901,7 @@
           "description": "Create a CommonActivatableWidget and CommonTabListWidget asset, add CommonUI container/content widgets, author navigation rules, save, and read the authored tree/navigation back"
         },
         {
-          "id": "BEB-450",
+          "id": "BEB-453",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5830,7 +5932,7 @@
           "description": "Create a BlendSpace with three samples, edit one sample's position and animation, save it, and verify the edited sample data"
         },
         {
-          "id": "BEB-451",
+          "id": "BEB-454",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5859,7 +5961,7 @@
           "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
         },
         {
-          "id": "BEB-452",
+          "id": "BEB-455",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5887,7 +5989,7 @@
           "description": "Create and save two Texture2D assets, inspect them as a batch, validate a dry-run delete, delete one asset, and verify the remaining/deleted rows"
         },
         {
-          "id": "BEB-453",
+          "id": "BEB-456",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5919,7 +6021,7 @@
           "description": "Create a MetaSound Source asset, author graph-level input/output pins, edit an input default, save it, and read the graph back"
         },
         {
-          "id": "BEB-454",
+          "id": "BEB-457",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5948,7 +6050,7 @@
           "description": "Create a Deferred Decal material, edit material-domain and translucent blend settings, save it, and read the material properties back"
         },
         {
-          "id": "BEB-455",
+          "id": "BEB-458",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -5979,7 +6081,7 @@
           "description": "Create an entry Widget Blueprint and a ListView container, configure the ListView entry class and item size, save both assets, and read the list widget back"
         },
         {
-          "id": "BEB-456",
+          "id": "BEB-459",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6013,7 +6115,7 @@
           "description": "Create a Widget Blueprint, add nested panels and a child widget, rename and move the child, remove the empty panel, save, and read the final widget tree back"
         },
         {
-          "id": "BEB-457",
+          "id": "BEB-460",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6044,7 +6146,7 @@
           "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
         },
         {
-          "id": "BEB-458",
+          "id": "BEB-461",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6079,7 +6181,7 @@
           "description": "Create primitive mesh handles, union them, edit material IDs, remesh, generate a LOD handle, save as StaticMesh, release handles, and inspect the saved mesh"
         },
         {
-          "id": "BEB-459",
+          "id": "BEB-462",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6109,7 +6211,7 @@
           "description": "Generate a room StaticMesh with wall thickness, floor/ceiling, and a door opening, save it, and inspect the generated mesh bounds and quality"
         },
         {
-          "id": "BEB-460",
+          "id": "BEB-463",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6139,7 +6241,7 @@
           "description": "Generate a deterministic terrain-patch StaticMesh with seeded multi-octave displacement, save it, and read mesh quality and bounds back"
         },
         {
-          "id": "BEB-461",
+          "id": "BEB-464",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6167,7 +6269,7 @@
           "description": "Generate a deterministic world-tile Texture2D through ImageGen, apply the world texture role preset, save it, and verify provenance and Texture2D settings"
         },
         {
-          "id": "BEB-462",
+          "id": "BEB-465",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6198,7 +6300,7 @@
           "description": "Create a material, edit render-facing material properties, save it, render a thumbnail preview PNG, and read compilation stats back"
         },
         {
-          "id": "BEB-463",
+          "id": "BEB-466",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6227,7 +6329,7 @@
           "description": "Create a GameplayAbility Blueprint, edit persisted ability behavior flags on the CDO, save it, and read the flags back"
         },
         {
-          "id": "BEB-464",
+          "id": "BEB-467",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6258,7 +6360,7 @@
           "description": "Create a Widget Blueprint ProgressBar, bind it to native GAS Health/MaxHealth attributes, save it, and read persisted binding metadata back"
         },
         {
-          "id": "BEB-465",
+          "id": "BEB-468",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6286,7 +6388,7 @@
           "description": "Generate street StaticMesh geometry with road, sidewalk, and curb parameters, save it, and inspect the generated mesh"
         },
         {
-          "id": "BEB-466",
+          "id": "BEB-469",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6314,7 +6416,7 @@
           "description": "Generate a gable-roof StaticMesh from a footprint polygon, save it, and verify the generated mesh asset"
         },
         {
-          "id": "BEB-467",
+          "id": "BEB-470",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6342,7 +6444,7 @@
           "description": "Generate a room-grid building StaticMesh with authored room metadata, save it, and inspect the generated mesh"
         },
         {
-          "id": "BEB-468",
+          "id": "BEB-471",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6375,7 +6477,7 @@
           "description": "Create a GeometryScript sphere handle, simplify it, compute UVs, save it as a StaticMesh, and read UV and vertex data back"
         },
         {
-          "id": "BEB-469",
+          "id": "BEB-472",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6405,7 +6507,7 @@
           "description": "Create a MetaSound Source, add a graph variable with generated get/set nodes, save it, and inspect document variables"
         },
         {
-          "id": "BEB-470",
+          "id": "BEB-473",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6435,7 +6537,7 @@
           "description": "Create a Niagara System, add two user parameters, remove one stale parameter, save, and verify only the kept parameter remains"
         },
         {
-          "id": "BEB-471",
+          "id": "BEB-474",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6466,7 +6568,7 @@
           "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
         },
         {
-          "id": "BEB-472",
+          "id": "BEB-475",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6496,7 +6598,7 @@
           "description": "Create a SoundWave test tone, build a one-shot MetaSound Source around it, save both assets, and read back graph and asset metadata"
         },
         {
-          "id": "BEB-473",
+          "id": "BEB-476",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6526,7 +6628,7 @@
           "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
         },
         {
-          "id": "BEB-474",
+          "id": "BEB-477",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6559,7 +6661,7 @@
           "description": "Create a CommonUI input-action DataTable and Widget Blueprint, bind a UCommonActionWidget to the row, save, and audit the widget binding"
         },
         {
-          "id": "BEB-475",
+          "id": "BEB-478",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6591,7 +6693,7 @@
           "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
         },
         {
-          "id": "BEB-476",
+          "id": "BEB-479",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6623,7 +6725,7 @@
           "description": "Create a CommonUI pause-menu scaffold with an action table, save it, and read back widget tree, navigation, focus, and CommonUI audit state"
         },
         {
-          "id": "BEB-477",
+          "id": "BEB-480",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6655,7 +6757,7 @@
           "description": "Create a looping ambient MetaSound Source from a SoundWave, create a preset referencing it, save all assets, and read back graph and dependency metadata"
         },
         {
-          "id": "BEB-478",
+          "id": "BEB-481",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6687,7 +6789,7 @@
           "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
         },
         {
-          "id": "BEB-479",
+          "id": "BEB-482",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6719,7 +6821,7 @@
           "description": "Create a schema-aware DataTable, bulk-write rows, export a CSV file under the project directory, save, and read back schema plus row payloads"
         },
         {
-          "id": "BEB-480",
+          "id": "BEB-483",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6753,7 +6855,7 @@
           "description": "Create a primitive mesh handle, plane-cut with hole filling, mirror and repair it, save as StaticMesh, release the handle, and inspect the saved mesh"
         },
         {
-          "id": "BEB-481",
+          "id": "BEB-484",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6786,7 +6888,7 @@
           "description": "Create a GameplayAbility and cost GameplayEffect, edit ability tag containers, cost, and gameplay-event triggers, save both assets, and read the ability metadata back"
         },
         {
-          "id": "BEB-482",
+          "id": "BEB-485",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6816,7 +6918,7 @@
           "description": "Generate a balcony StaticMesh with authored railing parameters, save it, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-483",
+          "id": "BEB-486",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6846,7 +6948,7 @@
           "description": "Generate a covered porch StaticMesh with columns, roof, steps, and railings, save it, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-484",
+          "id": "BEB-487",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6876,7 +6978,7 @@
           "description": "Generate a multi-floor fire escape StaticMesh with landings, stairs, railings, and ladder metadata, save it, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-485",
+          "id": "BEB-488",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6906,7 +7008,7 @@
           "description": "Generate an accessible ramp connector StaticMesh with slope and landing parameters, save it, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-486",
+          "id": "BEB-489",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6936,7 +7038,7 @@
           "description": "Generate a closed-loop railing StaticMesh from authored path points and style parameters, save it, and inspect the generated mesh asset"
         },
         {
-          "id": "BEB-487",
+          "id": "BEB-490",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -6968,7 +7070,7 @@
           "description": "Create an InputAction and InputMappingContext, add keyboard and gamepad bindings, remove one binding, save, and verify the removed key is gone while the remaining key persists"
         },
         {
-          "id": "BEB-488",
+          "id": "BEB-491",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7001,7 +7103,7 @@
           "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
         },
         {
-          "id": "BEB-489",
+          "id": "BEB-492",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7031,7 +7133,7 @@
           "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back"
         },
         {
-          "id": "BEB-490",
+          "id": "BEB-493",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7064,7 +7166,7 @@
           "description": "Create a Widget Blueprint with two animations, remove one animation, save, and verify only the retained animation remains"
         },
         {
-          "id": "BEB-491",
+          "id": "BEB-494",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7092,7 +7194,7 @@
           "description": "Create an HLODLayer through the mesh setup action, save it, and read reflected layer metadata back through the HLOD action surface"
         },
         {
-          "id": "BEB-492",
+          "id": "BEB-495",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7121,7 +7223,7 @@
           "description": "Generate a multi-floor building shell StaticMesh with a stairwell cutout, save it, and inspect mesh geometry metadata"
         },
         {
-          "id": "BEB-493",
+          "id": "BEB-496",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7150,7 +7252,7 @@
           "description": "Generate a seeded maze StaticMesh, save it, and verify deterministic maze metadata and mesh bounds"
         },
         {
-          "id": "BEB-494",
+          "id": "BEB-497",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7179,7 +7281,7 @@
           "description": "Generate a seeded barricade StaticMesh with authored board and gap parameters, save it, and inspect mesh geometry metadata"
         },
         {
-          "id": "BEB-495",
+          "id": "BEB-498",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7211,7 +7313,7 @@
           "description": "Create a dialog-free Blueprint prefab from temporary actors, place an instance in the editor world, read back the placed actor, clean up the scene actor, save, and inspect the prefab asset"
         },
         {
-          "id": "BEB-496",
+          "id": "BEB-499",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7242,7 +7344,7 @@
           "description": "Create a local Content Browser collection with a generated Texture2D member, force-delete the non-empty collection, and verify the collection is absent from the collection list"
         },
         {
-          "id": "BEB-497",
+          "id": "BEB-500",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7272,7 +7374,7 @@
           "description": "Create a synthesized MetaSound Source with oscillator and ADSR parameters, save it, and read graph summary, user parameter, and validation state back"
         },
         {
-          "id": "BEB-498",
+          "id": "BEB-501",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7304,7 +7406,7 @@
           "description": "Create two deterministic SoundWaves, build a parameter-driven interactive MetaSound crossfade graph, save all assets, and read graph and validation state back"
         },
         {
-          "id": "BEB-499",
+          "id": "BEB-502",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7333,7 +7435,7 @@
           "description": "Create a BlendSpace, edit its interpolation mode and triangulation preference, save it, and verify authored interpolation metadata"
         },
         {
-          "id": "BEB-500",
+          "id": "BEB-503",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7364,7 +7466,7 @@
           "description": "Create an AnimMontage, add and rename a slot, edit blend timings, save it, and verify slot plus blend metadata"
         },
         {
-          "id": "BEB-501",
+          "id": "BEB-504",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7394,7 +7496,7 @@
           "description": "Create an IKRig asset, add and remove a solver stack entry, save it, and verify the solver stack read-back"
         },
         {
-          "id": "BEB-502",
+          "id": "BEB-505",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7426,7 +7528,7 @@
           "description": "Create an Axis3D Enhanced Input action and mapping context, edit action properties, map three keyboard keys, save, and read the bindings back"
         },
         {
-          "id": "BEB-503",
+          "id": "BEB-506",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7456,7 +7558,7 @@
           "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
         },
         {
-          "id": "BEB-504",
+          "id": "BEB-507",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7488,7 +7590,7 @@
           "description": "Create a primitive GeometryScript handle, fragment it deterministically, save one fragment as a StaticMesh, release handles, and inspect the saved mesh"
         },
         {
-          "id": "BEB-505",
+          "id": "BEB-508",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7521,7 +7623,7 @@
           "description": "Create a MetaSound Patch asset, add graph-level input/output pins, save it, and verify patch metadata plus user parameters"
         },
         {
-          "id": "BEB-506",
+          "id": "BEB-509",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7553,7 +7655,7 @@
           "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
         },
         {
-          "id": "BEB-507",
+          "id": "BEB-510",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7585,7 +7687,7 @@
           "description": "Build a MetaSound Patch from a JSON spec, add a graph node by alias, edit its editor location, remove it, save, and verify the final graph"
         },
         {
-          "id": "BEB-508",
+          "id": "BEB-511",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7620,7 +7722,7 @@
           "description": "Create an AnimSequence, add curve and sync-marker metadata, rename the marker, remove both authored items, save, and verify cleanup"
         },
         {
-          "id": "BEB-509",
+          "id": "BEB-512",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7651,7 +7753,7 @@
           "description": "Create a Niagara System and EffectType asset, assign the EffectType to the system, save both assets, and verify the relationship plus scalability metadata"
         },
         {
-          "id": "BEB-510",
+          "id": "BEB-513",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7681,7 +7783,7 @@
           "description": "Generate a parametric StaticMesh, run mesh quality repair operations through GeometryScript, save it, and read mesh quality and registry state back"
         },
         {
-          "id": "BEB-511",
+          "id": "BEB-514",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7712,7 +7814,7 @@
           "description": "Create a UserDefinedStruct-backed DataTable, write a row, save it, and verify the row struct through both DataTable payload and schema-only readers"
         },
         {
-          "id": "BEB-512",
+          "id": "BEB-515",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7743,7 +7845,7 @@
           "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export"
         },
         {
-          "id": "BEB-513",
+          "id": "BEB-516",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7771,7 +7873,7 @@
           "description": "Create a disposable Texture2D under the cleanup action allowlist, refresh asset visibility, dry-run cleanup, apply cleanup, and verify the asset is gone"
         },
         {
-          "id": "BEB-514",
+          "id": "BEB-517",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7802,7 +7904,7 @@
           "description": "Create a GameplayEffect cost asset, build a GameplayAbility from a declarative spec, save both assets, and verify policies, tags, cost, triggers, and flags"
         },
         {
-          "id": "BEB-515",
+          "id": "BEB-518",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7831,7 +7933,7 @@
           "description": "Build an EQS query from a declarative generator/test/scoring/filter spec, save it, and verify the materialized query graph"
         },
         {
-          "id": "BEB-516",
+          "id": "BEB-519",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7866,7 +7968,7 @@
           "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
         },
         {
-          "id": "BEB-517",
+          "id": "BEB-520",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7897,7 +7999,7 @@
           "description": "Create a Niagara Parameter Collection, add kept and retired parameters, remove the retired parameter, save, and verify the final collection state"
         },
         {
-          "id": "BEB-518",
+          "id": "BEB-521",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7928,7 +8030,7 @@
           "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
         },
         {
-          "id": "BEB-519",
+          "id": "BEB-522",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -7963,7 +8065,7 @@
           "description": "Create a Widget Blueprint and UI-domain shadow parent material, apply a saved box-shadow MaterialInstance to a target widget, save, and read back the inserted shadow widget and MIC parameters"
         },
         {
-          "id": "BEB-520",
+          "id": "BEB-523",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8000,7 +8102,7 @@
           "description": "Create a Widget Blueprint with Image, Border, and TextBlock widgets, apply set_image/set_brush/set_font styling edits, save it, and dump the UI spec to read back brush/font/image content"
         },
         {
-          "id": "BEB-521",
+          "id": "BEB-524",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8031,7 +8133,7 @@
           "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set"
         },
         {
-          "id": "BEB-522",
+          "id": "BEB-525",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8061,7 +8163,7 @@
           "description": "Create a schema-backed DataTable, submit an invalid strict row write, verify the rejection report, then save and read back that no row was persisted"
         },
         {
-          "id": "BEB-523",
+          "id": "BEB-526",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8097,7 +8199,7 @@
           "description": "Create a Logic Driver State Machine Blueprint, add gameplay states and transitions, set initial/end states, compile, save, and read back graph topology/statistics"
         },
         {
-          "id": "BEB-524",
+          "id": "BEB-527",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8128,7 +8230,7 @@
           "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata"
         },
         {
-          "id": "BEB-525",
+          "id": "BEB-528",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8159,7 +8261,7 @@
           "description": "Create two Enhanced Input Actions mapped to the same key in one mapping context, save, read back both mappings, and require validation to report a duplicate-key conflict"
         },
         {
-          "id": "BEB-526",
+          "id": "BEB-529",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8191,7 +8293,7 @@
           "description": "Create a MassEntityConfigAsset, capture an available Mass trait class, add it, save and read it back, then remove the trait and validate the empty config warning"
         },
         {
-          "id": "BEB-527",
+          "id": "BEB-530",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8220,7 +8322,7 @@
           "description": "Create saved UMG settings-panel and notification-toast template Widget Blueprints, then read both widget trees back"
         },
         {
-          "id": "BEB-528",
+          "id": "BEB-531",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8251,7 +8353,7 @@
           "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
         },
         {
-          "id": "BEB-529",
+          "id": "BEB-532",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8283,7 +8385,7 @@
           "description": "Create source and destination AnimSequences, copy evaluated bone pose keys into the destination sequence, save it, and read the copied keys back"
         },
         {
-          "id": "BEB-530",
+          "id": "BEB-533",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8315,7 +8417,7 @@
           "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back"
         },
         {
-          "id": "BEB-531",
+          "id": "BEB-534",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8346,7 +8448,7 @@
           "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout"
         },
         {
-          "id": "BEB-532",
+          "id": "BEB-535",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8379,7 +8481,7 @@
           "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup"
         },
         {
-          "id": "BEB-533",
+          "id": "BEB-536",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8411,7 +8513,7 @@
           "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back"
         },
         {
-          "id": "BEB-534",
+          "id": "BEB-537",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8442,7 +8544,7 @@
           "description": "Create a StringTable, edit entry text and metadata, save it, then verify the table through both direct and registry-level read-back"
         },
         {
-          "id": "BEB-535",
+          "id": "BEB-538",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8478,7 +8580,7 @@
           "description": "Create a Content Browser collection with a generated asset member, validate its name contract, request a collision-free follow-up name, save the member asset, and verify membership"
         },
         {
-          "id": "BEB-536",
+          "id": "BEB-539",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8508,7 +8610,7 @@
           "description": "Create an AnimSequence, persist an engine AnimationModifier into its modifier stack, save it, and read the saved modifier metadata back"
         },
         {
-          "id": "BEB-537",
+          "id": "BEB-540",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8539,7 +8641,7 @@
           "description": "Import a Texture2D, edit an editor-visible texture setting, save it, then validate typed asset enrichment and the supported enricher registry"
         },
         {
-          "id": "BEB-538",
+          "id": "BEB-541",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8572,7 +8674,7 @@
           "description": "Create a Niagara System with three emitters, disable one, reorder the topology, remove one emitter, save, and read back the final emitter order and enabled state"
         },
         {
-          "id": "BEB-539",
+          "id": "BEB-542",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8606,7 +8708,7 @@
           "description": "Import two Texture2D assets, wire them into a Material graph, save the material, render single and contact-sheet texture previews, and read back tiling-quality diagnostics"
         },
         {
-          "id": "BEB-540",
+          "id": "BEB-543",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8642,7 +8744,7 @@
           "description": "Create a MetaSound Source, add two graph nodes by alias, discover their pins, connect and disconnect the nodes by pin name, save it, and verify the final graph"
         },
         {
-          "id": "BEB-541",
+          "id": "BEB-544",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8673,7 +8775,7 @@
           "description": "Create two StaticMesh assets, edit simple collision, save them, then read material-slot/section data and compare mesh deltas"
         },
         {
-          "id": "BEB-542",
+          "id": "BEB-545",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -8778,8 +8880,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -8849,9 +8951,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -8966,25 +9068,28 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ]
         },
         "by_domain": {
           "ai": [
-            "BEB-330",
-            "BEB-331",
             "BEB-332",
             "BEB-333",
             "BEB-334",
-            "BEB-345",
-            "BEB-355",
+            "BEB-335",
+            "BEB-336",
+            "BEB-347",
             "BEB-357",
-            "BEB-388",
-            "BEB-389",
-            "BEB-390",
-            "BEB-439",
-            "BEB-515",
-            "BEB-526"
+            "BEB-359",
+            "BEB-391",
+            "BEB-392",
+            "BEB-393",
+            "BEB-442",
+            "BEB-518",
+            "BEB-529"
           ],
           "animation": [
             "BEB-314",
@@ -8995,33 +9100,36 @@
             "BEB-319",
             "BEB-320",
             "BEB-321",
-            "BEB-340",
-            "BEB-359",
-            "BEB-360",
-            "BEB-371",
-            "BEB-391",
-            "BEB-392",
-            "BEB-401",
-            "BEB-409",
-            "BEB-410",
-            "BEB-418",
-            "BEB-419",
-            "BEB-431",
-            "BEB-437",
-            "BEB-438",
-            "BEB-450",
-            "BEB-457",
-            "BEB-499",
-            "BEB-500",
-            "BEB-501",
-            "BEB-508",
-            "BEB-528",
-            "BEB-529",
-            "BEB-530",
+            "BEB-322",
+            "BEB-323",
+            "BEB-342",
+            "BEB-361",
+            "BEB-362",
+            "BEB-373",
+            "BEB-374",
+            "BEB-394",
+            "BEB-395",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-421",
+            "BEB-422",
+            "BEB-434",
+            "BEB-440",
+            "BEB-441",
+            "BEB-453",
+            "BEB-460",
+            "BEB-502",
+            "BEB-503",
+            "BEB-504",
+            "BEB-511",
             "BEB-531",
             "BEB-532",
             "BEB-533",
-            "BEB-536"
+            "BEB-534",
+            "BEB-535",
+            "BEB-536",
+            "BEB-539"
           ],
           "asset": [
             "BEB-279",
@@ -9033,51 +9141,51 @@
             "BEB-285",
             "BEB-286",
             "BEB-293",
-            "BEB-452",
-            "BEB-537"
+            "BEB-455",
+            "BEB-540"
           ],
           "audio": [
-            "BEB-322",
-            "BEB-323",
             "BEB-324",
             "BEB-325",
             "BEB-326",
-            "BEB-361",
-            "BEB-362",
+            "BEB-327",
+            "BEB-328",
             "BEB-363",
             "BEB-364",
             "BEB-365",
-            "BEB-373",
-            "BEB-374",
-            "BEB-375",
+            "BEB-366",
+            "BEB-367",
+            "BEB-376",
+            "BEB-377",
             "BEB-378",
-            "BEB-379",
-            "BEB-380",
-            "BEB-396",
+            "BEB-381",
+            "BEB-382",
+            "BEB-383",
             "BEB-399",
-            "BEB-403",
-            "BEB-426",
-            "BEB-453",
-            "BEB-469",
+            "BEB-402",
+            "BEB-406",
+            "BEB-429",
+            "BEB-456",
             "BEB-472",
-            "BEB-477",
-            "BEB-497",
-            "BEB-498",
-            "BEB-505",
-            "BEB-507",
-            "BEB-540"
+            "BEB-475",
+            "BEB-480",
+            "BEB-500",
+            "BEB-501",
+            "BEB-508",
+            "BEB-510",
+            "BEB-543"
           ],
           "blueprint": [
-            "BEB-353",
-            "BEB-408",
-            "BEB-412",
-            "BEB-413"
+            "BEB-355",
+            "BEB-411",
+            "BEB-415",
+            "BEB-416"
           ],
           "collection": [
-            "BEB-347",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ],
           "data": [
             "BEB-294",
@@ -9085,80 +9193,80 @@
             "BEB-309",
             "BEB-310",
             "BEB-311",
-            "BEB-354",
-            "BEB-377",
-            "BEB-387",
-            "BEB-479",
-            "BEB-511",
-            "BEB-521",
-            "BEB-522"
+            "BEB-356",
+            "BEB-380",
+            "BEB-390",
+            "BEB-482",
+            "BEB-514",
+            "BEB-524",
+            "BEB-525"
           ],
           "editor": [
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ],
           "gas": [
-            "BEB-335",
-            "BEB-336",
             "BEB-337",
             "BEB-338",
             "BEB-339",
+            "BEB-340",
             "BEB-341",
-            "BEB-344",
-            "BEB-356",
-            "BEB-435",
-            "BEB-436",
-            "BEB-463",
-            "BEB-464",
-            "BEB-475",
-            "BEB-481",
-            "BEB-488",
-            "BEB-514"
+            "BEB-343",
+            "BEB-346",
+            "BEB-358",
+            "BEB-438",
+            "BEB-439",
+            "BEB-466",
+            "BEB-467",
+            "BEB-478",
+            "BEB-484",
+            "BEB-491",
+            "BEB-517"
           ],
           "hlod": [
-            "BEB-346",
-            "BEB-491"
+            "BEB-348",
+            "BEB-494"
           ],
           "imagegen": [
             "BEB-287",
             "BEB-288",
-            "BEB-350",
-            "BEB-382",
-            "BEB-461"
+            "BEB-352",
+            "BEB-385",
+            "BEB-464"
           ],
           "input": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ],
           "interchange": [
             "BEB-289",
             "BEB-290",
             "BEB-291",
             "BEB-292",
-            "BEB-358",
-            "BEB-398",
-            "BEB-415",
-            "BEB-422"
+            "BEB-360",
+            "BEB-401",
+            "BEB-418",
+            "BEB-425"
           ],
           "level_instance": [
-            "BEB-425",
-            "BEB-495"
+            "BEB-428",
+            "BEB-498"
           ],
           "localization": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ],
           "logicdriver": [
-            "BEB-523"
+            "BEB-526"
           ],
           "material": [
             "BEB-298",
@@ -9167,139 +9275,139 @@
             "BEB-301",
             "BEB-302",
             "BEB-303",
-            "BEB-342",
-            "BEB-372",
-            "BEB-395",
-            "BEB-397",
-            "BEB-404",
-            "BEB-405",
-            "BEB-406",
-            "BEB-416",
-            "BEB-417",
-            "BEB-451",
+            "BEB-344",
+            "BEB-375",
+            "BEB-398",
+            "BEB-400",
+            "BEB-407",
+            "BEB-408",
+            "BEB-409",
+            "BEB-419",
+            "BEB-420",
             "BEB-454",
-            "BEB-462",
-            "BEB-471",
-            "BEB-506",
-            "BEB-539"
+            "BEB-457",
+            "BEB-465",
+            "BEB-474",
+            "BEB-509",
+            "BEB-542"
           ],
           "mesh": [
             "BEB-304",
             "BEB-305",
             "BEB-306",
-            "BEB-393",
-            "BEB-394",
-            "BEB-402",
-            "BEB-411",
-            "BEB-421",
-            "BEB-446",
-            "BEB-447",
-            "BEB-458",
-            "BEB-459",
-            "BEB-460",
-            "BEB-468",
-            "BEB-480",
-            "BEB-492",
-            "BEB-493",
-            "BEB-494",
-            "BEB-504",
-            "BEB-510",
-            "BEB-541"
+            "BEB-396",
+            "BEB-397",
+            "BEB-405",
+            "BEB-414",
+            "BEB-424",
+            "BEB-449",
+            "BEB-450",
+            "BEB-461",
+            "BEB-462",
+            "BEB-463",
+            "BEB-471",
+            "BEB-483",
+            "BEB-495",
+            "BEB-496",
+            "BEB-497",
+            "BEB-507",
+            "BEB-513",
+            "BEB-544"
           ],
           "modelgen": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ],
           "niagara": [
-            "BEB-327",
-            "BEB-328",
             "BEB-329",
-            "BEB-366",
-            "BEB-367",
+            "BEB-330",
+            "BEB-331",
             "BEB-368",
             "BEB-369",
             "BEB-370",
-            "BEB-383",
-            "BEB-384",
-            "BEB-385",
-            "BEB-400",
-            "BEB-420",
-            "BEB-427",
-            "BEB-428",
-            "BEB-429",
+            "BEB-371",
+            "BEB-372",
+            "BEB-386",
+            "BEB-387",
+            "BEB-388",
+            "BEB-403",
+            "BEB-423",
             "BEB-430",
-            "BEB-440",
-            "BEB-441",
-            "BEB-442",
+            "BEB-431",
+            "BEB-432",
+            "BEB-433",
             "BEB-443",
             "BEB-444",
-            "BEB-470",
+            "BEB-445",
+            "BEB-446",
+            "BEB-447",
             "BEB-473",
-            "BEB-509",
-            "BEB-516",
-            "BEB-517",
-            "BEB-518",
-            "BEB-538"
+            "BEB-476",
+            "BEB-512",
+            "BEB-519",
+            "BEB-520",
+            "BEB-521",
+            "BEB-541"
           ],
           "project": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ],
           "ui": [
             "BEB-312",
             "BEB-313",
-            "BEB-343",
-            "BEB-348",
-            "BEB-349",
-            "BEB-407",
-            "BEB-414",
-            "BEB-423",
-            "BEB-434",
-            "BEB-448",
-            "BEB-449",
-            "BEB-455",
-            "BEB-456",
-            "BEB-474",
-            "BEB-476",
-            "BEB-490",
-            "BEB-519",
-            "BEB-520",
-            "BEB-527"
+            "BEB-345",
+            "BEB-350",
+            "BEB-351",
+            "BEB-410",
+            "BEB-417",
+            "BEB-426",
+            "BEB-437",
+            "BEB-451",
+            "BEB-452",
+            "BEB-458",
+            "BEB-459",
+            "BEB-477",
+            "BEB-479",
+            "BEB-493",
+            "BEB-522",
+            "BEB-523",
+            "BEB-530"
           ],
           "worldgen": [
-            "BEB-351",
-            "BEB-465",
-            "BEB-466",
-            "BEB-467",
-            "BEB-482",
-            "BEB-483",
-            "BEB-484",
+            "BEB-353",
+            "BEB-468",
+            "BEB-469",
+            "BEB-470",
             "BEB-485",
-            "BEB-486"
+            "BEB-486",
+            "BEB-487",
+            "BEB-488",
+            "BEB-489"
           ]
         },
         "by_edit_domain": {
           "ability_input_binding": [
-            "BEB-337"
+            "BEB-339"
           ],
           "ability_spec_builder": [
-            "BEB-514"
+            "BEB-517"
           ],
           "ability_tags_cost_triggers": [
-            "BEB-481"
+            "BEB-484"
           ],
           "ai_controller_perception": [
-            "BEB-345"
+            "BEB-347"
           ],
           "aim_offset_axis": [
             "BEB-316"
           ],
           "anim_blueprint_motion_matching": [
-            "BEB-419"
+            "BEB-422"
           ],
           "anim_blueprint_state_machine": [
-            "BEB-418"
+            "BEB-421"
           ],
           "animation_core": [
             "BEB-314"
@@ -9308,154 +9416,154 @@
             "BEB-318"
           ],
           "asc_replication_mode": [
-            "BEB-436"
+            "BEB-439"
           ],
           "attribute_init_datatable": [
-            "BEB-435"
+            "BEB-438"
           ],
           "audio_routing": [
-            "BEB-324"
-          ],
-          "audio_template_batch": [
             "BEB-326"
           ],
+          "audio_template_batch": [
+            "BEB-328"
+          ],
           "axis2d_movement_mapping": [
-            "BEB-478"
+            "BEB-481"
           ],
           "axis3d_mapping": [
-            "BEB-502"
+            "BEB-505"
           ],
           "balcony_static_mesh": [
-            "BEB-482"
+            "BEB-485"
           ],
           "batch_delete": [
-            "BEB-452"
+            "BEB-455"
           ],
           "batch_rename_dry_run": [
             "BEB-284"
           ],
           "behavior_tree": [
-            "BEB-330"
+            "BEB-332"
           ],
           "behavior_tree_granular_edit": [
-            "BEB-439"
+            "BEB-442"
           ],
           "behavior_tree_node_blueprints": [
-            "BEB-334"
+            "BEB-336"
           ],
           "behavior_tree_spec": [
-            "BEB-333"
+            "BEB-335"
           ],
           "blackboard_inheritance_duplicate": [
-            "BEB-355"
-          ],
-          "blackboard_set_parent": [
             "BEB-357"
           ],
+          "blackboard_set_parent": [
+            "BEB-359"
+          ],
           "blendspace_1d_aimoffset_1d": [
-            "BEB-391"
+            "BEB-394"
           ],
           "blendspace_interpolation": [
-            "BEB-499"
+            "BEB-502"
           ],
           "blendspace_sample_delete": [
-            "BEB-531"
+            "BEB-534"
           ],
           "blendspace_sample_edit": [
-            "BEB-450"
+            "BEB-453"
           ],
           "blendspace_samples": [
             "BEB-315"
           ],
           "blockout_volume_blueprint": [
-            "BEB-351"
-          ],
-          "blueprint_asset_types": [
-            "BEB-408"
-          ],
-          "blueprint_duplicate_reparent": [
-            "BEB-412"
-          ],
-          "blueprint_prefab": [
-            "BEB-425"
-          ],
-          "blueprint_spec_builder": [
             "BEB-353"
           ],
+          "blueprint_asset_types": [
+            "BEB-411"
+          ],
+          "blueprint_duplicate_reparent": [
+            "BEB-415"
+          ],
+          "blueprint_prefab": [
+            "BEB-428"
+          ],
+          "blueprint_spec_builder": [
+            "BEB-355"
+          ],
           "blueprint_timeline_persistence": [
-            "BEB-413"
+            "BEB-416"
           ],
           "bone_track_keys": [
-            "BEB-457"
+            "BEB-460"
           ],
           "bone_track_lifecycle": [
-            "BEB-532"
+            "BEB-535"
           ],
           "box_shadow_mid": [
-            "BEB-519"
+            "BEB-522"
           ],
           "building_shell_static_mesh": [
-            "BEB-492"
+            "BEB-495"
           ],
           "building_static_mesh": [
-            "BEB-467"
+            "BEB-470"
           ],
           "chooser_context_class": [
-            "BEB-410"
+            "BEB-413"
           ],
           "chooser_result_reference_rewrite": [
-            "BEB-359"
+            "BEB-361"
           ],
           "chooser_table": [
-            "BEB-340"
+            "BEB-342"
           ],
           "chooser_tree_duplicate_remap": [
-            "BEB-360"
+            "BEB-362"
           ],
           "cleanup_generated_assets": [
-            "BEB-513"
+            "BEB-516"
           ],
           "commonui_action_widget_binding": [
-            "BEB-474"
+            "BEB-477"
           ],
           "commonui_container_navigation": [
-            "BEB-449"
+            "BEB-452"
           ],
           "commonui_input_action_datatable": [
-            "BEB-343"
+            "BEB-345"
           ],
           "commonui_pause_menu_focus": [
-            "BEB-476"
+            "BEB-479"
           ],
           "commonui_style_assets": [
-            "BEB-448"
+            "BEB-451"
           ],
           "commonui_styled_button": [
-            "BEB-423"
+            "BEB-426"
           ],
           "commonui_text_block": [
             "BEB-313"
           ],
           "composite_mirror_table": [
-            "BEB-392"
+            "BEB-395"
           ],
           "content_browser_collection": [
-            "BEB-347"
+            "BEB-349"
           ],
           "content_browser_collection_remove": [
-            "BEB-376"
+            "BEB-379"
           ],
           "curve_di_key_edit": [
-            "BEB-516"
+            "BEB-519"
           ],
           "curvetable": [
             "BEB-308"
           ],
           "curvetable_row_maintenance": [
-            "BEB-377"
+            "BEB-380"
           ],
           "custom_hlsl_update": [
-            "BEB-473"
+            "BEB-476"
           ],
           "data_asset": [
             "BEB-309"
@@ -9470,94 +9578,94 @@
             "BEB-294"
           ],
           "datatable_bulk_import_export": [
-            "BEB-354"
+            "BEB-356"
           ],
           "datatable_dry_run_strict_apply": [
-            "BEB-521"
+            "BEB-524"
           ],
           "datatable_schema_csv_file": [
-            "BEB-479"
+            "BEB-482"
           ],
           "datatable_schema_readback": [
-            "BEB-511"
+            "BEB-514"
           ],
           "datatable_strict_rejection": [
-            "BEB-522"
+            "BEB-525"
           ],
           "decal_domain": [
-            "BEB-454"
+            "BEB-457"
           ],
           "delete_assets_guard": [
             "BEB-286"
           ],
           "delete_readback": [
-            "BEB-496"
+            "BEB-499"
           ],
           "duplicate_key_conflict": [
-            "BEB-525"
+            "BEB-528"
           ],
           "effect_modifier_crud": [
-            "BEB-475"
+            "BEB-478"
           ],
           "emitter_lifecycle": [
-            "BEB-538"
+            "BEB-541"
           ],
           "enhanced_input": [
             "BEB-297"
           ],
           "enhanced_input_mapping_removal": [
-            "BEB-487"
+            "BEB-490"
           ],
           "eqs_query": [
-            "BEB-331"
+            "BEB-333"
           ],
           "eqs_query_mutation": [
-            "BEB-332"
+            "BEB-334"
           ],
           "eqs_spec_builder": [
-            "BEB-515"
+            "BEB-518"
           ],
           "fire_escape_static_mesh": [
-            "BEB-484"
+            "BEB-487"
           ],
           "fix_quality": [
-            "BEB-510"
+            "BEB-513"
           ],
           "font": [
             "BEB-293"
           ],
           "fragment_static_mesh": [
-            "BEB-504"
+            "BEB-507"
           ],
           "gameplay_ability": [
-            "BEB-336"
-          ],
-          "gameplay_ability_flags": [
-            "BEB-463"
-          ],
-          "gameplay_cue_effect_link": [
-            "BEB-339"
-          ],
-          "gameplay_cue_notify": [
             "BEB-338"
           ],
+          "gameplay_ability_flags": [
+            "BEB-466"
+          ],
+          "gameplay_cue_effect_link": [
+            "BEB-341"
+          ],
+          "gameplay_cue_notify": [
+            "BEB-340"
+          ],
           "gameplay_cue_unlink_lifecycle": [
-            "BEB-488"
+            "BEB-491"
           ],
           "gameplay_effect": [
-            "BEB-335"
+            "BEB-337"
           ],
           "gameplay_effect_spec_builder": [
-            "BEB-356"
+            "BEB-358"
           ],
           "gameplay_effect_template": [
-            "BEB-344"
+            "BEB-346"
           ],
           "generated_image_import": [
-            "BEB-350"
+            "BEB-352"
           ],
           "generated_model_job_lifecycle": [
-            "BEB-386"
+            "BEB-389"
           ],
           "generated_static_mesh": [
             "BEB-307"
@@ -9566,52 +9674,52 @@
             "BEB-287"
           ],
           "generated_world_tile_texture": [
-            "BEB-461"
+            "BEB-464"
           ],
           "geometry_direct_ops": [
-            "BEB-402"
+            "BEB-405"
           ],
           "geometry_handle_save": [
-            "BEB-393"
+            "BEB-396"
           ],
           "handle_boolean_remesh_material_ids": [
-            "BEB-458"
+            "BEB-461"
           ],
           "hlod_layer": [
-            "BEB-346"
+            "BEB-348"
           ],
           "horror_prop_static_mesh": [
-            "BEB-494"
+            "BEB-497"
           ],
           "hygiene": [
             "BEB-281"
           ],
           "ik_retargeter_pose_settings": [
-            "BEB-321"
+            "BEB-323"
           ],
           "ikrig_retargeter": [
             "BEB-319"
           ],
           "ikrig_solver_stack": [
-            "BEB-501"
+            "BEB-504"
           ],
           "index_details_text": [
-            "BEB-512"
+            "BEB-515"
           ],
           "interchange_audio_import": [
             "BEB-292"
           ],
           "interchange_batch_import": [
-            "BEB-358"
+            "BEB-360"
           ],
           "interchange_batch_reimport": [
-            "BEB-415"
+            "BEB-418"
           ],
           "interchange_generic_import": [
-            "BEB-422"
+            "BEB-425"
           ],
           "interchange_generic_options_import": [
-            "BEB-398"
+            "BEB-401"
           ],
           "interchange_scene_import": [
             "BEB-291"
@@ -9623,25 +9731,25 @@
             "BEB-289"
           ],
           "list_view_binding": [
-            "BEB-455"
+            "BEB-458"
           ],
           "map_actor_defaults": [
-            "BEB-503"
+            "BEB-506"
           ],
           "mass_entity_config": [
-            "BEB-526"
+            "BEB-529"
           ],
           "material": [
             "BEB-298"
           ],
           "material_batch_layout_replace": [
-            "BEB-397"
+            "BEB-400"
           ],
           "material_custom_hlsl": [
-            "BEB-372"
+            "BEB-375"
           ],
           "material_expression_crud": [
-            "BEB-395"
+            "BEB-398"
           ],
           "material_function": [
             "BEB-299"
@@ -9650,316 +9758,325 @@
             "BEB-303"
           ],
           "material_function_maintenance": [
-            "BEB-404"
+            "BEB-407"
           ],
           "material_function_parameter_group_rename": [
-            "BEB-417"
+            "BEB-420"
           ],
           "material_graph": [
             "BEB-300"
           ],
           "material_graph_clear_import": [
-            "BEB-406"
+            "BEB-409"
           ],
           "material_instance_parameters": [
-            "BEB-342"
+            "BEB-344"
           ],
           "material_instance_reparent": [
             "BEB-302"
           ],
           "material_instance_single_param_delete_batch": [
-            "BEB-405"
+            "BEB-408"
           ],
           "material_layer_assets": [
-            "BEB-451"
+            "BEB-454"
           ],
           "material_slots_compare": [
-            "BEB-541"
+            "BEB-544"
           ],
           "material_texture_import_settings": [
-            "BEB-416"
+            "BEB-419"
           ],
           "maze_static_mesh": [
-            "BEB-493"
+            "BEB-496"
           ],
           "merge_actors": [
-            "BEB-447"
+            "BEB-450"
           ],
           "mesh_setup_layer": [
-            "BEB-491"
+            "BEB-494"
           ],
           "metasound_explicit_connection": [
-            "BEB-540"
+            "BEB-543"
           ],
           "metasound_interactive_crossfade": [
-            "BEB-498"
+            "BEB-501"
           ],
           "metasound_looping_ambient_preset": [
-            "BEB-477"
+            "BEB-480"
           ],
           "metasound_oneshot_sfx": [
-            "BEB-472"
+            "BEB-475"
           ],
           "metasound_patch_io": [
-            "BEB-505"
+            "BEB-508"
           ],
           "metasound_source_graph": [
-            "BEB-453"
+            "BEB-456"
           ],
           "metasound_spec_node_edit": [
-            "BEB-507"
+            "BEB-510"
           ],
           "metasound_synth_tone": [
-            "BEB-497"
+            "BEB-500"
           ],
           "metasound_variable_state": [
-            "BEB-469"
+            "BEB-472"
           ],
           "modifier_stack": [
-            "BEB-536"
+            "BEB-539"
           ],
           "montage": [
             "BEB-317"
           ],
           "montage_blend_slot": [
-            "BEB-500"
+            "BEB-503"
           ],
           "montage_from_sections": [
-            "BEB-431"
+            "BEB-434"
           ],
           "montage_section_crud": [
-            "BEB-530"
+            "BEB-533"
           ],
           "msdf_texture": [
             "BEB-288"
           ],
           "nav_harness_map": [
-            "BEB-445"
+            "BEB-448"
           ],
           "niagara_clear_emitter_modules": [
-            "BEB-430"
-          ],
-          "niagara_data_interface_curve": [
-            "BEB-444"
-          ],
-          "niagara_duplicate_diff": [
-            "BEB-369"
-          ],
-          "niagara_dynamic_input": [
-            "BEB-443"
-          ],
-          "niagara_effect_type_scalability": [
-            "BEB-400"
-          ],
-          "niagara_emitter_properties": [
-            "BEB-440"
-          ],
-          "niagara_emitter_template_spec": [
-            "BEB-428"
-          ],
-          "niagara_emitter_topology": [
-            "BEB-420"
-          ],
-          "niagara_event_handler_metadata": [
-            "BEB-370"
-          ],
-          "niagara_hlsl_function": [
-            "BEB-427"
-          ],
-          "niagara_import_system_spec": [
-            "BEB-429"
-          ],
-          "niagara_mesh_ribbon_renderer": [
-            "BEB-383"
-          ],
-          "niagara_module_duplicate_capture": [
-            "BEB-384"
-          ],
-          "niagara_module_script": [
-            "BEB-329"
-          ],
-          "niagara_module_stack_state": [
-            "BEB-385"
-          ],
-          "niagara_renderer_material": [
-            "BEB-442"
-          ],
-          "niagara_renderer_property_binding": [
-            "BEB-441"
-          ],
-          "niagara_sidecar_assets": [
-            "BEB-328"
-          ],
-          "niagara_sim_stage_lifetime": [
-            "BEB-368"
-          ],
-          "niagara_sprite_renderer_subuv": [
-            "BEB-366"
-          ],
-          "niagara_system": [
-            "BEB-327"
-          ],
-          "niagara_user_parameters": [
-            "BEB-367"
-          ],
-          "notify_batch_track_clone": [
-            "BEB-533"
-          ],
-          "notify_point_crud": [
-            "BEB-437"
-          ],
-          "notify_state_timing": [
-            "BEB-438"
-          ],
-          "npc_parameter_remove": [
-            "BEB-517"
-          ],
-          "package_dirty_save": [
             "BEB-433"
           ],
+          "niagara_data_interface_curve": [
+            "BEB-447"
+          ],
+          "niagara_duplicate_diff": [
+            "BEB-371"
+          ],
+          "niagara_dynamic_input": [
+            "BEB-446"
+          ],
+          "niagara_effect_type_scalability": [
+            "BEB-403"
+          ],
+          "niagara_emitter_properties": [
+            "BEB-443"
+          ],
+          "niagara_emitter_template_spec": [
+            "BEB-431"
+          ],
+          "niagara_emitter_topology": [
+            "BEB-423"
+          ],
+          "niagara_event_handler_metadata": [
+            "BEB-372"
+          ],
+          "niagara_hlsl_function": [
+            "BEB-430"
+          ],
+          "niagara_import_system_spec": [
+            "BEB-432"
+          ],
+          "niagara_mesh_ribbon_renderer": [
+            "BEB-386"
+          ],
+          "niagara_module_duplicate_capture": [
+            "BEB-387"
+          ],
+          "niagara_module_script": [
+            "BEB-331"
+          ],
+          "niagara_module_stack_state": [
+            "BEB-388"
+          ],
+          "niagara_renderer_material": [
+            "BEB-445"
+          ],
+          "niagara_renderer_property_binding": [
+            "BEB-444"
+          ],
+          "niagara_sidecar_assets": [
+            "BEB-330"
+          ],
+          "niagara_sim_stage_lifetime": [
+            "BEB-370"
+          ],
+          "niagara_sprite_renderer_subuv": [
+            "BEB-368"
+          ],
+          "niagara_system": [
+            "BEB-329"
+          ],
+          "niagara_user_parameters": [
+            "BEB-369"
+          ],
+          "notify_batch_track_clone": [
+            "BEB-536"
+          ],
+          "notify_point_crud": [
+            "BEB-440"
+          ],
+          "notify_state_timing": [
+            "BEB-441"
+          ],
+          "npc_parameter_remove": [
+            "BEB-520"
+          ],
+          "package_dirty_save": [
+            "BEB-436"
+          ],
           "parameter_inventory": [
-            "BEB-471"
+            "BEB-474"
           ],
           "parametric_static_mesh": [
-            "BEB-394"
+            "BEB-397"
           ],
           "pbr_material_from_disk": [
             "BEB-301"
           ],
           "plane_cut_mirror_repair": [
-            "BEB-480"
-          ],
-          "porch_static_mesh": [
             "BEB-483"
           ],
-          "pose_search_database": [
-            "BEB-371"
-          ],
-          "pose_search_normalization_set": [
-            "BEB-409"
-          ],
-          "postprocess_emissive": [
-            "BEB-506"
-          ],
-          "prefab_placement": [
-            "BEB-495"
-          ],
-          "preview_render": [
-            "BEB-462"
-          ],
-          "procedural_pipe_network": [
-            "BEB-421"
-          ],
-          "procedural_structure_static_mesh": [
-            "BEB-459"
-          ],
-          "procedural_terrain_patch": [
-            "BEB-460"
-          ],
-          "proxy_mesh_from_scene_actors": [
-            "BEB-446"
-          ],
-          "railing_path_static_mesh": [
+          "porch_static_mesh": [
             "BEB-486"
           ],
+          "pose_search_database": [
+            "BEB-373"
+          ],
+          "pose_search_normalization_set": [
+            "BEB-412"
+          ],
+          "pose_search_schema_channels": [
+            "BEB-374"
+          ],
+          "postprocess_emissive": [
+            "BEB-509"
+          ],
+          "prefab_placement": [
+            "BEB-498"
+          ],
+          "preview_render": [
+            "BEB-465"
+          ],
+          "procedural_pipe_network": [
+            "BEB-424"
+          ],
+          "procedural_structure_static_mesh": [
+            "BEB-462"
+          ],
+          "procedural_terrain_patch": [
+            "BEB-463"
+          ],
+          "proxy_mesh_from_scene_actors": [
+            "BEB-449"
+          ],
+          "railing_path_static_mesh": [
+            "BEB-489"
+          ],
           "ramp_connector_static_mesh": [
-            "BEB-485"
+            "BEB-488"
           ],
           "retarget_chain_lifecycle": [
             "BEB-320"
           ],
-          "roof_static_mesh": [
-            "BEB-466"
+          "retarget_chain_mapping": [
+            "BEB-321"
           ],
-          "saved_asset_state": [
-            "BEB-432"
-          ],
-          "seed_data_asset": [
-            "BEB-387"
-          ],
-          "sequence_curve_marker_cleanup": [
-            "BEB-508"
-          ],
-          "sequence_from_poses": [
-            "BEB-528"
-          ],
-          "sequence_pose_copy": [
-            "BEB-529"
-          ],
-          "sequence_root_additive_duplicate": [
-            "BEB-401"
-          ],
-          "settings_notification_templates": [
-            "BEB-527"
-          ],
-          "simplify_uv_static_mesh": [
-            "BEB-468"
-          ],
-          "smart_object_behavior_duplicate": [
-            "BEB-390"
-          ],
-          "smart_object_definition": [
-            "BEB-389"
-          ],
-          "sound_class_mix_ducking": [
-            "BEB-362"
-          ],
-          "sound_concurrency": [
-            "BEB-379"
-          ],
-          "sound_cue": [
+          "retarget_chain_settings": [
             "BEB-322"
           ],
-          "sound_cue_delete": [
-            "BEB-323"
+          "roof_static_mesh": [
+            "BEB-469"
           ],
-          "sound_cue_distance_crossfade": [
-            "BEB-365"
+          "saved_asset_state": [
+            "BEB-435"
           ],
-          "sound_cue_graph_primitives": [
-            "BEB-396"
+          "seed_data_asset": [
+            "BEB-390"
           ],
-          "sound_cue_layered_template": [
-            "BEB-373"
+          "sequence_curve_marker_cleanup": [
+            "BEB-511"
           ],
-          "sound_cue_looping_ambient": [
-            "BEB-374"
+          "sequence_from_poses": [
+            "BEB-531"
           ],
-          "sound_cue_random_template": [
+          "sequence_pose_copy": [
+            "BEB-532"
+          ],
+          "sequence_root_additive_duplicate": [
+            "BEB-404"
+          ],
+          "settings_notification_templates": [
+            "BEB-530"
+          ],
+          "simplify_uv_static_mesh": [
+            "BEB-471"
+          ],
+          "smart_object_behavior_duplicate": [
+            "BEB-393"
+          ],
+          "smart_object_definition": [
+            "BEB-392"
+          ],
+          "sound_class_mix_ducking": [
             "BEB-364"
           ],
-          "sound_cue_spec": [
+          "sound_concurrency": [
+            "BEB-382"
+          ],
+          "sound_cue": [
+            "BEB-324"
+          ],
+          "sound_cue_delete": [
             "BEB-325"
           ],
-          "sound_cue_switch_duplicate": [
-            "BEB-375"
+          "sound_cue_distance_crossfade": [
+            "BEB-367"
           ],
-          "sound_perception_binding": [
-            "BEB-403"
-          ],
-          "sound_perception_unbind": [
-            "BEB-426"
-          ],
-          "sound_wave_batch_maintenance": [
-            "BEB-380"
-          ],
-          "sound_wave_batch_properties": [
-            "BEB-361"
-          ],
-          "sound_wave_batch_routing": [
-            "BEB-378"
-          ],
-          "sound_wave_virtualization_looping": [
+          "sound_cue_graph_primitives": [
             "BEB-399"
           ],
+          "sound_cue_layered_template": [
+            "BEB-376"
+          ],
+          "sound_cue_looping_ambient": [
+            "BEB-377"
+          ],
+          "sound_cue_random_template": [
+            "BEB-366"
+          ],
+          "sound_cue_spec": [
+            "BEB-327"
+          ],
+          "sound_cue_switch_duplicate": [
+            "BEB-378"
+          ],
+          "sound_perception_binding": [
+            "BEB-406"
+          ],
+          "sound_perception_unbind": [
+            "BEB-429"
+          ],
+          "sound_wave_batch_maintenance": [
+            "BEB-383"
+          ],
+          "sound_wave_batch_properties": [
+            "BEB-363"
+          ],
+          "sound_wave_batch_routing": [
+            "BEB-381"
+          ],
+          "sound_wave_virtualization_looping": [
+            "BEB-402"
+          ],
           "state_machine_graph": [
-            "BEB-523"
+            "BEB-526"
           ],
           "state_tree": [
-            "BEB-388"
+            "BEB-391"
           ],
           "static_mesh_auto_lod": [
-            "BEB-411"
+            "BEB-414"
           ],
           "static_mesh_export": [
             "BEB-305"
@@ -9971,40 +10088,40 @@
             "BEB-306"
           ],
           "street_static_mesh": [
-            "BEB-465"
+            "BEB-468"
           ],
           "stringtable": [
             "BEB-295"
           ],
           "stringtable_blueprint_bulk": [
-            "BEB-489"
+            "BEB-492"
           ],
           "stringtable_csv": [
             "BEB-296"
           ],
           "stringtable_export_remove": [
-            "BEB-381"
+            "BEB-384"
           ],
           "stringtable_metadata_remove": [
-            "BEB-524"
+            "BEB-527"
           ],
           "stringtable_registry_list": [
-            "BEB-534"
+            "BEB-537"
           ],
           "submix_hierarchy": [
-            "BEB-363"
+            "BEB-365"
           ],
           "svg_source_boundary": [
-            "BEB-382"
+            "BEB-385"
           ],
           "system_effect_type_assignment": [
-            "BEB-509"
+            "BEB-512"
           ],
           "system_timing": [
-            "BEB-518"
+            "BEB-521"
           ],
           "target_actor": [
-            "BEB-341"
+            "BEB-343"
           ],
           "texture": [
             "BEB-279"
@@ -10016,55 +10133,55 @@
             "BEB-280"
           ],
           "texture_flipbook_atlas": [
-            "BEB-542"
+            "BEB-545"
           ],
           "texture_postprocess_png": [
             "BEB-283"
           ],
           "texture_preview_tiling": [
-            "BEB-539"
+            "BEB-542"
           ],
           "texture_role_presets": [
             "BEB-282"
           ],
           "typed_validation": [
-            "BEB-537"
+            "BEB-540"
           ],
           "unique_name_validation": [
-            "BEB-535"
+            "BEB-538"
           ],
           "user_parameter_remove": [
-            "BEB-470"
+            "BEB-473"
           ],
           "widget_animation_advanced_events": [
-            "BEB-349"
+            "BEB-351"
           ],
           "widget_animation_remove": [
-            "BEB-490"
+            "BEB-493"
           ],
           "widget_animation_v2": [
-            "BEB-348"
+            "BEB-350"
           ],
           "widget_attribute_binding": [
-            "BEB-464"
+            "BEB-467"
           ],
           "widget_blueprint": [
             "BEB-312"
           ],
           "widget_slot_property_variable": [
-            "BEB-414"
+            "BEB-417"
           ],
           "widget_spec_builder": [
-            "BEB-407"
+            "BEB-410"
           ],
           "widget_styling_actions": [
-            "BEB-520"
+            "BEB-523"
           ],
           "widget_templates": [
-            "BEB-434"
+            "BEB-437"
           ],
           "widget_tree_maintenance": [
-            "BEB-456"
+            "BEB-459"
           ]
         },
         "by_blueprint_type": {
@@ -10142,8 +10259,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -10213,9 +10330,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -10330,7 +10447,10 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ]
         },
         "by_asset_operation": {
@@ -10408,8 +10528,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -10479,9 +10599,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -10596,7 +10716,10 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ],
           "edit": [
             "BEB-279",
@@ -10672,8 +10795,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -10743,9 +10866,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -10860,7 +10983,10 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ],
           "readback_verify": [
             "BEB-279",
@@ -10936,8 +11062,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -11007,9 +11133,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -11124,7 +11250,10 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ],
           "save": [
             "BEB-279",
@@ -11200,8 +11329,8 @@
             "BEB-349",
             "BEB-350",
             "BEB-351",
+            "BEB-352",
             "BEB-353",
-            "BEB-354",
             "BEB-355",
             "BEB-356",
             "BEB-357",
@@ -11271,9 +11400,9 @@
             "BEB-421",
             "BEB-422",
             "BEB-423",
+            "BEB-424",
             "BEB-425",
             "BEB-426",
-            "BEB-427",
             "BEB-428",
             "BEB-429",
             "BEB-430",
@@ -11388,7 +11517,10 @@
             "BEB-539",
             "BEB-540",
             "BEB-541",
-            "BEB-542"
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545"
           ]
         }
       },
@@ -11695,9 +11827,6 @@
         "BEB-276",
         "BEB-277",
         "BEB-278",
-        "BEB-543",
-        "BEB-544",
-        "BEB-545",
         "BEB-546",
         "BEB-547",
         "BEB-548",
@@ -11726,7 +11855,10 @@
         "BEB-571",
         "BEB-572",
         "BEB-573",
-        "BEB-574"
+        "BEB-574",
+        "BEB-575",
+        "BEB-576",
+        "BEB-577"
       ],
       "task_refs": [
         {
@@ -17678,7 +17810,7 @@
           "description": "Set a PrintString InString pin literal and read it back"
         },
         {
-          "id": "BEB-543",
+          "id": "BEB-546",
           "category": "negative_compile",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17706,7 +17838,7 @@
           "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error"
         },
         {
-          "id": "BEB-544",
+          "id": "BEB-547",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17726,7 +17858,7 @@
           "description": "get_graph_data on non-existent asset"
         },
         {
-          "id": "BEB-545",
+          "id": "BEB-548",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17746,7 +17878,7 @@
           "description": "compile_blueprint on non-existent asset"
         },
         {
-          "id": "BEB-546",
+          "id": "BEB-549",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17766,7 +17898,7 @@
           "description": "get_variables on non-existent asset"
         },
         {
-          "id": "BEB-547",
+          "id": "BEB-550",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17786,7 +17918,7 @@
           "description": "list_graphs on non-existent asset"
         },
         {
-          "id": "BEB-548",
+          "id": "BEB-551",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17806,7 +17938,7 @@
           "description": "connect_pins with invalid node IDs"
         },
         {
-          "id": "BEB-549",
+          "id": "BEB-552",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17827,7 +17959,7 @@
           "description": "remove non-existent variable"
         },
         {
-          "id": "BEB-550",
+          "id": "BEB-553",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17848,7 +17980,7 @@
           "description": "rename non-existent function"
         },
         {
-          "id": "BEB-551",
+          "id": "BEB-554",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17869,7 +18001,7 @@
           "description": "remove non-existent component"
         },
         {
-          "id": "BEB-552",
+          "id": "BEB-555",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17890,7 +18022,7 @@
           "description": "set property on non-existent component"
         },
         {
-          "id": "BEB-553",
+          "id": "BEB-556",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17911,7 +18043,7 @@
           "description": "add_component with invalid component class"
         },
         {
-          "id": "BEB-554",
+          "id": "BEB-557",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17932,7 +18064,7 @@
           "description": "set default on non-existent Widget variable"
         },
         {
-          "id": "BEB-555",
+          "id": "BEB-558",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17953,7 +18085,7 @@
           "description": "set params on non-existent Interface function"
         },
         {
-          "id": "BEB-556",
+          "id": "BEB-559",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17973,7 +18105,7 @@
           "description": "get signature for non-existent Interface function"
         },
         {
-          "id": "BEB-557",
+          "id": "BEB-560",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -17994,7 +18126,7 @@
           "description": "set non-existent CDO property"
         },
         {
-          "id": "BEB-558",
+          "id": "BEB-561",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18015,7 +18147,7 @@
           "description": "duplicate non-existent function graph"
         },
         {
-          "id": "BEB-559",
+          "id": "BEB-562",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18036,7 +18168,7 @@
           "description": "add_node with invalid function name"
         },
         {
-          "id": "BEB-560",
+          "id": "BEB-563",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18058,7 +18190,7 @@
           "description": "create_blueprint on an already-existing asset path (precondition: already exists)"
         },
         {
-          "id": "BEB-561",
+          "id": "BEB-564",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18079,7 +18211,7 @@
           "description": "add_variable with an unknown/invalid type token"
         },
         {
-          "id": "BEB-562",
+          "id": "BEB-565",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18100,7 +18232,7 @@
           "description": "reparent_blueprint to a non-existent parent class"
         },
         {
-          "id": "BEB-563",
+          "id": "BEB-566",
           "category": "error_path",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18121,7 +18253,7 @@
           "description": "add_node with an unknown node_type token"
         },
         {
-          "id": "BEB-564",
+          "id": "BEB-567",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18143,7 +18275,7 @@
           "description": "add_variable must reject a duplicate member variable name"
         },
         {
-          "id": "BEB-565",
+          "id": "BEB-568",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18165,7 +18297,7 @@
           "description": "add_function must reject a duplicate function name"
         },
         {
-          "id": "BEB-566",
+          "id": "BEB-569",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18187,7 +18319,7 @@
           "description": "add_component must reject a duplicate component name (regression: silent suffix bug)"
         },
         {
-          "id": "BEB-567",
+          "id": "BEB-570",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18208,7 +18340,7 @@
           "description": "add_event_node must reject a duplicate custom event name"
         },
         {
-          "id": "BEB-568",
+          "id": "BEB-571",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18230,7 +18362,7 @@
           "description": "add_event_dispatcher must reject a duplicate dispatcher name"
         },
         {
-          "id": "BEB-569",
+          "id": "BEB-572",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18253,7 +18385,7 @@
           "description": "add_local_variable must reject a duplicate local variable name (regression: silent duplicate bug)"
         },
         {
-          "id": "BEB-570",
+          "id": "BEB-573",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18275,7 +18407,7 @@
           "description": "Widget add_variable must reject duplicate display-state variable names"
         },
         {
-          "id": "BEB-571",
+          "id": "BEB-574",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18297,7 +18429,7 @@
           "description": "AnimInstance add_function must reject duplicate update helper names"
         },
         {
-          "id": "BEB-572",
+          "id": "BEB-575",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18319,7 +18451,7 @@
           "description": "GameplayAbility add_event_dispatcher must reject duplicate commit signals"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-576",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18341,7 +18473,7 @@
           "description": "Character add_component must reject duplicate helper component names"
         },
         {
-          "id": "BEB-574",
+          "id": "BEB-577",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -18366,9 +18498,6 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-564",
-            "BEB-565",
-            "BEB-566",
             "BEB-567",
             "BEB-568",
             "BEB-569",
@@ -18376,7 +18505,10 @@
             "BEB-571",
             "BEB-572",
             "BEB-573",
-            "BEB-574"
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "edit_execute": [
             "BEB-166",
@@ -18543,9 +18675,6 @@
             "BEB-154"
           ],
           "error_path": [
-            "BEB-544",
-            "BEB-545",
-            "BEB-546",
             "BEB-547",
             "BEB-548",
             "BEB-549",
@@ -18562,7 +18691,10 @@
             "BEB-560",
             "BEB-561",
             "BEB-562",
-            "BEB-563"
+            "BEB-563",
+            "BEB-564",
+            "BEB-565",
+            "BEB-566"
           ],
           "graph_read": [
             "BEB-022",
@@ -18602,7 +18734,7 @@
             "BEB-056"
           ],
           "negative_compile": [
-            "BEB-543"
+            "BEB-546"
           ],
           "read_schema": [
             "BEB-085",
@@ -18728,7 +18860,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-572"
+            "BEB-575"
           ],
           "animation": [
             "BEB-004",
@@ -18761,7 +18893,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-571"
+            "BEB-574"
           ],
           "component": [
             "BEB-006",
@@ -18856,14 +18988,14 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-543",
-            "BEB-564",
-            "BEB-565",
-            "BEB-566",
+            "BEB-546",
             "BEB-567",
             "BEB-568",
             "BEB-569",
-            "BEB-573"
+            "BEB-570",
+            "BEB-571",
+            "BEB-572",
+            "BEB-576"
           ],
           "general": [
             "BEB-085",
@@ -18936,9 +19068,6 @@
             "BEB-152",
             "BEB-153",
             "BEB-154",
-            "BEB-544",
-            "BEB-545",
-            "BEB-546",
             "BEB-547",
             "BEB-548",
             "BEB-549",
@@ -18955,7 +19084,10 @@
             "BEB-560",
             "BEB-561",
             "BEB-562",
-            "BEB-563"
+            "BEB-563",
+            "BEB-564",
+            "BEB-565",
+            "BEB-566"
           ],
           "interface": [
             "BEB-007",
@@ -18986,7 +19118,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-574"
+            "BEB-577"
           ],
           "ui": [
             "BEB-003",
@@ -19019,7 +19151,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-570"
+            "BEB-573"
           ]
         },
         "by_edit_domain": {
@@ -19052,7 +19184,7 @@
             "BEB-225",
             "BEB-234",
             "BEB-235",
-            "BEB-543"
+            "BEB-546"
           ],
           "component": [
             "BEB-134",
@@ -19069,8 +19201,8 @@
             "BEB-272",
             "BEB-273",
             "BEB-276",
-            "BEB-566",
-            "BEB-573"
+            "BEB-569",
+            "BEB-576"
           ],
           "event": [
             "BEB-143",
@@ -19084,8 +19216,8 @@
             "BEB-222",
             "BEB-259",
             "BEB-265",
-            "BEB-568",
-            "BEB-572"
+            "BEB-571",
+            "BEB-575"
           ],
           "function": [
             "BEB-115",
@@ -19135,11 +19267,11 @@
             "BEB-269",
             "BEB-270",
             "BEB-275",
-            "BEB-565",
-            "BEB-567",
-            "BEB-569",
-            "BEB-571",
-            "BEB-574"
+            "BEB-568",
+            "BEB-570",
+            "BEB-572",
+            "BEB-574",
+            "BEB-577"
           ],
           "general": [
             "BEB-001",
@@ -19249,9 +19381,6 @@
             "BEB-105",
             "BEB-106",
             "BEB-107",
-            "BEB-544",
-            "BEB-545",
-            "BEB-546",
             "BEB-547",
             "BEB-548",
             "BEB-549",
@@ -19268,7 +19397,10 @@
             "BEB-560",
             "BEB-561",
             "BEB-562",
-            "BEB-563"
+            "BEB-563",
+            "BEB-564",
+            "BEB-565",
+            "BEB-566"
           ],
           "node": [
             "BEB-108",
@@ -19348,8 +19480,8 @@
             "BEB-261",
             "BEB-262",
             "BEB-274",
-            "BEB-564",
-            "BEB-570"
+            "BEB-567",
+            "BEB-573"
           ]
         },
         "by_blueprint_type": {
@@ -19390,13 +19522,13 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-543",
-            "BEB-564",
-            "BEB-565",
-            "BEB-566",
+            "BEB-546",
             "BEB-567",
             "BEB-568",
-            "BEB-569"
+            "BEB-569",
+            "BEB-570",
+            "BEB-571",
+            "BEB-572"
           ],
           "ActorComponent": [
             "BEB-006",
@@ -19459,7 +19591,7 @@
             "BEB-253",
             "BEB-254",
             "BEB-255",
-            "BEB-571"
+            "BEB-574"
           ],
           "Character": [
             "BEB-002",
@@ -19488,7 +19620,7 @@
             "BEB-185",
             "BEB-237",
             "BEB-243",
-            "BEB-573"
+            "BEB-576"
           ],
           "GameplayAbility": [
             "BEB-005",
@@ -19521,7 +19653,7 @@
             "BEB-258",
             "BEB-259",
             "BEB-260",
-            "BEB-572"
+            "BEB-575"
           ],
           "Interface": [
             "BEB-007",
@@ -19552,7 +19684,7 @@
             "BEB-268",
             "BEB-269",
             "BEB-270",
-            "BEB-574"
+            "BEB-577"
           ],
           "Widget": [
             "BEB-003",
@@ -19585,7 +19717,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-570"
+            "BEB-573"
           ],
           "general": [
             "BEB-085",
@@ -19658,9 +19790,6 @@
             "BEB-152",
             "BEB-153",
             "BEB-154",
-            "BEB-544",
-            "BEB-545",
-            "BEB-546",
             "BEB-547",
             "BEB-548",
             "BEB-549",
@@ -19677,15 +19806,18 @@
             "BEB-560",
             "BEB-561",
             "BEB-562",
-            "BEB-563"
+            "BEB-563",
+            "BEB-564",
+            "BEB-565",
+            "BEB-566"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-146",
             "BEB-154",
-            "BEB-543",
-            "BEB-560"
+            "BEB-546",
+            "BEB-563"
           ],
           "edit": [
             "BEB-108",
@@ -19828,20 +19960,17 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-543",
-            "BEB-549",
-            "BEB-550",
-            "BEB-551",
+            "BEB-546",
             "BEB-552",
             "BEB-553",
             "BEB-554",
             "BEB-555",
+            "BEB-556",
             "BEB-557",
             "BEB-558",
-            "BEB-559",
+            "BEB-560",
             "BEB-561",
             "BEB-562",
-            "BEB-563",
             "BEB-564",
             "BEB-565",
             "BEB-566",
@@ -19852,7 +19981,10 @@
             "BEB-571",
             "BEB-572",
             "BEB-573",
-            "BEB-574"
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "readback_verify": [
             "BEB-001",
@@ -20133,9 +20265,6 @@
             "BEB-276",
             "BEB-277",
             "BEB-278",
-            "BEB-543",
-            "BEB-544",
-            "BEB-545",
             "BEB-546",
             "BEB-547",
             "BEB-548",
@@ -20164,14 +20293,17 @@
             "BEB-571",
             "BEB-572",
             "BEB-573",
-            "BEB-574"
+            "BEB-574",
+            "BEB-575",
+            "BEB-576",
+            "BEB-577"
           ],
           "save": [
             "BEB-140",
             "BEB-148",
             "BEB-235",
-            "BEB-543",
-            "BEB-560"
+            "BEB-546",
+            "BEB-563"
           ]
         }
       },

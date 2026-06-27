@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.collection",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/collection.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 6,
   "routing_axes": [
     "category",
@@ -210,15 +210,15 @@
       },
       "task_count": 5,
       "task_ids": [
-        "BEB-347",
-        "BEB-352",
-        "BEB-376",
-        "BEB-496",
-        "BEB-535"
+        "BEB-349",
+        "BEB-354",
+        "BEB-379",
+        "BEB-499",
+        "BEB-538"
       ],
       "task_refs": [
         {
-          "id": "BEB-347",
+          "id": "BEB-349",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -251,7 +251,7 @@
           "description": "Create a local Content Browser collection, add a generated Texture2D member, color it, and verify membership"
         },
         {
-          "id": "BEB-352",
+          "id": "BEB-354",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -279,7 +279,7 @@
           "description": "Create a dynamic Content Browser collection, edit its project asset query, color it, and read the query back"
         },
         {
-          "id": "BEB-376",
+          "id": "BEB-379",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -310,7 +310,7 @@
           "description": "Create a static Content Browser collection, add two Texture2D assets, remove one, and verify remaining membership"
         },
         {
-          "id": "BEB-496",
+          "id": "BEB-499",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -341,7 +341,7 @@
           "description": "Create a local Content Browser collection with a generated Texture2D member, force-delete the non-empty collection, and verify the collection is absent from the collection list"
         },
         {
-          "id": "BEB-535",
+          "id": "BEB-538",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -380,70 +380,70 @@
       "groups": {
         "by_edit_domain": {
           "content_browser_collection": [
-            "BEB-347"
+            "BEB-349"
           ],
           "content_browser_collection_remove": [
-            "BEB-376"
+            "BEB-379"
           ],
           "content_browser_dynamic_collection": [
-            "BEB-352"
+            "BEB-354"
           ],
           "delete_readback": [
-            "BEB-496"
+            "BEB-499"
           ],
           "unique_name_validation": [
-            "BEB-535"
+            "BEB-538"
           ]
         },
         "by_operation_semantics": {
           "create": [
-            "BEB-352"
+            "BEB-354"
           ],
           "create_save": [
-            "BEB-347",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-352"
+            "BEB-354"
           ],
           "create_save": [
-            "BEB-347",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-347",
-            "BEB-352",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-354",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ],
           "edit": [
-            "BEB-347",
-            "BEB-352",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-354",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ],
           "readback_verify": [
-            "BEB-347",
-            "BEB-352",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-354",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ],
           "save": [
-            "BEB-347",
-            "BEB-376",
-            "BEB-496",
-            "BEB-535"
+            "BEB-349",
+            "BEB-379",
+            "BEB-499",
+            "BEB-538"
           ]
         }
       },
@@ -485,11 +485,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-347"
+        "BEB-349"
       ],
       "task_refs": [
         {
-          "id": "BEB-347",
+          "id": "BEB-349",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -525,26 +525,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-347"
+            "BEB-349"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-347"
+            "BEB-349"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-347"
+            "BEB-349"
           ],
           "edit": [
-            "BEB-347"
+            "BEB-349"
           ],
           "readback_verify": [
-            "BEB-347"
+            "BEB-349"
           ],
           "save": [
-            "BEB-347"
+            "BEB-349"
           ]
         }
       },
@@ -580,11 +580,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-376"
+        "BEB-379"
       ],
       "task_refs": [
         {
-          "id": "BEB-376",
+          "id": "BEB-379",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -618,26 +618,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-376"
+            "BEB-379"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-376"
+            "BEB-379"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-376"
+            "BEB-379"
           ],
           "edit": [
-            "BEB-376"
+            "BEB-379"
           ],
           "readback_verify": [
-            "BEB-376"
+            "BEB-379"
           ],
           "save": [
-            "BEB-376"
+            "BEB-379"
           ]
         }
       },
@@ -673,11 +673,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-352"
+        "BEB-354"
       ],
       "task_refs": [
         {
-          "id": "BEB-352",
+          "id": "BEB-354",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -708,23 +708,23 @@
       "groups": {
         "by_operation_semantics": {
           "create": [
-            "BEB-352"
+            "BEB-354"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-352"
+            "BEB-354"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-352"
+            "BEB-354"
           ],
           "edit": [
-            "BEB-352"
+            "BEB-354"
           ],
           "readback_verify": [
-            "BEB-352"
+            "BEB-354"
           ]
         }
       },
@@ -760,11 +760,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-496"
+        "BEB-499"
       ],
       "task_refs": [
         {
-          "id": "BEB-496",
+          "id": "BEB-499",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -798,26 +798,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-496"
+            "BEB-499"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-496"
+            "BEB-499"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-496"
+            "BEB-499"
           ],
           "edit": [
-            "BEB-496"
+            "BEB-499"
           ],
           "readback_verify": [
-            "BEB-496"
+            "BEB-499"
           ],
           "save": [
-            "BEB-496"
+            "BEB-499"
           ]
         }
       },
@@ -853,11 +853,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-535"
+        "BEB-538"
       ],
       "task_refs": [
         {
-          "id": "BEB-535",
+          "id": "BEB-538",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -896,26 +896,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-535"
+            "BEB-538"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-535"
+            "BEB-538"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-535"
+            "BEB-538"
           ],
           "edit": [
-            "BEB-535"
+            "BEB-538"
           ],
           "readback_verify": [
-            "BEB-535"
+            "BEB-538"
           ],
           "save": [
-            "BEB-535"
+            "BEB-538"
           ]
         }
       },

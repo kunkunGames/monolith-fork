@@ -19,23 +19,23 @@
   "task_ids": [
     "BEB-312",
     "BEB-313",
-    "BEB-343",
-    "BEB-348",
-    "BEB-349",
-    "BEB-407",
-    "BEB-414",
-    "BEB-423",
-    "BEB-434",
-    "BEB-448",
-    "BEB-449",
-    "BEB-455",
-    "BEB-456",
-    "BEB-474",
-    "BEB-476",
-    "BEB-490",
-    "BEB-519",
-    "BEB-520",
-    "BEB-527"
+    "BEB-345",
+    "BEB-350",
+    "BEB-351",
+    "BEB-410",
+    "BEB-417",
+    "BEB-426",
+    "BEB-437",
+    "BEB-451",
+    "BEB-452",
+    "BEB-458",
+    "BEB-459",
+    "BEB-477",
+    "BEB-479",
+    "BEB-493",
+    "BEB-522",
+    "BEB-523",
+    "BEB-530"
   ],
   "task_refs": [
     {
@@ -103,7 +103,7 @@
       "description": "Create a CommonActivatableWidget, convert/configure CommonTextBlock text, compile/save, and audit CommonUI wiring"
     },
     {
-      "id": "BEB-343",
+      "id": "BEB-345",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -132,7 +132,7 @@
       "description": "Create a CommonUI input-action DataTable, add keyboard/gamepad glyph rows, save, and read the rows back"
     },
     {
-      "id": "BEB-348",
+      "id": "BEB-350",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -163,7 +163,7 @@
       "description": "Create a Widget Blueprint, add a TextBlock, author a multi-key UWidgetAnimation, save, and read animation tracks back"
     },
     {
-      "id": "BEB-349",
+      "id": "BEB-351",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -199,7 +199,7 @@
       "description": "Create a Widget Blueprint, author Bezier and spring animation tracks, add timed animation events, bind a widget event to an animation, save, and read animation tracks back"
     },
     {
-      "id": "BEB-407",
+      "id": "BEB-410",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -228,7 +228,7 @@
       "description": "Build a Widget Blueprint from a UISpec document, save it, dump the UISpec back, and verify the generated widget tree"
     },
     {
-      "id": "BEB-414",
+      "id": "BEB-417",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -264,7 +264,7 @@
       "description": "Create a Widget Blueprint, apply CanvasPanel slot edits, set allowlisted TextBlock properties, expose widget variables, save, and read back tree/properties/variables"
     },
     {
-      "id": "BEB-423",
+      "id": "BEB-426",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -299,7 +299,7 @@
       "description": "Create a Widget Blueprint, convert a Button to CommonButtonBase, create/apply a CommonButtonStyle, save it, and audit styled CommonUI state"
     },
     {
-      "id": "BEB-434",
+      "id": "BEB-437",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -333,7 +333,7 @@
       "description": "Create saved UMG template Widget Blueprints for menu, dialog, loading, inventory, save slots, and HUD element layouts, then read each generated tree back"
     },
     {
-      "id": "BEB-448",
+      "id": "BEB-451",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -370,7 +370,7 @@
       "description": "Create a dialog Widget Blueprint, convert text and border widgets to CommonUI variants, create CommonText/CommonBorder style assets, apply them, save, and read back the styled tree"
     },
     {
-      "id": "BEB-449",
+      "id": "BEB-452",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -411,7 +411,7 @@
       "description": "Create a CommonActivatableWidget and CommonTabListWidget asset, add CommonUI container/content widgets, author navigation rules, save, and read the authored tree/navigation back"
     },
     {
-      "id": "BEB-455",
+      "id": "BEB-458",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -442,7 +442,7 @@
       "description": "Create an entry Widget Blueprint and a ListView container, configure the ListView entry class and item size, save both assets, and read the list widget back"
     },
     {
-      "id": "BEB-456",
+      "id": "BEB-459",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -476,7 +476,7 @@
       "description": "Create a Widget Blueprint, add nested panels and a child widget, rename and move the child, remove the empty panel, save, and read the final widget tree back"
     },
     {
-      "id": "BEB-474",
+      "id": "BEB-477",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -509,7 +509,7 @@
       "description": "Create a CommonUI input-action DataTable and Widget Blueprint, bind a UCommonActionWidget to the row, save, and audit the widget binding"
     },
     {
-      "id": "BEB-476",
+      "id": "BEB-479",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -541,7 +541,7 @@
       "description": "Create a CommonUI pause-menu scaffold with an action table, save it, and read back widget tree, navigation, focus, and CommonUI audit state"
     },
     {
-      "id": "BEB-490",
+      "id": "BEB-493",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -574,7 +574,7 @@
       "description": "Create a Widget Blueprint with two animations, remove one animation, save, and verify only the retained animation remains"
     },
     {
-      "id": "BEB-519",
+      "id": "BEB-522",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -609,7 +609,7 @@
       "description": "Create a Widget Blueprint and UI-domain shadow parent material, apply a saved box-shadow MaterialInstance to a target widget, save, and read back the inserted shadow widget and MIC parameters"
     },
     {
-      "id": "BEB-520",
+      "id": "BEB-523",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -646,7 +646,7 @@
       "description": "Create a Widget Blueprint with Image, Border, and TextBlock widgets, apply set_image/set_brush/set_font styling edits, save it, and dump the UI spec to read back brush/font/image content"
     },
     {
-      "id": "BEB-527",
+      "id": "BEB-530",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -698,7 +698,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-519"
+        "BEB-522"
       ],
       "case_file": "testcases\\box_shadow_mid.json"
     },
@@ -720,7 +720,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-474"
+        "BEB-477"
       ],
       "case_file": "testcases\\commonui_action_widget_binding.json"
     },
@@ -742,7 +742,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-449"
+        "BEB-452"
       ],
       "case_file": "testcases\\commonui_container_navigation.json"
     },
@@ -764,7 +764,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-343"
+        "BEB-345"
       ],
       "case_file": "testcases\\commonui_input_action_datatable.json"
     },
@@ -786,7 +786,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-476"
+        "BEB-479"
       ],
       "case_file": "testcases\\commonui_pause_menu_focus.json"
     },
@@ -808,7 +808,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-448"
+        "BEB-451"
       ],
       "case_file": "testcases\\commonui_style_assets.json"
     },
@@ -830,7 +830,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-423"
+        "BEB-426"
       ],
       "case_file": "testcases\\commonui_styled_button.json"
     },
@@ -874,7 +874,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-455"
+        "BEB-458"
       ],
       "case_file": "testcases\\list_view_binding.json"
     },
@@ -896,7 +896,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-527"
+        "BEB-530"
       ],
       "case_file": "testcases\\settings_notification_templates.json"
     },
@@ -918,7 +918,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-349"
+        "BEB-351"
       ],
       "case_file": "testcases\\widget_animation_advanced_events.json"
     },
@@ -940,7 +940,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-490"
+        "BEB-493"
       ],
       "case_file": "testcases\\widget_animation_remove.json"
     },
@@ -962,7 +962,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-348"
+        "BEB-350"
       ],
       "case_file": "testcases\\widget_animation_v2.json"
     },
@@ -1006,7 +1006,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-414"
+        "BEB-417"
       ],
       "case_file": "testcases\\widget_slot_property_variable.json"
     },
@@ -1028,7 +1028,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-407"
+        "BEB-410"
       ],
       "case_file": "testcases\\widget_spec_builder.json"
     },
@@ -1050,7 +1050,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-520"
+        "BEB-523"
       ],
       "case_file": "testcases\\widget_styling_actions.json"
     },
@@ -1072,7 +1072,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-434"
+        "BEB-437"
       ],
       "case_file": "testcases\\widget_templates.json"
     },
@@ -1094,7 +1094,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-456"
+        "BEB-459"
       ],
       "case_file": "testcases\\widget_tree_maintenance.json"
     }

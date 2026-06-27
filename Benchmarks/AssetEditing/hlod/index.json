@@ -17,12 +17,12 @@
   },
   "edit_domain_count": 2,
   "task_ids": [
-    "BEB-346",
-    "BEB-491"
+    "BEB-348",
+    "BEB-494"
   ],
   "task_refs": [
     {
-      "id": "BEB-346",
+      "id": "BEB-348",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -51,7 +51,7 @@
       "description": "Create a World Partition HLODLayer asset, reconfigure cell/loading settings, save, and inspect the reflected HLOD layer"
     },
     {
-      "id": "BEB-491",
+      "id": "BEB-494",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -102,7 +102,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-346"
+        "BEB-348"
       ],
       "case_file": "testcases\\layer.json"
     },
@@ -124,7 +124,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-491"
+        "BEB-494"
       ],
       "case_file": "testcases\\mesh_setup_layer.json"
     }

@@ -17,39 +17,39 @@
   },
   "edit_domain_count": 29,
   "task_ids": [
-    "BEB-322",
-    "BEB-323",
     "BEB-324",
     "BEB-325",
     "BEB-326",
-    "BEB-361",
-    "BEB-362",
+    "BEB-327",
+    "BEB-328",
     "BEB-363",
     "BEB-364",
     "BEB-365",
-    "BEB-373",
-    "BEB-374",
-    "BEB-375",
+    "BEB-366",
+    "BEB-367",
+    "BEB-376",
+    "BEB-377",
     "BEB-378",
-    "BEB-379",
-    "BEB-380",
-    "BEB-396",
+    "BEB-381",
+    "BEB-382",
+    "BEB-383",
     "BEB-399",
-    "BEB-403",
-    "BEB-426",
-    "BEB-453",
-    "BEB-469",
+    "BEB-402",
+    "BEB-406",
+    "BEB-429",
+    "BEB-456",
     "BEB-472",
-    "BEB-477",
-    "BEB-497",
-    "BEB-498",
-    "BEB-505",
-    "BEB-507",
-    "BEB-540"
+    "BEB-475",
+    "BEB-480",
+    "BEB-500",
+    "BEB-501",
+    "BEB-508",
+    "BEB-510",
+    "BEB-543"
   ],
   "task_refs": [
     {
-      "id": "BEB-322",
+      "id": "BEB-324",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -83,7 +83,7 @@
       "description": "Create a test SoundWave, SoundClass, and SoundCue, assign class metadata, save, validate, and read references back"
     },
     {
-      "id": "BEB-323",
+      "id": "BEB-325",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -113,7 +113,7 @@
       "description": "Create a SoundWave-backed SoundCue, delete the cue through the audio namespace, and verify the source wave remains while the cue is gone"
     },
     {
-      "id": "BEB-324",
+      "id": "BEB-326",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -149,7 +149,7 @@
       "description": "Create attenuation, mix, concurrency, and submix assets, edit routing settings, save, and read each value back"
     },
     {
-      "id": "BEB-325",
+      "id": "BEB-327",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -179,7 +179,7 @@
       "description": "Build a SoundCue graph from a declarative spec with two WavePlayers feeding a Mixer, save it, and validate references"
     },
     {
-      "id": "BEB-326",
+      "id": "BEB-328",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -212,7 +212,7 @@
       "description": "Apply a batch audio template to a generated SoundWave, save it, and read back routing/compression/looping fields"
     },
     {
-      "id": "BEB-361",
+      "id": "BEB-363",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -241,7 +241,7 @@
       "description": "Create a procedural SoundWave, batch-edit core SoundWave properties, save it, then read volume and pitch back"
     },
     {
-      "id": "BEB-362",
+      "id": "BEB-364",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -272,7 +272,7 @@
       "description": "Create parent/child SoundClass assets and a SoundMix ducking adjuster, save them, then read hierarchy and mix timing back"
     },
     {
-      "id": "BEB-363",
+      "id": "BEB-365",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -302,7 +302,7 @@
       "description": "Create root and child SoundSubmix assets, reparent the child and set output volume, save both, then read hierarchy back"
     },
     {
-      "id": "BEB-364",
+      "id": "BEB-366",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -332,7 +332,7 @@
       "description": "Create two SoundWaves, build a weighted-random SoundCue template, save it, then inspect graph nodes and wave references"
     },
     {
-      "id": "BEB-365",
+      "id": "BEB-367",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -362,7 +362,7 @@
       "description": "Create near/far SoundWaves, build a DistanceCrossFade SoundCue template, save it, then inspect crossfade bands and references"
     },
     {
-      "id": "BEB-373",
+      "id": "BEB-376",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -392,7 +392,7 @@
       "description": "Create two synthetic SoundWave assets, build a layered mixer SoundCue with per-layer volumes, save it, and read the graph back"
     },
     {
-      "id": "BEB-374",
+      "id": "BEB-377",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -422,7 +422,7 @@
       "description": "Create a looping ambient SoundCue with Looping, Delay, Random, WavePlayer nodes, save it, and read the graph back"
     },
     {
-      "id": "BEB-375",
+      "id": "BEB-378",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -454,7 +454,7 @@
       "description": "Create a Switch SoundCue, duplicate it, save both assets, and verify the duplicated graph and wave references"
     },
     {
-      "id": "BEB-378",
+      "id": "BEB-381",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -488,7 +488,7 @@
       "description": "Create two SoundWave assets, batch-assign shared class/attenuation/submix/looping settings, save both, and read back both routed assets"
     },
     {
-      "id": "BEB-379",
+      "id": "BEB-382",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -520,7 +520,7 @@
       "description": "Create and edit a SoundConcurrency asset, batch-attach it to two SoundWaves, save all assets, and read the concurrency settings and registry entry back"
     },
     {
-      "id": "BEB-380",
+      "id": "BEB-383",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -550,7 +550,7 @@
       "description": "Create two SoundWaves, batch-edit compression fields, batch-rename through the audio namespace, save renamed assets, and read compression plus registry names back"
     },
     {
-      "id": "BEB-396",
+      "id": "BEB-399",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -585,7 +585,7 @@
       "description": "Create SoundWaves and an empty SoundCue, add/connect/set/remove graph nodes through primitive actions, save it, and validate the resulting graph"
     },
     {
-      "id": "BEB-399",
+      "id": "BEB-402",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -615,7 +615,7 @@
       "description": "Create two SoundWaves, batch-enable looping and PlayWhenSilent virtualization, save both, and verify looping plus the native VirtualizationMode enum read-back"
     },
     {
-      "id": "BEB-403",
+      "id": "BEB-406",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -645,7 +645,7 @@
       "description": "Create a SoundWave, bind Monolith perception user data, save it, and read back exact hearing/noise settings"
     },
     {
-      "id": "BEB-426",
+      "id": "BEB-429",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -676,7 +676,7 @@
       "description": "Create a SoundWave, bind and then remove Monolith perception user data, save it, and verify the binding is absent"
     },
     {
-      "id": "BEB-453",
+      "id": "BEB-456",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -708,7 +708,7 @@
       "description": "Create a MetaSound Source asset, author graph-level input/output pins, edit an input default, save it, and read the graph back"
     },
     {
-      "id": "BEB-469",
+      "id": "BEB-472",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -738,7 +738,7 @@
       "description": "Create a MetaSound Source, add a graph variable with generated get/set nodes, save it, and inspect document variables"
     },
     {
-      "id": "BEB-472",
+      "id": "BEB-475",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -768,7 +768,7 @@
       "description": "Create a SoundWave test tone, build a one-shot MetaSound Source around it, save both assets, and read back graph and asset metadata"
     },
     {
-      "id": "BEB-477",
+      "id": "BEB-480",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -800,7 +800,7 @@
       "description": "Create a looping ambient MetaSound Source from a SoundWave, create a preset referencing it, save all assets, and read back graph and dependency metadata"
     },
     {
-      "id": "BEB-497",
+      "id": "BEB-500",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -830,7 +830,7 @@
       "description": "Create a synthesized MetaSound Source with oscillator and ADSR parameters, save it, and read graph summary, user parameter, and validation state back"
     },
     {
-      "id": "BEB-498",
+      "id": "BEB-501",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -862,7 +862,7 @@
       "description": "Create two deterministic SoundWaves, build a parameter-driven interactive MetaSound crossfade graph, save all assets, and read graph and validation state back"
     },
     {
-      "id": "BEB-505",
+      "id": "BEB-508",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -895,7 +895,7 @@
       "description": "Create a MetaSound Patch asset, add graph-level input/output pins, save it, and verify patch metadata plus user parameters"
     },
     {
-      "id": "BEB-507",
+      "id": "BEB-510",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -927,7 +927,7 @@
       "description": "Build a MetaSound Patch from a JSON spec, add a graph node by alias, edit its editor location, remove it, save, and verify the final graph"
     },
     {
-      "id": "BEB-540",
+      "id": "BEB-543",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -986,7 +986,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-324"
+        "BEB-326"
       ],
       "case_file": "testcases\\routing.json"
     },
@@ -1008,7 +1008,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-326"
+        "BEB-328"
       ],
       "case_file": "testcases\\template_batch.json"
     },
@@ -1030,7 +1030,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-540"
+        "BEB-543"
       ],
       "case_file": "testcases\\metasound_explicit_connection.json"
     },
@@ -1052,7 +1052,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-498"
+        "BEB-501"
       ],
       "case_file": "testcases\\metasound_interactive_crossfade.json"
     },
@@ -1074,7 +1074,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-477"
+        "BEB-480"
       ],
       "case_file": "testcases\\metasound_looping_ambient_preset.json"
     },
@@ -1096,7 +1096,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-472"
+        "BEB-475"
       ],
       "case_file": "testcases\\metasound_oneshot_sfx.json"
     },
@@ -1118,7 +1118,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-505"
+        "BEB-508"
       ],
       "case_file": "testcases\\metasound_patch_io.json"
     },
@@ -1140,7 +1140,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-453"
+        "BEB-456"
       ],
       "case_file": "testcases\\metasound_source_graph.json"
     },
@@ -1162,7 +1162,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-507"
+        "BEB-510"
       ],
       "case_file": "testcases\\metasound_spec_node_edit.json"
     },
@@ -1184,7 +1184,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-497"
+        "BEB-500"
       ],
       "case_file": "testcases\\metasound_synth_tone.json"
     },
@@ -1206,7 +1206,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-469"
+        "BEB-472"
       ],
       "case_file": "testcases\\metasound_variable_state.json"
     },
@@ -1228,7 +1228,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-362"
+        "BEB-364"
       ],
       "case_file": "testcases\\sound_class_mix_ducking.json"
     },
@@ -1250,7 +1250,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-379"
+        "BEB-382"
       ],
       "case_file": "testcases\\sound_concurrency.json"
     },
@@ -1272,7 +1272,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-322"
+        "BEB-324"
       ],
       "case_file": "testcases\\sound_cue.json"
     },
@@ -1294,7 +1294,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-323"
+        "BEB-325"
       ],
       "case_file": "testcases\\sound_cue_delete.json"
     },
@@ -1316,7 +1316,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-365"
+        "BEB-367"
       ],
       "case_file": "testcases\\sound_cue_distance_crossfade.json"
     },
@@ -1338,7 +1338,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-396"
+        "BEB-399"
       ],
       "case_file": "testcases\\sound_cue_graph_primitives.json"
     },
@@ -1360,7 +1360,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-373"
+        "BEB-376"
       ],
       "case_file": "testcases\\sound_cue_layered_template.json"
     },
@@ -1382,7 +1382,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-374"
+        "BEB-377"
       ],
       "case_file": "testcases\\sound_cue_looping_ambient.json"
     },
@@ -1404,7 +1404,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-364"
+        "BEB-366"
       ],
       "case_file": "testcases\\sound_cue_random_template.json"
     },
@@ -1426,7 +1426,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-325"
+        "BEB-327"
       ],
       "case_file": "testcases\\sound_cue_spec.json"
     },
@@ -1448,7 +1448,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-375"
+        "BEB-378"
       ],
       "case_file": "testcases\\sound_cue_switch_duplicate.json"
     },
@@ -1470,7 +1470,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-403"
+        "BEB-406"
       ],
       "case_file": "testcases\\sound_perception_binding.json"
     },
@@ -1492,7 +1492,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-426"
+        "BEB-429"
       ],
       "case_file": "testcases\\sound_perception_unbind.json"
     },
@@ -1514,7 +1514,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-380"
+        "BEB-383"
       ],
       "case_file": "testcases\\sound_wave_batch_maintenance.json"
     },
@@ -1536,7 +1536,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-361"
+        "BEB-363"
       ],
       "case_file": "testcases\\sound_wave_batch_properties.json"
     },
@@ -1558,7 +1558,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-378"
+        "BEB-381"
       ],
       "case_file": "testcases\\sound_wave_batch_routing.json"
     },
@@ -1580,7 +1580,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-399"
+        "BEB-402"
       ],
       "case_file": "testcases\\sound_wave_virtualization_looping.json"
     },
@@ -1602,7 +1602,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-363"
+        "BEB-365"
       ],
       "case_file": "testcases\\submix_hierarchy.json"
     }

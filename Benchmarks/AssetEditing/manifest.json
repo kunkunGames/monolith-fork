@@ -3,10 +3,10 @@
   "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
   "primary_score": "asset_editing_score",
   "expected_namespace": "blueprint-plus-asset-authoring",
-  "generated_at": "2026-06-27T13:47:56.108021+00:00",
-  "task_count": 574,
+  "generated_at": "2026-06-27T14:12:35.204398+00:00",
+  "task_count": 577,
   "category_counts": {
-    "asset_authoring": 264,
+    "asset_authoring": 267,
     "duplicate_reject": 11,
     "edit_execute": 113,
     "edit_schema": 47,
@@ -67,7 +67,7 @@
   "base_edit_execute_tasks_per_type": 10,
   "additional_edit_execute_tasks": 43,
   "additional_edit_execute_specs": 28,
-  "asset_authoring_tasks": 264,
+  "asset_authoring_tasks": 267,
   "edit_execute_tasks_per_type": {
     "Actor": 20,
     "ActorComponent": 16,
@@ -108,7 +108,7 @@
   "testset_module_storage": "split_shards",
   "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
   "testset_module_shard_count": 38,
-  "testset_module_count": 1791,
+  "testset_module_count": 1809,
   "testset_routing_axes": [
     "category",
     "domain",
@@ -146,16 +146,16 @@
       "asset_type": "animation",
       "asset_type_slug": "animation",
       "module_id": "asset_authoring.animation",
-      "task_count": 35,
-      "edit_domain_count": 35,
+      "task_count": 38,
+      "edit_domain_count": 38,
       "operation_counts": {
-        "creation_or_import": 35,
-        "edit": 35,
-        "save": 35,
-        "readback_verify": 35
+        "creation_or_import": 38,
+        "edit": 38,
+        "save": 38,
+        "readback_verify": 38
       },
       "lifecycle_counts": {
-        "create_save": 35
+        "create_save": 38
       },
       "directory": "Benchmarks/AssetEditing/animation",
       "index_file": "Benchmarks/AssetEditing/animation/index.json",

@@ -6,7 +6,7 @@ Measures Monolith MCP asset editing capability across Blueprint graph/class/comp
 
 | File | Purpose |
 |------|---------|
-| `tasks.jsonl` | 574 benchmark tasks across 11 categories |
+| `tasks.jsonl` | 577 benchmark tasks across 11 categories |
 | `manifest.json` | Benchmark metadata, score formula, weights, category counts |
 | `asset_types.json` | Generated AssetType support matrix and links to per-type directories |
 | `[AssetType]\README.md` | Generated summary for one asset type/domain, including supported operations and test cases |
@@ -29,7 +29,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | AssetType | Tasks | Test cases | Create/import | Edit | Save | Read-back | Directory |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `ai` | 14 | 14 | 14 | 14 | 14 | 14 | `Benchmarks/AssetEditing/ai` |
-| `animation` | 35 | 35 | 35 | 35 | 35 | 35 | `Benchmarks/AssetEditing/animation` |
+| `animation` | 38 | 38 | 38 | 38 | 38 | 38 | `Benchmarks/AssetEditing/animation` |
 | `asset` | 11 | 11 | 11 | 11 | 11 | 11 | `Benchmarks/AssetEditing/asset` |
 | `audio` | 29 | 29 | 29 | 29 | 29 | 29 | `Benchmarks/AssetEditing/audio` |
 | `blueprint` | 4 | 4 | 4 | 4 | 4 | 4 | `Benchmarks/AssetEditing/blueprint` |
@@ -55,7 +55,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 ## Task Categories
 
 > **v5.4 (2026-06-26) — AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion:** extends the
-> `asset_authoring` dimension to 264 asset creation/edit/save/read-back chains. New coverage includes
+> `asset_authoring` dimension to 267 asset creation/edit/save/read-back chains. New coverage includes
 > ImageGen deterministic Texture2D provenance, ImageGen MSDF texture/material baking, Interchange
 > typed texture/audio import, Texture2D PNG post-processing, batch-rename dry-run/apply,
 > file-conflict overwrite policy, editor delete guard, DataTable strict rejection, and IKRig
@@ -132,7 +132,8 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 > ramp/railing StaticMesh generation, Enhanced Input binding removal, GAS cue unlink
 > lifecycle validation, Blueprint StringTable bulk edit/remove, UMG animation removal,
 > HLOD mesh setup-layer creation, procedural building-shell, maze, and barricade StaticMesh
-> generation, LevelInstance Blueprint prefab placement, collection force-delete read-back,
+> generation, IK Retargeter explicit chain mapping/settings read-back, PoseSearch Schema channel
+> configuration read-back, LevelInstance Blueprint prefab placement, collection force-delete read-back,
 > MetaSound synth-tone authoring, interactive MetaSound crossfade authoring, BlendSpace
 > interpolation editing, AnimMontage blend/slot editing, IKRig solver-stack editing,
 > Axis3D Enhanced Input mapping, editor map actor-default authoring/read-back,
@@ -208,7 +209,7 @@ directory contains `README.md`, `index.json`, `tasks.jsonl`, and `testcases\*.js
 | `edit_schema` | 47 | `monolith_discover` | Schema has `planning_signals` + `skill` AND no isError (strict) |
 | `workflow_execute` | 11 | `blueprint_query` | Executed multi-step chains run, compile clean, and read back their end state |
 | `edit_execute` | 113 | `blueprint_query` | Edit call succeeds AND its mutation is observable via read-back; creates run delete-first so the read-back proves THIS run; includes UMG, AnimBP, GAS, ActorComponent, Interface, component/property value, exec- and data-pin wiring, pin literals, and delete round-trips |
-| `asset_authoring` | 264 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
+| `asset_authoring` | 267 | mixed owner namespaces | Cross-domain UE assets are created or routed to asset edit workflows through owning namespaces, then saved where persistable and inspected/read back |
 | `error_path` | 20 | `blueprint_query` | Server returns a structured `isError` whose message references the **offending identifier** (transport crash = fail; generic-only error = fail) |
 | `duplicate_reject` | 11 | `blueprint_query` | First call CLEANLY creates the entity (delete-reset each run) AND a second identical `add_*` call returns a duplicate-specific `isError` |
 | `negative_compile` | 1 | `blueprint_query` | A deliberately broken scratch Blueprint function signature must be REPORTED as a real compile failure (`error_count>0`); a transport/isError/clean envelope = fail |
@@ -309,7 +310,7 @@ python Scripts\asset_editing_benchmark.py generate `
 `generate` keeps `tasks.jsonl` as the canonical full-suite stream and emits
 `asset_types.json`, `AssetEditing\[AssetType]\...` lookup folders, `testsets/index.json`,
 `testsets/modules.json`, and `testsets/module_shards/` for routable subsets. The module manifest
-advertises 1791 generated modules across 38 shard files, so a routed subset can load a small module
+advertises 1809 generated modules across 38 shard files, so a routed subset can load a small module
 payload without parsing the full route tree.
 
 ## Select Test Sets

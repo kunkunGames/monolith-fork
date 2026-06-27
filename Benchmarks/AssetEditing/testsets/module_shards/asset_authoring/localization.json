@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.localization",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/localization.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 7,
   "routing_axes": [
     "category",
@@ -240,10 +240,10 @@
       "task_ids": [
         "BEB-295",
         "BEB-296",
-        "BEB-381",
-        "BEB-489",
-        "BEB-524",
-        "BEB-534"
+        "BEB-384",
+        "BEB-492",
+        "BEB-527",
+        "BEB-537"
       ],
       "task_refs": [
         {
@@ -307,7 +307,7 @@
           "description": "Create a StringTable, import translator-style CSV rows with metadata, save it, and validate the imported entries"
         },
         {
-          "id": "BEB-381",
+          "id": "BEB-384",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -337,7 +337,7 @@
           "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table"
         },
         {
-          "id": "BEB-489",
+          "id": "BEB-492",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -367,7 +367,7 @@
           "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back"
         },
         {
-          "id": "BEB-524",
+          "id": "BEB-527",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -398,7 +398,7 @@
           "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata"
         },
         {
-          "id": "BEB-534",
+          "id": "BEB-537",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -435,73 +435,73 @@
             "BEB-295"
           ],
           "stringtable_blueprint_bulk": [
-            "BEB-489"
+            "BEB-492"
           ],
           "stringtable_csv": [
             "BEB-296"
           ],
           "stringtable_export_remove": [
-            "BEB-381"
+            "BEB-384"
           ],
           "stringtable_metadata_remove": [
-            "BEB-524"
+            "BEB-527"
           ],
           "stringtable_registry_list": [
-            "BEB-534"
+            "BEB-537"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ],
           "edit": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ],
           "readback_verify": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ],
           "save": [
             "BEB-295",
             "BEB-296",
-            "BEB-381",
-            "BEB-489",
-            "BEB-524",
-            "BEB-534"
+            "BEB-384",
+            "BEB-492",
+            "BEB-527",
+            "BEB-537"
           ]
         }
       },
@@ -636,11 +636,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-489"
+        "BEB-492"
       ],
       "task_refs": [
         {
-          "id": "BEB-489",
+          "id": "BEB-492",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -673,26 +673,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-489"
+            "BEB-492"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-489"
+            "BEB-492"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-489"
+            "BEB-492"
           ],
           "edit": [
-            "BEB-489"
+            "BEB-492"
           ],
           "readback_verify": [
-            "BEB-489"
+            "BEB-492"
           ],
           "save": [
-            "BEB-489"
+            "BEB-492"
           ]
         }
       },
@@ -820,11 +820,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-381"
+        "BEB-384"
       ],
       "task_refs": [
         {
-          "id": "BEB-381",
+          "id": "BEB-384",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -857,26 +857,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-381"
+            "BEB-384"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-381"
+            "BEB-384"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-381"
+            "BEB-384"
           ],
           "edit": [
-            "BEB-381"
+            "BEB-384"
           ],
           "readback_verify": [
-            "BEB-381"
+            "BEB-384"
           ],
           "save": [
-            "BEB-381"
+            "BEB-384"
           ]
         }
       },
@@ -912,11 +912,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-524"
+        "BEB-527"
       ],
       "task_refs": [
         {
-          "id": "BEB-524",
+          "id": "BEB-527",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -950,26 +950,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-524"
+            "BEB-527"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-524"
+            "BEB-527"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-524"
+            "BEB-527"
           ],
           "edit": [
-            "BEB-524"
+            "BEB-527"
           ],
           "readback_verify": [
-            "BEB-524"
+            "BEB-527"
           ],
           "save": [
-            "BEB-524"
+            "BEB-527"
           ]
         }
       },
@@ -1005,11 +1005,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-534"
+        "BEB-537"
       ],
       "task_refs": [
         {
-          "id": "BEB-534",
+          "id": "BEB-537",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -1043,26 +1043,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-534"
+            "BEB-537"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-534"
+            "BEB-537"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-534"
+            "BEB-537"
           ],
           "edit": [
-            "BEB-534"
+            "BEB-537"
           ],
           "readback_verify": [
-            "BEB-534"
+            "BEB-537"
           ],
           "save": [
-            "BEB-534"
+            "BEB-537"
           ]
         }
       },

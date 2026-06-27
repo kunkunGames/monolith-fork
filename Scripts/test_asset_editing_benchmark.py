@@ -12,6 +12,7 @@ from __future__ import annotations
 import collections
 import json
 import pathlib
+import re
 import sys
 from typing import Any, Dict, Iterable, List, Set
 
@@ -192,8 +193,24 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
         check("asset_type_count matches index",
               manifest.get("asset_type_count") == len(asset_types),
               f"manifest={manifest.get('asset_type_count')} index={len(asset_types)}")
+        root_readme = asset_index_path.parent / "README.md"
+        root_readme_text = root_readme.read_text(encoding="utf-8") if root_readme.exists() else ""
+        stale_root_rows: List[str] = []
         repeated_asset_type_cases: List[str] = []
         for item in asset_types:
+            asset_type_name = str(item.get("asset_type") or "")
+            operation_counts = item.get("operation_counts") if isinstance(item.get("operation_counts"), dict) else {}
+            expected_root_row = (
+                f"| `{asset_type_name}` | {int(item.get('task_count', 0))} | "
+                f"{int(item.get('edit_domain_count', 0))} | "
+                f"{int(operation_counts.get('creation_or_import', 0))} | "
+                f"{int(operation_counts.get('edit', 0))} | "
+                f"{int(operation_counts.get('save', 0))} | "
+                f"{int(operation_counts.get('readback_verify', 0))} | "
+                f"`{aeb.markdown_cell(str(item.get('directory') or ''))}` |"
+            )
+            if expected_root_row not in root_readme_text:
+                stale_root_rows.append(expected_root_row)
             task_file = aeb.resolve_plugin_path(pathlib.Path(str(item.get("tasks_file", ""))))
             rows = aeb.load_jsonl(task_file) if task_file.exists() else []
             check(f"asset type task count matches {item.get('asset_type')}",
@@ -212,12 +229,16 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
         check("asset type testcase route names do not repeat the AssetType token",
               not repeated_asset_type_cases,
               f"repeated={repeated_asset_type_cases[:8]}")
+        check("root README AssetType support table matches generated index",
+              root_readme.exists() and not stale_root_rows,
+              f"missing_or_stale={stale_root_rows[:3]}")
 
     if testset_index_path.exists() and testset_modules_path.exists():
         testset_index = load_json(testset_index_path)
         modules_payload = load_json(testset_modules_path)
         module_refs = modules_payload.get("module_refs", [])
         module_lookup = modules_payload.get("module_lookup", {})
+        all_task_ids = {str(task.get("id")) for task in tasks}
         check("testset task_count matches tasks",
               testset_index.get("task_count") == len(tasks),
               f"index={testset_index.get('task_count')} rows={len(tasks)}")
@@ -225,13 +246,45 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
               testset_index.get("module_count") == modules_payload.get("module_count") == len(module_refs) == len(module_lookup),
               f"index={testset_index.get('module_count')} manifest={modules_payload.get('module_count')} refs={len(module_refs)} lookup={len(module_lookup)}")
         missing_shards = []
+        bad_shards: List[str] = []
+        bad_shard_links: List[str] = []
         for shard_info in modules_payload.get("module_shards", {}).values():
             shard = pathlib.Path(str(shard_info.get("file", ""))) if isinstance(shard_info, dict) else pathlib.Path(str(shard_info))
             shard = aeb.resolve_plugin_path(shard)
             if not shard.exists():
                 missing_shards.append(str(shard))
+                continue
+            shard_payload = load_json(shard)
+            shard_ids = [str(module_id) for module_id in (shard_info.get("module_ids", []) if isinstance(shard_info, dict) else [])]
+            shard_refs = shard_payload.get("module_refs", [])
+            shard_modules = shard_payload.get("modules", {})
+            if (
+                shard_payload.get("module_count") != len(shard_refs)
+                or len(shard_refs) != len(shard_modules)
+                or (shard_ids and sorted(shard_ids) != sorted(str(ref.get("module_id")) for ref in shard_refs))
+                or sorted(str(module_id) for module_id in shard_modules) != sorted(str(ref.get("module_id")) for ref in shard_refs)
+            ):
+                bad_shards.append(str(shard))
+            for module_id, module in shard_modules.items():
+                if str(module_id) not in module_lookup:
+                    bad_shard_links.append(f"{module_id}:missing_lookup")
+                task_ids = {str(task_id) for task_id in module.get("task_ids", [])}
+                if not task_ids.issubset(all_task_ids):
+                    bad_shard_links.append(f"{module_id}:unknown_task")
+                parent_id = str(module.get("parent_module_id") or "")
+                if parent_id and parent_id not in module_lookup:
+                    bad_shard_links.append(f"{module_id}:parent={parent_id}")
+                for child_id in module.get("child_module_ids", []):
+                    if str(child_id) not in module_lookup:
+                        bad_shard_links.append(f"{module_id}:child={child_id}")
         check("all split testset module shards exist", not missing_shards,
               f"missing={missing_shards[:5]}")
+        check("all split testset module shards have internally matching refs/modules",
+              not bad_shards,
+              f"bad={bad_shards[:5]}")
+        check("all split testset module shard links resolve",
+              not bad_shard_links,
+              f"bad={bad_shard_links[:8]}")
 
         repeated_leaf_modules: List[str] = []
         for module_id in module_lookup:
@@ -327,6 +380,51 @@ def test_asset_type_and_testset_indexes(tasks: List[Dict[str, Any]], manifest: D
               "asset_authoring.asset.batch_delete" in module_lookup)
         check("canonical asset-operation batch_delete route exists",
               "asset_operation.edit.asset.batch_delete" in module_lookup)
+        canonical_authoring_tasks, canonical_authoring_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=["asset_authoring.asset.batch_delete"],
+        )
+        legacy_authoring_tasks, legacy_authoring_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=["asset_authoring.asset." + "asset_batch_delete"],
+        )
+        canonical_operation_tasks, canonical_operation_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=["asset_operation.edit.asset.batch_delete"],
+        )
+        legacy_operation_tasks, legacy_operation_selection = aeb.select_tasks(
+            aeb.DEFAULT_TASKS,
+            aeb.DEFAULT_TESTSETS,
+            module_ids=["asset_operation.edit.asset." + "asset_batch_delete"],
+        )
+        check("legacy authoring duplicate selector selects same tasks as canonical",
+              [task.get("id") for task in legacy_authoring_tasks] == [task.get("id") for task in canonical_authoring_tasks]
+              and legacy_authoring_selection.get("selection_filters", {}).get("module_ids") == ["asset_authoring.asset.batch_delete"],
+              f"legacy={legacy_authoring_selection.get('selection_filters', {}).get('module_ids')}")
+        check("legacy asset-operation duplicate selector selects same tasks as canonical",
+              [task.get("id") for task in legacy_operation_tasks] == [task.get("id") for task in canonical_operation_tasks]
+              and legacy_operation_selection.get("selection_filters", {}).get("module_ids") == ["asset_operation.edit.asset.batch_delete"],
+              f"legacy={legacy_operation_selection.get('selection_filters', {}).get('module_ids')}")
+
+    docs_root = aeb.resolve_plugin_path(aeb.DEFAULT_TASKS).parent
+    repeated_doc_selectors: List[str] = []
+    repeated_selector_patterns = [
+        re.compile(r"asset_authoring\.([A-Za-z0-9_]+)\.\1_[A-Za-z0-9_]+"),
+        re.compile(r"asset_operation\.(?:creation_or_import|edit|save|readback_verify|delete)\.([A-Za-z0-9_]+)\.\1_[A-Za-z0-9_]+"),
+    ]
+    for doc_path in docs_root.rglob("*.md"):
+        text = doc_path.read_text(encoding="utf-8")
+        for pattern in repeated_selector_patterns:
+            for match in pattern.finditer(text):
+                repeated_doc_selectors.append(
+                    f"{doc_path.relative_to(docs_root)}:{match.group(0)}"
+                )
+    check("generated markdown docs do not expose duplicate AssetType selector leaves",
+          not repeated_doc_selectors,
+          f"repeated={repeated_doc_selectors[:8]}")
 
 
 def test_compact_route_helpers() -> None:

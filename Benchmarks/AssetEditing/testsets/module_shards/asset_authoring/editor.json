@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.editor",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 6,
   "routing_axes": [
     "category",
@@ -210,15 +210,15 @@
       },
       "task_count": 5,
       "task_ids": [
-        "BEB-424",
-        "BEB-433",
-        "BEB-445",
-        "BEB-503",
-        "BEB-542"
+        "BEB-427",
+        "BEB-436",
+        "BEB-448",
+        "BEB-506",
+        "BEB-545"
       ],
       "task_refs": [
         {
-          "id": "BEB-424",
+          "id": "BEB-427",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -243,7 +243,7 @@
           "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
         },
         {
-          "id": "BEB-433",
+          "id": "BEB-436",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -274,7 +274,7 @@
           "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
         },
         {
-          "id": "BEB-445",
+          "id": "BEB-448",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -303,7 +303,7 @@
           "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
         },
         {
-          "id": "BEB-503",
+          "id": "BEB-506",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -333,7 +333,7 @@
           "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
         },
         {
-          "id": "BEB-542",
+          "id": "BEB-545",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -365,70 +365,70 @@
       "groups": {
         "by_edit_domain": {
           "empty_map_asset": [
-            "BEB-424"
+            "BEB-427"
           ],
           "map_actor_defaults": [
-            "BEB-503"
+            "BEB-506"
           ],
           "nav_harness_map": [
-            "BEB-445"
+            "BEB-448"
           ],
           "package_dirty_save": [
-            "BEB-433"
+            "BEB-436"
           ],
           "texture_flipbook_atlas": [
-            "BEB-542"
+            "BEB-545"
           ]
         },
         "by_operation_semantics": {
           "create": [
-            "BEB-424"
+            "BEB-427"
           ],
           "create_save": [
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-424"
+            "BEB-427"
           ],
           "create_save": [
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-424",
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-427",
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ],
           "edit": [
-            "BEB-424",
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-427",
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ],
           "readback_verify": [
-            "BEB-424",
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-427",
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ],
           "save": [
-            "BEB-433",
-            "BEB-445",
-            "BEB-503",
-            "BEB-542"
+            "BEB-436",
+            "BEB-448",
+            "BEB-506",
+            "BEB-545"
           ]
         }
       },
@@ -470,11 +470,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-424"
+        "BEB-427"
       ],
       "task_refs": [
         {
-          "id": "BEB-424",
+          "id": "BEB-427",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -502,23 +502,23 @@
       "groups": {
         "by_operation_semantics": {
           "create": [
-            "BEB-424"
+            "BEB-427"
           ]
         },
         "by_lifecycle_phase": {
           "create": [
-            "BEB-424"
+            "BEB-427"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-424"
+            "BEB-427"
           ],
           "edit": [
-            "BEB-424"
+            "BEB-427"
           ],
           "readback_verify": [
-            "BEB-424"
+            "BEB-427"
           ]
         }
       },
@@ -554,11 +554,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-503"
+        "BEB-506"
       ],
       "task_refs": [
         {
-          "id": "BEB-503",
+          "id": "BEB-506",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -591,26 +591,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-503"
+            "BEB-506"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-503"
+            "BEB-506"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-503"
+            "BEB-506"
           ],
           "edit": [
-            "BEB-503"
+            "BEB-506"
           ],
           "readback_verify": [
-            "BEB-503"
+            "BEB-506"
           ],
           "save": [
-            "BEB-503"
+            "BEB-506"
           ]
         }
       },
@@ -646,11 +646,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-445"
+        "BEB-448"
       ],
       "task_refs": [
         {
-          "id": "BEB-445",
+          "id": "BEB-448",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -682,26 +682,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-445"
+            "BEB-448"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-445"
+            "BEB-448"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-445"
+            "BEB-448"
           ],
           "edit": [
-            "BEB-445"
+            "BEB-448"
           ],
           "readback_verify": [
-            "BEB-445"
+            "BEB-448"
           ],
           "save": [
-            "BEB-445"
+            "BEB-448"
           ]
         }
       },
@@ -737,11 +737,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-433"
+        "BEB-436"
       ],
       "task_refs": [
         {
-          "id": "BEB-433",
+          "id": "BEB-436",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -775,26 +775,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-433"
+            "BEB-436"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-433"
+            "BEB-436"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-433"
+            "BEB-436"
           ],
           "edit": [
-            "BEB-433"
+            "BEB-436"
           ],
           "readback_verify": [
-            "BEB-433"
+            "BEB-436"
           ],
           "save": [
-            "BEB-433"
+            "BEB-436"
           ]
         }
       },
@@ -830,11 +830,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-542"
+        "BEB-545"
       ],
       "task_refs": [
         {
-          "id": "BEB-542",
+          "id": "BEB-545",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -866,26 +866,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-542"
+            "BEB-545"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-542"
+            "BEB-545"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-542"
+            "BEB-545"
           ],
           "edit": [
-            "BEB-542"
+            "BEB-545"
           ],
           "readback_verify": [
-            "BEB-542"
+            "BEB-545"
           ],
           "save": [
-            "BEB-542"
+            "BEB-545"
           ]
         }
       },

@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.project",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 4,
   "routing_axes": [
     "category",
@@ -154,13 +154,13 @@
       },
       "task_count": 3,
       "task_ids": [
-        "BEB-432",
-        "BEB-512",
-        "BEB-513"
+        "BEB-435",
+        "BEB-515",
+        "BEB-516"
       ],
       "task_refs": [
         {
-          "id": "BEB-432",
+          "id": "BEB-435",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -188,7 +188,7 @@
           "description": "Import two Texture2D assets, force an AssetRegistry refresh, then verify saved disk state through the project namespace and batch asset inspection"
         },
         {
-          "id": "BEB-512",
+          "id": "BEB-515",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -219,7 +219,7 @@
           "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export"
         },
         {
-          "id": "BEB-513",
+          "id": "BEB-516",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -250,49 +250,49 @@
       "groups": {
         "by_edit_domain": {
           "cleanup_generated_assets": [
-            "BEB-513"
+            "BEB-516"
           ],
           "index_details_text": [
-            "BEB-512"
+            "BEB-515"
           ],
           "saved_asset_state": [
-            "BEB-432"
+            "BEB-435"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ],
           "edit": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ],
           "readback_verify": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ],
           "save": [
-            "BEB-432",
-            "BEB-512",
-            "BEB-513"
+            "BEB-435",
+            "BEB-515",
+            "BEB-516"
           ]
         }
       },
@@ -332,11 +332,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-513"
+        "BEB-516"
       ],
       "task_refs": [
         {
-          "id": "BEB-513",
+          "id": "BEB-516",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -367,26 +367,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-513"
+            "BEB-516"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-513"
+            "BEB-516"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-513"
+            "BEB-516"
           ],
           "edit": [
-            "BEB-513"
+            "BEB-516"
           ],
           "readback_verify": [
-            "BEB-513"
+            "BEB-516"
           ],
           "save": [
-            "BEB-513"
+            "BEB-516"
           ]
         }
       },
@@ -422,11 +422,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-512"
+        "BEB-515"
       ],
       "task_refs": [
         {
-          "id": "BEB-512",
+          "id": "BEB-515",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -460,26 +460,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-512"
+            "BEB-515"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-512"
+            "BEB-515"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-512"
+            "BEB-515"
           ],
           "edit": [
-            "BEB-512"
+            "BEB-515"
           ],
           "readback_verify": [
-            "BEB-512"
+            "BEB-515"
           ],
           "save": [
-            "BEB-512"
+            "BEB-515"
           ]
         }
       },
@@ -515,11 +515,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-432"
+        "BEB-435"
       ],
       "task_refs": [
         {
-          "id": "BEB-432",
+          "id": "BEB-435",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -550,26 +550,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-432"
+            "BEB-435"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-432"
+            "BEB-435"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-432"
+            "BEB-435"
           ],
           "edit": [
-            "BEB-432"
+            "BEB-435"
           ],
           "readback_verify": [
-            "BEB-432"
+            "BEB-435"
           ],
           "save": [
-            "BEB-432"
+            "BEB-435"
           ]
         }
       },

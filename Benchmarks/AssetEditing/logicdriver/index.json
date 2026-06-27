@@ -17,11 +17,11 @@
   },
   "edit_domain_count": 1,
   "task_ids": [
-    "BEB-523"
+    "BEB-526"
   ],
   "task_refs": [
     {
-      "id": "BEB-523",
+      "id": "BEB-526",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -80,7 +80,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-523"
+        "BEB-526"
       ],
       "case_file": "testcases\\state_machine_graph.json"
     }

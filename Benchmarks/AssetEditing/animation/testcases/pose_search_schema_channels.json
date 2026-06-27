@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "pose_search_schema_channels",
+  "route_edit_domain": "pose_search_schema_channels",
+  "module_id": "asset_authoring.animation.pose_search_schema_channels",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.pose_search_schema_channels",
+    "edit": "asset_operation.edit.animation.pose_search_schema_channels",
+    "save": "asset_operation.save.animation.pose_search_schema_channels",
+    "readback_verify": "asset_operation.readback_verify.animation.pose_search_schema_channels"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-374"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-374",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "pose_search_schema_channels",
+      "blueprint_type": "",
+      "workflow": "animation_pose_search_schema_channels_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "get_skeleton_info",
+        "create_pose_search_schema",
+        "add_schema_channel",
+        "configure_schema_channel",
+        "save_asset",
+        "get_pose_search_schema",
+        "inspect_asset"
+      ],
+      "description": "Create a PoseSearch Schema, add Pose and Trajectory channels, configure sampled bones and trajectory samples, save, and read the channel data back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-374",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_skeleton_info",
+            "asset_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "bone_count",
+            "bones"
+          ],
+          "capture": {
+            "schema_bone": "$.bones[0].name"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_pose_search_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "sample_rate": 60,
+            "add_default_channels": false
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "default_channels_added",
+            "false"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_schema_channel",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels",
+            "channel_type": "Pose",
+            "weight": 1.25
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "Pose",
+            "authored_channel_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "configure_schema_channel",
+            "schema_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels",
+            "channel_index": 0,
+            "sampled_bones": [
+              "${schema_bone}"
+            ],
+            "weight": 1.5
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "Pose",
+            "bone_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_schema_channel",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels",
+            "channel_type": "Trajectory",
+            "weight": 0.75
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "Trajectory",
+            "authored_channel_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "configure_schema_channel",
+            "schema_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels",
+            "channel_index": 1,
+            "samples": [
+              {
+                "offset": -0.35,
+                "flags": 3,
+                "weight": 0.5
+              },
+              {
+                "offset": 0.0,
+                "flags": 3,
+                "weight": 1.0
+              },
+              {
+                "offset": 0.45,
+                "flags": 3,
+                "weight": 0.75
+              }
+            ],
+            "weight": 0.8
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "Trajectory",
+            "sample_count",
+            "3"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_pose_search_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels"
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "sample_rate",
+            "60",
+            "PoseSearchFeatureChannel_Pose",
+            "bone_count",
+            "1",
+            "${schema_bone}",
+            "PoseSearchFeatureChannel_Trajectory",
+            "sample_count",
+            "3",
+            "offset",
+            "-0.35",
+            "0.45"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchSchemaChannels"
+          },
+          "contains": [
+            "PSS_BenchSchemaChannels",
+            "PoseSearchSchema"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "pose_search_schema_channels",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_pose_search_schema_channels_roundtrip",
+      "description": "Create a PoseSearch Schema, add Pose and Trajectory channels, configure sampled bones and trajectory samples, save, and read the channel data back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/PoseSearchSchema?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/PoseSearchFeatureChannel_Pose?application_version=5.8",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/PoseSearchFeatureChannel_Trajectory?application_version=5.8",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithPoseSearchActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "get_skeleton_info",
+          "create_pose_search_schema",
+          "add_schema_channel",
+          "configure_schema_channel",
+          "save_asset",
+          "get_pose_search_schema",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

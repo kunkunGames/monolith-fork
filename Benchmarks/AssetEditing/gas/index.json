@@ -17,26 +17,26 @@
   },
   "edit_domain_count": 16,
   "task_ids": [
-    "BEB-335",
-    "BEB-336",
     "BEB-337",
     "BEB-338",
     "BEB-339",
+    "BEB-340",
     "BEB-341",
-    "BEB-344",
-    "BEB-356",
-    "BEB-435",
-    "BEB-436",
-    "BEB-463",
-    "BEB-464",
-    "BEB-475",
-    "BEB-481",
-    "BEB-488",
-    "BEB-514"
+    "BEB-343",
+    "BEB-346",
+    "BEB-358",
+    "BEB-438",
+    "BEB-439",
+    "BEB-466",
+    "BEB-467",
+    "BEB-478",
+    "BEB-484",
+    "BEB-491",
+    "BEB-517"
   ],
   "task_refs": [
     {
-      "id": "BEB-335",
+      "id": "BEB-337",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -65,7 +65,7 @@
       "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
     },
     {
-      "id": "BEB-336",
+      "id": "BEB-338",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -101,7 +101,7 @@
       "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect"
     },
     {
-      "id": "BEB-337",
+      "id": "BEB-339",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -136,7 +136,7 @@
       "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state"
     },
     {
-      "id": "BEB-338",
+      "id": "BEB-340",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -165,7 +165,7 @@
       "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata"
     },
     {
-      "id": "BEB-339",
+      "id": "BEB-341",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -196,7 +196,7 @@
       "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag onto the effect, save both assets, and reverse-lookup the trigger"
     },
     {
-      "id": "BEB-341",
+      "id": "BEB-343",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -225,7 +225,7 @@
       "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class"
     },
     {
-      "id": "BEB-344",
+      "id": "BEB-346",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -256,7 +256,7 @@
       "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects"
     },
     {
-      "id": "BEB-356",
+      "id": "BEB-358",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -285,7 +285,7 @@
       "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
     },
     {
-      "id": "BEB-435",
+      "id": "BEB-438",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -314,7 +314,7 @@
       "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
     },
     {
-      "id": "BEB-436",
+      "id": "BEB-439",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -345,7 +345,7 @@
       "description": "Create an Actor Blueprint, add an ASC, set its replication mode, save, and read back component defaults plus validation metadata"
     },
     {
-      "id": "BEB-463",
+      "id": "BEB-466",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -374,7 +374,7 @@
       "description": "Create a GameplayAbility Blueprint, edit persisted ability behavior flags on the CDO, save it, and read the flags back"
     },
     {
-      "id": "BEB-464",
+      "id": "BEB-467",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -405,7 +405,7 @@
       "description": "Create a Widget Blueprint ProgressBar, bind it to native GAS Health/MaxHealth attributes, save it, and read persisted binding metadata back"
     },
     {
-      "id": "BEB-475",
+      "id": "BEB-478",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -437,7 +437,7 @@
       "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
     },
     {
-      "id": "BEB-481",
+      "id": "BEB-484",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -470,7 +470,7 @@
       "description": "Create a GameplayAbility and cost GameplayEffect, edit ability tag containers, cost, and gameplay-event triggers, save both assets, and read the ability metadata back"
     },
     {
-      "id": "BEB-488",
+      "id": "BEB-491",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -503,7 +503,7 @@
       "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
     },
     {
-      "id": "BEB-514",
+      "id": "BEB-517",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -557,7 +557,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-337"
+        "BEB-339"
       ],
       "case_file": "testcases\\ability_input_binding.json"
     },
@@ -579,7 +579,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-514"
+        "BEB-517"
       ],
       "case_file": "testcases\\ability_spec_builder.json"
     },
@@ -601,7 +601,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-481"
+        "BEB-484"
       ],
       "case_file": "testcases\\ability_tags_cost_triggers.json"
     },
@@ -623,7 +623,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-436"
+        "BEB-439"
       ],
       "case_file": "testcases\\asc_replication_mode.json"
     },
@@ -645,7 +645,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-435"
+        "BEB-438"
       ],
       "case_file": "testcases\\attribute_init_datatable.json"
     },
@@ -667,7 +667,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-475"
+        "BEB-478"
       ],
       "case_file": "testcases\\effect_modifier_crud.json"
     },
@@ -689,7 +689,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-336"
+        "BEB-338"
       ],
       "case_file": "testcases\\gameplay_ability.json"
     },
@@ -711,7 +711,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-463"
+        "BEB-466"
       ],
       "case_file": "testcases\\gameplay_ability_flags.json"
     },
@@ -733,7 +733,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-339"
+        "BEB-341"
       ],
       "case_file": "testcases\\gameplay_cue_effect_link.json"
     },
@@ -755,7 +755,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-338"
+        "BEB-340"
       ],
       "case_file": "testcases\\gameplay_cue_notify.json"
     },
@@ -777,7 +777,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-488"
+        "BEB-491"
       ],
       "case_file": "testcases\\gameplay_cue_unlink_lifecycle.json"
     },
@@ -799,7 +799,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-335"
+        "BEB-337"
       ],
       "case_file": "testcases\\gameplay_effect.json"
     },
@@ -821,7 +821,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-356"
+        "BEB-358"
       ],
       "case_file": "testcases\\gameplay_effect_spec_builder.json"
     },
@@ -843,7 +843,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-344"
+        "BEB-346"
       ],
       "case_file": "testcases\\gameplay_effect_template.json"
     },
@@ -865,7 +865,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-341"
+        "BEB-343"
       ],
       "case_file": "testcases\\target_actor.json"
     },
@@ -887,7 +887,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-464"
+        "BEB-467"
       ],
       "case_file": "testcases\\widget_attribute_binding.json"
     }

@@ -22,13 +22,13 @@
     "BEB-309",
     "BEB-310",
     "BEB-311",
-    "BEB-354",
-    "BEB-377",
-    "BEB-387",
-    "BEB-479",
-    "BEB-511",
-    "BEB-521",
-    "BEB-522"
+    "BEB-356",
+    "BEB-380",
+    "BEB-390",
+    "BEB-482",
+    "BEB-514",
+    "BEB-524",
+    "BEB-525"
   ],
   "task_refs": [
     {
@@ -180,7 +180,7 @@
       "description": "Create a raw UObject asset, describe its writable CDO schema, dry-run and apply a bulk property update, save it, and read values back"
     },
     {
-      "id": "BEB-354",
+      "id": "BEB-356",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -215,7 +215,7 @@
       "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set"
     },
     {
-      "id": "BEB-377",
+      "id": "BEB-380",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -247,7 +247,7 @@
       "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back"
     },
     {
-      "id": "BEB-387",
+      "id": "BEB-390",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -275,7 +275,7 @@
       "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back"
     },
     {
-      "id": "BEB-479",
+      "id": "BEB-482",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -307,7 +307,7 @@
       "description": "Create a schema-aware DataTable, bulk-write rows, export a CSV file under the project directory, save, and read back schema plus row payloads"
     },
     {
-      "id": "BEB-511",
+      "id": "BEB-514",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -338,7 +338,7 @@
       "description": "Create a UserDefinedStruct-backed DataTable, write a row, save it, and verify the row struct through both DataTable payload and schema-only readers"
     },
     {
-      "id": "BEB-521",
+      "id": "BEB-524",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -369,7 +369,7 @@
       "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set"
     },
     {
-      "id": "BEB-522",
+      "id": "BEB-525",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -444,7 +444,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-377"
+        "BEB-380"
       ],
       "case_file": "testcases\\curvetable_row_maintenance.json"
     },
@@ -554,7 +554,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-354"
+        "BEB-356"
       ],
       "case_file": "testcases\\datatable_bulk_import_export.json"
     },
@@ -576,7 +576,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-521"
+        "BEB-524"
       ],
       "case_file": "testcases\\datatable_dry_run_strict_apply.json"
     },
@@ -598,7 +598,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-479"
+        "BEB-482"
       ],
       "case_file": "testcases\\datatable_schema_csv_file.json"
     },
@@ -620,7 +620,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-511"
+        "BEB-514"
       ],
       "case_file": "testcases\\datatable_schema_readback.json"
     },
@@ -642,7 +642,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-522"
+        "BEB-525"
       ],
       "case_file": "testcases\\datatable_strict_rejection.json"
     },
@@ -664,7 +664,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-387"
+        "BEB-390"
       ],
       "case_file": "testcases\\seed_data_asset.json"
     }

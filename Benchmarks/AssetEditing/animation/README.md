@@ -6,16 +6,16 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 35 |
-| `edit` | 35 |
-| `save` | 35 |
-| `readback_verify` | 35 |
+| `creation_or_import` | 38 |
+| `edit` | 38 |
+| `save` | 38 |
+| `readback_verify` | 38 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 35 |
+| `create_save` | 38 |
 
 ## Test Cases
 
@@ -51,7 +51,10 @@ Generated AssetType slice for the AssetEditing benchmark.
 | `notify_state_timing` | 1 | `asset_authoring.animation.notify_state_timing` | `testcases\notify_state_timing.json` |
 | `pose_search_database` | 1 | `asset_authoring.animation.pose_search_database` | `testcases\pose_search_database.json` |
 | `pose_search_normalization_set` | 1 | `asset_authoring.animation.pose_search_normalization_set` | `testcases\pose_search_normalization_set.json` |
+| `pose_search_schema_channels` | 1 | `asset_authoring.animation.pose_search_schema_channels` | `testcases\pose_search_schema_channels.json` |
 | `retarget_chain_lifecycle` | 1 | `asset_authoring.animation.retarget_chain_lifecycle` | `testcases\retarget_chain_lifecycle.json` |
+| `retarget_chain_mapping` | 1 | `asset_authoring.animation.retarget_chain_mapping` | `testcases\retarget_chain_mapping.json` |
+| `retarget_chain_settings` | 1 | `asset_authoring.animation.retarget_chain_settings` | `testcases\retarget_chain_settings.json` |
 | `sequence_curve_marker_cleanup` | 1 | `asset_authoring.animation.sequence_curve_marker_cleanup` | `testcases\sequence_curve_marker_cleanup.json` |
 | `sequence_from_poses` | 1 | `asset_authoring.animation.sequence_from_poses` | `testcases\sequence_from_poses.json` |
 | `sequence_pose_copy` | 1 | `asset_authoring.animation.sequence_pose_copy` | `testcases\sequence_pose_copy.json` |

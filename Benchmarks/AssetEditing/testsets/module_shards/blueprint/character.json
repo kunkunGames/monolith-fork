@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "blueprint.character",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 10,
   "routing_axes": [
     "category",
@@ -315,7 +315,7 @@
         "BEB-185",
         "BEB-237",
         "BEB-243",
-        "BEB-573"
+        "BEB-576"
       ],
       "task_refs": [
         {
@@ -880,7 +880,7 @@
           "description": "Wire MoveSpeed (float) -> PrintString.Duration on Character EventGraph (executed data-pin connect_pins + read-back)"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-576",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -905,7 +905,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-573"
+            "BEB-576"
           ],
           "edit_execute": [
             "BEB-176",
@@ -954,7 +954,7 @@
           "component": [
             "BEB-157",
             "BEB-181",
-            "BEB-573"
+            "BEB-576"
           ],
           "event": [
             "BEB-182"
@@ -1004,7 +1004,7 @@
             "BEB-183",
             "BEB-237",
             "BEB-243",
-            "BEB-573"
+            "BEB-576"
           ],
           "read_only": [
             "BEB-002",
@@ -1037,7 +1037,7 @@
             "BEB-183",
             "BEB-237",
             "BEB-243",
-            "BEB-573"
+            "BEB-576"
           ],
           "readback_verify": [
             "BEB-002",
@@ -1066,7 +1066,7 @@
             "BEB-185",
             "BEB-237",
             "BEB-243",
-            "BEB-573"
+            "BEB-576"
           ]
         }
       },
@@ -1254,7 +1254,7 @@
       "task_ids": [
         "BEB-157",
         "BEB-181",
-        "BEB-573"
+        "BEB-576"
       ],
       "task_refs": [
         {
@@ -1307,7 +1307,7 @@
           "description": "Add SphereComponent BenchOverlapComp to Character"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-576",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -1332,7 +1332,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-573"
+            "BEB-576"
           ],
           "edit_execute": [
             "BEB-181"
@@ -1345,19 +1345,19 @@
           "edit": [
             "BEB-157",
             "BEB-181",
-            "BEB-573"
+            "BEB-576"
           ]
         },
         "by_asset_operation": {
           "edit": [
             "BEB-157",
             "BEB-181",
-            "BEB-573"
+            "BEB-576"
           ],
           "readback_verify": [
             "BEB-157",
             "BEB-181",
-            "BEB-573"
+            "BEB-576"
           ]
         }
       },

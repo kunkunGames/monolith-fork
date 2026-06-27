@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.modelgen",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/modelgen.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 3,
   "routing_axes": [
     "category",
@@ -127,7 +127,7 @@
       "task_count": 2,
       "task_ids": [
         "BEB-307",
-        "BEB-386"
+        "BEB-389"
       ],
       "task_refs": [
         {
@@ -161,7 +161,7 @@
           "description": "Import a generated-model OBJ through ModelGen, save it as StaticMesh, and verify redacted generation provenance"
         },
         {
-          "id": "BEB-386",
+          "id": "BEB-389",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -195,7 +195,7 @@
       "groups": {
         "by_edit_domain": {
           "generated_model_job_lifecycle": [
-            "BEB-386"
+            "BEB-389"
           ],
           "generated_static_mesh": [
             "BEB-307"
@@ -204,31 +204,31 @@
         "by_operation_semantics": {
           "create_save": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ],
           "edit": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ],
           "readback_verify": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ],
           "save": [
             "BEB-307",
-            "BEB-386"
+            "BEB-389"
           ]
         }
       },
@@ -267,11 +267,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-386"
+        "BEB-389"
       ],
       "task_refs": [
         {
-          "id": "BEB-386",
+          "id": "BEB-389",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -305,26 +305,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-386"
+            "BEB-389"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-386"
+            "BEB-389"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-386"
+            "BEB-389"
           ],
           "edit": [
-            "BEB-386"
+            "BEB-389"
           ],
           "readback_verify": [
-            "BEB-386"
+            "BEB-389"
           ],
           "save": [
-            "BEB-386"
+            "BEB-389"
           ]
         }
       },

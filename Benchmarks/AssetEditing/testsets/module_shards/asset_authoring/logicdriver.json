@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.logicdriver",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 2,
   "routing_axes": [
     "category",
@@ -98,11 +98,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-523"
+        "BEB-526"
       ],
       "task_refs": [
         {
-          "id": "BEB-523",
+          "id": "BEB-526",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -141,31 +141,31 @@
       "groups": {
         "by_edit_domain": {
           "state_machine_graph": [
-            "BEB-523"
+            "BEB-526"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
-            "BEB-523"
+            "BEB-526"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-523"
+            "BEB-526"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-523"
+            "BEB-526"
           ],
           "edit": [
-            "BEB-523"
+            "BEB-526"
           ],
           "readback_verify": [
-            "BEB-523"
+            "BEB-526"
           ],
           "save": [
-            "BEB-523"
+            "BEB-526"
           ]
         }
       },
@@ -203,11 +203,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-523"
+        "BEB-526"
       ],
       "task_refs": [
         {
-          "id": "BEB-523",
+          "id": "BEB-526",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -246,26 +246,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-523"
+            "BEB-526"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-523"
+            "BEB-526"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-523"
+            "BEB-526"
           ],
           "edit": [
-            "BEB-523"
+            "BEB-526"
           ],
           "readback_verify": [
-            "BEB-523"
+            "BEB-526"
           ],
           "save": [
-            "BEB-523"
+            "BEB-526"
           ]
         }
       },

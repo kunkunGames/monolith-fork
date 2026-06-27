@@ -4,7 +4,7 @@
   "generated_by": "asset_editing_benchmark.py",
   "description": "Human-browsable AssetEditing slices grouped by asset type/domain. The root tasks.jsonl remains the canonical full-suite stream, and testsets remain the route loader.",
   "asset_type_count": 23,
-  "asset_authoring_task_count": 264,
+  "asset_authoring_task_count": 267,
   "asset_types": [
     {
       "asset_type": "ai",
@@ -30,16 +30,16 @@
       "asset_type": "animation",
       "asset_type_slug": "animation",
       "module_id": "asset_authoring.animation",
-      "task_count": 35,
-      "edit_domain_count": 35,
+      "task_count": 38,
+      "edit_domain_count": 38,
       "operation_counts": {
-        "creation_or_import": 35,
-        "edit": 35,
-        "save": 35,
-        "readback_verify": 35
+        "creation_or_import": 38,
+        "edit": 38,
+        "save": 38,
+        "readback_verify": 38
       },
       "lifecycle_counts": {
-        "create_save": 35
+        "create_save": 38
       },
       "directory": "Benchmarks/AssetEditing/animation",
       "index_file": "Benchmarks/AssetEditing/animation/index.json",

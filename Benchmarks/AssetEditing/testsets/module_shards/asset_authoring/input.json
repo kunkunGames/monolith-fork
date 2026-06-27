@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.input",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
-  "task_count": 574,
+  "task_count": 577,
   "module_count": 6,
   "routing_axes": [
     "category",
@@ -211,10 +211,10 @@
       "task_count": 5,
       "task_ids": [
         "BEB-297",
-        "BEB-478",
-        "BEB-487",
-        "BEB-502",
-        "BEB-525"
+        "BEB-481",
+        "BEB-490",
+        "BEB-505",
+        "BEB-528"
       ],
       "task_refs": [
         {
@@ -251,7 +251,7 @@
           "description": "Create an InputAction and InputMappingContext, map SpaceBar, validate mappings, and read the key binding back"
         },
         {
-          "id": "BEB-478",
+          "id": "BEB-481",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -283,7 +283,7 @@
           "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
         },
         {
-          "id": "BEB-487",
+          "id": "BEB-490",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -315,7 +315,7 @@
           "description": "Create an InputAction and InputMappingContext, add keyboard and gamepad bindings, remove one binding, save, and verify the removed key is gone while the remaining key persists"
         },
         {
-          "id": "BEB-502",
+          "id": "BEB-505",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -347,7 +347,7 @@
           "description": "Create an Axis3D Enhanced Input action and mapping context, edit action properties, map three keyboard keys, save, and read the bindings back"
         },
         {
-          "id": "BEB-525",
+          "id": "BEB-528",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -381,67 +381,67 @@
       "groups": {
         "by_edit_domain": {
           "axis2d_movement_mapping": [
-            "BEB-478"
+            "BEB-481"
           ],
           "axis3d_mapping": [
-            "BEB-502"
+            "BEB-505"
           ],
           "duplicate_key_conflict": [
-            "BEB-525"
+            "BEB-528"
           ],
           "enhanced_input": [
             "BEB-297"
           ],
           "enhanced_input_mapping_removal": [
-            "BEB-487"
+            "BEB-490"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ],
           "edit": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ],
           "readback_verify": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ],
           "save": [
             "BEB-297",
-            "BEB-478",
-            "BEB-487",
-            "BEB-502",
-            "BEB-525"
+            "BEB-481",
+            "BEB-490",
+            "BEB-505",
+            "BEB-528"
           ]
         }
       },
@@ -483,11 +483,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-478"
+        "BEB-481"
       ],
       "task_refs": [
         {
-          "id": "BEB-478",
+          "id": "BEB-481",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -522,26 +522,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-478"
+            "BEB-481"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-478"
+            "BEB-481"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-478"
+            "BEB-481"
           ],
           "edit": [
-            "BEB-478"
+            "BEB-481"
           ],
           "readback_verify": [
-            "BEB-478"
+            "BEB-481"
           ],
           "save": [
-            "BEB-478"
+            "BEB-481"
           ]
         }
       },
@@ -577,11 +577,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-502"
+        "BEB-505"
       ],
       "task_refs": [
         {
-          "id": "BEB-502",
+          "id": "BEB-505",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -616,26 +616,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-502"
+            "BEB-505"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-502"
+            "BEB-505"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-502"
+            "BEB-505"
           ],
           "edit": [
-            "BEB-502"
+            "BEB-505"
           ],
           "readback_verify": [
-            "BEB-502"
+            "BEB-505"
           ],
           "save": [
-            "BEB-502"
+            "BEB-505"
           ]
         }
       },
@@ -671,11 +671,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-525"
+        "BEB-528"
       ],
       "task_refs": [
         {
-          "id": "BEB-525",
+          "id": "BEB-528",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -709,26 +709,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-525"
+            "BEB-528"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-525"
+            "BEB-528"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-525"
+            "BEB-528"
           ],
           "edit": [
-            "BEB-525"
+            "BEB-528"
           ],
           "readback_verify": [
-            "BEB-525"
+            "BEB-528"
           ],
           "save": [
-            "BEB-525"
+            "BEB-528"
           ]
         }
       },
@@ -859,11 +859,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-487"
+        "BEB-490"
       ],
       "task_refs": [
         {
-          "id": "BEB-487",
+          "id": "BEB-490",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -898,26 +898,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-487"
+            "BEB-490"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-487"
+            "BEB-490"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-487"
+            "BEB-490"
           ],
           "edit": [
-            "BEB-487"
+            "BEB-490"
           ],
           "readback_verify": [
-            "BEB-487"
+            "BEB-490"
           ],
           "save": [
-            "BEB-487"
+            "BEB-490"
           ]
         }
       },

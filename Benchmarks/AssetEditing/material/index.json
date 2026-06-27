@@ -23,21 +23,21 @@
     "BEB-301",
     "BEB-302",
     "BEB-303",
-    "BEB-342",
-    "BEB-372",
-    "BEB-395",
-    "BEB-397",
-    "BEB-404",
-    "BEB-405",
-    "BEB-406",
-    "BEB-416",
-    "BEB-417",
-    "BEB-451",
+    "BEB-344",
+    "BEB-375",
+    "BEB-398",
+    "BEB-400",
+    "BEB-407",
+    "BEB-408",
+    "BEB-409",
+    "BEB-419",
+    "BEB-420",
     "BEB-454",
-    "BEB-462",
-    "BEB-471",
-    "BEB-506",
-    "BEB-539"
+    "BEB-457",
+    "BEB-465",
+    "BEB-474",
+    "BEB-509",
+    "BEB-542"
   ],
   "task_refs": [
     {
@@ -228,7 +228,7 @@
       "description": "Create a parameterized Material Function, create a function instance, edit its scalar override, save, and inspect override metadata"
     },
     {
-      "id": "BEB-342",
+      "id": "BEB-344",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -259,7 +259,7 @@
       "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back"
     },
     {
-      "id": "BEB-372",
+      "id": "BEB-375",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -289,7 +289,7 @@
       "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back"
     },
     {
-      "id": "BEB-395",
+      "id": "BEB-398",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -326,7 +326,7 @@
       "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back"
     },
     {
-      "id": "BEB-397",
+      "id": "BEB-400",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -362,7 +362,7 @@
       "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back"
     },
     {
-      "id": "BEB-404",
+      "id": "BEB-407",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -396,7 +396,7 @@
       "description": "Create a Material Function, edit library metadata, layout and update it, delete an unconnected expression, save it, and read metadata/graph back"
     },
     {
-      "id": "BEB-405",
+      "id": "BEB-408",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -429,7 +429,7 @@
       "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back"
     },
     {
-      "id": "BEB-406",
+      "id": "BEB-409",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -462,7 +462,7 @@
       "description": "Create a Material graph, clear every expression, import a replacement graph through import_material_graph merge mode, save, and read the imported topology back"
     },
     {
-      "id": "BEB-416",
+      "id": "BEB-419",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -490,7 +490,7 @@
       "description": "Import a Texture2D through the material namespace with normal-map settings, save it, and read compression/sRGB/LOD metadata back"
     },
     {
-      "id": "BEB-417",
+      "id": "BEB-420",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -521,7 +521,7 @@
       "description": "Create a Material Function with a grouped scalar parameter, rename the function parameter group, save it, and export graph metadata to verify the new group"
     },
     {
-      "id": "BEB-451",
+      "id": "BEB-454",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -550,7 +550,7 @@
       "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
     },
     {
-      "id": "BEB-454",
+      "id": "BEB-457",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -579,7 +579,7 @@
       "description": "Create a Deferred Decal material, edit material-domain and translucent blend settings, save it, and read the material properties back"
     },
     {
-      "id": "BEB-462",
+      "id": "BEB-465",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -610,7 +610,7 @@
       "description": "Create a material, edit render-facing material properties, save it, render a thumbnail preview PNG, and read compilation stats back"
     },
     {
-      "id": "BEB-471",
+      "id": "BEB-474",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -641,7 +641,7 @@
       "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
     },
     {
-      "id": "BEB-506",
+      "id": "BEB-509",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -673,7 +673,7 @@
       "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
     },
     {
-      "id": "BEB-539",
+      "id": "BEB-542",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -730,7 +730,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-454"
+        "BEB-457"
       ],
       "case_file": "testcases\\decal_domain.json"
     },
@@ -774,7 +774,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-397"
+        "BEB-400"
       ],
       "case_file": "testcases\\batch_layout_replace.json"
     },
@@ -796,7 +796,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-372"
+        "BEB-375"
       ],
       "case_file": "testcases\\custom_hlsl.json"
     },
@@ -818,7 +818,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-395"
+        "BEB-398"
       ],
       "case_file": "testcases\\expression_crud.json"
     },
@@ -884,7 +884,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-404"
+        "BEB-407"
       ],
       "case_file": "testcases\\function_maintenance.json"
     },
@@ -906,7 +906,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-417"
+        "BEB-420"
       ],
       "case_file": "testcases\\function_parameter_group_rename.json"
     },
@@ -950,7 +950,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-406"
+        "BEB-409"
       ],
       "case_file": "testcases\\graph_clear_import.json"
     },
@@ -972,7 +972,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-342"
+        "BEB-344"
       ],
       "case_file": "testcases\\instance_parameters.json"
     },
@@ -1016,7 +1016,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-405"
+        "BEB-408"
       ],
       "case_file": "testcases\\instance_single_param_delete_batch.json"
     },
@@ -1038,7 +1038,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-451"
+        "BEB-454"
       ],
       "case_file": "testcases\\layer_assets.json"
     },
@@ -1060,7 +1060,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-416"
+        "BEB-419"
       ],
       "case_file": "testcases\\texture_import_settings.json"
     },
@@ -1082,7 +1082,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-471"
+        "BEB-474"
       ],
       "case_file": "testcases\\parameter_inventory.json"
     },
@@ -1126,7 +1126,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-506"
+        "BEB-509"
       ],
       "case_file": "testcases\\postprocess_emissive.json"
     },
@@ -1148,7 +1148,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-462"
+        "BEB-465"
       ],
       "case_file": "testcases\\preview_render.json"
     },
@@ -1170,7 +1170,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-539"
+        "BEB-542"
       ],
       "case_file": "testcases\\texture_preview_tiling.json"
     }

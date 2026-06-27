@@ -18,15 +18,15 @@
   },
   "edit_domain_count": 5,
   "task_ids": [
-    "BEB-424",
-    "BEB-433",
-    "BEB-445",
-    "BEB-503",
-    "BEB-542"
+    "BEB-427",
+    "BEB-436",
+    "BEB-448",
+    "BEB-506",
+    "BEB-545"
   ],
   "task_refs": [
     {
-      "id": "BEB-424",
+      "id": "BEB-427",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -51,7 +51,7 @@
       "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
     },
     {
-      "id": "BEB-433",
+      "id": "BEB-436",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -82,7 +82,7 @@
       "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
     },
     {
-      "id": "BEB-445",
+      "id": "BEB-448",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -111,7 +111,7 @@
       "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
     },
     {
-      "id": "BEB-503",
+      "id": "BEB-506",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -141,7 +141,7 @@
       "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
     },
     {
-      "id": "BEB-542",
+      "id": "BEB-545",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -192,7 +192,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-424"
+        "BEB-427"
       ],
       "case_file": "testcases\\empty_map_asset.json"
     },
@@ -214,7 +214,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-503"
+        "BEB-506"
       ],
       "case_file": "testcases\\map_actor_defaults.json"
     },
@@ -236,7 +236,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-445"
+        "BEB-448"
       ],
       "case_file": "testcases\\nav_harness_map.json"
     },
@@ -258,7 +258,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-433"
+        "BEB-436"
       ],
       "case_file": "testcases\\package_dirty_save.json"
     },
@@ -280,7 +280,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-542"
+        "BEB-545"
       ],
       "case_file": "testcases\\texture_flipbook_atlas.json"
     }

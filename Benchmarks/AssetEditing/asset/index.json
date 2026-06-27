@@ -26,8 +26,8 @@
     "BEB-285",
     "BEB-286",
     "BEB-293",
-    "BEB-452",
-    "BEB-537"
+    "BEB-455",
+    "BEB-540"
   ],
   "task_refs": [
     {
@@ -287,7 +287,7 @@
       "description": "Resolve the project engine, import an engine TTF as UFont/UFontFace assets, save them, and inspect both outputs"
     },
     {
-      "id": "BEB-452",
+      "id": "BEB-455",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -315,7 +315,7 @@
       "description": "Create and save two Texture2D assets, inspect them as a batch, validate a dry-run delete, delete one asset, and verify the remaining/deleted rows"
     },
     {
-      "id": "BEB-537",
+      "id": "BEB-540",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -369,7 +369,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-452"
+        "BEB-455"
       ],
       "case_file": "testcases\\batch_delete.json"
     },
@@ -589,7 +589,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-537"
+        "BEB-540"
       ],
       "case_file": "testcases\\typed_validation.json"
     }

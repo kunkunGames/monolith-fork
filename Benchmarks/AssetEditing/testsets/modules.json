@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T13:47:55.383703+00:00",
+  "generated_at": "2026-06-27T14:12:33.847039+00:00",
   "description": "Split-shard manifest for generated AssetEditing test-set modules. Use index.json for routing and module_shards/*.json for module payloads; tasks.jsonl remains the canonical task payload stream.",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "820193c9f22794a8e8b00b1f691627026521d53d32ed1c466659f23bec1ef958",
+  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
   "module_storage": "split_shards",
   "module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
-  "task_count": 574,
+  "task_count": 577,
   "task_id_order": [
     "BEB-001",
     "BEB-002",
@@ -583,9 +583,12 @@
     "BEB-571",
     "BEB-572",
     "BEB-573",
-    "BEB-574"
+    "BEB-574",
+    "BEB-575",
+    "BEB-576",
+    "BEB-577"
   ],
-  "module_count": 1791,
+  "module_count": 1809,
   "routing_axes": [
     "category",
     "domain",
@@ -669,7 +672,10 @@
             "notify_state_timing": "asset_authoring.animation.notify_state_timing",
             "pose_search_database": "asset_authoring.animation.pose_search_database",
             "pose_search_normalization_set": "asset_authoring.animation.pose_search_normalization_set",
+            "pose_search_schema_channels": "asset_authoring.animation.pose_search_schema_channels",
             "retarget_chain_lifecycle": "asset_authoring.animation.retarget_chain_lifecycle",
+            "retarget_chain_mapping": "asset_authoring.animation.retarget_chain_mapping",
+            "retarget_chain_settings": "asset_authoring.animation.retarget_chain_settings",
             "sequence_curve_marker_cleanup": "asset_authoring.animation.sequence_curve_marker_cleanup",
             "sequence_from_poses": "asset_authoring.animation.sequence_from_poses",
             "sequence_pose_copy": "asset_authoring.animation.sequence_pose_copy",
@@ -1162,7 +1168,10 @@
               "notify_state_timing": "asset_operation.creation_or_import.animation.notify_state_timing",
               "pose_search_database": "asset_operation.creation_or_import.animation.pose_search_database",
               "pose_search_normalization_set": "asset_operation.creation_or_import.animation.pose_search_normalization_set",
+              "pose_search_schema_channels": "asset_operation.creation_or_import.animation.pose_search_schema_channels",
               "retarget_chain_lifecycle": "asset_operation.creation_or_import.animation.retarget_chain_lifecycle",
+              "retarget_chain_mapping": "asset_operation.creation_or_import.animation.retarget_chain_mapping",
+              "retarget_chain_settings": "asset_operation.creation_or_import.animation.retarget_chain_settings",
               "sequence_curve_marker_cleanup": "asset_operation.creation_or_import.animation.sequence_curve_marker_cleanup",
               "sequence_from_poses": "asset_operation.creation_or_import.animation.sequence_from_poses",
               "sequence_pose_copy": "asset_operation.creation_or_import.animation.sequence_pose_copy",
@@ -1543,7 +1552,10 @@
               "notify_state_timing": "asset_operation.edit.animation.notify_state_timing",
               "pose_search_database": "asset_operation.edit.animation.pose_search_database",
               "pose_search_normalization_set": "asset_operation.edit.animation.pose_search_normalization_set",
+              "pose_search_schema_channels": "asset_operation.edit.animation.pose_search_schema_channels",
               "retarget_chain_lifecycle": "asset_operation.edit.animation.retarget_chain_lifecycle",
+              "retarget_chain_mapping": "asset_operation.edit.animation.retarget_chain_mapping",
+              "retarget_chain_settings": "asset_operation.edit.animation.retarget_chain_settings",
               "sequence_curve_marker_cleanup": "asset_operation.edit.animation.sequence_curve_marker_cleanup",
               "sequence_from_poses": "asset_operation.edit.animation.sequence_from_poses",
               "sequence_pose_copy": "asset_operation.edit.animation.sequence_pose_copy",
@@ -1924,7 +1936,10 @@
               "notify_state_timing": "asset_operation.readback_verify.animation.notify_state_timing",
               "pose_search_database": "asset_operation.readback_verify.animation.pose_search_database",
               "pose_search_normalization_set": "asset_operation.readback_verify.animation.pose_search_normalization_set",
+              "pose_search_schema_channels": "asset_operation.readback_verify.animation.pose_search_schema_channels",
               "retarget_chain_lifecycle": "asset_operation.readback_verify.animation.retarget_chain_lifecycle",
+              "retarget_chain_mapping": "asset_operation.readback_verify.animation.retarget_chain_mapping",
+              "retarget_chain_settings": "asset_operation.readback_verify.animation.retarget_chain_settings",
               "sequence_curve_marker_cleanup": "asset_operation.readback_verify.animation.sequence_curve_marker_cleanup",
               "sequence_from_poses": "asset_operation.readback_verify.animation.sequence_from_poses",
               "sequence_pose_copy": "asset_operation.readback_verify.animation.sequence_pose_copy",
@@ -2305,7 +2320,10 @@
               "notify_state_timing": "asset_operation.save.animation.notify_state_timing",
               "pose_search_database": "asset_operation.save.animation.pose_search_database",
               "pose_search_normalization_set": "asset_operation.save.animation.pose_search_normalization_set",
+              "pose_search_schema_channels": "asset_operation.save.animation.pose_search_schema_channels",
               "retarget_chain_lifecycle": "asset_operation.save.animation.retarget_chain_lifecycle",
+              "retarget_chain_mapping": "asset_operation.save.animation.retarget_chain_mapping",
+              "retarget_chain_settings": "asset_operation.save.animation.retarget_chain_settings",
               "sequence_curve_marker_cleanup": "asset_operation.save.animation.sequence_curve_marker_cleanup",
               "sequence_from_poses": "asset_operation.save.animation.sequence_from_poses",
               "sequence_pose_copy": "asset_operation.save.animation.sequence_pose_copy",
@@ -2677,7 +2695,10 @@
         "animation_notify_state_timing_roundtrip": "workflow.animation_notify_state_timing_roundtrip",
         "animation_pose_search_database_roundtrip": "workflow.animation_pose_search_database_roundtrip",
         "animation_pose_search_normalization_set_roundtrip": "workflow.animation_pose_search_normalization_set_roundtrip",
+        "animation_pose_search_schema_channels_roundtrip": "workflow.animation_pose_search_schema_channels_roundtrip",
         "animation_retarget_chain_lifecycle_roundtrip": "workflow.animation_retarget_chain_lifecycle_roundtrip",
+        "animation_retarget_chain_mapping_roundtrip": "workflow.animation_retarget_chain_mapping_roundtrip",
+        "animation_retarget_chain_settings_roundtrip": "workflow.animation_retarget_chain_settings_roundtrip",
         "animation_sequence_curve_marker_cleanup_roundtrip": "workflow.animation_sequence_curve_marker_cleanup_roundtrip",
         "animation_sequence_curve_sync_metadata_roundtrip": "workflow.animation_sequence_curve_sync_metadata_roundtrip",
         "animation_sequence_from_poses_roundtrip": "workflow.animation_sequence_from_poses_roundtrip",
@@ -3369,7 +3390,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: animation",
-      "task_count": 35,
+      "task_count": 38,
       "filters": {
         "category": [
           "asset_authoring"
@@ -3411,7 +3432,10 @@
         "asset_authoring.animation.notify_state_timing",
         "asset_authoring.animation.pose_search_database",
         "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.pose_search_schema_channels",
         "asset_authoring.animation.retarget_chain_lifecycle",
+        "asset_authoring.animation.retarget_chain_mapping",
+        "asset_authoring.animation.retarget_chain_settings",
         "asset_authoring.animation.sequence_curve_marker_cleanup",
         "asset_authoring.animation.sequence_events",
         "asset_authoring.animation.sequence_from_poses",
@@ -4203,6 +4227,33 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.animation.pose_search_schema_channels",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "pose_search_schema_channels"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/pose_search_schema_channels",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_schema_channels"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.animation.retarget_chain_lifecycle",
       "route": [
         "AssetEditing",
@@ -4222,6 +4273,60 @@
         ],
         "edit_domain": [
           "retarget_chain_lifecycle"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.retarget_chain_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "retarget_chain_mapping"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/retarget_chain_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_mapping"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.retarget_chain_settings",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "retarget_chain_settings"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/retarget_chain_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_settings"
         ]
       },
       "module_shard_id": "asset_authoring.animation",
@@ -10897,7 +11002,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Creation/import",
-      "task_count": 264,
+      "task_count": 267,
       "filters": {
         "asset_operation": [
           "creation_or_import"
@@ -11418,7 +11523,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/animation",
-      "task_count": 35,
+      "task_count": 38,
       "filters": {
         "category": [
           "asset_authoring"
@@ -11463,7 +11568,10 @@
         "asset_operation.creation_or_import.animation.notify_state_timing",
         "asset_operation.creation_or_import.animation.pose_search_database",
         "asset_operation.creation_or_import.animation.pose_search_normalization_set",
+        "asset_operation.creation_or_import.animation.pose_search_schema_channels",
         "asset_operation.creation_or_import.animation.retarget_chain_lifecycle",
+        "asset_operation.creation_or_import.animation.retarget_chain_mapping",
+        "asset_operation.creation_or_import.animation.retarget_chain_settings",
         "asset_operation.creation_or_import.animation.sequence_curve_marker_cleanup",
         "asset_operation.creation_or_import.animation.sequence_events",
         "asset_operation.creation_or_import.animation.sequence_from_poses",
@@ -12371,6 +12479,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.creation_or_import.animation.pose_search_schema_channels",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "animation",
+        "pose_search_schema_channels"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/animation/pose_search_schema_channels",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_schema_channels"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.creation_or_import.animation.retarget_chain_lifecycle",
       "route": [
         "AssetEditing",
@@ -12391,6 +12530,68 @@
         ],
         "edit_domain": [
           "retarget_chain_lifecycle"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.animation.retarget_chain_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "animation",
+        "retarget_chain_mapping"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/animation/retarget_chain_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_mapping"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.animation.retarget_chain_settings",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "animation",
+        "retarget_chain_settings"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/animation/retarget_chain_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_settings"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -20033,7 +20234,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Asset edit",
-      "task_count": 264,
+      "task_count": 267,
       "filters": {
         "asset_operation": [
           "edit"
@@ -20554,7 +20755,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Asset edit/animation",
-      "task_count": 35,
+      "task_count": 38,
       "filters": {
         "category": [
           "asset_authoring"
@@ -20599,7 +20800,10 @@
         "asset_operation.edit.animation.notify_state_timing",
         "asset_operation.edit.animation.pose_search_database",
         "asset_operation.edit.animation.pose_search_normalization_set",
+        "asset_operation.edit.animation.pose_search_schema_channels",
         "asset_operation.edit.animation.retarget_chain_lifecycle",
+        "asset_operation.edit.animation.retarget_chain_mapping",
+        "asset_operation.edit.animation.retarget_chain_settings",
         "asset_operation.edit.animation.sequence_curve_marker_cleanup",
         "asset_operation.edit.animation.sequence_events",
         "asset_operation.edit.animation.sequence_from_poses",
@@ -21507,6 +21711,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.edit.animation.pose_search_schema_channels",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "animation",
+        "pose_search_schema_channels"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/animation/pose_search_schema_channels",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_schema_channels"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.edit.animation.retarget_chain_lifecycle",
       "route": [
         "AssetEditing",
@@ -21527,6 +21762,68 @@
         ],
         "edit_domain": [
           "retarget_chain_lifecycle"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.animation.retarget_chain_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "animation",
+        "retarget_chain_mapping"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/animation/retarget_chain_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_mapping"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.animation.retarget_chain_settings",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "animation",
+        "retarget_chain_settings"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/animation/retarget_chain_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_settings"
         ],
         "asset_operation": [
           "edit"
@@ -29169,7 +29466,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Read-back verify",
-      "task_count": 264,
+      "task_count": 267,
       "filters": {
         "asset_operation": [
           "readback_verify"
@@ -29690,7 +29987,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Read-back verify/animation",
-      "task_count": 35,
+      "task_count": 38,
       "filters": {
         "category": [
           "asset_authoring"
@@ -29735,7 +30032,10 @@
         "asset_operation.readback_verify.animation.notify_state_timing",
         "asset_operation.readback_verify.animation.pose_search_database",
         "asset_operation.readback_verify.animation.pose_search_normalization_set",
+        "asset_operation.readback_verify.animation.pose_search_schema_channels",
         "asset_operation.readback_verify.animation.retarget_chain_lifecycle",
+        "asset_operation.readback_verify.animation.retarget_chain_mapping",
+        "asset_operation.readback_verify.animation.retarget_chain_settings",
         "asset_operation.readback_verify.animation.sequence_curve_marker_cleanup",
         "asset_operation.readback_verify.animation.sequence_events",
         "asset_operation.readback_verify.animation.sequence_from_poses",
@@ -30643,6 +30943,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.readback_verify.animation.pose_search_schema_channels",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "animation",
+        "pose_search_schema_channels"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/animation/pose_search_schema_channels",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_schema_channels"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.readback_verify.animation.retarget_chain_lifecycle",
       "route": [
         "AssetEditing",
@@ -30663,6 +30994,68 @@
         ],
         "edit_domain": [
           "retarget_chain_lifecycle"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.animation.retarget_chain_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "animation",
+        "retarget_chain_mapping"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/animation/retarget_chain_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_mapping"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.animation.retarget_chain_settings",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "animation",
+        "retarget_chain_settings"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/animation/retarget_chain_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_settings"
         ],
         "asset_operation": [
           "readback_verify"
@@ -38305,7 +38698,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Save",
-      "task_count": 262,
+      "task_count": 265,
       "filters": {
         "asset_operation": [
           "save"
@@ -38826,7 +39219,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Save/animation",
-      "task_count": 35,
+      "task_count": 38,
       "filters": {
         "category": [
           "asset_authoring"
@@ -38871,7 +39264,10 @@
         "asset_operation.save.animation.notify_state_timing",
         "asset_operation.save.animation.pose_search_database",
         "asset_operation.save.animation.pose_search_normalization_set",
+        "asset_operation.save.animation.pose_search_schema_channels",
         "asset_operation.save.animation.retarget_chain_lifecycle",
+        "asset_operation.save.animation.retarget_chain_mapping",
+        "asset_operation.save.animation.retarget_chain_settings",
         "asset_operation.save.animation.sequence_curve_marker_cleanup",
         "asset_operation.save.animation.sequence_events",
         "asset_operation.save.animation.sequence_from_poses",
@@ -39779,6 +40175,37 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.save.animation.pose_search_schema_channels",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "animation",
+        "pose_search_schema_channels"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/animation/pose_search_schema_channels",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_schema_channels"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.animation",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.save.animation.retarget_chain_lifecycle",
       "route": [
         "AssetEditing",
@@ -39799,6 +40226,68 @@
         ],
         "edit_domain": [
           "retarget_chain_lifecycle"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.animation.retarget_chain_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "animation",
+        "retarget_chain_mapping"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/animation/retarget_chain_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_mapping"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.animation.retarget_chain_settings",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "animation",
+        "retarget_chain_settings"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/animation/retarget_chain_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "retarget_chain_settings"
         ],
         "asset_operation": [
           "save"
@@ -48749,7 +49238,7 @@
       ],
       "track": "category",
       "title": "Category: asset_authoring",
-      "task_count": 264,
+      "task_count": 267,
       "filters": {
         "category": [
           "asset_authoring"
@@ -48827,7 +49316,10 @@
         "workflow.animation_notify_state_timing_roundtrip",
         "workflow.animation_pose_search_database_roundtrip",
         "workflow.animation_pose_search_normalization_set_roundtrip",
+        "workflow.animation_pose_search_schema_channels_roundtrip",
         "workflow.animation_retarget_chain_lifecycle_roundtrip",
+        "workflow.animation_retarget_chain_mapping_roundtrip",
+        "workflow.animation_retarget_chain_settings_roundtrip",
         "workflow.animation_sequence_curve_marker_cleanup_roundtrip",
         "workflow.animation_sequence_curve_sync_metadata_roundtrip",
         "workflow.animation_sequence_from_poses_roundtrip",
@@ -49301,7 +49793,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 262,
+      "task_count": 265,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -49361,7 +49853,7 @@
       ],
       "track": "operation_semantics",
       "title": "Operation semantics: create_save",
-      "task_count": 264,
+      "task_count": 267,
       "filters": {
         "operation_semantics": [
           "create_save"
@@ -50253,6 +50745,26 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.animation_pose_search_schema_channels_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "animation_pose_search_schema_channels_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: animation_pose_search_schema_channels_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "animation_pose_search_schema_channels_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.animation_retarget_chain_lifecycle_roundtrip",
       "route": [
         "AssetEditing",
@@ -50265,6 +50777,46 @@
       "filters": {
         "workflow": [
           "animation_retarget_chain_lifecycle_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.animation_retarget_chain_mapping_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "animation_retarget_chain_mapping_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: animation_retarget_chain_mapping_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "animation_retarget_chain_mapping_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "workflow.animation_retarget_chain_settings_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "animation_retarget_chain_settings_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: animation_retarget_chain_settings_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "animation_retarget_chain_settings_roundtrip"
         ]
       },
       "module_shard_id": "workflow",
@@ -55039,7 +55591,7 @@
     "asset_authoring.animation": {
       "shard_id": "asset_authoring.animation",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
-      "module_count": 36,
+      "module_count": 39,
       "module_ids": [
         "asset_authoring.animation",
         "asset_authoring.animation.aim_offset_axis",
@@ -55071,7 +55623,10 @@
         "asset_authoring.animation.notify_state_timing",
         "asset_authoring.animation.pose_search_database",
         "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.pose_search_schema_channels",
         "asset_authoring.animation.retarget_chain_lifecycle",
+        "asset_authoring.animation.retarget_chain_mapping",
+        "asset_authoring.animation.retarget_chain_settings",
         "asset_authoring.animation.sequence_curve_marker_cleanup",
         "asset_authoring.animation.sequence_events",
         "asset_authoring.animation.sequence_from_poses",
@@ -55465,7 +56020,7 @@
     "asset_operation.creation_or_import": {
       "shard_id": "asset_operation.creation_or_import",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "module_count": 288,
+      "module_count": 291,
       "module_ids": [
         "asset_operation.creation_or_import",
         "asset_operation.creation_or_import.ai",
@@ -55513,7 +56068,10 @@
         "asset_operation.creation_or_import.animation.notify_state_timing",
         "asset_operation.creation_or_import.animation.pose_search_database",
         "asset_operation.creation_or_import.animation.pose_search_normalization_set",
+        "asset_operation.creation_or_import.animation.pose_search_schema_channels",
         "asset_operation.creation_or_import.animation.retarget_chain_lifecycle",
+        "asset_operation.creation_or_import.animation.retarget_chain_mapping",
+        "asset_operation.creation_or_import.animation.retarget_chain_settings",
         "asset_operation.creation_or_import.animation.sequence_curve_marker_cleanup",
         "asset_operation.creation_or_import.animation.sequence_events",
         "asset_operation.creation_or_import.animation.sequence_from_poses",
@@ -55760,7 +56318,7 @@
     "asset_operation.edit": {
       "shard_id": "asset_operation.edit",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
-      "module_count": 288,
+      "module_count": 291,
       "module_ids": [
         "asset_operation.edit",
         "asset_operation.edit.ai",
@@ -55808,7 +56366,10 @@
         "asset_operation.edit.animation.notify_state_timing",
         "asset_operation.edit.animation.pose_search_database",
         "asset_operation.edit.animation.pose_search_normalization_set",
+        "asset_operation.edit.animation.pose_search_schema_channels",
         "asset_operation.edit.animation.retarget_chain_lifecycle",
+        "asset_operation.edit.animation.retarget_chain_mapping",
+        "asset_operation.edit.animation.retarget_chain_settings",
         "asset_operation.edit.animation.sequence_curve_marker_cleanup",
         "asset_operation.edit.animation.sequence_events",
         "asset_operation.edit.animation.sequence_from_poses",
@@ -56055,7 +56616,7 @@
     "asset_operation.readback_verify": {
       "shard_id": "asset_operation.readback_verify",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
-      "module_count": 288,
+      "module_count": 291,
       "module_ids": [
         "asset_operation.readback_verify",
         "asset_operation.readback_verify.ai",
@@ -56103,7 +56664,10 @@
         "asset_operation.readback_verify.animation.notify_state_timing",
         "asset_operation.readback_verify.animation.pose_search_database",
         "asset_operation.readback_verify.animation.pose_search_normalization_set",
+        "asset_operation.readback_verify.animation.pose_search_schema_channels",
         "asset_operation.readback_verify.animation.retarget_chain_lifecycle",
+        "asset_operation.readback_verify.animation.retarget_chain_mapping",
+        "asset_operation.readback_verify.animation.retarget_chain_settings",
         "asset_operation.readback_verify.animation.sequence_curve_marker_cleanup",
         "asset_operation.readback_verify.animation.sequence_events",
         "asset_operation.readback_verify.animation.sequence_from_poses",
@@ -56350,7 +56914,7 @@
     "asset_operation.save": {
       "shard_id": "asset_operation.save",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
-      "module_count": 286,
+      "module_count": 289,
       "module_ids": [
         "asset_operation.save",
         "asset_operation.save.ai",
@@ -56398,7 +56962,10 @@
         "asset_operation.save.animation.notify_state_timing",
         "asset_operation.save.animation.pose_search_database",
         "asset_operation.save.animation.pose_search_normalization_set",
+        "asset_operation.save.animation.pose_search_schema_channels",
         "asset_operation.save.animation.retarget_chain_lifecycle",
+        "asset_operation.save.animation.retarget_chain_mapping",
+        "asset_operation.save.animation.retarget_chain_settings",
         "asset_operation.save.animation.sequence_curve_marker_cleanup",
         "asset_operation.save.animation.sequence_events",
         "asset_operation.save.animation.sequence_from_poses",
@@ -56787,7 +57354,7 @@
     "workflow": {
       "shard_id": "workflow",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
-      "module_count": 280,
+      "module_count": 283,
       "module_ids": [
         "workflow.actor_component_property_assembly",
         "workflow.actorcomponent_toggle_contract",
@@ -56831,7 +57398,10 @@
         "workflow.animation_notify_state_timing_roundtrip",
         "workflow.animation_pose_search_database_roundtrip",
         "workflow.animation_pose_search_normalization_set_roundtrip",
+        "workflow.animation_pose_search_schema_channels_roundtrip",
         "workflow.animation_retarget_chain_lifecycle_roundtrip",
+        "workflow.animation_retarget_chain_mapping_roundtrip",
+        "workflow.animation_retarget_chain_settings_roundtrip",
         "workflow.animation_sequence_curve_marker_cleanup_roundtrip",
         "workflow.animation_sequence_curve_sync_metadata_roundtrip",
         "workflow.animation_sequence_from_poses_roundtrip",
@@ -57118,7 +57688,10 @@
     "asset_authoring.animation.notify_state_timing": "asset_authoring.animation",
     "asset_authoring.animation.pose_search_database": "asset_authoring.animation",
     "asset_authoring.animation.pose_search_normalization_set": "asset_authoring.animation",
+    "asset_authoring.animation.pose_search_schema_channels": "asset_authoring.animation",
     "asset_authoring.animation.retarget_chain_lifecycle": "asset_authoring.animation",
+    "asset_authoring.animation.retarget_chain_mapping": "asset_authoring.animation",
+    "asset_authoring.animation.retarget_chain_settings": "asset_authoring.animation",
     "asset_authoring.animation.sequence_curve_marker_cleanup": "asset_authoring.animation",
     "asset_authoring.animation.sequence_events": "asset_authoring.animation",
     "asset_authoring.animation.sequence_from_poses": "asset_authoring.animation",
@@ -57406,7 +57979,10 @@
     "asset_operation.creation_or_import.animation.notify_state_timing": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.pose_search_database": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.pose_search_normalization_set": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.animation.pose_search_schema_channels": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.retarget_chain_lifecycle": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.animation.retarget_chain_mapping": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.animation.retarget_chain_settings": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.sequence_curve_marker_cleanup": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.sequence_events": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.animation.sequence_from_poses": "asset_operation.creation_or_import",
@@ -57694,7 +58270,10 @@
     "asset_operation.edit.animation.notify_state_timing": "asset_operation.edit",
     "asset_operation.edit.animation.pose_search_database": "asset_operation.edit",
     "asset_operation.edit.animation.pose_search_normalization_set": "asset_operation.edit",
+    "asset_operation.edit.animation.pose_search_schema_channels": "asset_operation.edit",
     "asset_operation.edit.animation.retarget_chain_lifecycle": "asset_operation.edit",
+    "asset_operation.edit.animation.retarget_chain_mapping": "asset_operation.edit",
+    "asset_operation.edit.animation.retarget_chain_settings": "asset_operation.edit",
     "asset_operation.edit.animation.sequence_curve_marker_cleanup": "asset_operation.edit",
     "asset_operation.edit.animation.sequence_events": "asset_operation.edit",
     "asset_operation.edit.animation.sequence_from_poses": "asset_operation.edit",
@@ -57982,7 +58561,10 @@
     "asset_operation.readback_verify.animation.notify_state_timing": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.pose_search_database": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.pose_search_normalization_set": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.animation.pose_search_schema_channels": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.retarget_chain_lifecycle": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.animation.retarget_chain_mapping": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.animation.retarget_chain_settings": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.sequence_curve_marker_cleanup": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.sequence_events": "asset_operation.readback_verify",
     "asset_operation.readback_verify.animation.sequence_from_poses": "asset_operation.readback_verify",
@@ -58270,7 +58852,10 @@
     "asset_operation.save.animation.notify_state_timing": "asset_operation.save",
     "asset_operation.save.animation.pose_search_database": "asset_operation.save",
     "asset_operation.save.animation.pose_search_normalization_set": "asset_operation.save",
+    "asset_operation.save.animation.pose_search_schema_channels": "asset_operation.save",
     "asset_operation.save.animation.retarget_chain_lifecycle": "asset_operation.save",
+    "asset_operation.save.animation.retarget_chain_mapping": "asset_operation.save",
+    "asset_operation.save.animation.retarget_chain_settings": "asset_operation.save",
     "asset_operation.save.animation.sequence_curve_marker_cleanup": "asset_operation.save",
     "asset_operation.save.animation.sequence_events": "asset_operation.save",
     "asset_operation.save.animation.sequence_from_poses": "asset_operation.save",
@@ -58626,7 +59211,10 @@
     "workflow.animation_notify_state_timing_roundtrip": "workflow",
     "workflow.animation_pose_search_database_roundtrip": "workflow",
     "workflow.animation_pose_search_normalization_set_roundtrip": "workflow",
+    "workflow.animation_pose_search_schema_channels_roundtrip": "workflow",
     "workflow.animation_retarget_chain_lifecycle_roundtrip": "workflow",
+    "workflow.animation_retarget_chain_mapping_roundtrip": "workflow",
+    "workflow.animation_retarget_chain_settings_roundtrip": "workflow",
     "workflow.animation_sequence_curve_marker_cleanup_roundtrip": "workflow",
     "workflow.animation_sequence_curve_sync_metadata_roundtrip": "workflow",
     "workflow.animation_sequence_from_poses_roundtrip": "workflow",

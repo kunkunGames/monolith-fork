@@ -17,39 +17,39 @@
   },
   "edit_domain_count": 29,
   "task_ids": [
-    "BEB-327",
-    "BEB-328",
     "BEB-329",
-    "BEB-366",
-    "BEB-367",
+    "BEB-330",
+    "BEB-331",
     "BEB-368",
     "BEB-369",
     "BEB-370",
-    "BEB-383",
-    "BEB-384",
-    "BEB-385",
-    "BEB-400",
-    "BEB-420",
-    "BEB-427",
-    "BEB-428",
-    "BEB-429",
+    "BEB-371",
+    "BEB-372",
+    "BEB-386",
+    "BEB-387",
+    "BEB-388",
+    "BEB-403",
+    "BEB-423",
     "BEB-430",
-    "BEB-440",
-    "BEB-441",
-    "BEB-442",
+    "BEB-431",
+    "BEB-432",
+    "BEB-433",
     "BEB-443",
     "BEB-444",
-    "BEB-470",
+    "BEB-445",
+    "BEB-446",
+    "BEB-447",
     "BEB-473",
-    "BEB-509",
-    "BEB-516",
-    "BEB-517",
-    "BEB-518",
-    "BEB-538"
+    "BEB-476",
+    "BEB-512",
+    "BEB-519",
+    "BEB-520",
+    "BEB-521",
+    "BEB-541"
   ],
   "task_refs": [
     {
-      "id": "BEB-327",
+      "id": "BEB-329",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -84,7 +84,7 @@
       "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
     },
     {
-      "id": "BEB-328",
+      "id": "BEB-330",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -117,7 +117,7 @@
       "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back"
     },
     {
-      "id": "BEB-329",
+      "id": "BEB-331",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -150,7 +150,7 @@
       "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order"
     },
     {
-      "id": "BEB-366",
+      "id": "BEB-368",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -183,7 +183,7 @@
       "description": "Create a Niagara System, normalize its renderer slot, add a Sprite renderer, configure SubUV, save, and inspect renderer properties"
     },
     {
-      "id": "BEB-367",
+      "id": "BEB-369",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -216,7 +216,7 @@
       "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
     },
     {
-      "id": "BEB-368",
+      "id": "BEB-370",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -250,7 +250,7 @@
       "description": "Create a GPU Niagara emitter, add a simulation stage, edit iteration/execute behavior and particle lifetime, save, and read stage metadata back"
     },
     {
-      "id": "BEB-369",
+      "id": "BEB-371",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -282,7 +282,7 @@
       "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
     },
     {
-      "id": "BEB-370",
+      "id": "BEB-372",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -313,7 +313,7 @@
       "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
     },
     {
-      "id": "BEB-383",
+      "id": "BEB-386",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -349,7 +349,7 @@
       "description": "Create a Niagara System, add Mesh and Ribbon renderers, assign an engine StaticMesh, configure a ribbon trail and spawn shape, then read renderer and module metadata back"
     },
     {
-      "id": "BEB-384",
+      "id": "BEB-387",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -384,7 +384,7 @@
       "description": "Create a Niagara HLSL module, add it to an emitter, capture the returned module GUID, duplicate that module, edit the duplicate input, save, and read both GUIDs back"
     },
     {
-      "id": "BEB-385",
+      "id": "BEB-388",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -419,7 +419,7 @@
       "description": "Create two Niagara HLSL modules, add both to an emitter, move one module ahead of the other, disable the remaining module, save, and read stack order/state back"
     },
     {
-      "id": "BEB-400",
+      "id": "BEB-403",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -449,7 +449,7 @@
       "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
     },
     {
-      "id": "BEB-420",
+      "id": "BEB-423",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -481,7 +481,7 @@
       "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
     },
     {
-      "id": "BEB-427",
+      "id": "BEB-430",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -510,7 +510,7 @@
       "description": "Create a reusable Niagara function script from HLSL, save it, and read back the generated graph plus CustomHlsl body"
     },
     {
-      "id": "BEB-428",
+      "id": "BEB-431",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -542,7 +542,7 @@
       "description": "Create a Niagara emitter template asset, build a new system from a JSON spec that consumes the template, save it, and export the authored spec back"
     },
     {
-      "id": "BEB-429",
+      "id": "BEB-432",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -574,7 +574,7 @@
       "description": "Create a Niagara System, import a JSON spec into it from a self-created emitter template, save, and verify overwrite-spec topology"
     },
     {
-      "id": "BEB-430",
+      "id": "BEB-433",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -607,7 +607,7 @@
       "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
     },
     {
-      "id": "BEB-440",
+      "id": "BEB-443",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -637,7 +637,7 @@
       "description": "Create a Niagara System, edit emitter data through direct property aliases, save, and read each property back"
     },
     {
-      "id": "BEB-441",
+      "id": "BEB-444",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -671,7 +671,7 @@
       "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
     },
     {
-      "id": "BEB-442",
+      "id": "BEB-445",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -705,7 +705,7 @@
       "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
     },
     {
-      "id": "BEB-443",
+      "id": "BEB-446",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -744,7 +744,7 @@
       "description": "Create a Niagara module stack, attach an engine Add_Float dynamic input to a module input, edit its value, remove it, save, and read back the final literal input state"
     },
     {
-      "id": "BEB-444",
+      "id": "BEB-447",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -780,7 +780,7 @@
       "description": "Create a Niagara module with a curve data-interface input, assign curve keys, save the system, and read DI keys back through module and system inspection"
     },
     {
-      "id": "BEB-470",
+      "id": "BEB-473",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -810,7 +810,7 @@
       "description": "Create a Niagara System, add two user parameters, remove one stale parameter, save, and verify only the kept parameter remains"
     },
     {
-      "id": "BEB-473",
+      "id": "BEB-476",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -840,7 +840,7 @@
       "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
     },
     {
-      "id": "BEB-509",
+      "id": "BEB-512",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -871,7 +871,7 @@
       "description": "Create a Niagara System and EffectType asset, assign the EffectType to the system, save both assets, and verify the relationship plus scalability metadata"
     },
     {
-      "id": "BEB-516",
+      "id": "BEB-519",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -906,7 +906,7 @@
       "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
     },
     {
-      "id": "BEB-517",
+      "id": "BEB-520",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -937,7 +937,7 @@
       "description": "Create a Niagara Parameter Collection, add kept and retired parameters, remove the retired parameter, save, and verify the final collection state"
     },
     {
-      "id": "BEB-518",
+      "id": "BEB-521",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -968,7 +968,7 @@
       "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
     },
     {
-      "id": "BEB-538",
+      "id": "BEB-541",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1024,7 +1024,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-516"
+        "BEB-519"
       ],
       "case_file": "testcases\\curve_di_key_edit.json"
     },
@@ -1046,7 +1046,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-473"
+        "BEB-476"
       ],
       "case_file": "testcases\\custom_hlsl_update.json"
     },
@@ -1068,7 +1068,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-538"
+        "BEB-541"
       ],
       "case_file": "testcases\\emitter_lifecycle.json"
     },
@@ -1090,7 +1090,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-430"
+        "BEB-433"
       ],
       "case_file": "testcases\\clear_emitter_modules.json"
     },
@@ -1112,7 +1112,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-444"
+        "BEB-447"
       ],
       "case_file": "testcases\\data_interface_curve.json"
     },
@@ -1134,7 +1134,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-369"
+        "BEB-371"
       ],
       "case_file": "testcases\\duplicate_diff.json"
     },
@@ -1156,7 +1156,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-443"
+        "BEB-446"
       ],
       "case_file": "testcases\\dynamic_input.json"
     },
@@ -1178,7 +1178,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-400"
+        "BEB-403"
       ],
       "case_file": "testcases\\effect_type_scalability.json"
     },
@@ -1200,7 +1200,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-440"
+        "BEB-443"
       ],
       "case_file": "testcases\\emitter_properties.json"
     },
@@ -1222,7 +1222,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-428"
+        "BEB-431"
       ],
       "case_file": "testcases\\emitter_template_spec.json"
     },
@@ -1244,7 +1244,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-420"
+        "BEB-423"
       ],
       "case_file": "testcases\\emitter_topology.json"
     },
@@ -1266,7 +1266,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-370"
+        "BEB-372"
       ],
       "case_file": "testcases\\event_handler_metadata.json"
     },
@@ -1288,7 +1288,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-427"
+        "BEB-430"
       ],
       "case_file": "testcases\\hlsl_function.json"
     },
@@ -1310,7 +1310,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-429"
+        "BEB-432"
       ],
       "case_file": "testcases\\import_system_spec.json"
     },
@@ -1332,7 +1332,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-383"
+        "BEB-386"
       ],
       "case_file": "testcases\\mesh_ribbon_renderer.json"
     },
@@ -1354,7 +1354,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-384"
+        "BEB-387"
       ],
       "case_file": "testcases\\module_duplicate_capture.json"
     },
@@ -1376,7 +1376,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-329"
+        "BEB-331"
       ],
       "case_file": "testcases\\module_script.json"
     },
@@ -1398,7 +1398,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-385"
+        "BEB-388"
       ],
       "case_file": "testcases\\module_stack_state.json"
     },
@@ -1420,7 +1420,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-442"
+        "BEB-445"
       ],
       "case_file": "testcases\\renderer_material.json"
     },
@@ -1442,7 +1442,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-441"
+        "BEB-444"
       ],
       "case_file": "testcases\\renderer_property_binding.json"
     },
@@ -1464,7 +1464,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-328"
+        "BEB-330"
       ],
       "case_file": "testcases\\sidecar_assets.json"
     },
@@ -1486,7 +1486,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-368"
+        "BEB-370"
       ],
       "case_file": "testcases\\sim_stage_lifetime.json"
     },
@@ -1508,7 +1508,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-366"
+        "BEB-368"
       ],
       "case_file": "testcases\\sprite_renderer_subuv.json"
     },
@@ -1530,7 +1530,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-327"
+        "BEB-329"
       ],
       "case_file": "testcases\\system.json"
     },
@@ -1552,7 +1552,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-367"
+        "BEB-369"
       ],
       "case_file": "testcases\\user_parameters.json"
     },
@@ -1574,7 +1574,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-517"
+        "BEB-520"
       ],
       "case_file": "testcases\\npc_parameter_remove.json"
     },
@@ -1596,7 +1596,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-509"
+        "BEB-512"
       ],
       "case_file": "testcases\\system_effect_type_assignment.json"
     },
@@ -1618,7 +1618,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-518"
+        "BEB-521"
       ],
       "case_file": "testcases\\system_timing.json"
     },
@@ -1640,7 +1640,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-470"
+        "BEB-473"
       ],
       "case_file": "testcases\\user_parameter_remove.json"
     }
