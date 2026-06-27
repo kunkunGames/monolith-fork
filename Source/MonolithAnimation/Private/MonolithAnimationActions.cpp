@@ -7995,6 +7995,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 		ABP->GetOutermost()->SetDirtyFlag(bWasDirty);
 
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(Errors.Num());
 		for (const FString& E : Errors) { ErrArr.Add(MakeShared<FJsonValueString>(E)); }
 		TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
 		ErrObj->SetArrayField(TEXT("compile_errors"), ErrArr);
@@ -8070,6 +8071,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetTransitionRule(const T
 	if (Warnings.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> WarnArr;
+		WarnArr.Reserve(Warnings.Num());
 		for (const FString& W : Warnings) { WarnArr.Add(MakeShared<FJsonValueString>(W)); }
 		Root->SetArrayField(TEXT("compile_warnings"), WarnArr);
 	}
@@ -10801,6 +10803,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontageFromSections
 	if (Errors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(Errors.Num());
 		for (const FString& Err : Errors)
 			ErrArr.Add(MakeShared<FJsonValueString>(Err));
 		Root->SetArrayField(TEXT("warnings"), ErrArr);

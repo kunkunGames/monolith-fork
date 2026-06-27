@@ -14729,6 +14729,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetStaticSwitchValue(const 
 	{
 		// List ALL static switches
 		TArray<TSharedPtr<FJsonValue>> SwitchArr;
+		SwitchArr.Reserve(SwitchInputs.Num());
 		for (const FNiagaraVariable& In : SwitchInputs)
 		{
 			TSharedRef<FJsonObject> SO = MakeShared<FJsonObject>();
@@ -15283,6 +15284,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleImportSystemSpec(const TSha
 	if (Errors.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> ErrArr;
+		ErrArr.Reserve(Errors.Num());
 		for (const FString& E : Errors)
 			ErrArr.Add(MakeShared<FJsonValueString>(E));
 		Final->SetArrayField(TEXT("errors"), ErrArr);
