@@ -181,7 +181,11 @@ FMonolithActionResult FMonolithLevelDesignHorrorActions::AnalyzeSightlines(const
 	double RayCountD;
 	if (Params->TryGetNumberField(TEXT("ray_count"), RayCountD))
 	{
-		RayCount = FMath::Clamp(static_cast<int32>(RayCountD), 4, 128);
+		if (RayCountD < 4.0 || RayCountD > 128.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("ray_count must be between 4 and 128, got %g"), RayCountD));
+		}
+		RayCount = static_cast<int32>(RayCountD);
 	}
 
 	double MaxDistance = 5000.0;
