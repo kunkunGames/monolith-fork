@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "notify_state_timing",
+  "route_edit_domain": "notify_state_timing",
+  "module_id": "asset_authoring.animation.notify_state_timing",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.notify_state_timing",
+    "edit": "asset_operation.edit.animation.notify_state_timing",
+    "save": "asset_operation.save.animation.notify_state_timing",
+    "readback_verify": "asset_operation.readback_verify.animation.notify_state_timing"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-432"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-432",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "notify_state_timing",
+      "blueprint_type": "",
+      "workflow": "animation_notify_state_timing_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "add_notify_state",
+        "set_notify_time",
+        "set_notify_duration",
+        "set_notify_properties",
+        "save_asset",
+        "get_sequence_notifies",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-432",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchNotifyStateTiming",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_notify_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming",
+            "notify_class": "AnimNotifyState_DisableRootMotion",
+            "time": 0.0,
+            "duration": 0.25,
+            "track_name": "BenchState"
+          },
+          "contains": [
+            "AnimNotifyState_DisableRootMotion",
+            "BenchState",
+            "duration"
+          ],
+          "capture": {
+            "state_notify": "$.index"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_notify_time",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming",
+            "notify_index": "${state_notify}",
+            "new_time": 0.1
+          },
+          "contains": [
+            "index",
+            "${state_notify}",
+            "new_time",
+            "0.1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_notify_duration",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming",
+            "notify_index": "${state_notify}",
+            "new_duration": 0.35
+          },
+          "contains": [
+            "index",
+            "${state_notify}",
+            "new_duration",
+            "0.35"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_notify_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming",
+            "notify_index": "${state_notify}",
+            "properties": {
+              "NotifyColor": "(R=64,G=128,B=255,A=255)"
+            }
+          },
+          "contains": [
+            "AnimNotifyState",
+            "NotifyColor",
+            "all_succeeded",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_notifies",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming"
+          },
+          "contains": [
+            "count",
+            "1",
+            "is_state",
+            "true",
+            "AnimNotifyState_DisableRootMotion",
+            "BenchState",
+            "duration"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyStateTiming"
+          },
+          "contains": [
+            "A_BenchNotifyStateTiming",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "notify_state_timing",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_notify_state_timing_roundtrip",
+      "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "add_notify_state",
+          "set_notify_time",
+          "set_notify_duration",
+          "set_notify_properties",
+          "save_asset",
+          "get_sequence_notifies",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

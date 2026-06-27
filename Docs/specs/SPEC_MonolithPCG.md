@@ -59,4 +59,4 @@ The single-asset response contract is documented in [SPEC_MonolithPcgGraphAssetM
 |------|----------|
 | Registration | `FMonolithPCGModule::StartupModule` registers `pcg.get_status`, `pcg.list_graph_assets`, `pcg.get_graph_asset`, and `pcg.list_components`. |
 | Parameter guard | `FMonolithParamGuardPCGGraphAssetRejectsUnsafePathTest` rejects filesystem paths before AssetRegistry lookup. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

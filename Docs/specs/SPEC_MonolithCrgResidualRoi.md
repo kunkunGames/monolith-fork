@@ -36,7 +36,7 @@ The 2026-06-15 read-only audit established the baseline below. These values are 
 | Source CRG projection parity is healthy | `source health --include-counts=true`: `symbols=536436`, `crg_nodes=536436`, `crg_node_metrics=536436`, `source_override_edges_version=2`; `source crg_graph_health`: `nodes=618521`, `edges=403226`, `fts_rows=618521`, schema version 9 | Source projection and graph export are structurally valid. The problem is result quality and maintenance cost, not total source cache corruption. |
 | Project CRG projection is stale | `project health --include-counts=true`: `assets=16177`, `crg_nodes=10000`, `crg_node_metrics=10000`, warning recommends `project.repair_crg_cache` | Project risk/review actions can read stale cached metrics until repair or freshness enforcement runs. |
 | Project repair is cheap on a copy | `project repair_crg_cache --execute --project-db=<copy>` fixed `crg_nodes` and metrics `10000 -> 16177` in about 1.2 s | Repair should be safe to trigger when health proves parity drift, but live concurrency and transaction behavior still need tests. |
-| Source result quality is polluted | `AGoMonster` appears 178 times in source/graph DB samples; many rows have blank file paths and huge `file_id` values. `review_context AGoMonster` produced repeated `<unknown>` impact rows. | Duplicate/blank-path rows are a trust problem for `search_source`, `search_crg_graph`, `review_context`, and hotspot ranking. |
+| Source result quality is polluted | `AProjectMonster` appears many times in source/graph DB samples; many rows have blank file paths and huge `file_id` values. `review_context AProjectMonster` produced repeated `<unknown>` impact rows. | Duplicate/blank-path rows are a trust problem for `search_source`, `search_crg_graph`, `review_context`, and hotspot ranking. |
 | Project sensitivity scoring has false positives | `/Game/Design/DataAsset/WorldTable/DA_World_002_Lobby` received `sensitivity: crypto/signing/hash surface` because `Design` contains `sign`. | Substring matching is too broad. Scoring must use token boundaries and expose which token matched. |
 | Query surfaces are cheap; maintenance was expensive | Recent log aggregation showed `repair_crg_cache`/`build_crg_graph` dominating wall time while `risk_score`, `impact_radius`, and `review_context` were comparatively cheap. | Optimize and gate maintenance/export paths before considering query-surface removal. |
 
@@ -104,12 +104,12 @@ The source index and CRG search path must preserve real distinct symbols while s
 Acceptance:
 
 ```powershell
-Plugins\Monolith\Binaries\monolith_query.exe source search_source AGoMonster --limit=10
-Plugins\Monolith\Binaries\monolith_query.exe source review_context AGoMonster --depth=2 --limit=20
-Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph AGoMonster --limit=10
+Plugins\Monolith\Binaries\monolith_query.exe source search_source AProjectMonster --limit=10
+Plugins\Monolith\Binaries\monolith_query.exe source review_context AProjectMonster --depth=2 --limit=20
+Plugins\Monolith\Binaries\monolith_query.exe source search_crg_graph AProjectMonster --limit=10
 ```
 
-The returned rows must include the real `Source/GoGame/Public/NPC/GoMonster.h` result and must not be dominated by repeated blank-path or `<unknown>` entries.
+The returned rows must include the real `Source/<ProjectGameModule>/Public/NPC/ProjectMonster.h` result and must not be dominated by repeated blank-path or `<unknown>` entries.
 
 ### P2 - Project Sensitivity Tokenization and Provenance
 
@@ -212,7 +212,7 @@ Every implementation change must update docs in the same changelist:
 
 The retained trust slice is done when all of these are true; P4/P5 remain separate evidence gates:
 
-1. `source.search_source`, `source.search_crg_graph`, and `source.review_context` no longer produce duplicate blank-path storms for the observed `AGoMonster`/`AGoCharacter` class of failures.
+1. `source.search_source`, `source.search_crg_graph`, and `source.review_context` no longer produce duplicate blank-path storms for the observed `AProjectMonster`/`AProjectCharacter` class of failures.
 2. `project.risk_score` does not classify `Design` as signing/crypto/hash sensitivity, while positive-control sensitive names still score.
 3. `project.health --include-counts=true` detects stale CRG parity, and `project.repair_crg_cache --execute` repairs a copied stale DB transactionally.
 4. Routine source/project review queries do not rebuild `Saved\graph.db`.

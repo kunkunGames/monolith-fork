@@ -2,7 +2,7 @@
 
 **Version:** v0.20.3 · **Last updated:** 2026-06-20
 
-**In-tree action total is approximate: ~1,914 actions across 62 in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: ~1,920 actions across 63 in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -25,6 +25,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 11 | INI config inspection and search |
+| [console](#console) | 15 | Live console object registry, EngineSource.db snapshot refresh, FTS5 search, exact lookup, health, command resolution/execution, log expectations/waits, sequences with artifacts, capture, failure diagnosis, scoped CVar runs |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [collection](#collection) | 13 | Content Browser collection CRUD and manipulation |
 | [source](#source) | 12 | Unreal Engine C++ source code navigation |
@@ -68,9 +69,9 @@ The Phase J retrofit cycle added five new actions and tightened param validation
 | `editor.create_empty_map` | **NEW** (Phase J F8) | Test scaffolding needed a blank UWorld factory that doesn't depend on engine templates. |
 | `editor.get_module_status` | **NEW** (Phase J F8) | Lets clients query plugin/module load state without grepping logs. Wraps `IPluginManager` + `FModuleManager`. |
 | `gas.grant_ability_to_pawn` | **NEW** (Phase J F8) | Convenience action for runtime ability grants. Earlier you had to grant via `apply_effect` or scaffold-side wiring. |
-| `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` | **NEW** (2026-05-31 Go workflow P0/P3) | DataAsset-driven GAS profile inspection/validation plus strict, transacted, dry-run-first field writes for ability/effect/cue/input/policy roles. |
-| `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` | **NEW** (2026-05-31 Go workflow P4) | Bounded PIE probe actions for GameplayEvent payload capture and active GameplayCue tag-count evidence; instant cue execute payload hooks are reported as unsupported instead of false success. |
-| `gas.get_runtime_summary` | Return payload expanded (2026-05-31 Go workflow P0) | Adds namespace readiness, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while preserving safe no-PIE behavior. |
+| `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` | **NEW** (2026-05-31 DataAsset GAS workflow P0/P3) | DataAsset-driven GAS profile inspection/validation plus strict, transacted, dry-run-first field writes for ability/effect/cue/input/policy roles. |
+| `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` | **NEW** (2026-05-31 DataAsset GAS workflow P4) | Bounded PIE probe actions for GameplayEvent payload capture and active GameplayCue tag-count evidence; instant cue execute payload hooks are reported as unsupported instead of false success. |
+| `gas.get_runtime_summary` | Return payload expanded (2026-05-31 DataAsset GAS workflow P0) | Adds namespace readiness, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while preserving safe no-PIE behavior. |
 | `ai.add_perception_to_actor` | **NEW** (Phase J F8) | Direct perception attach without going through `add_perception_component` + manual wiring. |
 | `ai.get_bt_graph` | **NEW** (Phase J F8) | Read-only graph dump distinct from `get_behavior_tree`'s structural inspection. |
 | `audio.create_test_wave` | **NEW** (Phase J F18) | Procedurally synthesizes a 16-bit mono sine `USoundWave` for tests with zero asset deps. |
@@ -151,7 +152,7 @@ Re-index the Monolith project database. Incremental by default (delta only). Pas
 |-----------|------|----------|-------------|
 | `force` | bool | optional | Full wipe + rebuild instead of incremental delta. Default: `false` |
 
-**Returns:** `status:"reindex_started"` plus a message when the indexer starts. With `UMonolithSettings::bEnableAsyncJobs=true`, also returns `job_id` and `poll_action:"monolith.get_job"`. Polling that job now reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
+**Returns:** with `UMonolithSettings::bEnableAsyncJobs=true` (default), `status:"started"`, `legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`, `cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and `cancellable:true`. Polling that job reaches an honest terminal state from the index subsystem: `completed` on successful full/incremental/no-change indexing, `failed` when the indexer cannot start or reports failure, and `cancelled` when cooperative job cancellation is observed. If async jobs are disabled, the legacy response remains `status:"reindex_started"` plus a message. If the async start is rejected before indexing begins, the action response uses `status:"reindex_not_started"` and the returned `job_id` contains the failure details.
 
 ---
 
@@ -169,25 +170,25 @@ Section-keyed editorial onboarding guide for your AI agent — an onboarding scr
 
 ### `monolith.get_job`
 
-Return one async Monolith job's status, progress, and result by `job_id`. Read-only and idempotent. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default off). Long-running actions mint a `job_id` (e.g. `monolith.reindex` when the flag is on emits `job_id` + `poll_action="monolith.get_job"`).
+Return one async Monolith job's status, progress, and result by `job_id`. Read-only and idempotent. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default on). Long-running actions mint a `job_id` (e.g. `monolith.reindex` emits `job_id` + `poll_action="monolith.get_job"`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `job_id` | string | **required** | Async job id returned by a long-running action |
 
-**Returns (flag on):** the registry row — `job_id`, `namespace`, `action`, `status` (`pending`/`running`/`completed`/`failed`/`cancelled`), `progress {percent, stage, message}`, optional `result` / `error`, `created_utc`, `updated_utc`. An expired/evicted/never-minted id returns `{status:"not_found"}`. **Returns (flag off):** `{status:"disabled", requested_job_id, reason}`.
+**Returns (flag on):** the registry row — `job_id`, `namespace`, `action`, `status` (`pending`/`running`/`completed`/`failed`/`cancelled`), `cancellable`, `supports_progress`, `cancel_requested`, optional `poll_action` / `cancel_action`, `progress {percent, stage, message}`, optional `result` / `error`, `created_utc`, `updated_utc`. An expired/evicted/never-minted id returns `{status:"not_found"}`. **Returns (flag off):** `{status:"disabled", requested_job_id, reason}`.
 
 ---
 
 ### `monolith.cancel_job`
 
-Request cooperative cancellation of an async Monolith job by `job_id` and return its current row. A mutation (sets the cooperative cancel flag) but non-destructive and idempotent — the running action is expected to observe the flag and stop; the server never interrupts running work. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default off).
+Request cooperative cancellation of an async Monolith job by `job_id` and return its current row. A mutation (sets the cooperative cancel flag for cancellable jobs) but non-destructive and idempotent — the running action is expected to observe the flag and stop; the server never interrupts running work. **Gated by `UMonolithSettings::bEnableAsyncJobs`** (default on).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `job_id` | string | **required** | Async job id to request cancellation for |
 
-**Returns (flag on):** the post-request registry row (a non-terminal job flips to `cancelled`), or `{status:"not_found"}` for an unknown id. **Returns (flag off):** `{status:"disabled", requested_job_id, cancel_requested:false, reason}`.
+**Returns (flag on):** the post-request registry row with `cancel_requested:true` for a cancellable job. The row keeps its current non-terminal status (`pending`/`running`) until the producer observes the request and acknowledges cancellation, then `monolith.get_job` reports `status:"cancelled"`. A non-cancellable job keeps its current status and `cancel_requested:false`. Unknown ids return `{status:"not_found"}`. **Returns (flag off):** `{status:"disabled", requested_job_id, cancel_requested:false, reason}`.
 
 ---
 
@@ -719,6 +720,218 @@ Close the current persistent level (without saving) and load the specified level
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | **required** | Asset path of the level to load (e.g. `/Game/Maps/L_Backyard`). Must exist. |
+
+---
+
+## console
+
+Live `IConsoleManager` registry discovery and EngineSource.db snapshot search. The namespace treats Unreal console variables and console commands as `IConsoleObject` rows, so it can find both cvars (`r.ShadowQuality`) and command-only entries (`stat`, custom `FAutoConsoleCommand`, exec-style commands whose token is registered). Existing `config.get_cvar` / `config.find_cvars` remain the compatibility path for CVar-only config workflows. Runtime-only actions return `status:"live_only"` in offline CLI instead of pretending SQLite can resolve live registry, log, world, capture, or CVar state.
+
+### `console.list_live_objects`
+
+List live registered console objects from `IConsoleManager`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | optional | Prefix or substring to match against console object names |
+| `mode` | string | optional | `prefix` or `contains`. Default: `prefix` |
+| `object_type` | string | optional | `all`, `variable`, or `command`. Default: `all` |
+| `limit` | integer | optional | Maximum rows, clamped to 1..5000. Default: `100` |
+| `include_values` | bool | optional | Include current variable values. Default: `true` |
+| `include_defaults` | bool | optional | Include variable defaults. Default: `true` |
+
+### `console.refresh_snapshot`
+
+Refresh `EngineSource.db` tables `console_objects`, `console_objects_fts`, and `console_snapshot_meta` from the live registry. This is the bridge between live MCP and offline `monolith_query.exe console ...`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | optional | Optional prefix or substring to restrict captured rows. Empty captures every registered object |
+| `mode` | string | optional | `prefix` or `contains`. Default: `prefix` |
+| `object_type` | string | optional | `all`, `variable`, or `command`. Default: `all` |
+| `limit` | integer | optional | Maximum objects to capture. `0` means no explicit cap. Default: `0` |
+| `include_values` | bool | optional | Persist current variable values. Default: `true` |
+| `include_defaults` | bool | optional | Persist variable defaults. Default: `true` |
+
+### `console.search_objects`
+
+Search the latest snapshot with FTS5.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | optional | FTS query over name, type, help, values, variable type, and set-by source. Empty lists rows by name |
+| `object_type` | string | optional | `all`, `variable`, or `command`. Default: `all` |
+| `limit` | integer | optional | Maximum rows, clamped to 1..5000. Default: `100` |
+
+### `console.get_object`
+
+Get one console object by exact name from the snapshot or live registry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | **required** | Exact console object name |
+| `source` | string | optional | `snapshot` or `live`. Default: `snapshot` |
+| `include_values` | bool | optional | For `source=live`, include current variable value. Default: `true` |
+| `include_defaults` | bool | optional | For `source=live`, include variable default value. Default: `true` |
+
+### `console.health`
+
+Report console snapshot schema, FTS parity, and last refresh metadata.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `include_counts` | bool | optional | Include row/FTS parity counts. Default: `false` |
+
+### `console.execute`
+
+Execute a live console command. Routes to the first PIE `PlayerController` when available and falls back to `GEngine->Exec` on the editor world. Offline `monolith_query.exe console execute ...` returns live-only guidance and never executes.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Console command string, including optional arguments |
+| `dry_run` | bool | optional | Validate and report routing without executing. Default: `true` |
+| `require_known_object` | bool | optional | Require the first token to resolve in `IConsoleManager`. Default: `false` |
+| `target_world` | string | optional | `auto`, `pie`, or `editor`. Use `pie` to fail instead of falling back when no live game world exists. Default: `auto` |
+
+### `console.resolve_command`
+
+Resolve a console command line against the live registry and target-world route without executing the command. Offline `monolith_query.exe console resolve_command ...` returns live-only guidance and never invents live registry state from SQLite.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Console command string to inspect |
+| `target_world` | string | optional | Route hint: `auto`, `pie`, or `editor`. Default: `auto` |
+| `include_values` | bool | optional | Include current variable value when the first token is a CVar. Default: `true` |
+| `include_defaults` | bool | optional | Include default variable value when available. Default: `true` |
+
+### `console.get_log_cursor`
+
+Return the current live log-capture cursor. The cursor is a monotonic editor-session sequence used to isolate logs emitted after a command.
+
+No parameters.
+
+### `console.search_logs_since`
+
+Search only logs emitted after a cursor.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cursor` | number | **required** | Cursor returned by `console.get_log_cursor` or a prior console verification action |
+| `pattern` | string | optional | Case-insensitive substring match against log message |
+| `category` | string | optional | Exact log category filter |
+| `verbosity` | string | optional | Maximum verbosity: `fatal`, `error`, `warning`, `display`, `log`, `verbose`, `very_verbose`. Default: `very_verbose` |
+| `limit` | integer | optional | Maximum entries, clamped to 1..2000. Default: `200` |
+
+### `console.execute_and_expect`
+
+Execute one console command and evaluate expected/rejected post-command log patterns. Expectation failures return `passed=false` in the result instead of becoming transport errors.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Console command string, including optional arguments |
+| `dry_run` | bool | optional | Validate routing without executing. Default: `false` |
+| `require_known_object` | bool | optional | Require first token registration. Default: `false` |
+| `target_world` | string | optional | `auto`, `pie`, or `editor`. Default: `auto` |
+| `expect_log` | string | optional | Single expected post-command log substring |
+| `expect_logs` | array | optional | Expected strings or objects `{pattern, category?, min_count?, max_count?}` |
+| `reject_log` | string | optional | Single rejected post-command log substring |
+| `reject_logs` | array | optional | Rejected strings or objects `{pattern, category?}` |
+| `settle_ms` | integer | optional | Wait after execution before log collection. Default: `100`, max `5000` |
+| `log_limit` | integer | optional | Maximum post-command logs to inspect/return. Default: `200`, max `2000` |
+
+### `console.wait_for_log`
+
+Bounded wait over post-cursor logs. It polls live Monolith log capture until expected patterns pass, a rejected pattern appears, or a timeout expires, returning structured match evidence rather than forcing callers to hand-roll retry loops. Offline `monolith_query.exe console wait_for_log ...` returns live-only guidance.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cursor` | number | **required** | Cursor returned by `console.get_log_cursor` or a prior console verification action |
+| `pattern` | string | optional | Shortcut expected log substring |
+| `expect_log` | string | optional | Single expected log substring |
+| `expect_logs` | array | optional | Expected strings or objects `{pattern, category?, min_count?, max_count?}` |
+| `reject_log` | string | optional | Single rejected log substring |
+| `reject_logs` | array | optional | Rejected strings or objects `{pattern, category?}` |
+| `mode` | string | optional | `expect` or `assert_absent`. Reject-only calls require `assert_absent`; when no rejected log appears for the full window the result is `status="absent"`, `passed=true`, `observed_full_window=true` |
+| `category` | string | optional | Default category applied to expectations without their own category |
+| `verbosity` | string | optional | Maximum verbosity: `fatal`, `error`, `warning`, `display`, `log`, `verbose`, `very_verbose`. Default: `very_verbose` |
+| `timeout_ms` | integer | optional | Wait budget before returning a miss. Default: `3000`, max `30000` |
+| `poll_interval_ms` | integer | optional | Polling cadence. Default: `100`, clamped to `25..1000` |
+| `log_limit` | integer | optional | Maximum post-cursor logs to inspect/return. Default: `200`, max `2000` |
+
+### `console.run_sequence`
+
+Run up to 100 console command strings or step objects with per-step cursors and expectations. The response is the sequence evidence artifact: every step reports the command, cursor window, execution payload or error, expectation report, log count, and returned post-step logs.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `commands` | array | **required** | Command strings or step objects `{command, dry_run?, require_known_object?, target_world?, expect_log?, expect_logs?, reject_log?, reject_logs?, settle_ms?, log_limit?, capture?, capture_command?, capture_wait_ms?, capture_output_path?}` |
+| `dry_run` | bool | optional | Default dry-run value for steps. Default: `false` |
+| `require_known_object` | bool | optional | Default known-object guard for steps. Default: `false` |
+| `target_world` | string | optional | Default target world: `auto`, `pie`, or `editor`. Default: `auto` |
+| `abort_on_failure` | bool | optional | Stop after first failed execution or expectation. Default: `true` |
+| `settle_ms` | integer | optional | Default wait after each command. Default: `100`, max `5000` |
+| `log_limit` | integer | optional | Maximum per-step post-command logs. Default: `200`, max `2000` |
+| `artifact_dir` | string | optional | Write `manifest.json` and `logs.jsonl`; relative paths resolve under the project root |
+
+### `console.execute_and_capture`
+
+Execute a command, run a screenshot console command such as `HighResShot 1920x1080`, and report the newly created or modified PNG path. It does not fall back to editor viewport capture. When the screenshot must complete on a later game tick, the result is `status="capture_pending"` with `capture_id`; poll `console.poll_capture` until completion.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **required** | Console command to execute before capture |
+| `capture_command` | string | optional | Screenshot console command. Default: `HighResShot 1920x1080` |
+| `output_path` | string | optional | Optional path to copy the captured PNG to; relative paths resolve under the project root |
+| `require_known_object` | bool | optional | Require the first token of `command` to resolve in `IConsoleManager`. Default: `false` |
+| `target_world` | string | optional | `auto`, `pie`, or `editor`. Default: `auto` |
+| `settle_ms` | integer | optional | Wait between command and capture. Default: `250`, max `5000` |
+| `capture_wait_ms` | integer | optional | Wait for the screenshot file after capture. Default: `120000`, max `240000` |
+
+### `console.poll_capture`
+
+Poll a pending `execute_and_capture` or `run_sequence` step capture. Completed results return `captured`, `capture_not_found`, or `copy_failed`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `capture_id` | string | **required** | Capture id returned when a capture result has `status="capture_pending"` |
+| `consume` | bool | optional | Remove the completed pending-capture record after reading. Default: `false` |
+
+### `console.diagnose_failure`
+
+Classify a failed console result and suggest focused next actions, including log timeouts, rejected logs, pending captures, capture failures, artifact write failures, missing worlds, and unknown commands.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `result` | object | **required** | Result object from `execute_and_expect`, `run_sequence`, `wait_for_log`, `execute_and_capture`, or `poll_capture` |
+
+### `console.set_cvar_scoped`
+
+Temporarily set one or more live CVars, run a console sequence, and restore the original values and original set-by priority before returning. The action preflights every requested CVar before mutating any value and returns structured `cvars[]` validation/restore reports.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `cvars` | object | **required** | Map of console variable name to temporary string/number/bool value |
+| `commands` | array | **required** | Command strings or step objects to run while CVars are applied |
+| `dry_run` | bool | optional | Default dry-run value for command steps. Default: `false` |
+| `require_known_object` | bool | optional | Default known-object guard for command steps. Default: `false` |
+| `target_world` | string | optional | Default target world: `auto`, `pie`, or `editor`. Default: `auto` |
+| `abort_on_failure` | bool | optional | Stop command sequence after first failed step. Default: `true` |
+| `settle_ms` | integer | optional | Default wait after each command. Default: `100`, max `5000` |
+| `log_limit` | integer | optional | Maximum per-step logs. Default: `200`, max `2000` |
+| `artifact_dir` | string | optional | Forwarded to `run_sequence` artifact writing |
+
+Offline examples:
+
+```powershell
+Binaries\monolith_query.exe console health --include-counts=true
+Binaries\monolith_query.exe console search_objects r.Shadow --limit=10
+Binaries\monolith_query.exe console get_object r.ShadowQuality
+Binaries\monolith_query.exe console resolve_command Project.Debug.DumpState
+Binaries\monolith_query.exe console wait_for_log --cursor=42 --pattern=Project.Debug
+Binaries\monolith_query.exe console poll_capture --capture-id=abc123
+Binaries\monolith_query.exe console diagnose_failure
+Binaries\monolith_query.exe console set_cvar_scoped
+```
 
 ---
 
@@ -1274,11 +1487,11 @@ Gameplay Ability System integration. **142 actions** across 12 categories — co
 | Inspect / Readiness | 10 | `export_gas_manifest`, `get_runtime_summary`, `snapshot_gas_state`, `get_tag_state`, `get_cooldown_state`, `trace_ability_activation`, `compare_gas_states`, `start_event_cue_probe`, `stop_event_cue_probe`, `expect_event_cue` |
 | UI bindings | 4 | `bind_widget_to_attribute`, `unbind_widget_attribute`, `list_attribute_bindings`, `clear_widget_attribute_bindings` *(also aliased into `ui` namespace — same handlers)* |
 
-### `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` · NEW in Go workflow P0/P3
+### `gas.describe_data_asset_gas_profile` / `gas.validate_data_asset_gas_profile` / `gas.set_data_asset_gas_fields` · NEW in DataAsset GAS workflow P0/P3
 
 Inspection, validation, and safe field writes for DataAsset-driven GAS skill/profile assets. The describe action accepts `asset_path` plus an optional profile map of semantic roles to UPROPERTY candidates. The validate action scans a `path_filter`, detects missing or invalid ability/effect/cue/input/policy fields, broken references, duplicate input action/tag pairs, deprecated `DynamicAbilityTags` source usage, and incomplete Started/Completed/Canceled release support. The set action accepts `asset_path`, `fields`, optional `profile`, `dry_run` (default true), `strict` (default true), and `save` (default false); non-dry-run writes are transacted and report the post-write profile shape.
 
-### `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` · NEW in Go workflow P4
+### `gas.start_event_cue_probe` / `gas.stop_event_cue_probe` / `gas.expect_event_cue` · NEW in DataAsset GAS workflow P4
 
 PIE-only runtime evidence for DataAsset/native GAS flows. `start_event_cue_probe` attaches bounded listeners to an actor ASC, `stop_event_cue_probe` removes them and returns captured rows, and `expect_event_cue` wraps an optional Monolith trigger action with pass/fail evidence. Gameplay events use `UAbilitySystemComponent::AddGameplayEventTagContainerDelegate`; cue coverage uses active tag-count changes through `RegisterGameplayTagEvent`, so instant `ExecuteGameplayCue` payload capture is explicitly reported as unsupported by UE 5.7 public hooks.
 
@@ -2226,7 +2439,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,914 / 62` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,920 / 63` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 
@@ -2322,7 +2535,7 @@ Before writing any client code:
 
 When the editor is closed but you still need to query Monolith:
 
-- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool and canonical offline path. Serves current `source`, `project`, `bridge`, `monolith guide`, and the full **20-action Reflection Intelligence surface**; maintenance actions remain dry-run unless their help explicitly requires `--execute`.
+- **`Plugins/Monolith/Binaries/monolith_query.exe`** — standalone C++ tool and canonical offline path. Serves current `source`, `project`, `bridge`, `console` snapshot reads (`search_objects`, `get_object`, `health`), `monolith guide`, and the full **20-action Reflection Intelligence surface**; maintenance/runtime-only actions remain dry-run or return explicit `live_only` guidance unless their help explicitly requires `--execute`.
 - **`python Plugins/Monolith/Scripts/monolith_offline.py`** — limited stdlib-only legacy fallback. It serves legacy `source` / `project` discovery plus the 20 RI actions, but not current `bridge`, `monolith guide`, source/project review, CRG graph, repair, snapshot, or expanded project content search workflows. Use the native exe for agent-facing offline work when available.
 
 Both invoke the same SQLite indexes the live MCP uses.

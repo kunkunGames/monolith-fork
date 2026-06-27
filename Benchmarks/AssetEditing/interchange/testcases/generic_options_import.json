@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_generic_options_import",
+  "route_edit_domain": "generic_options_import",
+  "module_id": "asset_authoring.interchange.generic_options_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.generic_options_import",
+    "edit": "asset_operation.edit.interchange.generic_options_import",
+    "save": "asset_operation.save.interchange.generic_options_import",
+    "readback_verify": "asset_operation.readback_verify.interchange.generic_options_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-392"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-392",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_generic_options_import",
+      "blueprint_type": "",
+      "workflow": "interchange_generic_options_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_with_options",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-392",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchOptionsImport"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_OPTIONS_BMP__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true",
+            "BMP texture image"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_with_options",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_OPTIONS_BMP__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true,
+            "options": {
+              "pipeline_preset": "benchmark_generic_texture",
+              "import_purpose": "asset_authoring_options_smoke",
+              "texture": {
+                "srgb": true,
+                "lod_group": "UI"
+              }
+            }
+          },
+          "contains": [
+            "row_count",
+            "1",
+            "status",
+            "imported",
+            "T_BenchOptionsImport",
+            "Texture2D",
+            "benchmark_generic_texture",
+            "asset_authoring_options_smoke"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOptionsImport"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOptionsImport"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "T_BenchOptionsImport.bmp",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOptionsImport"
+          },
+          "contains": [
+            "T_BenchOptionsImport",
+            "Texture2D"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_generic_options_import",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_generic_options_import_roundtrip",
+      "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "can_import",
+          "import_with_options",
+          "save_asset",
+          "get_import_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

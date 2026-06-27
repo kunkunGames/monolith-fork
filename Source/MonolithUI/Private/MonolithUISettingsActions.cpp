@@ -89,6 +89,7 @@ void FMonolithUISettingsActions::RegisterActions(FMonolithToolRegistry& Registry
             .Required(TEXT("class_name"), TEXT("string"), TEXT("Class name, e.g. ULeviathanSaveGame"))
             .Required(TEXT("module_name"), TEXT("string"), TEXT("Target module name"))
             .Optional(TEXT("properties"), TEXT("array"), TEXT("Array of {name, type, default_value} for UPROPERTY(SaveGame) fields"))
+            .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate and return generated metadata without writing source files"), TEXT("false"))
             .Build()
     );
 
@@ -350,6 +351,12 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
     if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("module_name"), ModuleName, Err))
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
 
+    bool bDryRun = false;
+    if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+    {
+        return FMonolithActionResult::Error(TEXT("dry_run must be a boolean"));
+    }
+
     FString CleanName = ClassName;
     if (CleanName.StartsWith(TEXT("U"))) CleanName = CleanName.RightChop(1);
 
@@ -385,9 +392,6 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
             }
         }
     }
-
-    FString SourceDir = ResolveSourceDir(ModuleName, Err);
-    if (SourceDir.IsEmpty()) return Err;
 
     // ---- Header ----
     FString Header;
@@ -478,6 +482,20 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
     }
     Cpp += TEXT("\n\tUE_LOG(LogTemp, Log, TEXT(\"Save data reset to defaults\"));\n");
     Cpp += TEXT("}\n");
+
+    if (bDryRun)
+    {
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetBoolField(TEXT("dry_run"), true);
+        Result->SetStringField(TEXT("class_name"), CleanName);
+        Result->SetStringField(TEXT("module_name"), ModuleName);
+        Result->SetNumberField(TEXT("property_count"), Properties.Num());
+        Result->SetNumberField(TEXT("latest_version"), 1);
+        return FMonolithActionResult::Success(Result);
+    }
+
+    FString SourceDir = ResolveSourceDir(ModuleName, Err);
+    if (SourceDir.IsEmpty()) return Err;
 
     // Write files
     TSharedPtr<FJsonObject> Result;

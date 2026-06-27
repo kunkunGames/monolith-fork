@@ -10,6 +10,7 @@
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Misc/CommandLine.h"
 #include "Modules/ModuleManager.h"
 
 #include "Dom/JsonObject.h"
@@ -604,7 +605,8 @@ bool FMonolithImageGenSvgGenerateMsdfMaterialRenderTest::RunTest(const FString& 
 	Params->SetBoolField(TEXT("return_png"), false);
 	Params->SetBoolField(TEXT("verify_samples"), true);
 	Params->SetBoolField(TEXT("create_material"), true);
-	Params->SetBoolField(TEXT("verify_material_render"), true);
+	const bool bCanVerifyMaterialRender = !FParse::Param(FCommandLine::Get(), TEXT("NullRHI"));
+	Params->SetBoolField(TEXT("verify_material_render"), bCanVerifyMaterialRender);
 
 	FMonolithActionResult Msdf = FMonolithToolRegistry::Get().ExecuteAction(
 		TEXT("imagegen"), TEXT("generate_msdf_from_svg"), Params);
@@ -649,26 +651,32 @@ bool FMonolithImageGenSvgGenerateMsdfMaterialRenderTest::RunTest(const FString& 
 		Material->TryGetBoolField(TEXT("rendered"), bRendered);
 		TestTrue(TEXT("MSDF material created"), bCreated);
 		TestTrue(TEXT("MSDF material graph built"), bGraphBuilt);
-		TestTrue(TEXT("MSDF material preview rendered"), bRendered);
-
-		TSharedPtr<FJsonObject> Stats;
-		TestTrue(TEXT("render preview stats returned"), TryGetObjectField(Material, TEXT("render_preview_stats"), Stats));
-		if (Stats.IsValid())
+		if (bCanVerifyMaterialRender)
 		{
-			bool bDecoded = false;
-			bool bNonEmpty = false;
-			bool bNonUniform = false;
-			Stats->TryGetBoolField(TEXT("decoded"), bDecoded);
-			Stats->TryGetBoolField(TEXT("non_empty"), bNonEmpty);
-			Stats->TryGetBoolField(TEXT("non_uniform"), bNonUniform);
-			TestTrue(TEXT("preview PNG decoded"), bDecoded);
-			TestTrue(TEXT("preview PNG is non-empty"), bNonEmpty);
-			TestTrue(TEXT("preview PNG is non-uniform"), bNonUniform);
+			TestTrue(TEXT("MSDF material preview rendered"), bRendered);
+
+			TSharedPtr<FJsonObject> Stats;
+			TestTrue(TEXT("render preview stats returned"), TryGetObjectField(Material, TEXT("render_preview_stats"), Stats));
+			if (Stats.IsValid())
+			{
+				bool bDecoded = false;
+				bool bNonEmpty = false;
+				bool bNonUniform = false;
+				Stats->TryGetBoolField(TEXT("decoded"), bDecoded);
+				Stats->TryGetBoolField(TEXT("non_empty"), bNonEmpty);
+				Stats->TryGetBoolField(TEXT("non_uniform"), bNonUniform);
+				TestTrue(TEXT("preview PNG decoded"), bDecoded);
+				TestTrue(TEXT("preview PNG is non-empty"), bNonEmpty);
+				TestTrue(TEXT("preview PNG is non-uniform"), bNonUniform);
+			}
 		}
 	}
 
 	FString PreviewPath = GetMaterialPreviewPath(Msdf.Result);
-	TestTrue(TEXT("material preview file exists"), !PreviewPath.IsEmpty() && FPaths::FileExists(PreviewPath));
+	if (bCanVerifyMaterialRender)
+	{
+		TestTrue(TEXT("material preview file exists"), !PreviewPath.IsEmpty() && FPaths::FileExists(PreviewPath));
+	}
 	if (!PreviewPath.IsEmpty())
 	{
 		IFileManager::Get().Delete(*PreviewPath, false, true);

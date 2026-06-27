@@ -153,7 +153,7 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleCreateMirrorDataTable(c
 
 	// Generate mirror rows from the find/replace rules against the skeleton's bone names.
 #if WITH_EDITOR
-	MDT->FindReplaceMirroredNames();
+	MDT->UpdateFromFindReplaceExpressions(UMirrorDataTable::FFindReplaceOptions::AddMissingOnly());
 #endif
 
 	FAssetRegistryModule::AssetCreated(MDT);

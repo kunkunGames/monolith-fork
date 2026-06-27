@@ -20,6 +20,16 @@
 
 namespace
 {
+	FMonolithActionResult InvalidSourceParams(const FString& Message)
+	{
+		FMonolithActionResult Result = FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams);
+		Result.ErrorData = MakeShared<FJsonObject>();
+		Result.ErrorData->SetNumberField(TEXT("code"), FMonolithJsonUtils::ErrInvalidParams);
+		Result.ErrorData->SetStringField(TEXT("failure_cause"), TEXT("invalid_param"));
+		Result.ErrorData->SetStringField(TEXT("retryability"), TEXT("retry_with_validated_param_types_or_ranges"));
+		return Result;
+	}
+
 	void AppendPathString(const FString& Raw, TArray<FString>& Out)
 	{
 		TArray<FString> Parts;
@@ -291,6 +301,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Find all usage sites of a symbol (calls, includes, type references)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindReferences),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Symbol name to find references for"))
 			.Optional(TEXT("ref_kind"), TEXT("string"), TEXT("Filter by reference kind"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results"), TEXT("50"))
@@ -835,7 +846,14 @@ FMonolithActionResult FMonolithSourceActions::HandleBuildCrgGraph(const TSharedP
 		Result->SetStringField(TEXT("summary"), TEXT("Started async source.build_crg_graph process"));
 		Result->SetStringField(TEXT("job_id"), FString::Printf(TEXT("source-build-crg-graph-%u"), ProcessId));
 		Result->SetStringField(TEXT("poll_action"), TEXT("source.crg_graph_health"));
+		Result->SetBoolField(TEXT("supports_progress"), true);
+		Result->SetBoolField(TEXT("cancellable"), false);
 		Result->SetNumberField(TEXT("child_pid"), ProcessId);
+		TSharedPtr<FJsonObject> Progress = MakeShared<FJsonObject>();
+		Progress->SetStringField(TEXT("stage"), TEXT("started"));
+		Progress->SetNumberField(TEXT("percent"), 0.0);
+		Progress->SetStringField(TEXT("message"), TEXT("Poll source.crg_graph_health for graph export progress and completion."));
+		Result->SetObjectField(TEXT("progress"), Progress);
 		const FString GraphDb = FMonolithSourceReview::PStr(Params, TEXT("graph_db"));
 		if (!GraphDb.IsEmpty())
 		{
@@ -1016,18 +1034,39 @@ FMonolithActionResult FMonolithSourceActions::HandleReviewContext(const TSharedP
 
 FString FMonolithSourceActions::ShortPath(const FString& FullPath)
 {
-	// Shorten to Engine/... relative path
-	FString EngineDir = FPaths::EngineDir();
-	FString ParentDir = FPaths::GetPath(EngineDir); // Parent of Engine/
-	if (!ParentDir.IsEmpty() && FullPath.StartsWith(ParentDir))
+	auto StripRoot = [](FString Path, FString Root) -> TOptional<FString>
 	{
-		FString Relative = FullPath.Mid(ParentDir.Len());
-		Relative.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (Path.IsEmpty() || Root.IsEmpty())
+		{
+			return TOptional<FString>();
+		}
+		FPaths::NormalizeFilename(Path);
+		FPaths::NormalizeFilename(Root);
+		if (!Root.EndsWith(TEXT("/")))
+		{
+			Root += TEXT("/");
+		}
+		if (!Path.StartsWith(Root))
+		{
+			return TOptional<FString>();
+		}
+		FString Relative = Path.Mid(Root.Len());
 		if (Relative.StartsWith(TEXT("/")))
 		{
 			Relative = Relative.Mid(1);
 		}
 		return Relative;
+	};
+
+	const FString AbsoluteFullPath = FPaths::ConvertRelativePathToFull(FullPath);
+	if (TOptional<FString> ProjectRelative = StripRoot(AbsoluteFullPath, FPaths::ConvertRelativePathToFull(FPaths::ProjectDir())))
+	{
+		return ProjectRelative.GetValue();
+	}
+	// Shorten engine files to Engine/... form.
+	if (TOptional<FString> EngineRelative = StripRoot(AbsoluteFullPath, FPaths::GetPath(FPaths::ConvertRelativePathToFull(FPaths::EngineDir()))))
+	{
+		return EngineRelative.GetValue();
 	}
 	return FullPath;
 }
@@ -1298,6 +1337,28 @@ FString FMonolithSourceActions::ReadFileLines(const FString& FilePath, int32 Sta
 	return Result;
 }
 
+namespace
+{
+	bool TryReadFileLinesSlice(const FString& FilePath, int32 StartLine, int32 EndLine, FString& OutText, int32& OutStartLine, int32& OutEndLine)
+	{
+		TArray<FString> Lines;
+		if (!FFileHelper::LoadFileToStringArray(Lines, *FilePath))
+		{
+			return false;
+		}
+
+		OutStartLine = FMath::Max(1, StartLine);
+		OutEndLine = FMath::Min(Lines.Num(), EndLine);
+
+		OutText.Empty();
+		for (int32 i = OutStartLine; i <= OutEndLine; ++i)
+		{
+			OutText += FString::Printf(TEXT("%5d | %s\n"), i, *Lines[i - 1]);
+		}
+		return true;
+	}
+}
+
 FMonolithSourceActions::FResolveReadResult FMonolithSourceActions::ResolveAndReadFile(
 	FMonolithSourceDatabase* DB,
 	const FString& RequestedPath,
@@ -1323,9 +1384,25 @@ FMonolithSourceActions::FResolveReadResult FMonolithSourceActions::ResolveAndRea
 
 	// Resolve path (mirrors HandleReadFile): absolute on-disk, then DB exact, then DB suffix.
 	FString ResolvedPath;
+	const bool bRequestedAbsolutePath = !FPaths::IsRelative(RequestedPath);
+	const bool bRequestedDirectFilesystemPath = bRequestedAbsolutePath
+		|| RequestedPath.Contains(TEXT(":"))
+		|| RequestedPath.StartsWith(TEXT("/"))
+		|| RequestedPath.StartsWith(TEXT("\\"))
+		|| RequestedPath.Contains(TEXT(".."));
+	const FString FullRequestedPath = FPaths::ConvertRelativePathToFull(RequestedPath);
 	if (FPaths::FileExists(RequestedPath))
 	{
 		ResolvedPath = RequestedPath;
+	}
+	else if (FPaths::FileExists(FullRequestedPath))
+	{
+		ResolvedPath = FullRequestedPath;
+	}
+	else if (bRequestedDirectFilesystemPath)
+	{
+		Out.ErrorClass = TEXT("path_not_found");
+		return Out;
 	}
 	else
 	{
@@ -1358,12 +1435,15 @@ FMonolithSourceActions::FResolveReadResult FMonolithSourceActions::ResolveAndRea
 	}
 
 	Out.bResolved = true;
-	Out.StartLine = StartLine;
-	Out.EndLine = EndLine;
 	// ShortPath() strips the local checkout/engine prefix: no absolute path leaks to callers
 	// or, downstream, to a resource-provider client.
 	Out.ShortPath = ShortPath(ResolvedPath);
-	Out.Text = ReadFileLines(ResolvedPath, StartLine, EndLine);
+	if (!TryReadFileLinesSlice(ResolvedPath, StartLine, EndLine, Out.Text, Out.StartLine, Out.EndLine))
+	{
+		Out.bResolved = false;
+		Out.ErrorClass = TEXT("indexed_path_unreadable");
+		Out.Text.Empty();
+	}
 	return Out;
 }
 
@@ -1765,23 +1845,29 @@ FMonolithActionResult FMonolithSourceActions::HandleFindReferences(const TShared
 	FString Symbol;
 	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+		return InvalidSourceParams(TEXT("'symbol' parameter is required and must be a string"));
 	}
 	FString RefKind;
 	if (Params->HasField(TEXT("ref_kind")))
 	{
-		if (!Params->TryGetStringField(TEXT("ref_kind"), RefKind))
+		TSharedPtr<FJsonValue> RefKindField = Params->TryGetField(TEXT("ref_kind"));
+		if (!RefKindField.IsValid() || RefKindField->Type != EJson::String || !Params->TryGetStringField(TEXT("ref_kind"), RefKind))
 		{
-			return FMonolithActionResult::Error(TEXT("'ref_kind' parameter must be a string"), -32602);
+			return InvalidSourceParams(TEXT("'ref_kind' parameter must be a string"));
 		}
 	}
 	int32 Limit = 50;
 	if (Params->HasField(TEXT("limit")))
 	{
+		TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
 		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		if (!LimitField.IsValid() || LimitField->Type != EJson::Number || !Params->TryGetNumberField(TEXT("limit"), LimitValue))
 		{
-			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
+			return InvalidSourceParams(TEXT("'limit' parameter must be a number"));
+		}
+		if (!FMath::IsNearlyEqual(LimitValue, FMath::RoundToDouble(LimitValue)))
+		{
+			return InvalidSourceParams(TEXT("'limit' parameter must be an integer"));
 		}
 		Limit = static_cast<int32>(LimitValue);
 	}
@@ -2688,21 +2774,41 @@ FMonolithActionResult FMonolithSourceActions::HandleReadFile(const TSharedPtr<FJ
 
 	if (!Resolved.bResolved)
 	{
-		// Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2).
-		// Absolute on-disk paths are read directly, so reaching here means a
-		// relative/engine-relative path resolved against EngineSource.db missed.
-		// If the file exists on disk this is an index coverage gap; steer agents to
-		// an absolute path or a reindex rather than an editor.run_python fallback.
+		const FString ErrorClass = Resolved.ErrorClass.IsEmpty() ? TEXT("read_failed") : Resolved.ErrorClass;
 		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
-		ErrorData->SetStringField(TEXT("error_class"), TEXT("coverage_miss"));
+		ErrorData->SetStringField(TEXT("error_class"), ErrorClass);
 		ErrorData->SetStringField(TEXT("path"), Path);
 		ErrorData->SetStringField(TEXT("index"), TEXT("EngineSource.db"));
-		return FMonolithActionResult::Error(FString::Printf(
+
+		FString Message;
+		FString Hint;
+		TArray<FString> RelatedActions;
+		if (ErrorClass == TEXT("path_not_found"))
+		{
+			Message = FString::Printf(TEXT("Absolute file path does not exist or is not readable: '%s'."), *Path);
+			Hint = TEXT("Check the path spelling or use source.search_source/read_source to locate an indexed file. Reindexing will not fix a missing absolute path.");
+			RelatedActions = { TEXT("source.search_source"), TEXT("source.read_source"), TEXT("source.health") };
+		}
+		else if (ErrorClass == TEXT("indexed_path_unreadable"))
+		{
+			Message = FString::Printf(TEXT("EngineSource.db contains a file matching '%s', but the backing file could not be read."), *Path);
+			Hint = TEXT("The source index points at a stale or inaccessible file. Refresh the index with source.trigger_project_reindex (live editor) and retry.");
+			RelatedActions = { TEXT("source.trigger_project_reindex"), TEXT("source.health"), TEXT("source.search_source") };
+		}
+		else
+		{
+			// Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2).
+			Message = FString::Printf(
 				TEXT("No file found matching '%s' in EngineSource.db. Absolute on-disk paths are read directly; a relative/engine-relative path that exists on disk but is missing here is likely an index coverage gap."),
-				*Path))
+				*Path);
+			Hint = TEXT("Pass an absolute path to read it directly, or refresh the index with source.trigger_project_reindex (live editor) and retry. Do not fall back to editor.run_python for source reads.");
+			RelatedActions = { TEXT("source.search_source"), TEXT("source.trigger_project_reindex"), TEXT("source.health") };
+		}
+
+		return FMonolithActionResult::Error(Message)
 			.WithErrorData(ErrorData)
-			.WithHint(TEXT("Pass an absolute path to read it directly, or refresh the index with source.trigger_project_reindex (live editor) and retry. Do not fall back to editor.run_python for source reads."))
-			.WithRelatedActions({ TEXT("source.search_source"), TEXT("source.trigger_project_reindex"), TEXT("source.health") });
+			.WithHint(Hint)
+			.WithRelatedActions(RelatedActions);
 	}
 
 	FString Header = FString::Printf(TEXT("--- %s (lines %d-%d) ---"), *Resolved.ShortPath, Resolved.StartLine, Resolved.EndLine);

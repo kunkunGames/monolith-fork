@@ -1,0 +1,439 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_batch_layout_replace",
+  "route_edit_domain": "batch_layout_replace",
+  "module_id": "asset_authoring.material.batch_layout_replace",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.batch_layout_replace",
+    "edit": "asset_operation.edit.material.batch_layout_replace",
+    "save": "asset_operation.save.material.batch_layout_replace",
+    "readback_verify": "asset_operation.readback_verify.material.batch_layout_replace"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-391"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-391",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_batch_layout_replace",
+      "blueprint_type": "",
+      "workflow": "material_batch_layout_replace_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "move_expression",
+        "replace_expression",
+        "auto_layout",
+        "batch_set_material_property",
+        "batch_recompile",
+        "save_material",
+        "get_material_properties",
+        "get_expression_details",
+        "get_full_connection_graph",
+        "validate_material"
+      ],
+      "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-391",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchBatchLayoutA"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BatchTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchBatchTint"
+                  },
+                  "pos": [
+                    -420,
+                    -160
+                  ]
+                },
+                {
+                  "id": "BatchRoughness",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchBatchRoughness",
+                    "DefaultValue": 0.65
+                  },
+                  "pos": [
+                    -420,
+                    80
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BatchTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "BatchRoughness",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "2",
+            "connections_made",
+            "2"
+          ],
+          "capture": {
+            "batch_rough_expr": "$.id_to_name.BatchRoughness"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchBatchLayoutB"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BatchBColor",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchBatchBTint"
+                  },
+                  "pos": [
+                    -360,
+                    -80
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BatchBColor",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "1",
+            "connections_made",
+            "1"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "move_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "expression_name": "${batch_rough_expr}",
+            "pos_x": -180,
+            "pos_y": 220
+          },
+          "contains": [
+            "moved_count",
+            "1",
+            "${batch_rough_expr}",
+            "220"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "replace_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "expression_name": "${batch_rough_expr}",
+            "new_class": "ScalarParameter",
+            "new_properties": {
+              "ParameterName": "BenchBatchRoughnessFinal",
+              "DefaultValue": "0.41"
+            },
+            "preserve_connections": true
+          },
+          "contains": [
+            "old_class",
+            "MaterialExpressionScalarParameter",
+            "new_class",
+            "MaterialExpressionScalarParameter",
+            "new_name",
+            "Roughness"
+          ],
+          "capture": {
+            "batch_replaced_expr": "$.new_name"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "auto_layout",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "formatter": "monolith"
+          },
+          "contains": [
+            "type",
+            "Material",
+            "expression_count",
+            "formatter_used",
+            "monolith"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "batch_set_material_property",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+            ],
+            "two_sided": true,
+            "fully_rough": true,
+            "used_with_niagara_sprites": true
+          },
+          "contains": [
+            "material_count",
+            "2",
+            "success",
+            "true",
+            "two_sided",
+            "fully_rough",
+            "used_with_niagara_sprites"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "batch_recompile",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+            ]
+          },
+          "contains": [
+            "material_count",
+            "2",
+            "success_count",
+            "2",
+            "ps_instructions"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_material_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA"
+          },
+          "contains": [
+            "two_sided",
+            "true",
+            "fully_rough",
+            "true",
+            "expression_count"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_material_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+          },
+          "contains": [
+            "two_sided",
+            "true",
+            "fully_rough",
+            "true",
+            "expression_count"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_expression_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA",
+            "expression_name": "${batch_replaced_expr}"
+          },
+          "contains": [
+            "BenchBatchRoughnessFinal",
+            "DefaultValue",
+            "0.41"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA"
+          },
+          "contains": [
+            "${batch_replaced_expr}",
+            "Roughness"
+          ],
+          "not_contains": [
+            "${batch_rough_expr}"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutA"
+          },
+          "contains": [
+            "valid"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBatchLayoutB"
+          },
+          "contains": [
+            "valid"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_batch_layout_replace",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_batch_layout_replace_roundtrip",
+      "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "move_expression",
+          "replace_expression",
+          "auto_layout",
+          "batch_set_material_property",
+          "batch_recompile",
+          "save_material",
+          "get_material_properties",
+          "get_expression_details",
+          "get_full_connection_graph",
+          "validate_material"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

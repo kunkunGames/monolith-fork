@@ -1869,6 +1869,22 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleCreateBTFromTemplate(con
 		{
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
 		}
+
+		TSharedPtr<FJsonObject> SaveBTParams = MakeShared<FJsonObject>();
+		SaveBTParams->SetStringField(TEXT("asset_path"), SavePath);
+		FMonolithActionResult SaveBTResult = Dispatch(TEXT("asset"), TEXT("save_asset"), SaveBTParams);
+		if (!SaveBTResult.bSuccess)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save Behavior Tree: %s"), *SaveBTResult.ErrorMessage));
+		}
+
+		TSharedPtr<FJsonObject> SaveBBParams = MakeShared<FJsonObject>();
+		SaveBBParams->SetStringField(TEXT("asset_path"), BBPath);
+		FMonolithActionResult SaveBBResult = Dispatch(TEXT("asset"), TEXT("save_asset"), SaveBBParams);
+		if (!SaveBBResult.bSuccess)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save Blackboard: %s"), *SaveBBResult.ErrorMessage));
+		}
 	}
 
 	// Augment result

@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "imagegen",
+  "asset_type_slug": "imagegen",
+  "module_id": "asset_authoring.imagegen",
+  "task_count": 5,
+  "operation_counts": {
+    "creation_or_import": 5,
+    "edit": 5,
+    "save": 5,
+    "readback_verify": 5
+  },
+  "lifecycle_counts": {
+    "create_save": 5
+  },
+  "edit_domain_count": 5,
+  "task_ids": [
+    "BEB-283",
+    "BEB-284",
+    "BEB-344",
+    "BEB-376",
+    "BEB-455"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-283",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "generated_texture",
+      "blueprint_type": "",
+      "workflow": "imagegen_texture_provenance_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "generate_image",
+        "save_asset",
+        "get_generated_asset_provenance",
+        "inspect_asset"
+      ],
+      "description": "Generate a deterministic Texture2D through ImageGen, save it, and verify redacted generation provenance"
+    },
+    {
+      "id": "BEB-284",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "msdf_texture",
+      "blueprint_type": "",
+      "workflow": "imagegen_msdf_svg_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "validate_svg",
+        "generate_msdf_from_svg",
+        "save_asset",
+        "get_generated_asset_provenance",
+        "inspect_asset"
+      ],
+      "description": "Validate an MSDF-ready SVG, bake an MSDF Texture2D plus preview material, save it, and inspect texture/provenance"
+    },
+    {
+      "id": "BEB-344",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "generated_image_import",
+      "blueprint_type": "",
+      "workflow": "imagegen_external_png_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_generated_image",
+        "save_asset",
+        "get_generated_asset_provenance",
+        "inspect_asset"
+      ],
+      "description": "Import externally generated PNG bytes as a Texture2D through ImageGen provenance, save, and inspect provenance/read-back"
+    },
+    {
+      "id": "BEB-376",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "svg_source_boundary",
+      "blueprint_type": "",
+      "workflow": "imagegen_svg_source_boundary_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "generate_svg",
+        "validate_svg",
+        "import_generated_svg"
+      ],
+      "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source"
+    },
+    {
+      "id": "BEB-455",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "generated_world_tile_texture",
+      "blueprint_type": "",
+      "workflow": "imagegen_world_tile_texture_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "generate_image",
+        "save_asset",
+        "get_generated_asset_provenance",
+        "inspect_asset"
+      ],
+      "description": "Generate a deterministic world-tile Texture2D through ImageGen, apply the world texture role preset, save it, and verify provenance and Texture2D settings"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "generated_image_import",
+      "route_edit_domain": "generated_image_import",
+      "module_id": "asset_authoring.imagegen.generated_image_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.imagegen.generated_image_import",
+        "edit": "asset_operation.edit.imagegen.generated_image_import",
+        "save": "asset_operation.save.imagegen.generated_image_import",
+        "readback_verify": "asset_operation.readback_verify.imagegen.generated_image_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-344"
+      ],
+      "case_file": "testcases\\generated_image_import.json"
+    },
+    {
+      "edit_domain": "generated_texture",
+      "route_edit_domain": "generated_texture",
+      "module_id": "asset_authoring.imagegen.generated_texture",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.imagegen.generated_texture",
+        "edit": "asset_operation.edit.imagegen.generated_texture",
+        "save": "asset_operation.save.imagegen.generated_texture",
+        "readback_verify": "asset_operation.readback_verify.imagegen.generated_texture"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-283"
+      ],
+      "case_file": "testcases\\generated_texture.json"
+    },
+    {
+      "edit_domain": "generated_world_tile_texture",
+      "route_edit_domain": "generated_world_tile_texture",
+      "module_id": "asset_authoring.imagegen.generated_world_tile_texture",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.imagegen.generated_world_tile_texture",
+        "edit": "asset_operation.edit.imagegen.generated_world_tile_texture",
+        "save": "asset_operation.save.imagegen.generated_world_tile_texture",
+        "readback_verify": "asset_operation.readback_verify.imagegen.generated_world_tile_texture"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-455"
+      ],
+      "case_file": "testcases\\generated_world_tile_texture.json"
+    },
+    {
+      "edit_domain": "msdf_texture",
+      "route_edit_domain": "msdf_texture",
+      "module_id": "asset_authoring.imagegen.msdf_texture",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.imagegen.msdf_texture",
+        "edit": "asset_operation.edit.imagegen.msdf_texture",
+        "save": "asset_operation.save.imagegen.msdf_texture",
+        "readback_verify": "asset_operation.readback_verify.imagegen.msdf_texture"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-284"
+      ],
+      "case_file": "testcases\\msdf_texture.json"
+    },
+    {
+      "edit_domain": "svg_source_boundary",
+      "route_edit_domain": "svg_source_boundary",
+      "module_id": "asset_authoring.imagegen.svg_source_boundary",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.imagegen.svg_source_boundary",
+        "edit": "asset_operation.edit.imagegen.svg_source_boundary",
+        "save": "asset_operation.save.imagegen.svg_source_boundary",
+        "readback_verify": "asset_operation.readback_verify.imagegen.svg_source_boundary"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-376"
+      ],
+      "case_file": "testcases\\svg_source_boundary.json"
+    }
+  ]
+}

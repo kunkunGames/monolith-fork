@@ -65,6 +65,35 @@
 
 namespace
 {
+	bool SaveBehaviorTreePackage(UBehaviorTree* BT, FString& OutError)
+	{
+		if (!BT)
+		{
+			OutError = TEXT("Cannot save null Behavior Tree");
+			return false;
+		}
+
+		UPackage* Package = BT->GetOutermost();
+		if (!Package)
+		{
+			OutError = FString::Printf(TEXT("Behavior Tree has no outer package: %s"), *BT->GetName());
+			return false;
+		}
+
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		if (!UPackage::SavePackage(Package, BT, *PackageFilename, SaveArgs))
+		{
+			OutError = FString::Printf(TEXT("Failed to save Behavior Tree package: %s"), *Package->GetName());
+			return false;
+		}
+
+		return true;
+	}
+
 	/** Recursively serialize a BT graph node and its children to JSON */
 	TSharedPtr<FJsonObject> SerializeBTGraphNode(const UBehaviorTreeGraphNode* GraphNode, int32 Depth)
 	{
@@ -1952,8 +1981,15 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBehaviorTree(c
 	FAssetRegistryModule::AssetCreated(BT);
 	BT->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveBehaviorTreePackage(BT, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	TSharedPtr<FJsonObject> Result = MonolithAI::MakeAssetResult(PackagePath, TEXT("Behavior Tree created"));
 	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetBoolField(TEXT("saved"), true);
 	if (BT->BlackboardAsset)
 	{
 		Result->SetStringField(TEXT("blackboard"), BT->BlackboardAsset->GetPathName());
@@ -3845,11 +3881,18 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	BTGraph->UpdateAsset(0);
 	BT->MarkPackageDirty();
 
+	FString SaveError;
+	if (!SaveBehaviorTreePackage(BT, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
+
 	// Build result
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("asset_path"), SavePath);
 	Result->SetStringField(TEXT("name"), AssetName);
 	Result->SetNumberField(TEXT("node_count"), Ctx.NodeCount);
+	Result->SetBoolField(TEXT("saved"), true);
 	if (BT->BlackboardAsset)
 	{
 		Result->SetStringField(TEXT("blackboard"), BT->BlackboardAsset->GetPathName());

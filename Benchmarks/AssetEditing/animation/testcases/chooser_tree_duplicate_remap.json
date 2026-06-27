@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "chooser_tree_duplicate_remap",
+  "route_edit_domain": "chooser_tree_duplicate_remap",
+  "module_id": "asset_authoring.animation.chooser_tree_duplicate_remap",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.chooser_tree_duplicate_remap",
+    "edit": "asset_operation.edit.animation.chooser_tree_duplicate_remap",
+    "save": "asset_operation.save.animation.chooser_tree_duplicate_remap",
+    "readback_verify": "asset_operation.readback_verify.animation.chooser_tree_duplicate_remap"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-354"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-354",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "chooser_tree_duplicate_remap",
+      "blueprint_type": "",
+      "workflow": "chooser_tree_duplicate_remap_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "create_chooser_table",
+        "add_chooser_column",
+        "add_chooser_row",
+        "validate_chooser",
+        "save_asset",
+        "duplicate_chooser_tree",
+        "inspect_chooser",
+        "inspect_asset"
+      ],
+      "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-354",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot",
+              "/Game/Benchmarks/AssetAuthoring/ChooserDup/CHT_BenchDuplicateRoot",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupOld",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupNew"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupOld",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "save": true
+          },
+          "contains": [
+            "T_BenchChooserDupOld"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupNew",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "save": true
+          },
+          "contains": [
+            "T_BenchChooserDupNew"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "create_chooser_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot",
+            "output_type": "ObjectResult",
+            "output_class": "/Script/Engine.Texture2D",
+            "context_class": "/Script/CoreUObject.Object"
+          },
+          "contains": [
+            "CHT_BenchDuplicateRoot",
+            "ObjectResult",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "add_chooser_column",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot",
+            "column_kind": "Bool"
+          },
+          "contains": [
+            "column_count",
+            "Bool"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "add_chooser_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot",
+            "cells": [
+              true
+            ],
+            "output_psd": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupOld"
+          },
+          "contains": [
+            "row_count",
+            "T_BenchChooserDupOld"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "validate_chooser",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot",
+            "expected_result_type": "ObjectResult"
+          },
+          "contains": [
+            "valid",
+            "true",
+            "ObjectResult"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot"
+          }
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "duplicate_chooser_tree",
+            "source_assets": [
+              "/Game/Benchmarks/AssetAuthoring/CHT_BenchDuplicateRoot"
+            ],
+            "destination_folder": "/Game/Benchmarks/AssetAuthoring/ChooserDup",
+            "remap_rules": {
+              "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupOld": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserDupNew"
+            }
+          },
+          "contains": [
+            "duplicated",
+            "1",
+            "CHT_BenchDuplicateRoot",
+            "refs_remapped",
+            "1",
+            "T_BenchChooserDupOld",
+            "T_BenchChooserDupNew"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ChooserDup/CHT_BenchDuplicateRoot"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "inspect_chooser",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ChooserDup/CHT_BenchDuplicateRoot",
+            "include_cells": true,
+            "recursive": true
+          },
+          "contains": [
+            "CHT_BenchDuplicateRoot",
+            "ObjectResult",
+            "BoolColumn",
+            "T_BenchChooserDupNew",
+            "true",
+            "compiled"
+          ],
+          "not_contains": [
+            "T_BenchChooserDupOld"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ChooserDup/CHT_BenchDuplicateRoot"
+          },
+          "contains": [
+            "CHT_BenchDuplicateRoot",
+            "ChooserTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "chooser_tree_duplicate_remap",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "chooser_tree_duplicate_remap_roundtrip",
+      "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "create_chooser_table",
+          "add_chooser_column",
+          "add_chooser_row",
+          "validate_chooser",
+          "save_asset",
+          "duplicate_chooser_tree",
+          "inspect_chooser",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

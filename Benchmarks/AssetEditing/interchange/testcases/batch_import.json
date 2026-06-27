@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_batch_import",
+  "route_edit_domain": "batch_import",
+  "module_id": "asset_authoring.interchange.batch_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.batch_import",
+    "edit": "asset_operation.edit.interchange.batch_import",
+    "save": "asset_operation.save.interchange.batch_import",
+    "readback_verify": "asset_operation.readback_verify.interchange.batch_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-352"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-352",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_batch_import",
+      "blueprint_type": "",
+      "workflow": "interchange_batch_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_assets",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-352",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchBatchA",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchBatchB"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_assets",
+            "source_files": [
+              "__ASSET_AUTHORING_INTERCHANGE_BATCH_A_BMP__",
+              "__ASSET_AUTHORING_INTERCHANGE_BATCH_B_BMP__"
+            ],
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true,
+            "options": {
+              "batch_label": "asset_authoring_texture_pair"
+            }
+          },
+          "contains": [
+            "row_count",
+            "2",
+            "status",
+            "imported",
+            "T_BenchBatchA",
+            "T_BenchBatchB",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchBatchA"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchBatchB"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchBatchA"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "T_BenchBatchA.bmp",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchBatchB"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "T_BenchBatchB.bmp",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchBatchB"
+          },
+          "contains": [
+            "T_BenchBatchB",
+            "Texture2D"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_batch_import",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_batch_import_roundtrip",
+      "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_assets",
+          "save_asset",
+          "get_import_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

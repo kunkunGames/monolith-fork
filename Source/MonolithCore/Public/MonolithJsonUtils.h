@@ -72,7 +72,7 @@ public:
 	//  FJsonObject key access — single cohesion endpoint (UE 5.8 migration).
 	//
 	//  UE 5.8 changed FJsonObject::Values keys from FString to UE::FSharedString.
-	//  Every Monolith / Go module MUST read JSON-object keys through these helpers
+	//  Every Monolith module MUST read JSON-object keys through these helpers
 	//  instead of touching `Obj->Values` keys directly, so the engine key type is
 	//  known in exactly ONE place. If the engine key type changes again, only this
 	//  file changes — no module needs to be re-touched. For field *lookups* use the

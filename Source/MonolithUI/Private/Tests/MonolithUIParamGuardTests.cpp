@@ -23,7 +23,8 @@ bool FMonolithUIParamGuardScaffoldSaveGame::RunTest(const FString& Parameters)
         TEXT("    null,")
         TEXT("    123,")
         TEXT("    { \"name\": \"ValidProp\", \"type\": \"int32\", \"default_value\": \"42\" }")
-        TEXT("]")
+        TEXT("],")
+        TEXT("\"dry_run\": true")
         TEXT("}");
 
     TSharedPtr<FJsonObject> ParamsObj;
@@ -37,6 +38,10 @@ bool FMonolithUIParamGuardScaffoldSaveGame::RunTest(const FString& Parameters)
     FMonolithActionResult Result = FMonolithUISettingsActions::HandleScaffoldSaveGame(ParamsObj);
 
     TestTrue(TEXT("scaffold_save_game did not crash and processed the valid prop"), Result.bSuccess);
+    if (Result.Result.IsValid())
+    {
+        TestEqual(TEXT("Only valid property object is counted"), static_cast<int32>(Result.Result->GetNumberField(TEXT("property_count"))), 1);
+    }
 
     return true;
 }

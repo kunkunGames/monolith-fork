@@ -83,14 +83,20 @@ Try calling Monolith MCP: `editor_query({action: 'get_build_status'})` or `monol
 >
 > Do NOT attempt UBT while editor is running. You will get: `"Unable to build while Live Coding is active"`
 
-**When editor is confirmed closed, run the project's primary editor build.** Resolve the engine root from `GO.uproject` `EngineAssociation` — never hard-code a local engine path. Build the `GoGameEditor` target:
+**When editor is confirmed closed, run the project's primary editor build.** Resolve the engine root from the host `.uproject` `EngineAssociation` - never hard-code a local engine path. Build the `<Project>Editor` target derived from that `.uproject`:
 
 ```powershell
 $projectRoot = (Get-Location).Path
-$uproject = Join-Path $projectRoot "GO.uproject"
+$uproject = Get-ChildItem -LiteralPath $projectRoot -Filter *.uproject | Select-Object -First 1
+$targetFile = Get-ChildItem -LiteralPath (Join-Path $projectRoot "Source") -Filter *Editor.Target.cs -Recurse | Select-Object -First 1
+$editorTarget = if ($targetFile) {
+  [System.IO.Path]::GetFileNameWithoutExtension([System.IO.Path]::GetFileNameWithoutExtension($targetFile.Name))
+} else {
+  "$([System.IO.Path]::GetFileNameWithoutExtension($uproject.Name))Editor"
+}
 $resolver = Join-Path $projectRoot "BatchFiles\Script\ResolveUnrealEngine.ps1"
-$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File $resolver -Project $uproject -Output Root
-& "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" GoGameEditor Win64 Development -Project=$uproject -WaitMutex -NoHotReloadFromIDE
+$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File $resolver -Project $uproject.FullName -Output Root
+& "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" $editorTarget Win64 Development "-Project=$($uproject.FullName)" -WaitMutex -NoHotReloadFromIDE
 ```
 
 > **IMPORTANT:** Do NOT hard-code an engine path such as `UE_5.7\Engine\...`; the resolver derives it from `EngineAssociation` so the build follows the project's pinned engine. Do NOT use `Build.bat`.

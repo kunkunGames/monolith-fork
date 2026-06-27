@@ -1425,6 +1425,11 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::CreateBlueprintPrefa
 		return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	bool bCenterPivot = true;
 	Params->TryGetBoolField(TEXT("center_pivot"), bCenterPivot);
 
@@ -1454,12 +1459,6 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::CreateBlueprintPrefa
 		NSLOCTEXT("Monolith", "CreateBlueprintPrefab", "Monolith: Create Blueprint Prefab"));
 
 	// Create package (no dialog)
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		Transaction.Cancel();
-		return FMonolithActionResult::Error(ValidationError);
-	}
-
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{

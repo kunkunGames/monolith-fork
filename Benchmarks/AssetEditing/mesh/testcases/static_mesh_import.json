@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "static_mesh_import",
+  "route_edit_domain": "static_mesh_import",
+  "module_id": "asset_authoring.mesh.static_mesh_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_import",
+    "edit": "asset_operation.edit.mesh.static_mesh_import",
+    "save": "asset_operation.save.mesh.static_mesh_import",
+    "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-300"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-300",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_import",
+      "blueprint_type": "",
+      "workflow": "static_mesh_import_collision_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_mesh",
+        "set_mesh_collision",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_collision",
+        "inspect_asset"
+      ],
+      "description": "Import a local OBJ as a StaticMesh asset, edit simple collision, save it, and inspect mesh/collision data"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-300",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchImported"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "import_mesh",
+            "files": [
+              "__ASSET_AUTHORING_STATIC_MESH_OBJ__"
+            ],
+            "destination": "/Game/Benchmarks/AssetAuthoring",
+            "replace_existing": true,
+            "combine_meshes": true,
+            "auto_generate_collision": true,
+            "material_import": "skip"
+          },
+          "contains": [
+            "SM_BenchImported",
+            "StaticMesh",
+            "triangle_count"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "set_mesh_collision",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchImported",
+            "collision_type": "simple_box"
+          },
+          "contains": [
+            "simple_box",
+            "box_elements"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchImported"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchImported"
+          },
+          "contains": [
+            "SM_BenchImported",
+            "StaticMesh",
+            "triangles",
+            "12"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_collision",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchImported"
+          },
+          "contains": [
+            "collision_type",
+            "boxes"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchImported"
+          },
+          "contains": [
+            "SM_BenchImported",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "static_mesh_import",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "static_mesh_import_collision_roundtrip",
+      "description": "Import a local OBJ as a StaticMesh asset, edit simple collision, save it, and inspect mesh/collision data",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_mesh",
+          "set_mesh_collision",
+          "save_asset",
+          "get_mesh_info",
+          "get_mesh_collision",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

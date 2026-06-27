@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "data_asset_property_path",
+  "route_edit_domain": "asset_property_path",
+  "module_id": "asset_authoring.data.asset_property_path",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.asset_property_path",
+    "edit": "asset_operation.edit.data.asset_property_path",
+    "save": "asset_operation.save.data.asset_property_path",
+    "readback_verify": "asset_operation.readback_verify.data.asset_property_path"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-306"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-306",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "data_asset_property_path",
+      "blueprint_type": "",
+      "workflow": "dataasset_property_path_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_data_asset",
+        "set_property_at_path",
+        "save_asset",
+        "get_cdo_properties",
+        "inspect_asset"
+      ],
+      "description": "Create a raw UObject asset, edit properties through the surgical path writer, save it, and read values back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-306",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_data_asset",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface",
+            "class_name": "PhysicalMaterial"
+          },
+          "contains": [
+            "PM_BenchPathSurface",
+            "PhysicalMaterial"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_property_at_path",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface",
+            "path": "Friction",
+            "value": 0.61,
+            "save": false
+          },
+          "contains": [
+            "Friction",
+            "0.61"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_property_at_path",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface",
+            "path": "Restitution",
+            "value": 0.17,
+            "save": true
+          },
+          "contains": [
+            "Restitution",
+            "0.17"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface",
+            "name_pattern": "Friction"
+          },
+          "contains": [
+            "Friction",
+            "0.61"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface",
+            "name_pattern": "Restitution"
+          },
+          "contains": [
+            "Restitution",
+            "0.17"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchPathSurface"
+          },
+          "contains": [
+            "PM_BenchPathSurface",
+            "PhysicalMaterial"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "data_asset_property_path",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "dataasset_property_path_roundtrip",
+      "description": "Create a raw UObject asset, edit properties through the surgical path writer, save it, and read values back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_data_asset",
+          "set_property_at_path",
+          "save_asset",
+          "get_cdo_properties",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

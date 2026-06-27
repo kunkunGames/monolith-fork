@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "ikrig_retargeter",
+  "route_edit_domain": "ikrig_retargeter",
+  "module_id": "asset_authoring.animation.ikrig_retargeter",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.ikrig_retargeter",
+    "edit": "asset_operation.edit.animation.ikrig_retargeter",
+    "save": "asset_operation.save.animation.ikrig_retargeter",
+    "readback_verify": "asset_operation.readback_verify.animation.ikrig_retargeter"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-314"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-314",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "ikrig_retargeter",
+      "blueprint_type": "",
+      "workflow": "animation_ikrig_retargeter_metadata_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_ik_rig",
+        "create_ik_retargeter",
+        "set_retargeter_rigs",
+        "save_asset",
+        "get_ikrig_info",
+        "get_retargeter_info",
+        "inspect_asset"
+      ],
+      "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-314",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IKR_BenchSource",
+              "/Game/Benchmarks/AssetAuthoring/IKR_BenchTarget",
+              "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_rig",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchSource",
+            "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"
+          },
+          "contains": [
+            "IKR_BenchSource",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_rig",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchTarget",
+            "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"
+          },
+          "contains": [
+            "IKR_BenchTarget",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_retargeter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget"
+          },
+          "contains": [
+            "RTG_BenchSourceToTarget",
+            "retarget_op_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_retargeter_rigs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget",
+            "source_ik_rig_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchSource",
+            "target_ik_rig_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchTarget",
+            "source_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+            "target_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+            "auto_map": "fuzzy"
+          },
+          "contains": [
+            "IKR_BenchSource",
+            "IKR_BenchTarget",
+            "default_ops_seeded",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchSource"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchTarget"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_ikrig_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchSource"
+          },
+          "contains": [
+            "IKR_BenchSource",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_ikrig_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchTarget"
+          },
+          "contains": [
+            "IKR_BenchTarget",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_retargeter_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget"
+          },
+          "contains": [
+            "IKR_BenchSource",
+            "IKR_BenchTarget",
+            "retarget_op_count",
+            "source_preview_mesh",
+            "target_preview_mesh"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchSourceToTarget"
+          },
+          "contains": [
+            "RTG_BenchSourceToTarget"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "ikrig_retargeter",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_ikrig_retargeter_metadata_roundtrip",
+      "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_ik_rig",
+          "create_ik_retargeter",
+          "set_retargeter_rigs",
+          "save_asset",
+          "get_ikrig_info",
+          "get_retargeter_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

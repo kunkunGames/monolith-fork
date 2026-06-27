@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "metasound_source_graph",
+  "route_edit_domain": "metasound_source_graph",
+  "module_id": "asset_authoring.audio.metasound_source_graph",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.metasound_source_graph",
+    "edit": "asset_operation.edit.audio.metasound_source_graph",
+    "save": "asset_operation.save.audio.metasound_source_graph",
+    "readback_verify": "asset_operation.readback_verify.audio.metasound_source_graph"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-447"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-447",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "metasound_source_graph",
+      "blueprint_type": "",
+      "workflow": "audio_metasound_source_graph_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_metasound_source",
+        "add_metasound_input",
+        "set_metasound_input_default",
+        "add_metasound_output",
+        "save_asset",
+        "get_metasound_input_names",
+        "get_metasound_graph",
+        "inspect_asset"
+      ],
+      "description": "Create a MetaSound Source asset, author graph-level input/output pins, edit an input default, save it, and read the graph back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-447",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_metasound_source",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph",
+            "format": "Mono",
+            "one_shot": true
+          },
+          "contains": [
+            "MS_BenchSourceGraph"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "add_metasound_input",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph",
+            "name": "BenchGain",
+            "data_type": "Float",
+            "default_value": 0.5
+          },
+          "contains": [
+            "BenchGain",
+            "Float"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_metasound_input_default",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph",
+            "input_name": "BenchGain",
+            "value": 0.75
+          },
+          "contains": [
+            "success",
+            "true",
+            "BenchGain",
+            "Float"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "add_metasound_output",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph",
+            "name": "BenchAudio",
+            "data_type": "Audio"
+          },
+          "contains": [
+            "BenchAudio",
+            "Audio"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_input_names",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph"
+          },
+          "contains": [
+            "BenchGain",
+            "Float",
+            "count"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph"
+          },
+          "contains": [
+            "BenchGain",
+            "BenchAudio"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchSourceGraph"
+          },
+          "contains": [
+            "MS_BenchSourceGraph"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "metasound_source_graph",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_metasound_source_graph_roundtrip",
+      "description": "Create a MetaSound Source asset, author graph-level input/output pins, edit an input default, save it, and read the graph back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/metasounds-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_metasound_source",
+          "add_metasound_input",
+          "set_metasound_input_default",
+          "add_metasound_output",
+          "save_asset",
+          "get_metasound_input_names",
+          "get_metasound_graph",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

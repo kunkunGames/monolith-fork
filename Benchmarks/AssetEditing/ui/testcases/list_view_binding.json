@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "list_view_binding",
+  "route_edit_domain": "list_view_binding",
+  "module_id": "asset_authoring.ui.list_view_binding",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.list_view_binding",
+    "edit": "asset_operation.edit.ui.list_view_binding",
+    "save": "asset_operation.save.ui.list_view_binding",
+    "readback_verify": "asset_operation.readback_verify.ui.list_view_binding"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-449"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-449",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "list_view_binding",
+      "blueprint_type": "",
+      "workflow": "ui_list_view_entry_widget_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "setup_list_view",
+        "save_asset",
+        "get_widget_tree",
+        "list_widget_properties",
+        "inspect_assets_batch"
+      ],
+      "description": "Create an entry Widget Blueprint and a ListView container, configure the ListView entry class and item size, save both assets, and read the list widget back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-449",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchListEntry",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry",
+            "widget_class": "TextBlock",
+            "widget_name": "EntryLabel",
+            "position": {
+              "x": 8,
+              "y": 4
+            },
+            "size": {
+              "x": 220,
+              "y": 36
+            },
+            "compile": true
+          },
+          "contains": [
+            "EntryLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchListContainer",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer",
+            "widget_class": "ListView",
+            "widget_name": "BenchListView",
+            "position": {
+              "x": 24,
+              "y": 24
+            },
+            "size": {
+              "x": 480,
+              "y": 320
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchListView",
+            "ListView"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "setup_list_view",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer",
+            "list_widget_name": "BenchListView",
+            "entry_widget_class": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry",
+            "entry_height": 44,
+            "entry_width": 160
+          },
+          "contains": [
+            "BenchListView",
+            "ListView",
+            "configured",
+            "true",
+            "entry_height",
+            "44"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer"
+          },
+          "contains": [
+            "BenchListView",
+            "ListView"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer",
+            "widget_name": "BenchListView"
+          },
+          "contains": [
+            "BenchListView",
+            "ListView",
+            "EntryWidgetClass",
+            "EntryHeight"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchListEntry",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchListContainer"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "WBP_BenchListEntry",
+            "WBP_BenchListContainer",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "list_view_binding",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_list_view_entry_widget_roundtrip",
+      "description": "Create an entry Widget Blueprint and a ListView container, configure the ListView entry class and item size, save both assets, and read the list widget back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/UMG/Components/UListView",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIBindingActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "setup_list_view",
+          "save_asset",
+          "get_widget_tree",
+          "list_widget_properties",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

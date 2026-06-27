@@ -1084,6 +1084,84 @@ def check_benchmark_definitions(ctx: CheckContext) -> None:
                 )
 
 
+def _subprocess_tail(stdout: str | bytes | None, stderr: str | bytes | None, max_lines: int = 8) -> str:
+    parts = []
+    for part in (stdout, stderr):
+        if not part:
+            continue
+        if isinstance(part, bytes):
+            parts.append(part.decode("utf-8", errors="replace"))
+        else:
+            parts.append(str(part))
+    combined = "\n".join(parts)
+    lines = [line.strip() for line in combined.splitlines() if line.strip()]
+    if not lines:
+        return "no output"
+    return " | ".join(lines[-max_lines:])
+
+
+def check_benchmark_contract_tests(ctx: CheckContext) -> None:
+    """Run lightweight benchmark contract tests listed in static CI config."""
+    config = ctx.config.get("benchmark_contract_tests", {})
+    if not config.get("enabled", False):
+        return
+
+    tests = config.get("tests", [])
+    if not isinstance(tests, list):
+        ctx.block("benchmark-contract-tests", "benchmark_contract_tests.tests must be a list", ctx.config_path)
+        return
+
+    default_timeout = float(config.get("timeout_seconds", 60))
+    for raw_entry in tests:
+        if not isinstance(raw_entry, dict):
+            ctx.block("benchmark-contract-tests", "Benchmark contract test entry must be an object", ctx.config_path)
+            continue
+
+        name = str(raw_entry.get("name") or "<unnamed>")
+        script_cfg = raw_entry.get("script")
+        if not script_cfg:
+            ctx.block("benchmark-contract-tests", f"{name}: script is required", ctx.config_path)
+            continue
+
+        script = _resolve_plugin_path(ctx, str(script_cfg))
+        if not script.is_file():
+            ctx.block("benchmark-contract-tests", f"{name}: script is missing", script)
+            continue
+
+        args = raw_entry.get("args", [])
+        if not isinstance(args, list):
+            ctx.block("benchmark-contract-tests", f"{name}: args must be a list", ctx.config_path)
+            continue
+
+        timeout = float(raw_entry.get("timeout_seconds", default_timeout))
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script), *[str(arg) for arg in args]],
+                cwd=ctx.root,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            ctx.block(
+                "benchmark-contract-tests",
+                f"{name}: contract test timed out after {timeout:g}s: {_subprocess_tail(exc.stdout, exc.stderr)}",
+                script,
+            )
+            continue
+        except OSError as exc:
+            ctx.block("benchmark-contract-tests", f"{name}: could not run contract test: {exc}", script)
+            continue
+
+        if proc.returncode != 0:
+            ctx.block(
+                "benchmark-contract-tests",
+                f"{name}: contract test failed with exit {proc.returncode}: "
+                f"{_subprocess_tail(proc.stdout, proc.stderr)}",
+                script,
+            )
+
+
 def check_offline_exe_freshness(ctx: CheckContext) -> None:
     """Block when the shipped offline CLI is stale relative to its tracked source.
 
@@ -1248,6 +1326,112 @@ def check_offline_parity_smoke(ctx: CheckContext) -> None:
             )
 
 
+def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
+    config = ctx.config.get("analyzer_smoke", {})
+    if not config.get("enabled", False):
+        return
+
+    script = ctx.path(str(config.get("script", "Analyzer/analyze_invocation_logs.py")))
+    if not script.is_file():
+        ctx.block("analyzer-smoke", "Invocation log analyzer script is missing", script)
+        return
+
+    def record(record_id: str, date: str, payload_bytes: int) -> str:
+        return json.dumps(
+            {
+                "format_version": 3,
+                "surface": "action",
+                "record_id": record_id,
+                "trace_id": f"trace-{record_id}",
+                "span_id": f"span-{record_id}",
+                "start_time": f"{date[:4]}-{date[4:6]}-{date[6:]}T00:00:00+09:00",
+                "duration_ms": 1.0,
+                "status": "success",
+                "call": {
+                    "namespace": "console",
+                    "action": "search_objects",
+                    "arguments": {},
+                },
+                "agent_signal": {
+                    "outcome": "success",
+                    "result_bytes": payload_bytes,
+                },
+                "return": {"success": True},
+            },
+            separators=(",", ":"),
+        )
+
+    with tempfile.TemporaryDirectory() as log_tmp, tempfile.TemporaryDirectory() as out_tmp:
+        log_root = Path(log_tmp)
+        old_dir = log_root / "20260101"
+        recent_dir = log_root / "20260102"
+        old_dir.mkdir()
+        recent_dir.mkdir()
+        (old_dir / "action.jsonl").write_text(record("old-large", "20260101", 250_000) + "\n", encoding="utf-8")
+        (recent_dir / "action.jsonl").write_text(record("recent-large", "20260102", 260_000) + "\n", encoding="utf-8")
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--log-root",
+                str(log_root),
+                "--out",
+                out_tmp,
+                "--format",
+                "json",
+                "--category",
+                "large_result",
+                "--rank-by-recency",
+                "--fix-boundary",
+                "20260102",
+                "--top",
+                "10",
+            ],
+            cwd=ctx.root,
+            capture_output=True,
+            text=True,
+            timeout=float(config.get("timeout_seconds", 30)),
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
+            ctx.block("analyzer-smoke", f"Analyzer large_result smoke failed: {'; '.join(detail)}", script)
+            return
+
+        findings_path = Path(out_tmp) / "findings.json"
+        try:
+            data = json.loads(findings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            ctx.block("analyzer-smoke", f"Analyzer did not produce parseable findings.json: {exc}", script)
+            return
+
+        findings = data.get("findings", [])
+        large = next(
+            (
+                item
+                for item in findings
+                if item.get("category") == "large_result"
+                and item.get("finding_id") == "large_result:action:console.search_objects"
+            ),
+            None,
+        )
+        if not large:
+            ctx.block("analyzer-smoke", "Analyzer did not emit the expected large_result finding", script)
+            return
+
+        recency = large.get("recency") or {}
+        if (
+            recency.get("metric") != "calls"
+            or recency.get("status") != "still_open"
+            or int(recency.get("recent_calls") or 0) < 1
+        ):
+            ctx.block(
+                "analyzer-smoke",
+                "large_result finding did not include call-based still_open recency metadata",
+                script,
+            )
+
+
 def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
     check_automation_test_names(ctx)
@@ -1262,8 +1446,10 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_proxy_smoke(ctx)
     check_skill_catalog_drift(ctx)
     check_benchmark_definitions(ctx)
+    check_benchmark_contract_tests(ctx)
     check_offline_exe_freshness(ctx)
     check_offline_parity_smoke(ctx)
+    check_analyzer_large_result_smoke(ctx)
     return ctx.findings
 
 
@@ -1359,6 +1545,16 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
                 },
             ],
         },
+        "benchmark_contract_tests": {
+            "enabled": True,
+            "timeout_seconds": 5,
+            "tests": [
+                {
+                    "name": "FooBench",
+                    "script": "Scripts/foo_contract_test.py",
+                },
+            ],
+        },
     }
     config_path = root / ".github/monolith-static-ci.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
@@ -1413,6 +1609,10 @@ def write_selftest_fixture(root: Path) -> tuple[dict[str, Any], Path]:
         "import pathlib\n"
         "DEFAULT_TASKS = pathlib.Path('Benchmarks/Foo/tasks.jsonl')\n"
         "DEFAULT_MANIFEST = pathlib.Path('Benchmarks/Foo/manifest.json')\n",
+        encoding="utf-8",
+    )
+    (root / "Scripts/foo_contract_test.py").write_text(
+        "raise SystemExit(0)\n",
         encoding="utf-8",
     )
     return config, config_path
@@ -1565,6 +1765,14 @@ def run_selftest() -> int:
                 "import pathlib\n"
                 "DEFAULT_TASKS = pathlib.Path('Benchmarks/Other/tasks.jsonl')\n"
                 "DEFAULT_MANIFEST = pathlib.Path('Benchmarks/Foo/manifest.json')\n",
+                encoding="utf-8",
+            ),
+        ),
+        (
+            "benchmark contract failure",
+            "benchmark-contract-tests",
+            lambda root: (root / "Scripts/foo_contract_test.py").write_text(
+                "print('contract failed')\nraise SystemExit(7)\n",
                 encoding="utf-8",
             ),
         ),

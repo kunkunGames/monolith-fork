@@ -1,0 +1,2370 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.widget",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+  "task_count": 552,
+  "module_count": 9,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.widget",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Widget",
+      "task_count": 31,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.widget.class",
+        "blueprint.widget.compilation",
+        "blueprint.widget.event",
+        "blueprint.widget.function",
+        "blueprint.widget.general",
+        "blueprint.widget.node",
+        "blueprint.widget.state",
+        "blueprint.widget.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.widget.class",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "class"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/class",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "class"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/event",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/function",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/general",
+      "task_count": 12,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/node",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/state",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.widget.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/variable",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.widget": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Widget",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ]
+      },
+      "task_count": 31,
+      "task_ids": [
+        "BEB-003",
+        "BEB-011",
+        "BEB-017",
+        "BEB-028",
+        "BEB-029",
+        "BEB-030",
+        "BEB-047",
+        "BEB-048",
+        "BEB-061",
+        "BEB-062",
+        "BEB-075",
+        "BEB-076",
+        "BEB-158",
+        "BEB-159",
+        "BEB-186",
+        "BEB-187",
+        "BEB-188",
+        "BEB-189",
+        "BEB-190",
+        "BEB-191",
+        "BEB-192",
+        "BEB-193",
+        "BEB-194",
+        "BEB-195",
+        "BEB-238",
+        "BEB-246",
+        "BEB-247",
+        "BEB-248",
+        "BEB-249",
+        "BEB-250",
+        "BEB-548"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-003",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query 'WBP_TestWidget'"
+        },
+        {
+          "id": "BEB-011",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query 'UserWidget Blueprint'"
+        },
+        {
+          "id": "BEB-017",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query '/Game/Benchmarks/WBP_TestWidget'"
+        },
+        {
+          "id": "BEB-028",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Widget fixture"
+        },
+        {
+          "id": "BEB-029",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Widget fixture default graph data"
+        },
+        {
+          "id": "BEB-030",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Widget fixture"
+        },
+        {
+          "id": "BEB-047",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Widget fixture WBP_TestWidget"
+        },
+        {
+          "id": "BEB-048",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Widget fixture WBP_TestWidget"
+        },
+        {
+          "id": "BEB-061",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Widget fixture"
+        },
+        {
+          "id": "BEB-062",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Widget fixture"
+        },
+        {
+          "id": "BEB-075",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Widget fixture"
+        },
+        {
+          "id": "BEB-076",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Widget"
+        },
+        {
+          "id": "BEB-158",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "widget_style_refresh",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "add_node",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create a Widget style-refresh function, add typed style inputs, place a FormatText node, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-159",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "widget_comment_layout",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_comment_node",
+            "auto_layout",
+            "compile_blueprint",
+            "get_graph_data"
+          ],
+          "description": "Add a UMG layout comment box, auto-layout the Widget graph, compile clean, read back the comment text"
+        },
+        {
+          "id": "BEB-186",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchWidgetRefresh function graph to Widget"
+        },
+        {
+          "id": "BEB-187",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchWidgetOnShown custom event to Widget EventGraph"
+        },
+        {
+          "id": "BEB-188",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add SetVisibility CallFunction node to Widget EventGraph"
+        },
+        {
+          "id": "BEB-189",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add string BenchWidgetTitle variable to Widget"
+        },
+        {
+          "id": "BEB-190",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsVisible fixture variable default to false (idempotent)"
+        },
+        {
+          "id": "BEB-191",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "event",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchWidgetOnClosed event dispatcher to Widget"
+        },
+        {
+          "id": "BEB-192",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_cdo_properties",
+          "domain": "ui",
+          "edit_domain": "class",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_cdo_properties",
+            "get_cdo_properties"
+          ],
+          "description": "Set CDO bIsVariable=true on Widget (idempotent)"
+        },
+        {
+          "id": "BEB-193",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "ui",
+          "edit_domain": "compilation",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate Widget blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-194",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "ui",
+          "edit_domain": "state",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Widget EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-195",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "ui",
+          "edit_domain": "compilation",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Widget blueprint"
+        },
+        {
+          "id": "BEB-238",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Widget EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-246",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add FText BenchWidgetSubtitle style variable to Widget"
+        },
+        {
+          "id": "BEB-247",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsVisible fixture variable default to true for Widget read-back"
+        },
+        {
+          "id": "BEB-248",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_comment_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_comment_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchWidgetStyleBlock comment box to Widget EventGraph"
+        },
+        {
+          "id": "BEB-249",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add FormatText node for Widget label formatting"
+        },
+        {
+          "id": "BEB-250",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchWidgetOpenSettings function graph to Widget"
+        },
+        {
+          "id": "BEB-548",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_variable",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_variable",
+            "remove_variable"
+          ],
+          "description": "Widget add_variable must reject duplicate display-state variable names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-548"
+          ],
+          "edit_execute": [
+            "BEB-186",
+            "BEB-187",
+            "BEB-188",
+            "BEB-189",
+            "BEB-190",
+            "BEB-191",
+            "BEB-192",
+            "BEB-193",
+            "BEB-194",
+            "BEB-195",
+            "BEB-238",
+            "BEB-246",
+            "BEB-247",
+            "BEB-248",
+            "BEB-249",
+            "BEB-250"
+          ],
+          "graph_read": [
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048"
+          ],
+          "type_discovery": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017"
+          ],
+          "variable_read": [
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076"
+          ],
+          "workflow_execute": [
+            "BEB-158",
+            "BEB-159"
+          ]
+        },
+        "by_edit_domain": {
+          "class": [
+            "BEB-192"
+          ],
+          "compilation": [
+            "BEB-193",
+            "BEB-195"
+          ],
+          "event": [
+            "BEB-191"
+          ],
+          "function": [
+            "BEB-158",
+            "BEB-186",
+            "BEB-187",
+            "BEB-250"
+          ],
+          "general": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017",
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048",
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076"
+          ],
+          "node": [
+            "BEB-159",
+            "BEB-188",
+            "BEB-238",
+            "BEB-248",
+            "BEB-249"
+          ],
+          "state": [
+            "BEB-194"
+          ],
+          "variable": [
+            "BEB-189",
+            "BEB-190",
+            "BEB-246",
+            "BEB-247",
+            "BEB-548"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-158",
+            "BEB-159",
+            "BEB-186",
+            "BEB-187",
+            "BEB-188",
+            "BEB-189",
+            "BEB-190",
+            "BEB-191",
+            "BEB-192",
+            "BEB-238",
+            "BEB-246",
+            "BEB-247",
+            "BEB-248",
+            "BEB-249",
+            "BEB-250",
+            "BEB-548"
+          ],
+          "read_only": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017",
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048",
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076",
+            "BEB-193",
+            "BEB-194",
+            "BEB-195"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-158",
+            "BEB-159",
+            "BEB-186",
+            "BEB-187",
+            "BEB-188",
+            "BEB-189",
+            "BEB-190",
+            "BEB-191",
+            "BEB-192",
+            "BEB-238",
+            "BEB-246",
+            "BEB-247",
+            "BEB-248",
+            "BEB-249",
+            "BEB-250",
+            "BEB-548"
+          ],
+          "readback_verify": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017",
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048",
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076",
+            "BEB-158",
+            "BEB-159",
+            "BEB-186",
+            "BEB-187",
+            "BEB-188",
+            "BEB-189",
+            "BEB-190",
+            "BEB-191",
+            "BEB-192",
+            "BEB-193",
+            "BEB-194",
+            "BEB-195",
+            "BEB-238",
+            "BEB-246",
+            "BEB-247",
+            "BEB-248",
+            "BEB-249",
+            "BEB-250",
+            "BEB-548"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.widget.class",
+        "blueprint.widget.compilation",
+        "blueprint.widget.event",
+        "blueprint.widget.function",
+        "blueprint.widget.general",
+        "blueprint.widget.node",
+        "blueprint.widget.state",
+        "blueprint.widget.variable"
+      ],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.class": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.class",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "class"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/class",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "class"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-192"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-192",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_cdo_properties",
+          "domain": "ui",
+          "edit_domain": "class",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_cdo_properties",
+            "get_cdo_properties"
+          ],
+          "description": "Set CDO bIsVariable=true on Widget (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-192"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-192"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-192"
+          ],
+          "readback_verify": [
+            "BEB-192"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-193",
+        "BEB-195"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-193",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "ui",
+          "edit_domain": "compilation",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate Widget blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-195",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "ui",
+          "edit_domain": "compilation",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Widget blueprint"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-193",
+            "BEB-195"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-193",
+            "BEB-195"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-193",
+            "BEB-195"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-191"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-191",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "event",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchWidgetOnClosed event dispatcher to Widget"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-191"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-191"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-191"
+          ],
+          "readback_verify": [
+            "BEB-191"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-158",
+        "BEB-186",
+        "BEB-187",
+        "BEB-250"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-158",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "widget_style_refresh",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "add_node",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create a Widget style-refresh function, add typed style inputs, place a FormatText node, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-186",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchWidgetRefresh function graph to Widget"
+        },
+        {
+          "id": "BEB-187",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchWidgetOnShown custom event to Widget EventGraph"
+        },
+        {
+          "id": "BEB-250",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "function",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchWidgetOpenSettings function graph to Widget"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-186",
+            "BEB-187",
+            "BEB-250"
+          ],
+          "workflow_execute": [
+            "BEB-158"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-158",
+            "BEB-186",
+            "BEB-187",
+            "BEB-250"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-158",
+            "BEB-186",
+            "BEB-187",
+            "BEB-250"
+          ],
+          "readback_verify": [
+            "BEB-158",
+            "BEB-186",
+            "BEB-187",
+            "BEB-250"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 12,
+      "task_ids": [
+        "BEB-003",
+        "BEB-011",
+        "BEB-017",
+        "BEB-028",
+        "BEB-029",
+        "BEB-030",
+        "BEB-047",
+        "BEB-048",
+        "BEB-061",
+        "BEB-062",
+        "BEB-075",
+        "BEB-076"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-003",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query 'WBP_TestWidget'"
+        },
+        {
+          "id": "BEB-011",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query 'UserWidget Blueprint'"
+        },
+        {
+          "id": "BEB-017",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Widget fixture with project.search query '/Game/Benchmarks/WBP_TestWidget'"
+        },
+        {
+          "id": "BEB-028",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Widget fixture"
+        },
+        {
+          "id": "BEB-029",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Widget fixture default graph data"
+        },
+        {
+          "id": "BEB-030",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Widget fixture"
+        },
+        {
+          "id": "BEB-047",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Widget fixture WBP_TestWidget"
+        },
+        {
+          "id": "BEB-048",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Widget fixture WBP_TestWidget"
+        },
+        {
+          "id": "BEB-061",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Widget fixture"
+        },
+        {
+          "id": "BEB-062",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Widget fixture"
+        },
+        {
+          "id": "BEB-075",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Widget fixture"
+        },
+        {
+          "id": "BEB-076",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ui",
+          "edit_domain": "",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Widget"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048"
+          ],
+          "type_discovery": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017"
+          ],
+          "variable_read": [
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017",
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048",
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-003",
+            "BEB-011",
+            "BEB-017",
+            "BEB-028",
+            "BEB-029",
+            "BEB-030",
+            "BEB-047",
+            "BEB-048",
+            "BEB-061",
+            "BEB-062",
+            "BEB-075",
+            "BEB-076"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-159",
+        "BEB-188",
+        "BEB-238",
+        "BEB-248",
+        "BEB-249"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-159",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "widget_comment_layout",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_comment_node",
+            "auto_layout",
+            "compile_blueprint",
+            "get_graph_data"
+          ],
+          "description": "Add a UMG layout comment box, auto-layout the Widget graph, compile clean, read back the comment text"
+        },
+        {
+          "id": "BEB-188",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add SetVisibility CallFunction node to Widget EventGraph"
+        },
+        {
+          "id": "BEB-238",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Widget EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-248",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_comment_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_comment_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchWidgetStyleBlock comment box to Widget EventGraph"
+        },
+        {
+          "id": "BEB-249",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ui",
+          "edit_domain": "node",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add FormatText node for Widget label formatting"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-188",
+            "BEB-238",
+            "BEB-248",
+            "BEB-249"
+          ],
+          "workflow_execute": [
+            "BEB-159"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-159",
+            "BEB-188",
+            "BEB-238",
+            "BEB-248",
+            "BEB-249"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-159",
+            "BEB-188",
+            "BEB-238",
+            "BEB-248",
+            "BEB-249"
+          ],
+          "readback_verify": [
+            "BEB-159",
+            "BEB-188",
+            "BEB-238",
+            "BEB-248",
+            "BEB-249"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-194"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-194",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "ui",
+          "edit_domain": "state",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Widget EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-194"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-194"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-194"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    },
+    "blueprint.widget.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.widget.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Widget",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Widget/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Widget"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-189",
+        "BEB-190",
+        "BEB-246",
+        "BEB-247",
+        "BEB-548"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-189",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add string BenchWidgetTitle variable to Widget"
+        },
+        {
+          "id": "BEB-190",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsVisible fixture variable default to false (idempotent)"
+        },
+        {
+          "id": "BEB-246",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add FText BenchWidgetSubtitle style variable to Widget"
+        },
+        {
+          "id": "BEB-247",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsVisible fixture variable default to true for Widget read-back"
+        },
+        {
+          "id": "BEB-548",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_variable",
+          "domain": "ui",
+          "edit_domain": "variable",
+          "blueprint_type": "Widget",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_variable",
+            "remove_variable"
+          ],
+          "description": "Widget add_variable must reject duplicate display-state variable names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-548"
+          ],
+          "edit_execute": [
+            "BEB-189",
+            "BEB-190",
+            "BEB-246",
+            "BEB-247"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-189",
+            "BEB-190",
+            "BEB-246",
+            "BEB-247",
+            "BEB-548"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-189",
+            "BEB-190",
+            "BEB-246",
+            "BEB-247",
+            "BEB-548"
+          ],
+          "readback_verify": [
+            "BEB-189",
+            "BEB-190",
+            "BEB-246",
+            "BEB-247",
+            "BEB-548"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.widget",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.widget",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json"
+    }
+  }
+}

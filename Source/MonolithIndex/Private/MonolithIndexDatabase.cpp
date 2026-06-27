@@ -1289,7 +1289,7 @@ FString FMonolithIndexDatabase::EscapeFTS(const FString& Query, int32 MinShouldM
 	// contains some full K-subset iff it has >= K distinct query tokens — provably exact under
 	// the porter/unicode61 tokenizer, with no C++ token reconstruction and no per-token
 	// re-query. Bounded: if the subset count would exceed 64 (many-token query) it collapses to
-	// require-all. pct==0 (default) skips this entirely and keeps the AND + Q3 behavior below.
+	// require-all. pct==0 (default) skips this entirely and keeps the pure AND-prefix query below.
 	if (MinShouldMatchPct > 0 && Tokens.Num() > 1)
 	{
 		const int32 N = Tokens.Num();
@@ -1302,7 +1302,7 @@ FString FMonolithIndexDatabase::EscapeFTS(const FString& Query, int32 MinShouldM
 		}
 		if (K == N || MonolithCombinationCount(N, K) > 64)
 		{
-			// "all N tokens" (or bounded fallback) — a single implicit-AND group, no Q3 widening.
+			// "all N tokens" (or bounded fallback) — a single implicit-AND group, no widening.
 			return FString::Printf(TEXT("(%s)"), *FString::Join(Prefix, TEXT(" ")));
 		}
 
@@ -1328,41 +1328,9 @@ FString FMonolithIndexDatabase::EscapeFTS(const FString& Query, int32 MinShouldM
 		return FString::Join(Groups, TEXT(" OR "));
 	}
 
-	// pct == 0 (default): byte-identical AND-prefix expression + Q3 de-spaced streak fusion.
-	FString Escaped = FString::Join(Prefix, TEXT(" "));
-
-	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion. A spaced natural-
-	// language query ("health bar") should also match the fused CamelCase identifier it
-	// indexes as ("HealthBar"), which unicode61 stores as a single token. The AND-prefix
-	// expression above is kept byte-identical and OR-ed with the concatenated form, so
-	// results are a guaranteed superset (recall only rises). Bounded to avoid a
-	// pathological MATCH expression.
-	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
-	{
-		FString Concat;
-		for (const FString& Token : Tokens) { Concat += Token; }
-		if (Concat.Len() <= 64)
-		{
-			Escaped = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Escaped, *Concat);
-		}
-	}
-
-	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion. A spaced natural-
-	// language query ("health bar") should also match the fused CamelCase identifier it
-	// indexes as ("HealthBar"), which unicode61 stores as a single token. The AND-prefix
-	// expression above is kept byte-identical and OR-ed with the concatenated form, so
-	// results are a guaranteed superset (recall only rises). Bounded to avoid a
-	// pathological MATCH expression.
-	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
-	{
-		FString Concat;
-		for (const FString& Token : Tokens) { Concat += Token; }
-		if (Concat.Len() <= 64)
-		{
-			Escaped = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Escaped, *Concat);
-		}
-	}
-	return Escaped;
+	// pct == 0 (default): pure safe-token prefix expression. Identifier recall is handled
+	// by supplemental indexed values, not by widening the escaped MATCH query itself.
+	return FString::Join(Prefix, TEXT(" "));
 }
 
 TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Query, int32 Limit)
@@ -1374,7 +1342,8 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 {
 	TArray<FSearchResult> Results;
 	if (!IsOpen()) return Results;
-	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1000);
+	const int32 ClampedLimit = FMath::Clamp(Limit, 1, 1001);
+	const int32 PageOffset = FMath::Max(Options.Offset, 0);
 	const FString FTSQuery = EscapeFTS(Query, Options.MinShouldMatchPct);
 
 	// Q4 (PRD AssetSearchSemanticSearch): RRF cross-table fusion. The 7 FTS tables produce
@@ -1383,8 +1352,11 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	// by RANK POSITION (scale-independent): each asset accumulates SourceWeight/(K+rank)
 	// across the tables it matched in, dedup'd to one result per asset (package_path). The
 	// per-source weight encodes AssetSearch-style name-over-body priority. Tables are
-	// oversampled 3x so fusion sees candidate depth before truncation to the caller's limit.
-	const int32 OversampleLimit = FMath::Min(ClampedLimit * 3, 1000);
+	// oversampled 3x so fusion sees candidate depth before slicing/truncating to the caller's page.
+	const int32 MaxSearchWindow = 100000;
+	const int64 PageEnd = static_cast<int64>(PageOffset) + static_cast<int64>(ClampedLimit);
+	const int32 RequiredWindow = static_cast<int32>(FMath::Min<int64>(PageEnd, MaxSearchWindow));
+	const int32 OversampleLimit = FMath::Clamp(FMath::Max(ClampedLimit * 3, RequiredWindow), 1, MaxSearchWindow);
 	const float RRFConstant = 60.0f;
 	auto SourceWeightFor = [](const FString& Src) -> float
 	{
@@ -1551,11 +1523,26 @@ TArray<FSearchResult> FMonolithIndexDatabase::FullTextSearch(const FString& Quer
 	// Q4: materialize the fused per-asset results and rank by accumulated RRF score
 	// (higher = better — the opposite direction of raw FTS5 bm25).
 	Fused.GenerateValueArray(Results);
-	Results.Sort([](const FSearchResult& A, const FSearchResult& B) { return A.Rank > B.Rank; });
-
-	if (Results.Num() > ClampedLimit)
+	Results.Sort([](const FSearchResult& A, const FSearchResult& B)
 	{
-		Results.SetNum(ClampedLimit);
+		if (!FMath::IsNearlyEqual(A.Rank, B.Rank))
+		{
+			return A.Rank > B.Rank;
+		}
+		return A.AssetPath.Compare(B.AssetPath, ESearchCase::IgnoreCase) < 0;
+	});
+
+	if (PageOffset > 0 || Results.Num() > ClampedLimit)
+	{
+		const int32 SliceStart = FMath::Min(PageOffset, Results.Num());
+		const int32 SliceEnd = FMath::Min(SliceStart + ClampedLimit, Results.Num());
+		TArray<FSearchResult> SlicedResults;
+		SlicedResults.Reserve(SliceEnd - SliceStart);
+		for (int32 Index = SliceStart; Index < SliceEnd; ++Index)
+		{
+			SlicedResults.Add(Results[Index]);
+		}
+		Results = SlicedResults;
 	}
 
 	return Results;

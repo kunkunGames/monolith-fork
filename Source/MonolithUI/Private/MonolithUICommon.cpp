@@ -51,6 +51,58 @@ DEFINE_LOG_CATEGORY(LogMonolithUISpec);
 
 namespace MonolithUI
 {
+    namespace
+    {
+        static FString MakeVariableGuidSeed(const UWidgetBlueprint* WBP, const FName& VariableName)
+        {
+            if (WBP)
+            {
+                return FString::Printf(TEXT("%s:%s"), *WBP->GetPathName(), *VariableName.ToString());
+            }
+            return VariableName.ToString();
+        }
+
+        static void EnsureVariableGuid(
+            UWidgetBlueprint* WBP,
+            const FName& VariableName,
+            const FString& StableSeed,
+            TMap<FGuid, FName>* UsedGuids = nullptr)
+        {
+            if (!WBP || VariableName.IsNone())
+            {
+                return;
+            }
+
+            FGuid* ExistingGuid = WBP->WidgetVariableNameToGuidMap.Find(VariableName);
+            if (ExistingGuid && ExistingGuid->IsValid())
+            {
+                if (!UsedGuids || !UsedGuids->Contains(*ExistingGuid))
+                {
+                    if (UsedGuids)
+                    {
+                        UsedGuids->Add(*ExistingGuid, VariableName);
+                    }
+                    return;
+                }
+            }
+
+            WBP->Modify();
+
+            FGuid NewGuid = FGuid::NewDeterministicGuid(
+                StableSeed.IsEmpty() ? MakeVariableGuidSeed(WBP, VariableName) : StableSeed);
+            if (UsedGuids)
+            {
+                while (!NewGuid.IsValid() || UsedGuids->Contains(NewGuid))
+                {
+                    NewGuid = FGuid::NewGuid();
+                }
+                UsedGuids->Add(NewGuid, VariableName);
+            }
+
+            WBP->WidgetVariableNameToGuidMap.Add(VariableName, NewGuid);
+        }
+    }
+
     FName MakeTokenFromClassName(const UClass* Class)
     {
         if (!Class)
@@ -242,10 +294,7 @@ namespace MonolithUI
             return;
         }
 
-        if (!WBP->WidgetVariableNameToGuidMap.Contains(VariableName))
-        {
-            WBP->OnVariableAdded(VariableName);
-        }
+        EnsureVariableGuid(WBP, VariableName, MakeVariableGuidSeed(WBP, VariableName));
     }
 
     void RegisterCreatedWidget(UWidgetBlueprint* WBP, UWidget* Widget)
@@ -254,7 +303,7 @@ namespace MonolithUI
         {
             return;
         }
-        RegisterVariableName(WBP, Widget->GetFName());
+        EnsureVariableGuid(WBP, Widget->GetFName(), Widget->GetPathName());
     }
 
     void ReconcileWidgetVariableGuids(UWidgetBlueprint* WBP)
@@ -265,20 +314,19 @@ namespace MonolithUI
         }
 
         TSet<FName> LiveVariableNames;
+        TMap<FName, FString> LiveVariableGuidSeeds;
 
         if (WBP->WidgetTree)
         {
-            TArray<UWidget*> LiveWidgets;
-            WBP->WidgetTree->GetAllWidgets(LiveWidgets);
-            for (UWidget* Widget : LiveWidgets)
+            WBP->ForEachSourceWidget([&LiveVariableNames, &LiveVariableGuidSeeds](UWidget* Widget)
             {
                 if (Widget)
                 {
                     const FName WidgetName = Widget->GetFName();
                     LiveVariableNames.Add(WidgetName);
-                    RegisterVariableName(WBP, WidgetName);
+                    LiveVariableGuidSeeds.Add(WidgetName, Widget->GetPathName());
                 }
-            }
+            });
         }
 
         for (UWidgetAnimation* Animation : WBP->Animations)
@@ -287,7 +335,7 @@ namespace MonolithUI
             {
                 const FName AnimationName = Animation->GetFName();
                 LiveVariableNames.Add(AnimationName);
-                RegisterVariableName(WBP, AnimationName);
+                LiveVariableGuidSeeds.Add(AnimationName, Animation->GetPathName());
             }
         }
 
@@ -303,6 +351,17 @@ namespace MonolithUI
         for (const FName& RemovedVariableName : RemovedVariableNames)
         {
             WBP->OnVariableRemoved(RemovedVariableName);
+        }
+
+        TMap<FGuid, FName> UsedGuids;
+        for (const FName& LiveVariableName : LiveVariableNames)
+        {
+            const FString* StableSeed = LiveVariableGuidSeeds.Find(LiveVariableName);
+            EnsureVariableGuid(
+                WBP,
+                LiveVariableName,
+                StableSeed ? *StableSeed : MakeVariableGuidSeed(WBP, LiveVariableName),
+                &UsedGuids);
         }
     }
 

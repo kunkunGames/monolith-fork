@@ -299,25 +299,27 @@ bool FRiskHotspotScoreFormulaTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("FHotspotScorer::Run"), bOk);
 
 	// Heavy.cpp should have max score (max churn × max complexity = 1.0 × 1.0 = 1.0).
-	FSQLitePreparedStatement Stmt;
-	TestTrue(TEXT("Prepare score query"),
-		Stmt.Create(Db, TEXT(
-			"SELECT score, normalised_churn, normalised_complexity "
-			"FROM risk_hotspot_scores WHERE file_path = ?;")));
-	Stmt.SetBindingValueByIndex(1, FString(TEXT("Source/Heavy.cpp")));
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		double Score = 0.0, NC = 0.0, NCmplx = 0.0;
-		Stmt.GetColumnValueByIndex(0, Score);
-		Stmt.GetColumnValueByIndex(1, NC);
-		Stmt.GetColumnValueByIndex(2, NCmplx);
-		TestEqual(TEXT("Heavy.cpp normalised_churn == 1.0"), NC, 1.0);
-		TestEqual(TEXT("Heavy.cpp normalised_complexity == 1.0"), NCmplx, 1.0);
-		TestEqual(TEXT("Heavy.cpp score == NC × NCmplx == 1.0"), Score, 1.0);
-	}
-	else
-	{
-		AddError(TEXT("Heavy.cpp row not found in risk_hotspot_scores"));
+		FSQLitePreparedStatement Stmt;
+		TestTrue(TEXT("Prepare score query"),
+			Stmt.Create(Db, TEXT(
+				"SELECT score, normalised_churn, normalised_complexity "
+				"FROM risk_hotspot_scores WHERE file_path = ?;")));
+		Stmt.SetBindingValueByIndex(1, FString(TEXT("Source/Heavy.cpp")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			double Score = 0.0, NC = 0.0, NCmplx = 0.0;
+			Stmt.GetColumnValueByIndex(0, Score);
+			Stmt.GetColumnValueByIndex(1, NC);
+			Stmt.GetColumnValueByIndex(2, NCmplx);
+			TestEqual(TEXT("Heavy.cpp normalised_churn == 1.0"), NC, 1.0);
+			TestEqual(TEXT("Heavy.cpp normalised_complexity == 1.0"), NCmplx, 1.0);
+			TestEqual(TEXT("Heavy.cpp score == NC × NCmplx == 1.0"), Score, 1.0);
+		}
+		else
+		{
+			AddError(TEXT("Heavy.cpp row not found in risk_hotspot_scores"));
+		}
 	}
 
 	Db.Close();

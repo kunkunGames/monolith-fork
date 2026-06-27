@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_system",
+  "route_edit_domain": "system",
+  "module_id": "asset_authoring.niagara.system",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.system",
+    "edit": "asset_operation.edit.niagara.system",
+    "save": "asset_operation.save.niagara.system",
+    "readback_verify": "asset_operation.readback_verify.niagara.system"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-321"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-321",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_system",
+      "blueprint_type": "",
+      "workflow": "niagara_system_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "set_system_property",
+        "set_emitter_loop_profile",
+        "set_fixed_bounds",
+        "save_system",
+        "list_emitters",
+        "get_system_summary",
+        "get_emitter_timing_summary",
+        "get_system_property",
+        "validate_system"
+      ],
+      "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-321",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "name": "BenchEmitter",
+            "sim_target": "cpu"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_system_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "property": "WarmupTime",
+            "value": "0.2"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_emitter_loop_profile",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "emitter": "BenchEmitter",
+            "loop_behavior": "Once",
+            "loop_duration": 0.4
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_fixed_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "min": [
+              -100.0,
+              -100.0,
+              -50.0
+            ],
+            "max": [
+              100.0,
+              100.0,
+              250.0
+            ]
+          },
+          "contains": [
+            "success",
+            "system"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_emitters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+          },
+          "contains": [
+            "BenchEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_system_summary",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+          },
+          "contains": [
+            "BenchEmitter",
+            "fixed_bounds",
+            "true"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_emitter_timing_summary",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "emitter": "BenchEmitter"
+          },
+          "contains": [
+            "BenchEmitter",
+            "0.4"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_system_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst",
+            "property": "WarmupTime"
+          },
+          "contains": [
+            "0.2"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "validate_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchBurst"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_system reports invalid Niagara system state as isError; emitters and timing are asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_system",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_system_roundtrip",
+      "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "set_system_property",
+          "set_emitter_loop_profile",
+          "set_fixed_bounds",
+          "save_system",
+          "list_emitters",
+          "get_system_summary",
+          "get_emitter_timing_summary",
+          "get_system_property",
+          "validate_system"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

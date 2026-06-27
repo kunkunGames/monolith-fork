@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_pause_menu_focus",
+  "route_edit_domain": "commonui_pause_menu_focus",
+  "module_id": "asset_authoring.ui.commonui_pause_menu_focus",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_pause_menu_focus",
+    "edit": "asset_operation.edit.ui.commonui_pause_menu_focus",
+    "save": "asset_operation.save.ui.commonui_pause_menu_focus",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_pause_menu_focus"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-470"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-470",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_pause_menu_focus",
+      "blueprint_type": "",
+      "workflow": "ui_commonui_pause_menu_focus_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_input_action_data_table",
+        "add_input_action_row",
+        "scaffold_pause_menu",
+        "save_asset",
+        "get_widget_tree",
+        "dump_widget_navigation",
+        "audit_focus_chain",
+        "audit_commonui_widget"
+      ],
+      "description": "Create a CommonUI pause-menu scaffold with an action table, save it, and read back widget tree, navigation, focus, and CommonUI audit state"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-470",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchPauseMenuActions",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_input_action_data_table",
+            "package_path": "/Game/Benchmarks/AssetAuthoring",
+            "asset_name": "DT_BenchPauseMenuActions"
+          },
+          "contains": [
+            "DT_BenchPauseMenuActions"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_input_action_row",
+            "table_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchPauseMenuActions",
+            "row_name": "Back",
+            "display_name": "Back",
+            "hold_display_name": "Hold Back",
+            "nav_bar_priority": 10,
+            "keyboard_key": "(Key=(KeyName=Escape))",
+            "gamepad_key": "(Key=(KeyName=Gamepad_FaceButton_Right))"
+          },
+          "contains": [
+            "Back"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_input_action_row",
+            "table_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchPauseMenuActions",
+            "row_name": "Confirm",
+            "display_name": "Confirm",
+            "hold_display_name": "Hold Confirm",
+            "nav_bar_priority": 20,
+            "keyboard_key": "(Key=(KeyName=Enter))",
+            "gamepad_key": "(Key=(KeyName=Gamepad_FaceButton_Bottom))"
+          },
+          "contains": [
+            "Confirm"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "scaffold_pause_menu",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu",
+            "action_table": "/Game/Benchmarks/AssetAuthoring/DT_BenchPauseMenuActions",
+            "button_names": [
+              "Resume",
+              "Settings",
+              "Inventory",
+              "Quit"
+            ]
+          },
+          "contains": [
+            "WBP_BenchCommonPauseMenu",
+            "Resume",
+            "Settings",
+            "Inventory",
+            "Quit",
+            "ActionBar",
+            "quit_requires_hold",
+            "true",
+            "focus_target_stamped"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchPauseMenuActions"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+          },
+          "contains": [
+            "Resume",
+            "Settings",
+            "Inventory",
+            "Quit",
+            "ActionBar",
+            "CommonBoundActionBar"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "dump_widget_navigation",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+          },
+          "contains": [
+            "Resume",
+            "Settings",
+            "Inventory",
+            "Quit",
+            "navigation"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_focus_chain",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+          },
+          "contains": [
+            "WBP_BenchCommonPauseMenu",
+            "desired_focus_target",
+            "Resume",
+            "dangling_explicit_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_commonui_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPauseMenu"
+          },
+          "contains": [
+            "WBP_BenchCommonPauseMenu",
+            "issue_count"
+          ],
+          "not_contains": [
+            "action_widget_unbound"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_pause_menu_focus",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_commonui_pause_menu_focus_roundtrip",
+      "description": "Create a CommonUI pause-menu scaffold with an action table, save it, and read back widget tree, navigation, focus, and CommonUI audit state",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-advanced-multiplatform-user-interfaces-with-common-ui-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUITemplateActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUINavigationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_input_action_data_table",
+          "add_input_action_row",
+          "scaffold_pause_menu",
+          "save_asset",
+          "get_widget_tree",
+          "dump_widget_navigation",
+          "audit_focus_chain",
+          "audit_commonui_widget"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

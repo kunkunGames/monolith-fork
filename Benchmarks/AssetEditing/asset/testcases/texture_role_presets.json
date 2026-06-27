@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "asset",
+  "asset_type_slug": "asset",
+  "edit_domain": "texture_role_presets",
+  "route_edit_domain": "texture_role_presets",
+  "module_id": "asset_authoring.asset.texture_role_presets",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.asset.texture_role_presets",
+    "edit": "asset_operation.edit.asset.texture_role_presets",
+    "save": "asset_operation.save.asset.texture_role_presets",
+    "readback_verify": "asset_operation.readback_verify.asset.texture_role_presets"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-282"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-282",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "texture_role_presets",
+      "blueprint_type": "",
+      "workflow": "texture_role_presets_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "find_assets",
+        "save_asset",
+        "get_texture_properties",
+        "inspect_asset"
+      ],
+      "description": "Import Texture2D assets with normal and ORM-mask role presets, save them, then read back compression, sRGB, LOD group, address mode, and AssetRegistry searchability"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-282",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchNormalRole",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchOrmRole"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchNormalRole",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "normal",
+            "save": true
+          },
+          "contains": [
+            "T_BenchNormalRole",
+            "texture_role",
+            "normal",
+            "TC_Normalmap",
+            "TEXTUREGROUP_WorldNormalMap",
+            "TA_Wrap"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchOrmRole",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "orm_mask",
+            "save": true
+          },
+          "contains": [
+            "T_BenchOrmRole",
+            "texture_role",
+            "orm_mask",
+            "TC_Masks",
+            "TEXTUREGROUP_WorldSpecular",
+            "TA_Wrap"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "find_assets",
+            "query": "BenchNormalRole",
+            "path": "/Game/Benchmarks/AssetAuthoring",
+            "recursive": true,
+            "class_names": [
+              "Texture2D"
+            ],
+            "limit": 5,
+            "include_tags": true,
+            "include_score_breakdown": true
+          },
+          "contains": [
+            "T_BenchNormalRole",
+            "Texture2D",
+            "score_breakdown",
+            "asset.inspect_asset"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchNormalRole"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOrmRole"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchNormalRole"
+          },
+          "contains": [
+            "T_BenchNormalRole",
+            "TC_Normalmap",
+            "false",
+            "TEXTUREGROUP_WorldNormalMap",
+            "TA_Wrap"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOrmRole"
+          },
+          "contains": [
+            "T_BenchOrmRole",
+            "TC_Masks",
+            "false",
+            "TEXTUREGROUP_WorldSpecular",
+            "TA_Wrap"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchNormalRole"
+          },
+          "contains": [
+            "T_BenchNormalRole",
+            "Texture2D",
+            "generated_texture_role",
+            "normal"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchOrmRole"
+          },
+          "contains": [
+            "T_BenchOrmRole",
+            "Texture2D",
+            "generated_texture_role",
+            "orm_mask"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "texture_role_presets",
+      "blueprint_type": "",
+      "domain": "asset",
+      "workflow": "texture_role_presets_roundtrip",
+      "description": "Import Texture2D assets with normal and ORM-mask role presets, save them, then read back compression, sRGB, LOD group, address mode, and AssetRegistry searchability",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/texture-asset-editor-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAsset/Private/MonolithAssetTextureIngestActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithMaterial/Private/MonolithMaterialActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "find_assets",
+          "save_asset",
+          "get_texture_properties",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

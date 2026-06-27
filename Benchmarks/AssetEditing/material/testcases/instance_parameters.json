@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_instance_parameters",
+  "route_edit_domain": "instance_parameters",
+  "module_id": "asset_authoring.material.instance_parameters",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.instance_parameters",
+    "edit": "asset_operation.edit.material.instance_parameters",
+    "save": "asset_operation.save.material.instance_parameters",
+    "readback_verify": "asset_operation.readback_verify.material.instance_parameters"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-336"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-336",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_instance_parameters",
+      "blueprint_type": "",
+      "workflow": "material_instance_parameter_overrides_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "create_material_instance",
+        "set_instance_parameters",
+        "save_material",
+        "get_instance_parameters",
+        "inspect_asset"
+      ],
+      "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-336",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchParamBase",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParamBase",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchParamBase"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParamBase",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BenchTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchTint"
+                  },
+                  "pos": [
+                    -360,
+                    -80
+                  ]
+                },
+                {
+                  "id": "BenchRoughness",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchRoughness"
+                  },
+                  "pos": [
+                    -360,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BenchTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "BenchRoughness",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "M_BenchParamBase"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides",
+            "parent_material": "/Game/Benchmarks/AssetAuthoring/M_BenchParamBase"
+          },
+          "contains": [
+            "MI_BenchParamOverrides"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides",
+            "parameters": [
+              {
+                "name": "BenchRoughness",
+                "type": "scalar",
+                "value": 0.42
+              },
+              {
+                "name": "BenchTint",
+                "type": "vector",
+                "value": {
+                  "R": 0.1,
+                  "G": 0.7,
+                  "B": 0.3,
+                  "A": 1.0
+                }
+              }
+            ]
+          },
+          "contains": [
+            "BenchRoughness",
+            "BenchTint"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParamBase"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides"
+          },
+          "contains": [
+            "BenchRoughness",
+            "BenchTint",
+            "is_overridden"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParamOverrides"
+          },
+          "contains": [
+            "MI_BenchParamOverrides",
+            "MaterialInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_instance_parameters",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_instance_parameter_overrides_roundtrip",
+      "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "create_material_instance",
+          "set_instance_parameters",
+          "save_material",
+          "get_instance_parameters",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

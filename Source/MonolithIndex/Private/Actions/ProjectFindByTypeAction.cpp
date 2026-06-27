@@ -11,14 +11,16 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 	// type-correctness (must be a string when supplied).
 	if (Params->HasField(TEXT("asset_type")))
 	{
-		if (!Params->TryGetStringField(TEXT("asset_type"), AssetClass))
+		if (!Params->HasTypedField<EJson::String>(TEXT("asset_type")) ||
+			!Params->TryGetStringField(TEXT("asset_type"), AssetClass))
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_type' parameter must be a string"), -32602);
 		}
 	}
 	if (AssetClass.IsEmpty() && Params->HasField(TEXT("asset_class")))
 	{
-		if (!Params->TryGetStringField(TEXT("asset_class"), AssetClass))
+		if (!Params->HasTypedField<EJson::String>(TEXT("asset_class")) ||
+			!Params->TryGetStringField(TEXT("asset_class"), AssetClass))
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_class' parameter must be a string"), -32602);
 		}
@@ -29,7 +31,8 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 	}
 	if (AssetClass.IsEmpty() && Params->HasField(TEXT("type")))
 	{
-		if (!Params->TryGetStringField(TEXT("type"), AssetClass))
+		if (!Params->HasTypedField<EJson::String>(TEXT("type")) ||
+			!Params->TryGetStringField(TEXT("type"), AssetClass))
 		{
 			return FMonolithActionResult::Error(TEXT("'type' parameter must be a string"), -32602);
 		}

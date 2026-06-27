@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "plane_cut_mirror_repair",
+  "route_edit_domain": "plane_cut_mirror_repair",
+  "module_id": "asset_authoring.mesh.plane_cut_mirror_repair",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.plane_cut_mirror_repair",
+    "edit": "asset_operation.edit.mesh.plane_cut_mirror_repair",
+    "save": "asset_operation.save.mesh.plane_cut_mirror_repair",
+    "readback_verify": "asset_operation.readback_verify.mesh.plane_cut_mirror_repair"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-474"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-474",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "plane_cut_mirror_repair",
+      "blueprint_type": "",
+      "workflow": "mesh_plane_cut_mirror_repair_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_plane_cut",
+        "mirror_mesh",
+        "fill_holes",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "list_handles",
+        "inspect_asset"
+      ],
+      "description": "Create a primitive mesh handle, plane-cut with hole filling, mirror and repair it, save as StaticMesh, release the handle, and inspect the saved mesh"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-474",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchPlaneCutMirrorRepair"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchPlaneCutMirror"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:box",
+            "handle": "AE_BenchPlaneCutMirror"
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "primitive:box",
+            "triangle_count",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_plane_cut",
+            "handle": "AE_BenchPlaneCutMirror",
+            "mode": "cut",
+            "origin": [
+              0.0,
+              0.0,
+              25.0
+            ],
+            "normal": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "fill_holes": true
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "cut",
+            "fill_holes",
+            "true",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "mirror_mesh",
+            "handle": "AE_BenchPlaneCutMirror",
+            "axis": "X",
+            "weld": true
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "X",
+            "weld",
+            "true",
+            "result_triangles"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "fill_holes",
+            "handle": "AE_BenchPlaneCutMirror"
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "holes_filled"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "save_handle",
+            "handle": "AE_BenchPlaneCutMirror",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPlaneCutMirrorRepair",
+            "overwrite": true,
+            "collision": "box"
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "SM_BenchPlaneCutMirrorRepair",
+            "saved"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchPlaneCutMirror"
+          },
+          "contains": [
+            "AE_BenchPlaneCutMirror",
+            "released"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPlaneCutMirrorRepair"
+          },
+          "contains": [
+            "SM_BenchPlaneCutMirrorRepair",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPlaneCutMirrorRepair"
+          },
+          "contains": [
+            "extent",
+            "volume_cm3",
+            "surface_area_cm2"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "list_handles"
+          },
+          "not_contains": [
+            "AE_BenchPlaneCutMirror"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPlaneCutMirrorRepair"
+          },
+          "contains": [
+            "SM_BenchPlaneCutMirrorRepair",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "plane_cut_mirror_repair",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_plane_cut_mirror_repair_roundtrip",
+      "description": "Create a primitive mesh handle, plane-cut with hole filling, mirror and repair it, save as StaticMesh, release the handle, and inspect the saved mesh",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshOperationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "release_handle",
+          "create_handle",
+          "geometry_plane_cut",
+          "mirror_mesh",
+          "fill_holes",
+          "save_handle",
+          "get_mesh_info",
+          "get_mesh_bounds",
+          "list_handles",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

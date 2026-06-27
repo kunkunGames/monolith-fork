@@ -1,0 +1,249 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "blueprint",
+  "asset_type_slug": "blueprint",
+  "module_id": "asset_authoring.blueprint",
+  "task_count": 4,
+  "operation_counts": {
+    "creation_or_import": 4,
+    "edit": 4,
+    "save": 4,
+    "readback_verify": 4
+  },
+  "lifecycle_counts": {
+    "create_save": 4
+  },
+  "edit_domain_count": 4,
+  "task_ids": [
+    "BEB-347",
+    "BEB-402",
+    "BEB-406",
+    "BEB-407"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-347",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_spec_builder",
+      "blueprint_type": "",
+      "workflow": "blueprint_spec_builder_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "build_blueprint_from_spec",
+        "save_asset",
+        "get_variables",
+        "get_components",
+        "get_graph_data",
+        "compile_blueprint"
+      ],
+      "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back"
+    },
+    {
+      "id": "BEB-402",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_asset_types",
+      "blueprint_type": "",
+      "workflow": "blueprint_asset_types_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "add_function",
+        "set_function_params",
+        "add_macro",
+        "compile_blueprint",
+        "save_asset",
+        "get_blueprint_info",
+        "get_functions",
+        "list_graphs",
+        "inspect_asset"
+      ],
+      "description": "Create Blueprint FunctionLibrary, MacroLibrary, and Interface assets, apply type-specific graph edits, save them, and read back asset type metadata"
+    },
+    {
+      "id": "BEB-406",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_duplicate_reparent",
+      "blueprint_type": "",
+      "workflow": "blueprint_duplicate_reparent_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "duplicate_blueprint",
+        "reparent_blueprint",
+        "compile_blueprint",
+        "save_asset",
+        "get_parent_class",
+        "inspect_asset"
+      ],
+      "description": "Create an Actor Blueprint asset, duplicate it, reparent the copy to Pawn, save both assets, and read the copied parent metadata back"
+    },
+    {
+      "id": "BEB-407",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_timeline_persistence",
+      "blueprint_type": "",
+      "workflow": "blueprint_timeline_persistence_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "add_timeline",
+        "compile_blueprint",
+        "add_timeline_track",
+        "set_timeline_keys",
+        "save_asset",
+        "get_timeline_data",
+        "inspect_asset"
+      ],
+      "description": "Create an Actor Blueprint, add a Timeline node plus float track keys, save it, and read the persisted timeline data back"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "blueprint_asset_types",
+      "route_edit_domain": "asset_types",
+      "module_id": "asset_authoring.blueprint.asset_types",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.blueprint.asset_types",
+        "edit": "asset_operation.edit.blueprint.asset_types",
+        "save": "asset_operation.save.blueprint.asset_types",
+        "readback_verify": "asset_operation.readback_verify.blueprint.asset_types"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-402"
+      ],
+      "case_file": "testcases\\asset_types.json"
+    },
+    {
+      "edit_domain": "blueprint_duplicate_reparent",
+      "route_edit_domain": "duplicate_reparent",
+      "module_id": "asset_authoring.blueprint.duplicate_reparent",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.blueprint.duplicate_reparent",
+        "edit": "asset_operation.edit.blueprint.duplicate_reparent",
+        "save": "asset_operation.save.blueprint.duplicate_reparent",
+        "readback_verify": "asset_operation.readback_verify.blueprint.duplicate_reparent"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-406"
+      ],
+      "case_file": "testcases\\duplicate_reparent.json"
+    },
+    {
+      "edit_domain": "blueprint_spec_builder",
+      "route_edit_domain": "spec_builder",
+      "module_id": "asset_authoring.blueprint.spec_builder",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.blueprint.spec_builder",
+        "edit": "asset_operation.edit.blueprint.spec_builder",
+        "save": "asset_operation.save.blueprint.spec_builder",
+        "readback_verify": "asset_operation.readback_verify.blueprint.spec_builder"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-347"
+      ],
+      "case_file": "testcases\\spec_builder.json"
+    },
+    {
+      "edit_domain": "blueprint_timeline_persistence",
+      "route_edit_domain": "timeline_persistence",
+      "module_id": "asset_authoring.blueprint.timeline_persistence",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.blueprint.timeline_persistence",
+        "edit": "asset_operation.edit.blueprint.timeline_persistence",
+        "save": "asset_operation.save.blueprint.timeline_persistence",
+        "readback_verify": "asset_operation.readback_verify.blueprint.timeline_persistence"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-407"
+      ],
+      "case_file": "testcases\\timeline_persistence.json"
+    }
+  ]
+}

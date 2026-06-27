@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_tree_maintenance",
+  "route_edit_domain": "widget_tree_maintenance",
+  "module_id": "asset_authoring.ui.widget_tree_maintenance",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_tree_maintenance",
+    "edit": "asset_operation.edit.ui.widget_tree_maintenance",
+    "save": "asset_operation.save.ui.widget_tree_maintenance",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_tree_maintenance"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-450"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-450",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_tree_maintenance",
+      "blueprint_type": "",
+      "workflow": "ui_widget_tree_maintenance_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "rename_widget",
+        "move_widget",
+        "remove_widget",
+        "compile_widget",
+        "save_asset",
+        "get_widget_tree",
+        "inspect_asset"
+      ],
+      "description": "Create a Widget Blueprint, add nested panels and a child widget, rename and move the child, remove the empty panel, save, and read the final widget tree back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-450",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchTreeMaintenance",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_class": "VerticalBox",
+            "widget_name": "BenchSourceColumn",
+            "position": {
+              "x": 24,
+              "y": 24
+            },
+            "size": {
+              "x": 280,
+              "y": 220
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchSourceColumn",
+            "VerticalBox"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_class": "HorizontalBox",
+            "widget_name": "BenchTargetRow",
+            "position": {
+              "x": 340,
+              "y": 24
+            },
+            "size": {
+              "x": 360,
+              "y": 96
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchTargetRow",
+            "HorizontalBox"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchTransientLabel",
+            "parent_name": "BenchSourceColumn",
+            "padding": {
+              "left": 8,
+              "top": 4,
+              "right": 8,
+              "bottom": 4
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchTransientLabel",
+            "TextBlock",
+            "BenchSourceColumn"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_name": "BenchTransientLabel",
+            "text": "Moved Tree Label",
+            "font_size": 18,
+            "compile": false
+          },
+          "contains": [
+            "BenchTransientLabel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "rename_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "old_name": "BenchTransientLabel",
+            "new_name": "BenchMovedLabel"
+          },
+          "contains": [
+            "BenchTransientLabel",
+            "BenchMovedLabel",
+            "recompiled",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "move_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_name": "BenchMovedLabel",
+            "new_parent_name": "BenchTargetRow",
+            "compile": false
+          },
+          "contains": [
+            "BenchMovedLabel",
+            "BenchSourceColumn",
+            "BenchTargetRow"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "remove_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance",
+            "widget_name": "BenchSourceColumn",
+            "compile": false
+          },
+          "contains": [
+            "removed",
+            "BenchSourceColumn"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance"
+          },
+          "contains": [
+            "BenchMovedLabel",
+            "BenchTargetRow",
+            "TextBlock",
+            "Moved Tree Label"
+          ],
+          "not_contains": [
+            "BenchTransientLabel",
+            "BenchSourceColumn"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTreeMaintenance"
+          },
+          "contains": [
+            "WBP_BenchTreeMaintenance",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_tree_maintenance",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_widget_tree_maintenance_roundtrip",
+      "description": "Create a Widget Blueprint, add nested panels and a child widget, rename and move the child, remove the empty panel, save, and read the final widget tree back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUISlotActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "rename_widget",
+          "move_widget",
+          "remove_widget",
+          "compile_widget",
+          "save_asset",
+          "get_widget_tree",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,794 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "module_id": "asset_authoring.ai",
+  "task_count": 14,
+  "operation_counts": {
+    "creation_or_import": 14,
+    "edit": 14,
+    "save": 14,
+    "readback_verify": 14
+  },
+  "lifecycle_counts": {
+    "create_save": 14
+  },
+  "edit_domain_count": 14,
+  "task_ids": [
+    "BEB-324",
+    "BEB-325",
+    "BEB-326",
+    "BEB-327",
+    "BEB-328",
+    "BEB-339",
+    "BEB-349",
+    "BEB-351",
+    "BEB-382",
+    "BEB-383",
+    "BEB-384",
+    "BEB-433",
+    "BEB-508",
+    "BEB-518"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-324",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_behavior_tree_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "add_bb_key",
+        "rename_bb_key",
+        "save_asset",
+        "create_behavior_tree",
+        "set_bt_blackboard",
+        "get_blackboard",
+        "get_behavior_tree"
+      ],
+      "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both"
+    },
+    {
+      "id": "BEB-325",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "eqs_query",
+      "blueprint_type": "",
+      "workflow": "ai_eqs_query_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_eqs_query",
+        "add_eqs_generator",
+        "add_eqs_test",
+        "configure_eqs_scoring",
+        "configure_eqs_filter",
+        "save_asset",
+        "get_eqs_query",
+        "validate_eqs_query"
+      ],
+      "description": "Create an EQS query, add a generator and scored/filtering test, save it, and inspect the query options"
+    },
+    {
+      "id": "BEB-326",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "eqs_query_mutation",
+      "blueprint_type": "",
+      "workflow": "ai_eqs_query_mutation_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_eqs_query",
+        "add_eqs_generator",
+        "add_eqs_test",
+        "reorder_eqs_tests",
+        "remove_eqs_test",
+        "duplicate_eqs_query",
+        "save_asset",
+        "get_eqs_query",
+        "inspect_asset"
+      ],
+      "description": "Create an EQS query, add two tests, reorder and remove tests, duplicate the query, save both assets, and inspect the edited structure"
+    },
+    {
+      "id": "BEB-327",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree_spec",
+      "blueprint_type": "",
+      "workflow": "ai_behavior_tree_spec_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_behavior_tree_from_spec",
+        "save_asset",
+        "get_behavior_tree",
+        "get_bt_graph",
+        "validate_behavior_tree"
+      ],
+      "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout"
+    },
+    {
+      "id": "BEB-328",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree_node_blueprints",
+      "blueprint_type": "",
+      "workflow": "ai_behavior_tree_node_blueprints_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_bt_task_blueprint",
+        "create_bt_decorator_blueprint",
+        "create_bt_service_blueprint",
+        "save_asset",
+        "get_parent_class",
+        "inspect_asset"
+      ],
+      "description": "Create BehaviorTree Task/Decorator/Service Blueprint assets, save them, and verify their parent classes"
+    },
+    {
+      "id": "BEB-339",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "ai_controller_perception",
+      "blueprint_type": "",
+      "workflow": "ai_controller_perception_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "save_asset",
+        "add_bb_key",
+        "create_behavior_tree",
+        "create_ai_controller",
+        "set_ai_team",
+        "set_ai_controller_flags",
+        "add_perception_component",
+        "configure_sight_sense",
+        "get_ai_controller",
+        "get_perception_config",
+        "validate_ai_controller"
+      ],
+      "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config"
+    },
+    {
+      "id": "BEB-349",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "blackboard_inheritance_duplicate",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_inheritance_duplicate_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "batch_add_bb_keys",
+        "save_asset",
+        "add_bb_key",
+        "duplicate_blackboard",
+        "get_blackboard",
+        "compare_blackboards"
+      ],
+      "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back"
+    },
+    {
+      "id": "BEB-351",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "blackboard_set_parent",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_set_parent_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "save_asset",
+        "batch_add_bb_keys",
+        "add_bb_key",
+        "set_bb_parent",
+        "get_blackboard",
+        "compare_blackboards"
+      ],
+      "description": "Create a child Blackboard without a parent, assign its parent via set_bb_parent, save, and verify inherited/local keys"
+    },
+    {
+      "id": "BEB-382",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "state_tree",
+      "blueprint_type": "",
+      "workflow": "ai_state_tree_asset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_state_tree",
+        "add_st_state",
+        "rename_st_state",
+        "compile_state_tree",
+        "save_asset",
+        "get_state_tree",
+        "validate_state_tree",
+        "inspect_asset"
+      ],
+      "description": "Create a StateTree asset, add and rename a root state, compile, save, and inspect the tree structure"
+    },
+    {
+      "id": "BEB-383",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "smart_object_definition",
+      "blueprint_type": "",
+      "workflow": "ai_smart_object_definition_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_smart_object_definition",
+        "add_so_slot",
+        "configure_so_slot",
+        "save_asset",
+        "get_smart_object_definition",
+        "validate_smart_object_definition",
+        "inspect_asset"
+      ],
+      "description": "Create a SmartObjectDefinition, add and configure a slot, save, and read slot metadata back"
+    },
+    {
+      "id": "BEB-384",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "smart_object_behavior_duplicate",
+      "blueprint_type": "",
+      "workflow": "ai_smart_object_behavior_duplicate_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_smart_object_definition",
+        "add_so_slot",
+        "add_so_behavior_definition",
+        "duplicate_smart_object_definition",
+        "save_asset",
+        "get_smart_object_definition",
+        "inspect_asset"
+      ],
+      "description": "Create a SmartObjectDefinition, add a slot behavior definition, duplicate the definition, save both assets, and inspect behavior metadata"
+    },
+    {
+      "id": "BEB-433",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree_granular_edit",
+      "blueprint_type": "",
+      "workflow": "ai_behavior_tree_granular_edit_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_behavior_tree",
+        "add_bt_node",
+        "set_bt_node_property",
+        "add_bt_decorator",
+        "add_bt_service",
+        "remove_bt_node",
+        "save_asset",
+        "get_behavior_tree",
+        "get_bt_node_properties",
+        "inspect_asset"
+      ],
+      "description": "Create a BehaviorTree with direct node, decorator, service, property, and delete edits, then read the exact authored graph back"
+    },
+    {
+      "id": "BEB-508",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "eqs_spec_builder",
+      "blueprint_type": "",
+      "workflow": "ai_eqs_spec_builder_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_eqs_query_from_spec",
+        "save_asset",
+        "get_eqs_query",
+        "validate_eqs_query",
+        "inspect_asset"
+      ],
+      "description": "Build an EQS query from a declarative generator/test/scoring/filter spec, save it, and verify the materialized query graph"
+    },
+    {
+      "id": "BEB-518",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "mass_entity_config",
+      "blueprint_type": "",
+      "workflow": "ai_mass_entity_config_trait_edit_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_mass_entity_config",
+        "list_mass_traits",
+        "add_mass_trait",
+        "save_asset",
+        "get_mass_entity_config",
+        "remove_mass_trait",
+        "validate_mass_entity_config",
+        "inspect_asset"
+      ],
+      "description": "Create a MassEntityConfigAsset, capture an available Mass trait class, add it, save and read it back, then remove the trait and validate the empty config warning"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "ai_controller_perception",
+      "route_edit_domain": "controller_perception",
+      "module_id": "asset_authoring.ai.controller_perception",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.controller_perception",
+        "edit": "asset_operation.edit.ai.controller_perception",
+        "save": "asset_operation.save.ai.controller_perception",
+        "readback_verify": "asset_operation.readback_verify.ai.controller_perception"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-339"
+      ],
+      "case_file": "testcases\\controller_perception.json"
+    },
+    {
+      "edit_domain": "behavior_tree",
+      "route_edit_domain": "behavior_tree",
+      "module_id": "asset_authoring.ai.behavior_tree",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree",
+        "edit": "asset_operation.edit.ai.behavior_tree",
+        "save": "asset_operation.save.ai.behavior_tree",
+        "readback_verify": "asset_operation.readback_verify.ai.behavior_tree"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-324"
+      ],
+      "case_file": "testcases\\behavior_tree.json"
+    },
+    {
+      "edit_domain": "behavior_tree_granular_edit",
+      "route_edit_domain": "behavior_tree_granular_edit",
+      "module_id": "asset_authoring.ai.behavior_tree_granular_edit",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree_granular_edit",
+        "edit": "asset_operation.edit.ai.behavior_tree_granular_edit",
+        "save": "asset_operation.save.ai.behavior_tree_granular_edit",
+        "readback_verify": "asset_operation.readback_verify.ai.behavior_tree_granular_edit"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-433"
+      ],
+      "case_file": "testcases\\behavior_tree_granular_edit.json"
+    },
+    {
+      "edit_domain": "behavior_tree_node_blueprints",
+      "route_edit_domain": "behavior_tree_node_blueprints",
+      "module_id": "asset_authoring.ai.behavior_tree_node_blueprints",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree_node_blueprints",
+        "edit": "asset_operation.edit.ai.behavior_tree_node_blueprints",
+        "save": "asset_operation.save.ai.behavior_tree_node_blueprints",
+        "readback_verify": "asset_operation.readback_verify.ai.behavior_tree_node_blueprints"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-328"
+      ],
+      "case_file": "testcases\\behavior_tree_node_blueprints.json"
+    },
+    {
+      "edit_domain": "behavior_tree_spec",
+      "route_edit_domain": "behavior_tree_spec",
+      "module_id": "asset_authoring.ai.behavior_tree_spec",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree_spec",
+        "edit": "asset_operation.edit.ai.behavior_tree_spec",
+        "save": "asset_operation.save.ai.behavior_tree_spec",
+        "readback_verify": "asset_operation.readback_verify.ai.behavior_tree_spec"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-327"
+      ],
+      "case_file": "testcases\\behavior_tree_spec.json"
+    },
+    {
+      "edit_domain": "blackboard_inheritance_duplicate",
+      "route_edit_domain": "blackboard_inheritance_duplicate",
+      "module_id": "asset_authoring.ai.blackboard_inheritance_duplicate",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.blackboard_inheritance_duplicate",
+        "edit": "asset_operation.edit.ai.blackboard_inheritance_duplicate",
+        "save": "asset_operation.save.ai.blackboard_inheritance_duplicate",
+        "readback_verify": "asset_operation.readback_verify.ai.blackboard_inheritance_duplicate"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-349"
+      ],
+      "case_file": "testcases\\blackboard_inheritance_duplicate.json"
+    },
+    {
+      "edit_domain": "blackboard_set_parent",
+      "route_edit_domain": "blackboard_set_parent",
+      "module_id": "asset_authoring.ai.blackboard_set_parent",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.blackboard_set_parent",
+        "edit": "asset_operation.edit.ai.blackboard_set_parent",
+        "save": "asset_operation.save.ai.blackboard_set_parent",
+        "readback_verify": "asset_operation.readback_verify.ai.blackboard_set_parent"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-351"
+      ],
+      "case_file": "testcases\\blackboard_set_parent.json"
+    },
+    {
+      "edit_domain": "eqs_query",
+      "route_edit_domain": "eqs_query",
+      "module_id": "asset_authoring.ai.eqs_query",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.eqs_query",
+        "edit": "asset_operation.edit.ai.eqs_query",
+        "save": "asset_operation.save.ai.eqs_query",
+        "readback_verify": "asset_operation.readback_verify.ai.eqs_query"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-325"
+      ],
+      "case_file": "testcases\\eqs_query.json"
+    },
+    {
+      "edit_domain": "eqs_query_mutation",
+      "route_edit_domain": "eqs_query_mutation",
+      "module_id": "asset_authoring.ai.eqs_query_mutation",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.eqs_query_mutation",
+        "edit": "asset_operation.edit.ai.eqs_query_mutation",
+        "save": "asset_operation.save.ai.eqs_query_mutation",
+        "readback_verify": "asset_operation.readback_verify.ai.eqs_query_mutation"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-326"
+      ],
+      "case_file": "testcases\\eqs_query_mutation.json"
+    },
+    {
+      "edit_domain": "eqs_spec_builder",
+      "route_edit_domain": "eqs_spec_builder",
+      "module_id": "asset_authoring.ai.eqs_spec_builder",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.eqs_spec_builder",
+        "edit": "asset_operation.edit.ai.eqs_spec_builder",
+        "save": "asset_operation.save.ai.eqs_spec_builder",
+        "readback_verify": "asset_operation.readback_verify.ai.eqs_spec_builder"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-508"
+      ],
+      "case_file": "testcases\\eqs_spec_builder.json"
+    },
+    {
+      "edit_domain": "mass_entity_config",
+      "route_edit_domain": "mass_entity_config",
+      "module_id": "asset_authoring.ai.mass_entity_config",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.mass_entity_config",
+        "edit": "asset_operation.edit.ai.mass_entity_config",
+        "save": "asset_operation.save.ai.mass_entity_config",
+        "readback_verify": "asset_operation.readback_verify.ai.mass_entity_config"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-518"
+      ],
+      "case_file": "testcases\\mass_entity_config.json"
+    },
+    {
+      "edit_domain": "smart_object_behavior_duplicate",
+      "route_edit_domain": "smart_object_behavior_duplicate",
+      "module_id": "asset_authoring.ai.smart_object_behavior_duplicate",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.smart_object_behavior_duplicate",
+        "edit": "asset_operation.edit.ai.smart_object_behavior_duplicate",
+        "save": "asset_operation.save.ai.smart_object_behavior_duplicate",
+        "readback_verify": "asset_operation.readback_verify.ai.smart_object_behavior_duplicate"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-384"
+      ],
+      "case_file": "testcases\\smart_object_behavior_duplicate.json"
+    },
+    {
+      "edit_domain": "smart_object_definition",
+      "route_edit_domain": "smart_object_definition",
+      "module_id": "asset_authoring.ai.smart_object_definition",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.smart_object_definition",
+        "edit": "asset_operation.edit.ai.smart_object_definition",
+        "save": "asset_operation.save.ai.smart_object_definition",
+        "readback_verify": "asset_operation.readback_verify.ai.smart_object_definition"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-383"
+      ],
+      "case_file": "testcases\\smart_object_definition.json"
+    },
+    {
+      "edit_domain": "state_tree",
+      "route_edit_domain": "state_tree",
+      "module_id": "asset_authoring.ai.state_tree",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.ai.state_tree",
+        "edit": "asset_operation.edit.ai.state_tree",
+        "save": "asset_operation.save.ai.state_tree",
+        "readback_verify": "asset_operation.readback_verify.ai.state_tree"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-382"
+      ],
+      "case_file": "testcases\\state_tree.json"
+    }
+  ]
+}

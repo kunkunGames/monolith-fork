@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_spec_builder",
+  "route_edit_domain": "widget_spec_builder",
+  "module_id": "asset_authoring.ui.widget_spec_builder",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_spec_builder",
+    "edit": "asset_operation.edit.ui.widget_spec_builder",
+    "save": "asset_operation.save.ui.widget_spec_builder",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_spec_builder"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-401"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-401",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_spec_builder",
+      "blueprint_type": "",
+      "workflow": "ui_spec_builder_dump_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_ui_from_spec",
+        "save_asset",
+        "get_widget_tree",
+        "dump_ui_spec",
+        "inspect_asset"
+      ],
+      "description": "Build a Widget Blueprint from a UISpec document, save it, dump the UISpec back, and verify the generated widget tree"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-401",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "build_ui_from_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder",
+            "overwrite": true,
+            "request_id": "asset-editing-ui-spec-builder",
+            "spec": {
+              "version": 1,
+              "name": "BenchSpecBuilder",
+              "parentClass": "UserWidget",
+              "rootWidget": {
+                "type": "VerticalBox",
+                "id": "BenchSpecRoot",
+                "children": [
+                  {
+                    "type": "TextBlock",
+                    "id": "BenchSpecLabel",
+                    "content": {
+                      "text": "AssetEditing Spec",
+                      "fontSize": 22
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "contains": [
+            "bSuccess",
+            "true",
+            "WBP_BenchSpecBuilder",
+            "asset-editing-ui-spec-builder",
+            "node_counts"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder"
+          },
+          "contains": [
+            "BenchSpecRoot",
+            "BenchSpecLabel",
+            "VerticalBox",
+            "TextBlock",
+            "AssetEditing Spec"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "dump_ui_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder",
+            "emit_defaults": false,
+            "request_id": "asset-editing-ui-spec-dump"
+          },
+          "contains": [
+            "bSuccess",
+            "true",
+            "rootWidget",
+            "BenchSpecLabel",
+            "AssetEditing Spec",
+            "fontSize",
+            "22"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSpecBuilder"
+          },
+          "contains": [
+            "WBP_BenchSpecBuilder",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_spec_builder",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_spec_builder_dump_roundtrip",
+      "description": "Build a Widget Blueprint from a UISpec document, save it, dump the UISpec back, and verify the generated widget tree",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "build_ui_from_spec",
+          "save_asset",
+          "get_widget_tree",
+          "dump_ui_spec",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

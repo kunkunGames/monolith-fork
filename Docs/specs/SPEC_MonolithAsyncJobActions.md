@@ -4,7 +4,7 @@
 | --- | --- |
 | Module | MonolithCore (actions), MonolithIndex / MonolithAI (producers) |
 | Slice | P1b (PRD Spec 10 — UnrealMCP async-jobs port) |
-| Status | Implemented, dark by default |
+| Status | Implemented, async jobs on by default |
 | Owner action gate | `UMonolithSettings::bEnableAsyncJobs`, `UMonolithSettings::bEnableZoneGraphRebuildJob` |
 | Depends on | `FMonolithAsyncJobRegistry` (SPEC_MonolithAsyncJobRegistry) |
 
@@ -13,11 +13,11 @@
 ## 1. Overview
 
 P1b wires two polling actions onto the in-memory `FMonolithAsyncJobRegistry`
-and migrates two long-running producers onto it, all behind feature flags that
-default to `false`. With every flag off the behavior is byte-identical to the
-pre-slice contract: the two actions are discoverable but return a `disabled`
-report, `monolith.reindex` returns its unchanged `reindex_started` payload, and
-`ai.rebuild_zone_graph` returns its unchanged `unavailable` report.
+and migrates long-running producers onto it. `bEnableAsyncJobs` defaults to
+`true` so `monolith.reindex` returns a registry-backed `job_id` by default;
+turning the flag off preserves the legacy `reindex_started` payload and makes
+`get_job` / `cancel_job` return disabled reports. Domain-specific producers can
+still have their own additional gates, such as `bEnableZoneGraphRebuildJob`.
 
 ---
 
@@ -40,23 +40,28 @@ the honest answer, never an error.
 ### 2.2 `monolith.cancel_job`
 
 When enabled, calls `RequestCancel(job_id)` (cooperative — sets a flag, does not
-interrupt running work) then returns `GetJobJson(job_id)` so the caller observes
-the post-request row (`status:"cancelled"` for a known non-terminal job, the
-existing terminal status for a known terminal job, `not_found` otherwise).
+interrupt running work or claim terminal cancellation) then returns
+`GetJobJson(job_id)` so the caller observes the post-request row. Known
+cancellable non-terminal jobs keep their current status with
+`cancel_requested:true` until the producer observes the request and calls
+`CancelJob`; known terminal jobs keep their existing terminal status, and
+unknown jobs return `not_found`.
 
 ---
 
 ## 3. Producers
 
-### 3.1 `monolith.reindex` (gate: `bEnableAsyncJobs`)
+### 3.1 `monolith.reindex` (gate: `bEnableAsyncJobs`, default on)
 
-The existing `status:"reindex_started"` payload and message are preserved
-byte-for-byte (Contract Preservation §9) for legacy calls and async calls whose
-index start is accepted. When the flag is on, the handler additionally calls
-`SubmitJob("project","reindex")`, seeds 0% progress, and adds two fields:
-`job_id` and `poll_action:"monolith.get_job"`. If the job-aware index start
-returns `false`, the action response uses `status:"reindex_not_started"` and
-the submitted job row carries the failure details.
+With the flag on, an accepted async start returns `status:"started"` plus
+`legacy_status:"reindex_started"`, `job_id`, `poll_action:"monolith.get_job"`,
+`cancel_action:"monolith.cancel_job"`, `supports_progress:true`, and
+`cancellable:true`. The handler calls `SubmitJob("project","reindex")`, seeds
+0% progress through MonolithIndex, and lets the submitted row carry the final
+terminal state. If the job-aware index start returns `false`, the action response
+uses `status:"reindex_not_started"` and the submitted job row carries the
+failure details. With the flag off, the handler keeps the legacy
+`status:"reindex_started"` response without async fields.
 
 When the flag is on, `HandleReindex` calls the job-aware reflected entry points
 on `UMonolithIndexSubsystem` (`StartFullIndexWithAsyncJob` /
@@ -69,6 +74,7 @@ so it also drives the submitted row to an honest terminal state:
 | Incremental indexing finds no changes | Completed | `completed` |
 | The index database is unavailable or the worker fails to start | Failed | `failed` |
 | Indexing is already in progress | Failed | `failed` |
+| `monolith.cancel_job` is requested but not yet observed by the indexer | Pending/Running | `cancel_requested:true` |
 | `monolith.cancel_job` is observed at an index checkpoint | Cancelled | `cancelled` |
 
 The handler does not synthesize terminal states in MonolithCore. If the
@@ -79,21 +85,28 @@ handler returns `status:"function_not_found"` with `job_id` / `poll_action`.
 
 Off for either flag preserves the legacy `MakeUnavailable` report with no async fields, because
 the producer must not return a `job_id` that cannot be polled through `monolith.get_job`. When
-both flags are on, the handler mints `SubmitJob("ai","rebuild_zone_graph")` and always returns a
-pollable `job_id` + `poll_action`. Inside a `#if WITH_ZONEGRAPH` guard plus a `GEditor`
-null-check, the handler broadcasts `UE::ZoneGraphDelegates::OnZoneGraphRequestRebuild`
-— the only public, supported editor entry point for a full rebuild
+both flags are on, the handler mints `SubmitJob("ai","rebuild_zone_graph")`, seeds
+`0%/queued` progress, and returns a P0.6 long-action envelope:
+`status:"started"`, `job_id`, `poll_action:"monolith.get_job"`,
+`cancel_action:"monolith.cancel_job"`, `supports_progress:true`,
+`cancellable:true`, and a `progress` object. The rebuild producer then runs from
+the next editor tick and owns the terminal registry state.
+
+Inside a `#if WITH_ZONEGRAPH` guard plus a `GEditor` null-check, the deferred
+producer broadcasts `UE::ZoneGraphDelegates::OnZoneGraphRequestRebuild` — the
+only public, supported editor entry point for a full rebuild
 (`UZoneGraphSubsystem::RebuildGraph` and `FZoneGraphBuilder::RequestRebuild` are
 protected). The subsystem's `OnRequestRebuild` handler runs the complete
-orchestrated `RebuildGraph(true)` synchronously on that broadcast, so reporting
-`completed` after `Broadcast()` returns is honest, not faked.
+orchestrated `RebuildGraph(true)` synchronously on that broadcast, so the job is
+marked `completed` only after `Broadcast()` returns. The immediate action
+response never claims completion.
 
 Honest terminal states only:
 
 | Condition | Job state | Result status |
 | --- | --- | --- |
-| `WITH_ZONEGRAPH` and `GEditor` available | Completed | `completed` |
-| cancellation requested before completion of the synchronous broadcast | Cancelled | `cancelled` |
+| `WITH_ZONEGRAPH` and `GEditor` available, producer queued | Running, then Completed after broadcast | `started` |
+| cancellation requested before the deferred producer starts or before broadcast | Cancelled after producer acknowledgement | `started` |
 | `GEditor` null | Failed | `failed` |
 | `WITH_ZONEGRAPH=0` | Failed | `failed` |
 
@@ -113,9 +126,9 @@ Honest terminal states only:
 | reindex does not overwrite cancelled | `Monolith.IndexGuard.Project.AsyncJobDoesNotOverwriteCancelled` | late completion after cancellation leaves the row `cancelled` |
 | rebuild async disabled | `Monolith.AI.ZoneGraphRebuildJob.AsyncJobsDisabled` | legacy `unavailable`; no `job_id`/`poll_action` |
 | rebuild producer disabled | `Monolith.AI.ZoneGraphRebuildJob.Disabled` | legacy `unavailable`; no `job_id`/`poll_action` |
-| rebuild enabled | `Monolith.AI.ZoneGraphRebuildJob.Enabled` | `job_id`+`poll_action` present; honest terminal state matches registry row |
-| rebuild cancelled after submit | `Monolith.AI.ZoneGraphRebuildJob.CancelledAfterSubmit` | test hook requests cancellation after job mint; result and registry row remain `cancelled` |
-| rebuild cancelled before broadcast | `Monolith.AI.ZoneGraphRebuildJob.CancelledBeforeBroadcast` (`WITH_ZONEGRAPH=1` targets only) | test hook requests cancellation after 10% progress and before `OnZoneGraphRequestRebuild`; result and registry row remain `cancelled` |
+| rebuild enabled | `Monolith.AI.ZoneGraphRebuildJob.Enabled` | `status:"started"` envelope includes `job_id`, `poll_action`, `cancel_action`, `supports_progress`, `cancellable`, and progress; deferred work drives the registry row to an honest terminal state |
+| rebuild cancelled after submit | `Monolith.AI.ZoneGraphRebuildJob.CancelledAfterSubmit` | test hook requests cancellation after job mint; action returns `started`, registry row reports `cancel_requested`, and deferred producer acknowledges `cancelled` |
+| rebuild cancelled before broadcast | `Monolith.AI.ZoneGraphRebuildJob.CancelledBeforeBroadcast` (`WITH_ZONEGRAPH=1` targets only) | test hook requests cancellation after 10% progress and before `OnZoneGraphRequestRebuild`; action returns `started`, registry row becomes `cancelled` before broadcast |
 
 Test sources:
 `Plugins\Monolith\Source\MonolithCore\Private\Tests\MonolithAsyncJobActionsTests.cpp`,

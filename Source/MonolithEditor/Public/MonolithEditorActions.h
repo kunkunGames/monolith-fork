@@ -5,15 +5,16 @@
 #include "Misc/OutputDevice.h"
 #include "Components/SceneCaptureComponent2D.h" // ESceneCaptureSource
 
-struct FMonolithLogEntry
+struct MONOLITHEDITOR_API FMonolithLogEntry
 {
+	int64 Sequence = 0;
 	double Timestamp;
 	FName Category;
 	ELogVerbosity::Type Verbosity;
 	FString Message;
 };
 
-class FMonolithLogCapture : public FOutputDevice
+class MONOLITHEDITOR_API FMonolithLogCapture : public FOutputDevice
 {
 public:
 	static constexpr int32 MaxEntries = 10000;
@@ -23,10 +24,12 @@ public:
 	TArray<FMonolithLogEntry> GetRecentEntries(int32 Count) const;
 	TArray<FMonolithLogEntry> SearchEntries(const FString& Pattern, const FString& CategoryFilter, ELogVerbosity::Type MaxVerbosity, int32 Limit) const;
 	TArray<FMonolithLogEntry> GetEntriesSince(double SinceTimestamp, const TArray<FName>& CategoryFilter, ELogVerbosity::Type MaxVerbosity, int32 Limit) const;
+	TArray<FMonolithLogEntry> GetEntriesAfter(int64 Sequence, const TArray<FName>& CategoryFilter, ELogVerbosity::Type MaxVerbosity, int32 Limit) const;
 	TArray<FString> GetActiveCategories() const;
 
 	int32 GetCountByVerbosity(ELogVerbosity::Type Verbosity) const;
 	int32 GetTotalCount() const;
+	int64 GetLatestSequence() const;
 	int32 CountErrorsSince(double SinceTimestamp) const;
 
 private:
@@ -34,6 +37,7 @@ private:
 	TArray<FMonolithLogEntry> RingBuffer;
 	int32 WriteIndex = 0;
 	bool bWrapped = false;
+	int64 NextSequence = 1;
 
 	int32 TotalFatal = 0;
 	int32 TotalError = 0;
@@ -42,11 +46,12 @@ private:
 	int32 TotalVerbose = 0;
 };
 
-class FMonolithEditorActions
+class MONOLITHEDITOR_API FMonolithEditorActions
 {
 public:
 	static void RegisterActions(FMonolithLogCapture* LogCapture);
 	static void InitLiveCodingDelegate();
+	static FMonolithLogCapture* GetLogCapture();
 
 	static FMonolithActionResult HandleTriggerBuild(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetBuildErrors(const TSharedPtr<FJsonObject>& Params);

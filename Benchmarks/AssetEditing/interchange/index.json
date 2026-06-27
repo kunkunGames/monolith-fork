@@ -1,0 +1,450 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "module_id": "asset_authoring.interchange",
+  "task_count": 8,
+  "operation_counts": {
+    "creation_or_import": 8,
+    "edit": 8,
+    "save": 8,
+    "readback_verify": 8
+  },
+  "lifecycle_counts": {
+    "create_save": 8
+  },
+  "edit_domain_count": 8,
+  "task_ids": [
+    "BEB-285",
+    "BEB-286",
+    "BEB-287",
+    "BEB-288",
+    "BEB-352",
+    "BEB-392",
+    "BEB-409",
+    "BEB-416"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-285",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_texture_import",
+      "blueprint_type": "",
+      "workflow": "interchange_texture_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_texture",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
+    },
+    {
+      "id": "BEB-286",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_static_mesh_reimport_export",
+      "blueprint_type": "",
+      "workflow": "interchange_static_mesh_reimport_export_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_mesh",
+        "save_asset",
+        "can_reimport",
+        "update_reimport_path",
+        "reimport_asset",
+        "export_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
+    },
+    {
+      "id": "BEB-287",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_scene_import",
+      "blueprint_type": "",
+      "workflow": "interchange_scene_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_scene",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
+    },
+    {
+      "id": "BEB-288",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_audio_import",
+      "blueprint_type": "",
+      "workflow": "interchange_audio_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_audio",
+        "save_asset",
+        "get_import_data",
+        "get_sound_wave_info",
+        "inspect_asset"
+      ],
+      "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
+    },
+    {
+      "id": "BEB-352",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_batch_import",
+      "blueprint_type": "",
+      "workflow": "interchange_batch_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_assets",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
+    },
+    {
+      "id": "BEB-392",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_generic_options_import",
+      "blueprint_type": "",
+      "workflow": "interchange_generic_options_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_with_options",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
+    },
+    {
+      "id": "BEB-409",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_batch_reimport",
+      "blueprint_type": "",
+      "workflow": "interchange_batch_reimport_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_assets",
+        "batch_rename_assets",
+        "reimport_assets",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
+    },
+    {
+      "id": "BEB-416",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_generic_import",
+      "blueprint_type": "",
+      "workflow": "interchange_generic_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_asset",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a Texture2D through the generic Interchange import_asset entrypoint, save it, and read back import source metadata"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "interchange_audio_import",
+      "route_edit_domain": "audio_import",
+      "module_id": "asset_authoring.interchange.audio_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.audio_import",
+        "edit": "asset_operation.edit.interchange.audio_import",
+        "save": "asset_operation.save.interchange.audio_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.audio_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-288"
+      ],
+      "case_file": "testcases\\audio_import.json"
+    },
+    {
+      "edit_domain": "interchange_batch_import",
+      "route_edit_domain": "batch_import",
+      "module_id": "asset_authoring.interchange.batch_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.batch_import",
+        "edit": "asset_operation.edit.interchange.batch_import",
+        "save": "asset_operation.save.interchange.batch_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.batch_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-352"
+      ],
+      "case_file": "testcases\\batch_import.json"
+    },
+    {
+      "edit_domain": "interchange_batch_reimport",
+      "route_edit_domain": "batch_reimport",
+      "module_id": "asset_authoring.interchange.batch_reimport",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.batch_reimport",
+        "edit": "asset_operation.edit.interchange.batch_reimport",
+        "save": "asset_operation.save.interchange.batch_reimport",
+        "readback_verify": "asset_operation.readback_verify.interchange.batch_reimport"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-409"
+      ],
+      "case_file": "testcases\\batch_reimport.json"
+    },
+    {
+      "edit_domain": "interchange_generic_import",
+      "route_edit_domain": "generic_import",
+      "module_id": "asset_authoring.interchange.generic_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.generic_import",
+        "edit": "asset_operation.edit.interchange.generic_import",
+        "save": "asset_operation.save.interchange.generic_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.generic_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-416"
+      ],
+      "case_file": "testcases\\generic_import.json"
+    },
+    {
+      "edit_domain": "interchange_generic_options_import",
+      "route_edit_domain": "generic_options_import",
+      "module_id": "asset_authoring.interchange.generic_options_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.generic_options_import",
+        "edit": "asset_operation.edit.interchange.generic_options_import",
+        "save": "asset_operation.save.interchange.generic_options_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.generic_options_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-392"
+      ],
+      "case_file": "testcases\\generic_options_import.json"
+    },
+    {
+      "edit_domain": "interchange_scene_import",
+      "route_edit_domain": "scene_import",
+      "module_id": "asset_authoring.interchange.scene_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.scene_import",
+        "edit": "asset_operation.edit.interchange.scene_import",
+        "save": "asset_operation.save.interchange.scene_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.scene_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-287"
+      ],
+      "case_file": "testcases\\scene_import.json"
+    },
+    {
+      "edit_domain": "interchange_static_mesh_reimport_export",
+      "route_edit_domain": "static_mesh_reimport_export",
+      "module_id": "asset_authoring.interchange.static_mesh_reimport_export",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.static_mesh_reimport_export",
+        "edit": "asset_operation.edit.interchange.static_mesh_reimport_export",
+        "save": "asset_operation.save.interchange.static_mesh_reimport_export",
+        "readback_verify": "asset_operation.readback_verify.interchange.static_mesh_reimport_export"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-286"
+      ],
+      "case_file": "testcases\\static_mesh_reimport_export.json"
+    },
+    {
+      "edit_domain": "interchange_texture_import",
+      "route_edit_domain": "texture_import",
+      "module_id": "asset_authoring.interchange.texture_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.interchange.texture_import",
+        "edit": "asset_operation.edit.interchange.texture_import",
+        "save": "asset_operation.save.interchange.texture_import",
+        "readback_verify": "asset_operation.readback_verify.interchange.texture_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-285"
+      ],
+      "case_file": "testcases\\texture_import.json"
+    }
+  ]
+}

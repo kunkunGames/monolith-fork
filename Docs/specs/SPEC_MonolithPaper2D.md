@@ -57,4 +57,4 @@ The single-asset response contract is documented in [SPEC_MonolithPaper2DAssetMe
 |------|----------|
 | Registration | `FMonolithPaper2DModule::StartupModule` registers `paper2d.get_status`, `paper2d.list_assets`, and `paper2d.get_asset`. |
 | Parameter guard | `FMonolithPaper2DAssetRejectsUnsafePathTest` rejects filesystem paths before AssetRegistry lookup. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

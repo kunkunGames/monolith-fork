@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_class_mix_ducking",
+  "route_edit_domain": "sound_class_mix_ducking",
+  "module_id": "asset_authoring.audio.sound_class_mix_ducking",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_class_mix_ducking",
+    "edit": "asset_operation.edit.audio.sound_class_mix_ducking",
+    "save": "asset_operation.save.audio.sound_class_mix_ducking",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_class_mix_ducking"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-356"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-356",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_class_mix_ducking",
+      "blueprint_type": "",
+      "workflow": "audio_soundclass_mix_ducking_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sound_class",
+        "set_sound_class_properties",
+        "create_sound_mix",
+        "set_sound_mix_settings",
+        "save_asset",
+        "get_sound_class_properties",
+        "get_sound_mix_settings"
+      ],
+      "description": "Create parent/child SoundClass assets and a SoundMix ducking adjuster, save them, then read hierarchy and mix timing back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-356",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic",
+              "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusicChild",
+              "/Game/Benchmarks/AssetAuthoring/Mix_BenchMusicDucking"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_class",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic",
+            "properties": {
+              "Volume": 0.82
+            }
+          },
+          "contains": [
+            "SoundClass_BenchMusic",
+            "Volume"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_class",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusicChild",
+            "parent_class": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic",
+            "properties": {
+              "Volume": 0.7
+            }
+          },
+          "contains": [
+            "SoundClass_BenchMusicChild",
+            "SoundClass_BenchMusic"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_sound_class_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusicChild",
+            "parent_class": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic",
+            "properties": {
+              "Volume": 0.58,
+              "Pitch": 1.05
+            }
+          },
+          "contains": [
+            "SoundClass_BenchMusicChild",
+            "SoundClass_BenchMusic",
+            "Volume"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_mix",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchMusicDucking"
+          },
+          "contains": [
+            "Mix_BenchMusicDucking"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_sound_mix_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchMusicDucking",
+            "class_effects": [
+              {
+                "SoundClass": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic",
+                "VolumeAdjuster": 0.45,
+                "PitchAdjuster": 1.0,
+                "LowPassFilterFrequency": 12000.0,
+                "bApplyToChildren": true
+              }
+            ],
+            "initial_delay": 0.05,
+            "fade_in_time": 0.15,
+            "duration": 1.25,
+            "fade_out_time": 0.2
+          },
+          "contains": [
+            "class_effects",
+            "VolumeAdjuster",
+            "duration",
+            "fade_out_time"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusic"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusicChild"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchMusicDucking"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_class_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchMusicChild"
+          },
+          "contains": [
+            "SoundClass_BenchMusic",
+            "Volume",
+            "0.579",
+            "Pitch"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_mix_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchMusicDucking"
+          },
+          "contains": [
+            "Mix_BenchMusicDucking",
+            "SoundClass_BenchMusic",
+            "VolumeAdjuster",
+            "fade_in_time"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_class_mix_ducking",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_soundclass_mix_ducking_roundtrip",
+      "description": "Create parent/child SoundClass assets and a SoundMix ducking adjuster, save them, then read hierarchy and mix timing back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sound_class",
+          "set_sound_class_properties",
+          "create_sound_mix",
+          "set_sound_mix_settings",
+          "save_asset",
+          "get_sound_class_properties",
+          "get_sound_mix_settings"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

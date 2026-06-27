@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_emitter_topology",
+  "route_edit_domain": "emitter_topology",
+  "module_id": "asset_authoring.niagara.emitter_topology",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.emitter_topology",
+    "edit": "asset_operation.edit.niagara.emitter_topology",
+    "save": "asset_operation.save.niagara.emitter_topology",
+    "readback_verify": "asset_operation.readback_verify.niagara.emitter_topology"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-414"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-414",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_emitter_topology",
+      "blueprint_type": "",
+      "workflow": "niagara_emitter_topology_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "duplicate_emitter",
+        "rename_emitter",
+        "save_system",
+        "list_emitters",
+        "get_system_summary",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-414",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+          },
+          "contains": [
+            "NS_BenchEmitterTopology"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology",
+            "name": "BenchSourceEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "BenchSourceEmitter"
+          ],
+          "capture": {
+            "source_emitter": "$.handle_id"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "duplicate_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology",
+            "source_emitter": "${source_emitter}",
+            "new_name": "BenchDuplicatedEmitter"
+          },
+          "contains": [
+            "handle_id"
+          ],
+          "capture": {
+            "duplicated_emitter": "$.handle_id"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "rename_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology",
+            "emitter": "${duplicated_emitter}",
+            "name": "BenchRenamedEmitter"
+          },
+          "contains": [
+            "requested_name",
+            "BenchRenamedEmitter",
+            "actual_name",
+            "BenchRenamedEmitter",
+            "name_changed",
+            "true"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_emitters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+          },
+          "contains": [
+            "BenchSourceEmitter",
+            "BenchRenamedEmitter",
+            "count",
+            "2"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_system_summary",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+          },
+          "contains": [
+            "BenchSourceEmitter",
+            "BenchRenamedEmitter"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEmitterTopology"
+          },
+          "contains": [
+            "NS_BenchEmitterTopology",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_emitter_topology",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_emitter_topology_roundtrip",
+      "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "duplicate_emitter",
+          "rename_emitter",
+          "save_system",
+          "list_emitters",
+          "get_system_summary",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

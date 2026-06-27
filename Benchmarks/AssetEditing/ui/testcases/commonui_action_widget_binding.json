@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_action_widget_binding",
+  "route_edit_domain": "commonui_action_widget_binding",
+  "module_id": "asset_authoring.ui.commonui_action_widget_binding",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_action_widget_binding",
+    "edit": "asset_operation.edit.ui.commonui_action_widget_binding",
+    "save": "asset_operation.save.ui.commonui_action_widget_binding",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_action_widget_binding"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-468"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-468",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_action_widget_binding",
+      "blueprint_type": "",
+      "workflow": "ui_commonui_action_widget_binding_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_input_action_data_table",
+        "add_input_action_row",
+        "create_widget_blueprint",
+        "add_widget",
+        "bind_common_action_widget",
+        "save_asset",
+        "audit_commonui_widget",
+        "get_widget_tree",
+        "get_data_table_rows"
+      ],
+      "description": "Create a CommonUI input-action DataTable and Widget Blueprint, bind a UCommonActionWidget to the row, save, and audit the widget binding"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-468",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActionBinding",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_input_action_data_table",
+            "package_path": "/Game/Benchmarks/AssetAuthoring",
+            "asset_name": "DT_BenchCommonActionBinding"
+          },
+          "contains": [
+            "DT_BenchCommonActionBinding"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_input_action_row",
+            "table_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActionBinding",
+            "row_name": "BenchConfirm",
+            "display_name": "Bench Confirm",
+            "hold_display_name": "Hold Bench Confirm",
+            "nav_bar_priority": 20,
+            "keyboard_key": "(Key=(KeyName=Enter))",
+            "gamepad_key": "(Key=(KeyName=Gamepad_FaceButton_Bottom))"
+          },
+          "contains": [
+            "BenchConfirm"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchCommonActionGlyph",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph",
+            "widget_class": "CommonActionWidget",
+            "widget_name": "BenchActionGlyph",
+            "anchor_preset": "center",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "x": 96,
+              "y": 96
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchActionGlyph",
+            "CommonActionWidget"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "bind_common_action_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph",
+            "widget_name": "BenchActionGlyph",
+            "table_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActionBinding",
+            "row_name": "BenchConfirm"
+          },
+          "contains": [
+            "WBP_BenchCommonActionGlyph",
+            "BenchActionGlyph",
+            "DT_BenchCommonActionBinding",
+            "BenchConfirm"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActionBinding"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_commonui_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph"
+          },
+          "contains": [
+            "action_widgets_scanned",
+            "1"
+          ],
+          "not_contains": [
+            "action_widget_unbound"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonActionGlyph"
+          },
+          "contains": [
+            "BenchActionGlyph",
+            "CommonActionWidget"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActionBinding"
+          },
+          "contains": [
+            "BenchConfirm",
+            "Bench Confirm"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_action_widget_binding",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_commonui_action_widget_binding_roundtrip",
+      "description": "Create a CommonUI input-action DataTable and Widget Blueprint, bind a UCommonActionWidget to the row, save, and audit the widget binding",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/overview-of-advanced-multiplatform-user-interfaces-with-common-ui-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUIInputActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/CommonUI/MonolithCommonUIAuditActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_input_action_data_table",
+          "add_input_action_row",
+          "create_widget_blueprint",
+          "add_widget",
+          "bind_common_action_widget",
+          "save_asset",
+          "audit_commonui_widget",
+          "get_widget_tree",
+          "get_data_table_rows"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

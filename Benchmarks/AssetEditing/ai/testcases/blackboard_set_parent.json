@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "blackboard_set_parent",
+  "route_edit_domain": "blackboard_set_parent",
+  "module_id": "asset_authoring.ai.blackboard_set_parent",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.blackboard_set_parent",
+    "edit": "asset_operation.edit.ai.blackboard_set_parent",
+    "save": "asset_operation.save.ai.blackboard_set_parent",
+    "readback_verify": "asset_operation.readback_verify.ai.blackboard_set_parent"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-351"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-351",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "blackboard_set_parent",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_set_parent_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "save_asset",
+        "batch_add_bb_keys",
+        "add_bb_key",
+        "set_bb_parent",
+        "get_blackboard",
+        "compare_blackboards"
+      ],
+      "description": "Create a child Blackboard without a parent, assign its parent via set_bb_parent, save, and verify inherited/local keys"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-351",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent",
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent"
+          },
+          "contains": [
+            "BB_BenchRuntimeParent"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "batch_add_bb_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent",
+            "keys": [
+              {
+                "base_class": "/Script/Engine.Actor",
+                "description": "Runtime parent target",
+                "name": "RuntimeTarget",
+                "type": "Object"
+              },
+              {
+                "description": "Runtime route point",
+                "name": "RuntimeRoute",
+                "type": "Vector"
+              }
+            ]
+          },
+          "contains": [
+            "RuntimeTarget",
+            "RuntimeRoute"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+          },
+          "contains": [
+            "BB_BenchRuntimeChild"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild",
+            "description": "Runtime local readiness",
+            "key_name": "RuntimeReady",
+            "key_type": "Bool"
+          },
+          "contains": [
+            "RuntimeReady"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "set_bb_parent",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild",
+            "parent_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent"
+          },
+          "contains": [
+            "BB_BenchRuntimeChild",
+            "BB_BenchRuntimeParent",
+            "parent"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_blackboard",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+          },
+          "contains": [
+            "RuntimeTarget",
+            "RuntimeRoute",
+            "RuntimeReady",
+            "inherited"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "compare_blackboards",
+            "path_a": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeParent",
+            "path_b": "/Game/Benchmarks/AssetAuthoring/BB_BenchRuntimeChild"
+          },
+          "contains": [
+            "RuntimeReady",
+            "same",
+            "only_in_b"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blackboard_set_parent",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_blackboard_set_parent_roundtrip",
+      "description": "Create a child Blackboard without a parent, assign its parent via set_bb_parent, save, and verify inherited/local keys",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blackboard",
+          "save_asset",
+          "batch_add_bb_keys",
+          "add_bb_key",
+          "set_bb_parent",
+          "get_blackboard",
+          "compare_blackboards"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "worldgen",
+  "asset_type_slug": "worldgen",
+  "edit_domain": "roof_static_mesh",
+  "route_edit_domain": "roof_static_mesh",
+  "module_id": "asset_authoring.worldgen.roof_static_mesh",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.worldgen.roof_static_mesh",
+    "edit": "asset_operation.edit.worldgen.roof_static_mesh",
+    "save": "asset_operation.save.worldgen.roof_static_mesh",
+    "readback_verify": "asset_operation.readback_verify.worldgen.roof_static_mesh"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-460"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-460",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "roof_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_roof_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "generate_roof",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a gable-roof StaticMesh from a footprint polygon, save it, and verify the generated mesh asset"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-460",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenRoof"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "worldgen_query",
+          "args": {
+            "action": "generate_roof",
+            "footprint_polygon": [
+              [
+                0.0,
+                0.0
+              ],
+              [
+                400.0,
+                0.0
+              ],
+              [
+                400.0,
+                300.0
+              ],
+              [
+                0.0,
+                300.0
+              ]
+            ],
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenRoof",
+            "roof_type": "gable",
+            "pitch_degrees": 30.0,
+            "overhang": 20.0,
+            "height_offset": 300.0,
+            "overwrite": true,
+            "location": [
+              0.0,
+              0.0,
+              300.0
+            ],
+            "label": "AE_BenchWorldgenRoof"
+          },
+          "contains": [
+            "SM_BenchWorldgenRoof",
+            "roof_type",
+            "gable",
+            "ridge_height",
+            "material_slots"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenRoof"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenRoof"
+          },
+          "contains": [
+            "SM_BenchWorldgenRoof",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenRoof"
+          },
+          "contains": [
+            "SM_BenchWorldgenRoof",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "roof_static_mesh",
+      "blueprint_type": "",
+      "domain": "worldgen",
+      "workflow": "worldgen_roof_static_mesh_roundtrip",
+      "description": "Generate a gable-roof StaticMesh from a footprint polygon, save it, and verify the generated mesh asset",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithWorldGen/Private/MonolithMeshRoofActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "generate_roof",
+          "save_asset",
+          "get_mesh_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

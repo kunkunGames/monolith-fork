@@ -1,0 +1,455 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_styling_actions",
+  "route_edit_domain": "widget_styling_actions",
+  "module_id": "asset_authoring.ui.widget_styling_actions",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_styling_actions",
+    "edit": "asset_operation.edit.ui.widget_styling_actions",
+    "save": "asset_operation.save.ui.widget_styling_actions",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_styling_actions"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-513"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-513",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_styling_actions",
+      "blueprint_type": "",
+      "workflow": "ui_widget_styling_actions_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "set_brush",
+        "set_image",
+        "set_font",
+        "compile_widget",
+        "save_asset",
+        "get_widget_tree",
+        "dump_ui_spec",
+        "list_widget_properties",
+        "inspect_asset"
+      ],
+      "description": "Create a Widget Blueprint with Image, Border, and TextBlock widgets, apply set_image/set_brush/set_font styling edits, save it, and dump the UI spec to read back brush/font/image content"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-513",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchWidgetStyleIcon"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchWidgetStyleIcon",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "settings": {
+              "srgb": true
+            },
+            "save": true
+          },
+          "contains": [
+            "T_BenchWidgetStyleIcon",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchWidgetStyling",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_class": "Border",
+            "widget_name": "BenchStyledPanel",
+            "anchor_preset": "center",
+            "position": [
+              0,
+              0
+            ],
+            "size": [
+              320,
+              160
+            ],
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledPanel",
+            "Border"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_class": "Image",
+            "widget_name": "BenchStyledIcon",
+            "anchor_preset": "center",
+            "position": [
+              -128,
+              -32
+            ],
+            "size": [
+              64,
+              64
+            ],
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledIcon",
+            "Image"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchStyledLabel",
+            "anchor_preset": "center",
+            "position": [
+              -48,
+              -18
+            ],
+            "size": [
+              220,
+              48
+            ],
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledLabel",
+            "text": "Styled UMG",
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledLabel",
+            "Styled UMG"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_brush",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledIcon",
+            "property_name": "Brush",
+            "draw_type": "Image",
+            "texture_path": "/Game/Benchmarks/AssetAuthoring/T_BenchWidgetStyleIcon",
+            "tint_color": "#FFFFFFFF",
+            "image_size": {
+              "x": 64,
+              "y": 64
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledIcon",
+            "Brush",
+            "properties_set",
+            "4"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_brush",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledPanel",
+            "property_name": "Background",
+            "draw_type": "RoundedBox",
+            "tint_color": "#102A43CC",
+            "image_size": {
+              "x": 320,
+              "y": 160
+            },
+            "corner_radius": {
+              "top_left": 12,
+              "top_right": 12,
+              "bottom_right": 12,
+              "bottom_left": 12
+            },
+            "outline_color": "#7FDBFFFF",
+            "outline_width": 2,
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledPanel",
+            "Background",
+            "properties_set",
+            "6"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_image",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledIcon",
+            "tint_color": "0.25,0.5,0.75,1.0",
+            "size": {
+              "x": 64,
+              "y": 64
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledIcon",
+            "properties_set",
+            "2"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_font",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledLabel",
+            "font_size": 24,
+            "typeface": "Bold",
+            "letter_spacing": 40,
+            "outline_size": 1,
+            "outline_color": "#000000FF",
+            "compile": false
+          },
+          "contains": [
+            "BenchStyledLabel",
+            "properties_set",
+            "5"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchWidgetStyleIcon"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling"
+          },
+          "contains": [
+            "WBP_BenchWidgetStyling",
+            "BenchStyledPanel",
+            "Border",
+            "BenchStyledIcon",
+            "Image",
+            "BenchStyledLabel",
+            "TextBlock",
+            "Styled UMG"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "dump_ui_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "emit_defaults": false,
+            "request_id": "asset-editing-ui-styling-dump"
+          },
+          "contains": [
+            "bSuccess",
+            "true",
+            "BenchStyledPanel",
+            "background",
+            "BenchStyledIcon",
+            "brushPath",
+            "T_BenchWidgetStyleIcon",
+            "BenchStyledLabel",
+            "Styled UMG",
+            "fontSize",
+            "24"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling",
+            "widget_name": "BenchStyledIcon"
+          },
+          "contains": [
+            "BenchStyledIcon",
+            "Image",
+            "Brush",
+            "ColorAndOpacity",
+            "current_value",
+            "0.25",
+            "0.5",
+            "0.75"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchWidgetStyling"
+          },
+          "contains": [
+            "WBP_BenchWidgetStyling",
+            "WidgetBlueprint"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchWidgetStyleIcon"
+          },
+          "contains": [
+            "T_BenchWidgetStyleIcon",
+            "Texture2D"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_styling_actions",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_widget_styling_actions_roundtrip",
+      "description": "Create a Widget Blueprint with Image, Border, and TextBlock widgets, apply set_image/set_brush/set_font styling edits, save it, and dump the UI spec to read back brush/font/image content",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-for-unreal-engine",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-quick-start-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIStylingActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/Spec/UISpecSerializer.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "set_brush",
+          "set_image",
+          "set_font",
+          "compile_widget",
+          "save_asset",
+          "get_widget_tree",
+          "dump_ui_spec",
+          "list_widget_properties",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

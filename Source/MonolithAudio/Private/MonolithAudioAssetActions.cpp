@@ -39,6 +39,11 @@
 
 namespace
 {
+	FMonolithActionResult AudioInvalidParams(const FString& Message)
+	{
+		return FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	struct FMonolithAudioEQSettingsDraft
 	{
 		double RootTime = 0.0;
@@ -140,10 +145,18 @@ namespace MonolithAudio
 		}
 
 		OutAssetPath.Reset();
-		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
+		if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), OutAssetPath))
+		{
+			OutError = TEXT("asset_path must be a string");
+			return false;
+		}
 		if (OutAssetPath.IsEmpty())
 		{
-			Params->TryGetStringField(TEXT("path"), OutAssetPath);
+			if (Params->HasField(TEXT("path")) && !Params->TryGetStringField(TEXT("path"), OutAssetPath))
+			{
+				OutError = TEXT("path must be a string");
+				return false;
+			}
 		}
 
 		if (OutAssetPath.IsEmpty())
@@ -624,6 +637,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Create a new USoundMix asset with optional EQ settings and class adjusters"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateSoundMix),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/Mix_Combat)"))
 			.Optional(TEXT("eq_settings"), TEXT("object"), TEXT("FAudioEQEffect fields (4-band EQ)"))
 			.Optional(TEXT("class_effects"), TEXT("array"), TEXT("Array of FSoundClassAdjuster objects"))
@@ -644,6 +658,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Set EQ settings, class adjusters, or timing on a USoundMix (partial update)"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::SetSoundMixSettings),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path of the USoundMix"))
 			.Optional(TEXT("eq_settings"), TEXT("object"), TEXT("FAudioEQEffect fields to update"))
 			.Optional(TEXT("class_effects"), TEXT("array"), TEXT("Array of FSoundClassAdjuster objects (replaces existing)"))
@@ -706,6 +721,7 @@ void FMonolithAudioAssetActions::RegisterActions(FMonolithToolRegistry& Registry
 		TEXT("Procedurally synthesize a 16-bit mono sine-tone USoundWave (no asset deps). Useful for tests requiring a disposable wave."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioAssetActions::CreateTestWave),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Destination asset path under /Game/ (e.g. /Game/Tests/Monolith/Audio/SW_Test_Sine_440)"), { TEXT("path") })
 			.Optional(TEXT("frequency_hz"), TEXT("number"), TEXT("Sine frequency in Hz (20.0 to 20000.0, default 440.0)"))
 			.Optional(TEXT("duration_seconds"), TEXT("number"), TEXT("Clip length in seconds (0.05 to 5.0, default 0.5)"))
@@ -1118,22 +1134,22 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 	double InitialDelayVal = 0, FadeInVal = 0, DurationVal = 0, FadeOutVal = 0;
 	if (Params->HasField(TEXT("initial_delay")))
 	{
-		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: initial_delay must be a number"));
+		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return AudioInvalidParams(TEXT("Malformed parameter: initial_delay must be a number"));
 		bHasInitialDelay = true;
 	}
 	if (Params->HasField(TEXT("fade_in_time")))
 	{
-		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_in_time must be a number"));
+		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return AudioInvalidParams(TEXT("Malformed parameter: fade_in_time must be a number"));
 		bHasFadeIn = true;
 	}
 	if (Params->HasField(TEXT("duration")))
 	{
-		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration must be a number"));
+		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return AudioInvalidParams(TEXT("Malformed parameter: duration must be a number"));
 		bHasDuration = true;
 	}
 	if (Params->HasField(TEXT("fade_out_time")))
 	{
-		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_out_time must be a number"));
+		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return AudioInvalidParams(TEXT("Malformed parameter: fade_out_time must be a number"));
 		bHasFadeOut = true;
 	}
 
@@ -1141,19 +1157,28 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 	bool bHasEffects = false;
 	TArray<FSoundClassAdjuster> ParsedEffects;
 	const TArray<TSharedPtr<FJsonValue>>* ClassEffectsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) && ClassEffectsArr)
+	if (Params->HasField(TEXT("class_effects")))
 	{
+		if (!Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) || !ClassEffectsArr)
+		{
+			return AudioInvalidParams(TEXT("Malformed parameter: class_effects must be an array"));
+		}
 		bHasEffects = true;
 		for (const auto& Val : *ClassEffectsArr)
 		{
 			const TSharedPtr<FJsonObject>* AdjusterObj = nullptr;
-			if (Val->TryGetObject(AdjusterObj) && AdjusterObj)
+			if (!Val.IsValid() || !Val->TryGetObject(AdjusterObj) || !AdjusterObj)
+			{
+				return AudioInvalidParams(TEXT("Malformed parameter: class_effects entries must be objects"));
+			}
+
+			if (AdjusterObj)
 			{
 				FSoundClassAdjuster Adjuster;
 				FString AdjError;
 				if (!JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
 				{
-					return FMonolithActionResult::Error(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
+					return AudioInvalidParams(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
 				}
 				ParsedEffects.Add(Adjuster);
 			}
@@ -1168,14 +1193,14 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateSoundMix(const TSharedPt
 	{
 		if (!Params->TryGetObjectField(TEXT("eq_settings"), EqJson) || !EqJson || !EqJson->IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: eq_settings must be an object"));
+			return AudioInvalidParams(TEXT("Malformed parameter: eq_settings must be an object"));
 		}
 
 		bHasEq = true;
 		FString SetError;
 		if (!JsonToAudioEQSettingsDraft(*EqJson, ParsedEq, SetError))
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("eq_settings error: %s"), *SetError));
+			return AudioInvalidParams(FString::Printf(TEXT("eq_settings error: %s"), *SetError));
 		}
 	}
 
@@ -1293,22 +1318,22 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 	double InitialDelayVal = 0, FadeInVal = 0, DurationVal = 0, FadeOutVal = 0;
 	if (Params->HasField(TEXT("initial_delay")))
 	{
-		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: initial_delay must be a number"));
+		if (!Params->TryGetNumberField(TEXT("initial_delay"), InitialDelayVal)) return AudioInvalidParams(TEXT("Malformed parameter: initial_delay must be a number"));
 		bHasInitialDelay = true;
 	}
 	if (Params->HasField(TEXT("fade_in_time")))
 	{
-		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_in_time must be a number"));
+		if (!Params->TryGetNumberField(TEXT("fade_in_time"), FadeInVal)) return AudioInvalidParams(TEXT("Malformed parameter: fade_in_time must be a number"));
 		bHasFadeIn = true;
 	}
 	if (Params->HasField(TEXT("duration")))
 	{
-		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration must be a number"));
+		if (!Params->TryGetNumberField(TEXT("duration"), DurationVal)) return AudioInvalidParams(TEXT("Malformed parameter: duration must be a number"));
 		bHasDuration = true;
 	}
 	if (Params->HasField(TEXT("fade_out_time")))
 	{
-		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return FMonolithActionResult::Error(TEXT("Malformed parameter: fade_out_time must be a number"));
+		if (!Params->TryGetNumberField(TEXT("fade_out_time"), FadeOutVal)) return AudioInvalidParams(TEXT("Malformed parameter: fade_out_time must be a number"));
 		bHasFadeOut = true;
 	}
 
@@ -1316,19 +1341,28 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 	bool bHasEffects = false;
 	TArray<FSoundClassAdjuster> ParsedEffects;
 	const TArray<TSharedPtr<FJsonValue>>* ClassEffectsArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) && ClassEffectsArr)
+	if (Params->HasField(TEXT("class_effects")))
 	{
+		if (!Params->TryGetArrayField(TEXT("class_effects"), ClassEffectsArr) || !ClassEffectsArr)
+		{
+			return AudioInvalidParams(TEXT("Malformed parameter: class_effects must be an array"));
+		}
 		bHasEffects = true;
 		for (const auto& Val : *ClassEffectsArr)
 		{
 			const TSharedPtr<FJsonObject>* AdjusterObj = nullptr;
-			if (Val->TryGetObject(AdjusterObj) && AdjusterObj)
+			if (!Val.IsValid() || !Val->TryGetObject(AdjusterObj) || !AdjusterObj)
+			{
+				return AudioInvalidParams(TEXT("Malformed parameter: class_effects entries must be objects"));
+			}
+
+			if (AdjusterObj)
 			{
 				FSoundClassAdjuster Adjuster;
 				FString AdjError;
 				if (!JsonToSoundClassAdjuster(*AdjusterObj, Adjuster, AdjError))
 				{
-					return FMonolithActionResult::Error(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
+					return AudioInvalidParams(FString::Printf(TEXT("class_effects error: %s"), *AdjError));
 				}
 				ParsedEffects.Add(Adjuster);
 			}
@@ -1343,14 +1377,14 @@ FMonolithActionResult FMonolithAudioAssetActions::SetSoundMixSettings(const TSha
 	{
 		if (!Params->TryGetObjectField(TEXT("eq_settings"), EqJson) || !EqJson || !EqJson->IsValid())
 		{
-			return FMonolithActionResult::Error(TEXT("Malformed parameter: eq_settings must be an object"));
+			return AudioInvalidParams(TEXT("Malformed parameter: eq_settings must be an object"));
 		}
 
 		bHasEq = true;
 		FString SetError;
 		if (!JsonToAudioEQSettingsDraft(*EqJson, ParsedEq, SetError))
 		{
-			return FMonolithActionResult::Error(SetError);
+			return AudioInvalidParams(SetError);
 		}
 	}
 
@@ -1857,22 +1891,22 @@ FMonolithActionResult FMonolithAudioAssetActions::CreateTestWave(const TSharedPt
 	double TmpD = 0.0;
 	if (Params->HasField(TEXT("frequency_hz")))
 	{
-		if (!Params->TryGetNumberField(TEXT("frequency_hz"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: frequency_hz must be a number"));
+		if (!Params->TryGetNumberField(TEXT("frequency_hz"), TmpD)) return AudioInvalidParams(TEXT("Malformed parameter: frequency_hz must be a number"));
 		FrequencyHz = TmpD;
 	}
 	if (Params->HasField(TEXT("duration_seconds")))
 	{
-		if (!Params->TryGetNumberField(TEXT("duration_seconds"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: duration_seconds must be a number"));
+		if (!Params->TryGetNumberField(TEXT("duration_seconds"), TmpD)) return AudioInvalidParams(TEXT("Malformed parameter: duration_seconds must be a number"));
 		DurationSeconds = TmpD;
 	}
 	if (Params->HasField(TEXT("amplitude")))
 	{
-		if (!Params->TryGetNumberField(TEXT("amplitude"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: amplitude must be a number"));
+		if (!Params->TryGetNumberField(TEXT("amplitude"), TmpD)) return AudioInvalidParams(TEXT("Malformed parameter: amplitude must be a number"));
 		Amplitude = TmpD;
 	}
 	if (Params->HasField(TEXT("sample_rate")))
 	{
-		if (!Params->TryGetNumberField(TEXT("sample_rate"), TmpD)) return FMonolithActionResult::Error(TEXT("Malformed parameter: sample_rate must be a number"));
+		if (!Params->TryGetNumberField(TEXT("sample_rate"), TmpD)) return AudioInvalidParams(TEXT("Malformed parameter: sample_rate must be a number"));
 		SampleRate = static_cast<int32>(TmpD);
 	}
 

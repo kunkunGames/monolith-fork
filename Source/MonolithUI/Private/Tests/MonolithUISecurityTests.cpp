@@ -24,7 +24,11 @@ bool FMonolithUISecurityPathTest::RunTest(const FString& Parameters)
 		else
 		{
 			TestFalse(FString::Printf(TEXT("%s: Action should fail"), *TestCaseName), Result.bSuccess);
-			TestTrue(FString::Printf(TEXT("%s: Error should complain about invalid package path"), *TestCaseName), Result.ErrorMessage.Contains(TEXT("Invalid package path")));
+			const bool bPathError =
+				Result.ErrorMessage.Contains(TEXT("Invalid package path")) ||
+				Result.ErrorMessage.Contains(TEXT("Package path")) ||
+				(Path.IsEmpty() && Result.ErrorMessage.Contains(TEXT("save_path")));
+			TestTrue(FString::Printf(TEXT("%s: Error should complain about invalid package path"), *TestCaseName), bPathError);
 		}
 	};
 

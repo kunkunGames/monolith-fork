@@ -1,0 +1,353 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "logicdriver",
+  "asset_type_slug": "logicdriver",
+  "edit_domain": "state_machine_graph",
+  "route_edit_domain": "state_machine_graph",
+  "module_id": "asset_authoring.logicdriver.state_machine_graph",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.logicdriver.state_machine_graph",
+    "edit": "asset_operation.edit.logicdriver.state_machine_graph",
+    "save": "asset_operation.save.logicdriver.state_machine_graph",
+    "readback_verify": "asset_operation.readback_verify.logicdriver.state_machine_graph"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-515"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-515",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "logicdriver",
+      "edit_domain": "state_machine_graph",
+      "blueprint_type": "",
+      "workflow": "logicdriver_state_machine_graph_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_state_machine",
+        "create_state_machine",
+        "add_state",
+        "set_initial_state",
+        "set_end_state",
+        "add_transition",
+        "auto_arrange_graph",
+        "compile_state_machine",
+        "save_asset",
+        "get_sm_structure",
+        "get_sm_statistics",
+        "validate_state_machine",
+        "inspect_asset"
+      ],
+      "description": "Create a Logic Driver State Machine Blueprint, add gameplay states and transitions, set initial/end states, compile, save, and read back graph topology/statistics"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-515",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "logicdriver_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_state_machine",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "create_state_machine",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "name": "SM_BenchPatrolFlow"
+          },
+          "contains": [
+            "SM_BenchPatrolFlow"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "add_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "name": "Patrol",
+            "position_x": -360,
+            "position_y": 0
+          },
+          "contains": [
+            "add_state",
+            "Patrol"
+          ],
+          "capture": {
+            "patrol_state": "$.node_guid"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "add_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "name": "Investigate",
+            "position_x": 0,
+            "position_y": 0
+          },
+          "contains": [
+            "add_state",
+            "Investigate"
+          ],
+          "capture": {
+            "investigate_state": "$.node_guid"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "add_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "name": "Return",
+            "position_x": 360,
+            "position_y": 0
+          },
+          "contains": [
+            "add_state",
+            "Return"
+          ],
+          "capture": {
+            "return_state": "$.node_guid"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "set_initial_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "node_guid": "${patrol_state}"
+          },
+          "contains": [
+            "set_initial_state",
+            "${patrol_state}",
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "set_end_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "node_guid": "${return_state}",
+            "is_end_state": true
+          },
+          "contains": [
+            "set_end_state",
+            "${return_state}",
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "add_transition",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "source_guid": "${patrol_state}",
+            "target_guid": "${investigate_state}",
+            "priority": 10
+          },
+          "contains": [
+            "add_transition",
+            "${patrol_state}",
+            "${investigate_state}"
+          ],
+          "capture": {
+            "patrol_to_investigate": "$.node_guid"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "add_transition",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "source_guid": "${investigate_state}",
+            "target_guid": "${return_state}",
+            "priority": 20
+          },
+          "contains": [
+            "add_transition",
+            "${investigate_state}",
+            "${return_state}"
+          ],
+          "capture": {
+            "investigate_to_return": "$.node_guid"
+          }
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "auto_arrange_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "formatter": "builtin"
+          },
+          "contains": [
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "compile_state_machine",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "status",
+            "success"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "get_sm_structure",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow",
+            "depth": -1
+          },
+          "contains": [
+            "SM_BenchPatrolFlow",
+            "Patrol",
+            "Investigate",
+            "Return",
+            "${patrol_state}",
+            "${investigate_state}",
+            "${return_state}"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "get_sm_statistics",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          },
+          "contains": [
+            "states",
+            "3",
+            "transitions",
+            "2"
+          ]
+        },
+        {
+          "tool": "logicdriver_query",
+          "args": {
+            "action": "validate_state_machine",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          },
+          "contains": [
+            "is_valid",
+            "true",
+            "issue_count",
+            "0",
+            "state_count",
+            "3",
+            "transition_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchPatrolFlow"
+          },
+          "contains": [
+            "SM_BenchPatrolFlow",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "state_machine_graph",
+      "blueprint_type": "",
+      "domain": "logicdriver",
+      "workflow": "logicdriver_state_machine_graph_roundtrip",
+      "description": "Create a Logic Driver State Machine Blueprint, add gameplay states and transitions, set initial/end states, compile, save, and read back graph topology/statistics",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/BlueprintAPI/LogicDriver",
+        "source: Plugins/Monolith/Source/MonolithLogicDriver/Private/MonolithLogicDriverAssetActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithLogicDriver/Private/MonolithLogicDriverGraphActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithLogicDriver/Private/MonolithLogicDriverDiscoveryActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_state_machine",
+          "create_state_machine",
+          "add_state",
+          "set_initial_state",
+          "set_end_state",
+          "add_transition",
+          "auto_arrange_graph",
+          "compile_state_machine",
+          "save_asset",
+          "get_sm_structure",
+          "get_sm_statistics",
+          "validate_state_machine",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

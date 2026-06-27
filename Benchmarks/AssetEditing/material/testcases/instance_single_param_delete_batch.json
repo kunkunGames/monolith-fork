@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_instance_single_param_delete_batch",
+  "route_edit_domain": "instance_single_param_delete_batch",
+  "module_id": "asset_authoring.material.instance_single_param_delete_batch",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.instance_single_param_delete_batch",
+    "edit": "asset_operation.edit.material.instance_single_param_delete_batch",
+    "save": "asset_operation.save.material.instance_single_param_delete_batch",
+    "readback_verify": "asset_operation.readback_verify.material.instance_single_param_delete_batch"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-399"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-399",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_instance_single_param_delete_batch",
+      "blueprint_type": "",
+      "workflow": "material_instance_single_param_delete_batch_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "create_material_instance",
+        "set_instance_parameter",
+        "delete_expressions",
+        "save_material",
+        "get_instance_parameters",
+        "get_all_expressions",
+        "get_full_connection_graph"
+      ],
+      "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-399",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchSingleParamDelete"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchSingleParamDelete"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BaseTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchSingleTint"
+                  },
+                  "pos": [
+                    -460,
+                    -160
+                  ]
+                },
+                {
+                  "id": "RoughnessParam",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchSingleRoughness",
+                    "DefaultValue": 0.5
+                  },
+                  "pos": [
+                    -460,
+                    80
+                  ]
+                },
+                {
+                  "id": "DeleteA",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchDeleteA",
+                    "DefaultValue": 0.1
+                  },
+                  "pos": [
+                    -740,
+                    260
+                  ]
+                },
+                {
+                  "id": "DeleteB",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchDeleteB",
+                    "DefaultValue": 0.2
+                  },
+                  "pos": [
+                    -740,
+                    420
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BaseTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "RoughnessParam",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "4",
+            "connections_made",
+            "2"
+          ],
+          "capture": {
+            "delete_expr_a": "$.id_to_name.DeleteA",
+            "delete_expr_b": "$.id_to_name.DeleteB"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchSingleParamDelete",
+            "parent_material": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete"
+          },
+          "contains": [
+            "MI_BenchSingleParamDelete"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_instance_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchSingleParamDelete",
+            "parameter_name": "BenchSingleRoughness",
+            "scalar_value": 0.88
+          },
+          "contains": [
+            "BenchSingleRoughness",
+            "scalar",
+            "0.88"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "delete_expressions",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete",
+            "expression_names": [
+              "${delete_expr_a}",
+              "${delete_expr_b}"
+            ]
+          },
+          "contains": [
+            "deleted_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchSingleParamDelete"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchSingleParamDelete"
+          },
+          "contains": [
+            "BenchSingleRoughness",
+            "0.88",
+            "total_overrides"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_all_expressions",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete"
+          },
+          "contains": [
+            "BenchSingleTint",
+            "BenchSingleRoughness"
+          ],
+          "not_contains": [
+            "${delete_expr_a}",
+            "${delete_expr_b}",
+            "BenchDeleteA",
+            "BenchDeleteB"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchSingleParamDelete"
+          },
+          "contains": [
+            "BaseColor",
+            "Roughness"
+          ],
+          "not_contains": [
+            "${delete_expr_a}",
+            "${delete_expr_b}"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_instance_single_param_delete_batch",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_instance_single_param_delete_batch_roundtrip",
+      "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "create_material_instance",
+          "set_instance_parameter",
+          "delete_expressions",
+          "save_material",
+          "get_instance_parameters",
+          "get_all_expressions",
+          "get_full_connection_graph"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

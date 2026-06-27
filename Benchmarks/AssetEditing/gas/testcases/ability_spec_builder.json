@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "ability_spec_builder",
+  "route_edit_domain": "ability_spec_builder",
+  "module_id": "asset_authoring.gas.ability_spec_builder",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.ability_spec_builder",
+    "edit": "asset_operation.edit.gas.ability_spec_builder",
+    "save": "asset_operation.save.gas.ability_spec_builder",
+    "readback_verify": "asset_operation.readback_verify.gas.ability_spec_builder"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-507"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-507",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "ability_spec_builder",
+      "blueprint_type": "",
+      "workflow": "gas_ability_spec_builder_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "add_gameplay_tags",
+        "create_gameplay_effect",
+        "build_ability_from_spec",
+        "save_asset",
+        "get_ability_info",
+        "get_ability_tags",
+        "inspect_asset"
+      ],
+      "description": "Create a GameplayEffect cost asset, build a GameplayAbility from a declarative spec, save both assets, and verify policies, tags, cost, triggers, and flags"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-507",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecCost",
+              "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "add_gameplay_tags",
+            "tags": [
+              {
+                "tag": "Ability.Bench.Spec",
+                "comment": "AssetEditing ability spec builder fixture"
+              },
+              {
+                "tag": "GameplayEvent.Bench.Spec",
+                "comment": "AssetEditing ability spec trigger fixture"
+              }
+            ]
+          },
+          "contains": [
+            "Ability.Bench.Spec",
+            "GameplayEvent.Bench.Spec"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_gameplay_effect",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecCost",
+            "duration_policy": "instant"
+          },
+          "contains": [
+            "GE_BenchSpecCost"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "build_ability_from_spec",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder",
+            "spec": {
+              "parent_class": "GameplayAbility",
+              "display_name": "Bench Spec Ability",
+              "instancing_policy": "InstancedPerActor",
+              "net_execution_policy": "LocalPredicted",
+              "tags": {
+                "AbilityTags": [
+                  "Ability.Bench.Spec"
+                ],
+                "ActivationOwnedTags": [
+                  "GameplayEvent.Bench.Spec"
+                ]
+              },
+              "cost_effect_class": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecCost",
+              "triggers": [
+                {
+                  "tag": "GameplayEvent.Bench.Spec",
+                  "trigger_source": "GameplayEvent"
+                }
+              ],
+              "flags": {
+                "replicate_input_directly": true,
+                "retrigger_instanced_ability": false,
+                "server_respects_remote_ability_cancellation": true
+              }
+            }
+          },
+          "contains": [
+            "GA_BenchSpecBuilder",
+            "Built ability from spec",
+            "policies",
+            "tags",
+            "cost",
+            "triggers",
+            "flags"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecCost"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_ability_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder"
+          },
+          "contains": [
+            "GA_BenchSpecBuilder",
+            "InstancedPerActor",
+            "LocalPredicted",
+            "Ability.Bench.Spec",
+            "GameplayEvent.Bench.Spec",
+            "GE_BenchSpecCost",
+            "triggers",
+            "GameplayEvent",
+            "replicate_input_directly",
+            "true",
+            "server_respects_remote_ability_cancellation",
+            "true"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_ability_tags",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder"
+          },
+          "contains": [
+            "AbilityTags",
+            "Ability.Bench.Spec",
+            "ActivationOwnedTags",
+            "GameplayEvent.Bench.Spec"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GA_BenchSpecBuilder"
+          },
+          "contains": [
+            "GA_BenchSpecBuilder",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "ability_spec_builder",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_ability_spec_builder_roundtrip",
+      "description": "Create a GameplayEffect cost asset, build a GameplayAbility from a declarative spec, save both assets, and verify policies, tags, cost, triggers, and flags",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-ability-system-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASAbilityActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "add_gameplay_tags",
+          "create_gameplay_effect",
+          "build_ability_from_spec",
+          "save_asset",
+          "get_ability_info",
+          "get_ability_tags",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

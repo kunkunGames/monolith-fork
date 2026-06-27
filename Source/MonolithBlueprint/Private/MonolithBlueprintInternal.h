@@ -42,7 +42,7 @@ namespace MonolithBlueprintInternal
 	 * The legacy resolution did only FindFirstObject<UClass> name permutations, which can never
 	 * match a Blueprint Interface — its generated class is "<Name>_C" and is loaded on demand —
 	 * even though the action help text promised "use the asset name". (Surfaced by the
-	 * BlueprintEditing benchmark: implement_interface/get_interface_functions with "BPI_TestInterface"
+	 * AssetEditing benchmark: implement_interface/get_interface_functions with "BPI_TestInterface"
 	 * returned "Interface class not found".) Resolution order:
 	 *   1. Native/direct UClass name: as-is, U-prefixed, I-stripped+U-prepended.
 	 *   2. "<name>_C" (an already-loaded Blueprint Interface's generated class).

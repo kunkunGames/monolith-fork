@@ -19,7 +19,13 @@ FMonolithAsyncJobRegistry& FMonolithAsyncJobRegistry::Get()
 	return Instance;
 }
 
-FString FMonolithAsyncJobRegistry::SubmitJob(const FString& Namespace, const FString& Action)
+FString FMonolithAsyncJobRegistry::SubmitJob(
+	const FString& Namespace,
+	const FString& Action,
+	bool bCancellable,
+	bool bSupportsProgress,
+	const FString& PollAction,
+	const FString& CancelAction)
 {
 	const FString JobId = MakeJobId();
 	const FDateTime Now = FDateTime::UtcNow();
@@ -32,6 +38,10 @@ FString FMonolithAsyncJobRegistry::SubmitJob(const FString& Namespace, const FSt
 	NewRow.Namespace = Namespace;
 	NewRow.Action = Action;
 	NewRow.Status = EMonolithAsyncJobStatus::Pending;
+	NewRow.bCancellable = bCancellable;
+	NewRow.bSupportsProgress = bSupportsProgress;
+	NewRow.PollAction = PollAction;
+	NewRow.CancelAction = CancelAction;
 	NewRow.CreatedUtc = Now;
 	NewRow.UpdatedUtc = Now;
 	RowsById.Add(JobId, MoveTemp(NewRow));
@@ -109,16 +119,42 @@ void FMonolithAsyncJobRegistry::RequestCancel(const FString& JobId)
 		return;
 	}
 
-	Row->bCancelRequested = true;
-
-	// Cooperative-cancellation: only a job that has not already reached a terminal
-	// state is flipped to Cancelled. A running action is expected to observe the
-	// flag via IsCancelRequested and stop; the registry never interrupts work.
-	if (Row->Status == EMonolithAsyncJobStatus::Pending || Row->Status == EMonolithAsyncJobStatus::Running)
+	if (!Row->bCancellable)
 	{
-		Row->Status = EMonolithAsyncJobStatus::Cancelled;
+		Row->UpdatedUtc = FDateTime::UtcNow();
+		return;
 	}
 
+	Row->bCancelRequested = true;
+	if (!IsTerminalStatus(Row->Status))
+	{
+		Row->ProgressStage = TEXT("cancellation_requested");
+		Row->ProgressMessage = TEXT("Cancellation requested; waiting for producer acknowledgement.");
+	}
+
+	Row->UpdatedUtc = FDateTime::UtcNow();
+}
+
+void FMonolithAsyncJobRegistry::CancelJob(const FString& JobId, const FString& Message)
+{
+	FScopeLock Lock(&RegistryLock);
+	FJobRow* Row = RowsById.Find(JobId);
+	if (!Row)
+	{
+		return;
+	}
+
+	if (IsTerminalStatus(Row->Status) || !Row->bCancellable)
+	{
+		return;
+	}
+
+	Row->bCancelRequested = true;
+	Row->Status = EMonolithAsyncJobStatus::Cancelled;
+	Row->ProgressStage = TEXT("cancelled");
+	Row->ProgressMessage = Message.IsEmpty()
+		? TEXT("Cancellation was acknowledged by the producer.")
+		: Message;
 	Row->UpdatedUtc = FDateTime::UtcNow();
 }
 
@@ -209,6 +245,17 @@ TSharedPtr<FJsonObject> FMonolithAsyncJobRegistry::RowToJson(const FJobRow& Row)
 	Obj->SetStringField(TEXT("namespace"), Row.Namespace);
 	Obj->SetStringField(TEXT("action"), Row.Action);
 	Obj->SetStringField(TEXT("status"), StatusToken(Row.Status));
+	Obj->SetBoolField(TEXT("cancellable"), Row.bCancellable);
+	Obj->SetBoolField(TEXT("supports_progress"), Row.bSupportsProgress);
+	Obj->SetBoolField(TEXT("cancel_requested"), Row.bCancelRequested);
+	if (!Row.PollAction.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("poll_action"), Row.PollAction);
+	}
+	if (!Row.CancelAction.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("cancel_action"), Row.CancelAction);
+	}
 
 	TSharedPtr<FJsonObject> Progress = MakeShared<FJsonObject>();
 	Progress->SetNumberField(TEXT("percent"), Row.ProgressPercent);

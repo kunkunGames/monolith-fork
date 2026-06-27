@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_concurrency",
+  "route_edit_domain": "sound_concurrency",
+  "module_id": "asset_authoring.audio.sound_concurrency",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_concurrency",
+    "edit": "asset_operation.edit.audio.sound_concurrency",
+    "save": "asset_operation.save.audio.sound_concurrency",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_concurrency"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-373"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-373",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_concurrency",
+      "blueprint_type": "",
+      "workflow": "audio_concurrency_batch_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_sound_concurrency",
+        "set_concurrency_settings",
+        "batch_set_concurrency",
+        "save_asset",
+        "get_concurrency_settings",
+        "list_audio_assets",
+        "inspect_asset"
+      ],
+      "description": "Create and edit a SoundConcurrency asset, batch-attach it to two SoundWaves, save all assets, and read the concurrency settings and registry entry back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-373",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyB",
+              "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyA",
+            "frequency_hz": 330.0,
+            "duration_seconds": 0.12,
+            "sample_rate": 44100,
+            "amplitude": 0.25
+          },
+          "contains": [
+            "SW_BenchConcurrencyA"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyB",
+            "frequency_hz": 660.0,
+            "duration_seconds": 0.12,
+            "sample_rate": 44100,
+            "amplitude": 0.25
+          },
+          "contains": [
+            "SW_BenchConcurrencyB"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_concurrency",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit",
+            "settings": {
+              "MaxCount": 2
+            }
+          },
+          "contains": [
+            "Concurrency_BenchVoiceLimit",
+            "MaxCount",
+            "2"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_concurrency_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit",
+            "settings": {
+              "MaxCount": 3
+            }
+          },
+          "contains": [
+            "Concurrency_BenchVoiceLimit",
+            "MaxCount",
+            "3"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "batch_set_concurrency",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyB"
+            ],
+            "concurrency": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit"
+          },
+          "contains": [
+            "modified",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyA"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchConcurrencyB"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_concurrency_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit"
+          },
+          "contains": [
+            "Concurrency_BenchVoiceLimit",
+            "MaxCount",
+            "3"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "list_audio_assets",
+            "type": "SoundConcurrency",
+            "path_filter": "/Game/Benchmarks/AssetAuthoring",
+            "limit": 20
+          },
+          "contains": [
+            "Concurrency_BenchVoiceLimit",
+            "SoundConcurrency"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchVoiceLimit"
+          },
+          "contains": [
+            "Concurrency_BenchVoiceLimit",
+            "SoundConcurrency"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_concurrency",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_concurrency_batch_roundtrip",
+      "description": "Create and edit a SoundConcurrency asset, batch-attach it to two SoundWaves, save all assets, and read the concurrency settings and registry entry back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_sound_concurrency",
+          "set_concurrency_settings",
+          "batch_set_concurrency",
+          "save_asset",
+          "get_concurrency_settings",
+          "list_audio_assets",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

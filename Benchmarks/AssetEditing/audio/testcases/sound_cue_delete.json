@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_cue_delete",
+  "route_edit_domain": "sound_cue_delete",
+  "module_id": "asset_authoring.audio.sound_cue_delete",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_cue_delete",
+    "edit": "asset_operation.edit.audio.sound_cue_delete",
+    "save": "asset_operation.save.audio.sound_cue_delete",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_cue_delete"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-317"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-317",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_cue_delete",
+      "blueprint_type": "",
+      "workflow": "audio_delete_asset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_sound_cue",
+        "save_asset",
+        "delete_audio_asset",
+        "list_audio_assets",
+        "get_sound_wave_info"
+      ],
+      "description": "Create a SoundWave-backed SoundCue, delete the cue through the audio namespace, and verify the source wave remains while the cue is gone"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-317",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchDeleteCueSource",
+              "/Game/Benchmarks/AssetAuthoring/SCue_BenchDelete"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchDeleteCueSource",
+            "frequency_hz": 392.0,
+            "duration_seconds": 0.18,
+            "sample_rate": 44100,
+            "amplitude": 0.25
+          },
+          "contains": [
+            "SW_BenchDeleteCueSource"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDelete",
+            "sound_waves": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchDeleteCueSource"
+            ]
+          },
+          "contains": [
+            "SCue_BenchDelete"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDelete"
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "delete_audio_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDelete"
+          },
+          "contains": [
+            "success",
+            "true",
+            "SCue_BenchDelete"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "list_audio_assets",
+            "type": "SoundCue",
+            "path_filter": "/Game/Benchmarks/AssetAuthoring",
+            "limit": 200
+          },
+          "contains": [
+            "count"
+          ],
+          "not_contains": [
+            "SCue_BenchDelete"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_wave_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchDeleteCueSource"
+          },
+          "contains": [
+            "SW_BenchDeleteCueSource",
+            "sample_rate"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_cue_delete",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_delete_asset_roundtrip",
+      "description": "Create a SoundWave-backed SoundCue, delete the cue through the audio namespace, and verify the source wave remains while the cue is gone",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_sound_cue",
+          "save_asset",
+          "delete_audio_asset",
+          "list_audio_assets",
+          "get_sound_wave_info"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

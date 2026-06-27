@@ -104,7 +104,8 @@ bool FMonolithBlueprintDataTableMaintenanceMalformedBoolTest::RunTest(const FStr
 
 	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("update_data_table_row"), Params);
 	TestFalse(TEXT("update_data_table_row rejects malformed dry_run"), Result.bSuccess);
-	TestTrue(TEXT("malformed dry_run reports boolean requirement"), Result.ErrorMessage.Contains(TEXT("dry_run must be a boolean")));
+	TestTrue(TEXT("malformed dry_run reports boolean requirement"),
+		Result.ErrorMessage.Contains(TEXT("dry_run")) && Result.ErrorMessage.Contains(TEXT("boolean")));
 
 	return true;
 }

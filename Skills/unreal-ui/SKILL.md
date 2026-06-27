@@ -164,9 +164,9 @@ Build the tabbed settings panel and save-slot selector WBPs, then scaffold the b
 ```
 1. ui_query("create_settings_panel", {"save_path": "/Game/UI/WBP_Settings", "tabs": ["graphics", "audio", "controls", "accessibility"]})
 2. ui_query("create_save_slot_list", {"save_path": "/Game/UI/WBP_SaveSlots", "max_slots": 3})
-3. ui_query("scaffold_game_user_settings", {"class_name": "GoGameUserSettings", "module_name": "GoGame", "features": ["audio_volumes", "accessibility_flags"]})
-4. ui_query("scaffold_save_game", {"class_name": "GoSaveGame", "module_name": "GoGame", "properties": [{"name": "SlotName", "type": "FString", "default_value": ""}]})
-5. ui_query("scaffold_save_subsystem", {"class_name": "GoSaveSubsystem", "module_name": "GoGame", "save_game_class": "GoSaveGame"})
+3. ui_query("scaffold_game_user_settings", {"class_name": "MyGameUserSettings", "module_name": "MyGame", "features": ["audio_volumes", "accessibility_flags"]})
+4. ui_query("scaffold_save_game", {"class_name": "MySaveGame", "module_name": "MyGame", "properties": [{"name": "SlotName", "type": "FString", "default_value": ""}]})
+5. ui_query("scaffold_save_subsystem", {"class_name": "MySaveSubsystem", "module_name": "MyGame", "save_game_class": "MySaveGame"})
 6. ui_query("audit_accessibility", {"asset_path": "/Game/UI/WBP_Settings"})
 ```
 

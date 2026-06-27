@@ -786,7 +786,9 @@ void MonolithSlate::FSlateInspectorActions::Register(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Optional(TEXT("window_index"), TEXT("number"), TEXT("-1 for all visible windows, otherwise a list_windows index."), TEXT("-1"))
 			.Optional(TEXT("max_depth"), TEXT("number"), TEXT("Maximum child depth to walk."), TEXT("8"))
+			.Range(TEXT("max_depth"), 0, MaxDepthLimit)
 			.Optional(TEXT("max_widgets"), TEXT("number"), TEXT("Maximum widgets returned across the snapshot."), TEXT("200"))
+			.Range(TEXT("max_widgets"), 1, MaxWidgetsLimit)
 			.Optional(TEXT("include_hidden"), TEXT("bool"), TEXT("Include hidden/collapsed widgets when Slate exposes them."), TEXT("false"))
 			.Build(),
 		Cat);
@@ -807,6 +809,7 @@ void MonolithSlate::FSlateInspectorActions::Register(FMonolithToolRegistry& Regi
 		FParamSchemaBuilder()
 			.Optional(TEXT("ref"), TEXT("string"), TEXT("Opaque ref returned by slate.snapshot_widgets. Omit to capture active top-level window."))
 			.Optional(TEXT("max_bytes"), TEXT("number"), TEXT("Maximum compressed PNG bytes to return as base64."), TEXT("1048576"))
+			.Range(TEXT("max_bytes"), 1, 8 * 1024 * 1024)
 			.Build(),
 		Cat);
 
@@ -820,7 +823,9 @@ void MonolithSlate::FSlateInspectorActions::Register(FMonolithToolRegistry& Regi
 			.Optional(TEXT("visible"), TEXT("bool"), TEXT("Require visible widgets only."), TEXT("true"))
 			.Optional(TEXT("timeout_ms"), TEXT("number"), TEXT("Maximum poll duration, capped at 5000 ms."), TEXT("1000"))
 			.Optional(TEXT("poll_interval_ms"), TEXT("number"), TEXT("Poll interval, clamped 16..1000 ms."), TEXT("100"))
+			.Range(TEXT("poll_interval_ms"), 16, 1000)
 			.Optional(TEXT("max_depth"), TEXT("number"), TEXT("Maximum child depth to walk per poll."), TEXT("12"))
+			.Range(TEXT("max_depth"), 0, MaxDepthLimit)
 			.Build(),
 		Cat);
 }

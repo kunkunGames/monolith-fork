@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "simplify_uv_static_mesh",
+  "route_edit_domain": "simplify_uv_static_mesh",
+  "module_id": "asset_authoring.mesh.simplify_uv_static_mesh",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.simplify_uv_static_mesh",
+    "edit": "asset_operation.edit.mesh.simplify_uv_static_mesh",
+    "save": "asset_operation.save.mesh.simplify_uv_static_mesh",
+    "readback_verify": "asset_operation.readback_verify.mesh.simplify_uv_static_mesh"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-462"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-462",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "simplify_uv_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_simplify_uv_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "mesh_simplify",
+        "compute_uvs",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_uvs",
+        "get_vertex_data",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript sphere handle, simplify it, compute UVs, save it as a StaticMesh, and read UV and vertex data back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-462",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchSimplifySphere"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:sphere",
+            "handle": "AE_BenchSimplifySphere"
+          },
+          "contains": [
+            "AE_BenchSimplifySphere",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "mesh_simplify",
+            "handle": "AE_BenchSimplifySphere",
+            "target_percentage": 0.5
+          },
+          "contains": [
+            "AE_BenchSimplifySphere",
+            "original_triangles",
+            "result_triangles",
+            "reduction_ratio"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "compute_uvs",
+            "handle": "AE_BenchSimplifySphere",
+            "method": "box_project",
+            "uv_channel": 0
+          },
+          "contains": [
+            "AE_BenchSimplifySphere",
+            "box_project",
+            "uv_channel",
+            "0"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "save_handle",
+            "handle": "AE_BenchSimplifySphere",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere",
+            "overwrite": true,
+            "collision": "box"
+          },
+          "contains": [
+            "AE_BenchSimplifySphere",
+            "SM_BenchSimplifiedSphere",
+            "saved_to"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchSimplifySphere"
+          },
+          "contains": [
+            "AE_BenchSimplifySphere",
+            "released"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere"
+          },
+          "contains": [
+            "SM_BenchSimplifiedSphere",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_uvs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere",
+            "uv_channel": 0
+          },
+          "contains": [
+            "uv_channels",
+            "channels",
+            "bounds"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_vertex_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere",
+            "limit": 4
+          },
+          "contains": [
+            "total_vertices",
+            "vertices",
+            "position",
+            "normal"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchSimplifiedSphere"
+          },
+          "contains": [
+            "SM_BenchSimplifiedSphere",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "simplify_uv_static_mesh",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_simplify_uv_static_mesh_roundtrip",
+      "description": "Create a GeometryScript sphere handle, simplify it, compute UVs, save it as a StaticMesh, and read UV and vertex data back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshOperationActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshInspectionActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "release_handle",
+          "create_handle",
+          "mesh_simplify",
+          "compute_uvs",
+          "save_handle",
+          "get_mesh_info",
+          "get_mesh_uvs",
+          "get_vertex_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

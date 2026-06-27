@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_layer_assets",
+  "route_edit_domain": "layer_assets",
+  "module_id": "asset_authoring.material.layer_assets",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.layer_assets",
+    "edit": "asset_operation.edit.material.layer_assets",
+    "save": "asset_operation.save.material.layer_assets",
+    "readback_verify": "asset_operation.readback_verify.material.layer_assets"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-445"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-445",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_layer_assets",
+      "blueprint_type": "",
+      "workflow": "material_layer_blend_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material_function",
+        "set_function_metadata",
+        "save_material",
+        "get_layer_info",
+        "inspect_assets_batch"
+      ],
+      "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-445",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer",
+              "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_function",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer",
+            "type": "MaterialLayer",
+            "description": "Benchmark material layer base response",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmarks",
+              "Layers"
+            ]
+          },
+          "contains": [
+            "ML_BenchLayer",
+            "MaterialLayer",
+            "Benchmark material layer base response"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_function",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend",
+            "type": "MaterialLayerBlend",
+            "description": "Benchmark material layer blend response",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmarks",
+              "Layers"
+            ]
+          },
+          "contains": [
+            "MLB_BenchBlend",
+            "MaterialLayerBlend",
+            "Benchmark material layer blend response"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_function_metadata",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer",
+            "description": "Edited benchmark material layer",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmarks",
+              "Layered Materials"
+            ]
+          },
+          "contains": [
+            "modified",
+            "true",
+            "description",
+            "library_categories"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_function_metadata",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend",
+            "description": "Edited benchmark material layer blend",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmarks",
+              "Layered Materials"
+            ]
+          },
+          "contains": [
+            "modified",
+            "true",
+            "description",
+            "library_categories"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer"
+          },
+          "contains": [
+            "saved"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend"
+          },
+          "contains": [
+            "saved"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_layer_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer"
+          },
+          "contains": [
+            "ML_BenchLayer",
+            "MaterialLayer",
+            "Edited benchmark material layer"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_layer_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend"
+          },
+          "contains": [
+            "MLB_BenchBlend",
+            "MaterialLayerBlend",
+            "Edited benchmark material layer blend"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ML_BenchLayer",
+              "/Game/Benchmarks/AssetAuthoring/MLB_BenchBlend"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "ML_BenchLayer",
+            "MLB_BenchBlend"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_layer_assets",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_layer_blend_roundtrip",
+      "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material_function",
+          "set_function_metadata",
+          "save_material",
+          "get_layer_info",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithAIMassZoneGraphActions.h"
 #include "Dom/JsonObject.h"
+#include "Containers/Ticker.h"
 #include "Editor.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -12,9 +13,9 @@
 // P1b (PRD Spec 10): ai.rebuild_zone_graph gating by
 // UMonolithSettings::bEnableAsyncJobs and bEnableZoneGraphRebuildJob. Either
 // flag off must preserve the legacy "unavailable" report with NO async fields
-// (contract preservation §9); both flags on must mint a pollable job and drive
-// it to an honest terminal state (completed when WITH_ZONEGRAPH and GEditor are
-// available, failed otherwise) — never a faked completion.
+// (contract preservation §9); both flags on must mint a pollable job, return a
+// P0.6 started envelope, and drive the job to an honest terminal state only
+// after the deferred rebuild work runs.
 
 namespace
 {
@@ -25,6 +26,16 @@ namespace
 		{
 			FMonolithAIMassZoneGraphActions::RegisterActions(Registry);
 		}
+	}
+
+	void TickRebuildZoneGraphWork()
+	{
+		FTSTicker::GetCoreTicker().Tick(0.016f);
+	}
+
+	bool IsTerminalStatus(const FString& Status)
+	{
+		return Status == TEXT("completed") || Status == TEXT("failed") || Status == TEXT("cancelled");
 	}
 }
 
@@ -136,21 +147,45 @@ bool FMonolithRebuildZoneGraphEnabledTest::RunTest(const FString& Parameters)
 		// outcome.
 		TestTrue(TEXT("job_id present when enabled"), Result.Result->HasField(TEXT("job_id")));
 		TestEqual(TEXT("poll_action points at monolith.get_job"), Result.Result->GetStringField(TEXT("poll_action")), TEXT("monolith.get_job"));
+		TestEqual(TEXT("cancel_action points at monolith.cancel_job"), Result.Result->GetStringField(TEXT("cancel_action")), TEXT("monolith.cancel_job"));
+		TestTrue(TEXT("Action result supports progress"), Result.Result->GetBoolField(TEXT("supports_progress")));
+		TestTrue(TEXT("Action result is cancellable"), Result.Result->GetBoolField(TEXT("cancellable")));
 
 		const FString Status = Result.Result->GetStringField(TEXT("status"));
-		// Honest terminal state only — completed (real rebuild), failed
-		// (ZoneGraph absent / no editor), or cancelled if a concurrent caller
-		// requested cancellation before completion. Never anything else, never faked.
-		TestTrue(TEXT("Status is an honest terminal state"),
-			Status == TEXT("completed") || Status == TEXT("failed") || Status == TEXT("cancelled"));
-
-		// The minted job is queryable and shares the same terminal state.
 		const FString JobId = Result.Result->GetStringField(TEXT("job_id"));
 		TSharedPtr<FJsonObject> JobRow = JobRegistry.GetJobJson(JobId);
 		TestTrue(TEXT("Minted job row is retrievable"), JobRow.IsValid());
+
+#if WITH_ZONEGRAPH
+		if (GEditor)
+		{
+			TestEqual(TEXT("Enabled rebuild returns a P0.6 started envelope"), Status, TEXT("started"));
+			const TSharedPtr<FJsonObject>* Progress = nullptr;
+			TestTrue(TEXT("Started envelope includes progress object"), Result.Result->TryGetObjectField(TEXT("progress"), Progress));
+			if (Progress && Progress->IsValid())
+			{
+				TestEqual(TEXT("Started progress stage is queued"), (*Progress)->GetStringField(TEXT("stage")), TEXT("queued"));
+			}
+
+			if (JobRow.IsValid())
+			{
+				TestEqual(TEXT("Registry row is running until deferred work completes"), JobRow->GetStringField(TEXT("status")), TEXT("running"));
+			}
+
+			TickRebuildZoneGraphWork();
+			JobRow = JobRegistry.GetJobJson(JobId);
+			TestTrue(TEXT("Minted job row remains retrievable after deferred work"), JobRow.IsValid());
+			if (JobRow.IsValid())
+			{
+				TestTrue(TEXT("Deferred work drives job to an honest terminal state"), IsTerminalStatus(JobRow->GetStringField(TEXT("status"))));
+			}
+		}
+		else
+#endif
 		if (JobRow.IsValid())
 		{
-			TestEqual(TEXT("Registry row matches result status"), JobRow->GetStringField(TEXT("status")), Status);
+			TestEqual(TEXT("Unavailable editor returns failed status"), Status, TEXT("failed"));
+			TestEqual(TEXT("Registry row matches failed result status"), JobRow->GetStringField(TEXT("status")), Status);
 		}
 	}
 
@@ -190,16 +225,44 @@ bool FMonolithRebuildZoneGraphCancelledAfterSubmitTest::RunTest(const FString& P
 		});
 
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("ai"), TEXT("rebuild_zone_graph"), MakeShared<FJsonObject>());
-	TestTrue(TEXT("rebuild_zone_graph returns a cancellation report"), Result.bSuccess);
+	TestTrue(TEXT("rebuild_zone_graph returns a started cancellation-capable report"), Result.bSuccess);
 	if (Result.Result.IsValid())
 	{
-		TestEqual(TEXT("Action result is cancelled"), Result.Result->GetStringField(TEXT("status")), TEXT("cancelled"));
+		TestEqual(TEXT("Action result exposes cancel action"), Result.Result->GetStringField(TEXT("cancel_action")), TEXT("monolith.cancel_job"));
+		const FString Status = Result.Result->GetStringField(TEXT("status"));
 		const FString JobId = Result.Result->GetStringField(TEXT("job_id"));
 		TSharedPtr<FJsonObject> JobRow = JobRegistry.GetJobJson(JobId);
-		TestTrue(TEXT("Registry row is retrievable after submit cancellation"), JobRow.IsValid());
+		TestTrue(TEXT("Registry row is retrievable after submit cancellation request"), JobRow.IsValid());
+
+#if WITH_ZONEGRAPH
+		if (GEditor)
+		{
+			TestEqual(TEXT("Action result is started before deferred cancellation acknowledgement"), Status, TEXT("started"));
+			TestTrue(TEXT("Registry row is valid before producer acknowledgement"), JobRow.IsValid());
+			if (!JobRow.IsValid())
+			{
+				Settings->bEnableAsyncJobs = bOriginalAsyncJobs;
+				Settings->bEnableZoneGraphRebuildJob = bOriginalZoneGraph;
+				FMonolithAIMassZoneGraphActions::ClearRebuildZoneGraphTestHooks();
+				JobRegistry.ResetForTests();
+				return false;
+			}
+			TestTrue(TEXT("Registry row records cancellation request before deferred work"), JobRow->GetBoolField(TEXT("cancel_requested")));
+			TestEqual(TEXT("Registry row is still running before producer acknowledgement"), JobRow->GetStringField(TEXT("status")), TEXT("running"));
+			TickRebuildZoneGraphWork();
+			JobRow = JobRegistry.GetJobJson(JobId);
+			TestTrue(TEXT("Registry row remains retrievable after cancellation acknowledgement"), JobRow.IsValid());
+			if (JobRow.IsValid())
+			{
+				TestEqual(TEXT("Registry row is cancelled after producer acknowledgement"), JobRow->GetStringField(TEXT("status")), TEXT("cancelled"));
+			}
+		}
+		else
+#endif
 		if (JobRow.IsValid())
 		{
-			TestEqual(TEXT("Registry row is cancelled"), JobRow->GetStringField(TEXT("status")), TEXT("cancelled"));
+			TestEqual(TEXT("No rebuild producer available returns failed"), Status, TEXT("failed"));
+			TestEqual(TEXT("Registry row matches failed result status"), JobRow->GetStringField(TEXT("status")), Status);
 		}
 	}
 
@@ -247,16 +310,23 @@ bool FMonolithRebuildZoneGraphCancelledBeforeBroadcastTest::RunTest(const FStrin
 		});
 
 	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("ai"), TEXT("rebuild_zone_graph"), MakeShared<FJsonObject>());
-	TestTrue(TEXT("rebuild_zone_graph returns a pre-broadcast cancellation report"), Result.bSuccess);
+	TestTrue(TEXT("rebuild_zone_graph returns a started pre-broadcast cancellation-capable report"), Result.bSuccess);
 	if (Result.Result.IsValid())
 	{
-		TestEqual(TEXT("Action result is cancelled before broadcast"), Result.Result->GetStringField(TEXT("status")), TEXT("cancelled"));
+		TestEqual(TEXT("Action result is started before pre-broadcast cancellation acknowledgement"), Result.Result->GetStringField(TEXT("status")), TEXT("started"));
 		const FString JobId = Result.Result->GetStringField(TEXT("job_id"));
 		TSharedPtr<FJsonObject> JobRow = JobRegistry.GetJobJson(JobId);
-		TestTrue(TEXT("Registry row is retrievable before broadcast cancellation"), JobRow.IsValid());
+		TestTrue(TEXT("Registry row is retrievable before broadcast cancellation request"), JobRow.IsValid());
 		if (JobRow.IsValid())
 		{
-			TestEqual(TEXT("Registry row is cancelled before broadcast"), JobRow->GetStringField(TEXT("status")), TEXT("cancelled"));
+			TestEqual(TEXT("Registry row is running before deferred work observes cancellation"), JobRow->GetStringField(TEXT("status")), TEXT("running"));
+			TickRebuildZoneGraphWork();
+			JobRow = JobRegistry.GetJobJson(JobId);
+			TestTrue(TEXT("Registry row remains retrievable before broadcast cancellation acknowledgement"), JobRow.IsValid());
+			if (JobRow.IsValid())
+			{
+				TestEqual(TEXT("Registry row is cancelled before broadcast"), JobRow->GetStringField(TEXT("status")), TEXT("cancelled"));
+			}
 		}
 	}
 

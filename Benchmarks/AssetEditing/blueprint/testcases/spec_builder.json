@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "blueprint",
+  "asset_type_slug": "blueprint",
+  "edit_domain": "blueprint_spec_builder",
+  "route_edit_domain": "spec_builder",
+  "module_id": "asset_authoring.blueprint.spec_builder",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.blueprint.spec_builder",
+    "edit": "asset_operation.edit.blueprint.spec_builder",
+    "save": "asset_operation.save.blueprint.spec_builder",
+    "readback_verify": "asset_operation.readback_verify.blueprint.spec_builder"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-347"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-347",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_spec_builder",
+      "blueprint_type": "",
+      "workflow": "blueprint_spec_builder_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "build_blueprint_from_spec",
+        "save_asset",
+        "get_variables",
+        "get_components",
+        "get_graph_data",
+        "compile_blueprint"
+      ],
+      "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-347",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor",
+            "parent_class": "Actor",
+            "blueprint_type": "Normal"
+          },
+          "contains": [
+            "BP_BenchSpecActor",
+            "Actor"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "build_blueprint_from_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor",
+            "graph_name": "EventGraph",
+            "variables": [
+              {
+                "name": "BenchSpecHealth",
+                "type": "float",
+                "default_value": "125.0",
+                "category": "Benchmark",
+                "instance_editable": true
+              }
+            ],
+            "components": [
+              {
+                "name": "BenchSpecSphere",
+                "class": "SphereComponent"
+              }
+            ],
+            "nodes": [
+              {
+                "id": "evt",
+                "type": "CustomEvent",
+                "event_name": "BenchSpecRun",
+                "position": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "id": "print",
+                "type": "CallFunction",
+                "function_name": "PrintString",
+                "position": [
+                  320,
+                  0
+                ]
+              }
+            ],
+            "connections": [
+              {
+                "source": "evt",
+                "source_pin": "Then",
+                "target": "print",
+                "target_pin": "execute"
+              }
+            ],
+            "pin_defaults": [
+              {
+                "node_id": "print",
+                "pin_name": "InString",
+                "value": "BenchSpecBuilt"
+              }
+            ],
+            "auto_compile": true
+          },
+          "contains": [
+            "variables_created",
+            "components_created",
+            "nodes_created",
+            "connections_made"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_variables",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor"
+          },
+          "contains": [
+            "BenchSpecHealth",
+            "125"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_components",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor"
+          },
+          "contains": [
+            "BenchSpecSphere",
+            "SphereComponent"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_graph_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor",
+            "graph_name": "EventGraph"
+          },
+          "contains": [
+            "BenchSpecRun",
+            "PrintString"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "compile_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchSpecActor"
+          },
+          "contains": [
+            "error_count",
+            "0"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blueprint_spec_builder",
+      "blueprint_type": "",
+      "domain": "blueprint",
+      "workflow": "blueprint_spec_builder_roundtrip",
+      "description": "Create an Actor Blueprint, build variables/components/nodes from a declarative spec, save, and read the generated graph back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blueprint",
+          "build_blueprint_from_spec",
+          "save_asset",
+          "get_variables",
+          "get_components",
+          "get_graph_data",
+          "compile_blueprint"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "imagegen",
+  "asset_type_slug": "imagegen",
+  "edit_domain": "msdf_texture",
+  "route_edit_domain": "msdf_texture",
+  "module_id": "asset_authoring.imagegen.msdf_texture",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.imagegen.msdf_texture",
+    "edit": "asset_operation.edit.imagegen.msdf_texture",
+    "save": "asset_operation.save.imagegen.msdf_texture",
+    "readback_verify": "asset_operation.readback_verify.imagegen.msdf_texture"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-284"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-284",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "msdf_texture",
+      "blueprint_type": "",
+      "workflow": "imagegen_msdf_svg_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "validate_svg",
+        "generate_msdf_from_svg",
+        "save_asset",
+        "get_generated_asset_provenance",
+        "inspect_asset"
+      ],
+      "description": "Validate an MSDF-ready SVG, bake an MSDF Texture2D plus preview material, save it, and inspect texture/provenance"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-284",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchMsdfGlyph",
+              "/Game/Benchmarks/AssetAuthoring/M_M_T_BenchMsdfGlyph"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "validate_svg",
+            "svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"12\" y=\"12\" width=\"40\" height=\"40\" fill=\"black\"/></svg>",
+            "profile": "msdf_source"
+          },
+          "contains": [
+            "msdf_ready",
+            "true",
+            "geometry_valid",
+            "true"
+          ]
+        },
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "generate_msdf_from_svg",
+            "svg_text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"12\" y=\"12\" width=\"40\" height=\"40\" fill=\"black\"/></svg>",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchMsdfGlyph",
+            "size": 128,
+            "pixel_range": 8,
+            "verify_samples": true,
+            "create_material": true,
+            "verify_material_render": false,
+            "overwrite_policy": "fail",
+            "save": true
+          },
+          "contains": [
+            "T_BenchMsdfGlyph",
+            "msdf_texture_asset_path",
+            "channel_samples",
+            "monolith_cpu_contour_msdf_v1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchMsdfGlyph"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_M_T_BenchMsdfGlyph"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "get_generated_asset_provenance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchMsdfGlyph"
+          },
+          "contains": [
+            "found",
+            "true",
+            "kind",
+            "msdf",
+            "monolith/local-msdf-cpu-v1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchMsdfGlyph"
+          },
+          "contains": [
+            "T_BenchMsdfGlyph",
+            "Texture2D",
+            "128x128",
+            "TC_Masks",
+            "SRGB",
+            "False"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_M_T_BenchMsdfGlyph"
+          },
+          "contains": [
+            "M_M_T_BenchMsdfGlyph",
+            "Material"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "msdf_texture",
+      "blueprint_type": "",
+      "domain": "imagegen",
+      "workflow": "imagegen_msdf_svg_roundtrip",
+      "description": "Validate an MSDF-ready SVG, bake an MSDF Texture2D plus preview material, save it, and inspect texture/provenance",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "validate_svg",
+          "generate_msdf_from_svg",
+          "save_asset",
+          "get_generated_asset_provenance",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

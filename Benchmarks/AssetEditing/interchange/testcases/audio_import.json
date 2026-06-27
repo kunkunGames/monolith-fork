@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_audio_import",
+  "route_edit_domain": "audio_import",
+  "module_id": "asset_authoring.interchange.audio_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.audio_import",
+    "edit": "asset_operation.edit.interchange.audio_import",
+    "save": "asset_operation.save.interchange.audio_import",
+    "readback_verify": "asset_operation.readback_verify.interchange.audio_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-288"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-288",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_audio_import",
+      "blueprint_type": "",
+      "workflow": "interchange_audio_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_audio",
+        "save_asset",
+        "get_import_data",
+        "get_sound_wave_info",
+        "inspect_asset"
+      ],
+      "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-288",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchInterchangeTone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_audio",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_AUDIO_WAV__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "imported",
+            "SW_BenchInterchangeTone",
+            "SoundWave"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchInterchangeTone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchInterchangeTone"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "SW_BenchInterchangeTone.wav",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_wave_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchInterchangeTone"
+          },
+          "contains": [
+            "SW_BenchInterchangeTone",
+            "num_channels",
+            "sample_rate"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchInterchangeTone"
+          },
+          "contains": [
+            "SW_BenchInterchangeTone",
+            "SoundWave"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_audio_import",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_audio_import_roundtrip",
+      "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "can_import",
+          "import_audio",
+          "save_asset",
+          "get_import_data",
+          "get_sound_wave_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

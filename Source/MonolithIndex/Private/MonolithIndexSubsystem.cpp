@@ -578,6 +578,7 @@ void UMonolithIndexSubsystem::FinishActiveAsyncJob(bool bSuccess)
 	FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
 	if (JobRegistry.IsCancelRequested(JobId))
 	{
+		JobRegistry.CancelJob(JobId, TEXT("Project index cancellation was acknowledged before completion."));
 		return;
 	}
 
@@ -910,10 +911,10 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 		// Queue assets that have deep indexers (Blueprint, Material, etc.). Exact leaf-class
 		// dispatch first; on a miss the resolver walks the parent class chain (most-derived
-		// first) to the first registered non-sentinel, non-generic ancestor indexer — e.g. the
-		// ~546 UGo*DataAsset : UPrimaryDataAsset types reach FDataAssetIndexer via their
-		// "PrimaryDataAsset" ancestor. Distribution stays keyed on the leaf class for honest
-		// per-type telemetry (e.g. "GoMonsterDataAsset: 83").
+		// first) to the first registered non-sentinel, non-generic ancestor indexer - e.g. a
+		// project-specific U*DataAsset : UPrimaryDataAsset type reaches FDataAssetIndexer via
+		// its "PrimaryDataAsset" ancestor. Distribution stays keyed on the leaf class for
+		// honest per-type telemetry (for example, "MonsterDataAsset: 83").
 		TSharedPtr<IMonolithIndexer> FoundIndexer = Owner->ResolveDeepIndexer(
 			IndexedAsset.AssetClass, AssetData.AssetClassPath, AssetRegistryPtr);
 		if (FoundIndexer.IsValid())

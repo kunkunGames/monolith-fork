@@ -412,6 +412,289 @@ static UFunction* FindFunctionAcrossLoadedClasses(const TArray<FName>& Candidate
 	return FirstMatch;
 }
 
+static TArray<TSharedPtr<FJsonValue>> AddEventNodeStringsToJsonValues(const TArray<FString>& Values)
+{
+	TArray<TSharedPtr<FJsonValue>> Out;
+	Out.Reserve(Values.Num());
+	for (const FString& Value : Values)
+	{
+		Out.Add(MakeShared<FJsonValueString>(Value));
+	}
+	return Out;
+}
+
+static TArray<FString> AddEventNodeAcceptedParameters()
+{
+	TArray<FString> Values;
+	Values.Add(TEXT("asset_path"));
+	Values.Add(TEXT("event_name"));
+	Values.Add(TEXT("graph_name"));
+	Values.Add(TEXT("position"));
+	Values.Add(TEXT("replication"));
+	Values.Add(TEXT("reliable"));
+	return Values;
+}
+
+static TArray<FString> AddEventNodeAcceptedReplicationModes()
+{
+	TArray<FString> Values;
+	Values.Add(TEXT("none"));
+	Values.Add(TEXT("multicast"));
+	Values.Add(TEXT("server"));
+	Values.Add(TEXT("client"));
+	return Values;
+}
+
+static TArray<FString> AddEventNodeCandidateActions()
+{
+	TArray<FString> Values;
+	Values.Add(TEXT("blueprint.get_graph_data"));
+	Values.Add(TEXT("blueprint.get_graph_summary"));
+	Values.Add(TEXT("blueprint.get_functions"));
+	Values.Add(TEXT("blueprint.get_interfaces"));
+	Values.Add(TEXT("blueprint.get_interface_functions"));
+	Values.Add(TEXT("blueprint.add_node"));
+	Values.Add(TEXT("blueprint.resolve_node"));
+	Values.Add(TEXT("monolith.discover"));
+	return Values;
+}
+
+static bool IsSupportedAddEventNodeReplicationMode(const FString& ReplicationLower)
+{
+	return ReplicationLower.IsEmpty()
+		|| ReplicationLower == TEXT("none")
+		|| ReplicationLower == TEXT("multicast")
+		|| ReplicationLower == TEXT("server")
+		|| ReplicationLower == TEXT("client");
+}
+
+static bool IsAddEventNodeBlueprintEventFunction(const UFunction* Func)
+{
+	return Func && Func->HasAnyFunctionFlags(FUNC_BlueprintEvent);
+}
+
+static TArray<TSharedPtr<FJsonValue>> AddEventNodeFunctionParametersToJsonValues(const UFunction* Func)
+{
+	TArray<TSharedPtr<FJsonValue>> Params;
+	if (!Func)
+	{
+		return Params;
+	}
+
+	for (TFieldIterator<FProperty> PropIt(Func); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
+	{
+		const FProperty* Prop = *PropIt;
+		if (!Prop)
+		{
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> Param = MakeShared<FJsonObject>();
+		Param->SetStringField(TEXT("name"), Prop->GetName());
+		Param->SetStringField(TEXT("type"), Prop->GetCPPType());
+		Param->SetBoolField(TEXT("is_return"), (Prop->PropertyFlags & CPF_ReturnParm) != 0);
+		Param->SetStringField(TEXT("direction"),
+			(Prop->PropertyFlags & (CPF_ReturnParm | CPF_OutParm)) != 0 ? TEXT("output") : TEXT("input"));
+		Params.Add(MakeShared<FJsonValueObject>(Param));
+	}
+	return Params;
+}
+
+static TSharedPtr<FJsonObject> AddEventNodeFunctionToJson(const UFunction* Func, const FString& EventKind)
+{
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	if (!Func)
+	{
+		return Obj;
+	}
+
+	Obj->SetStringField(TEXT("function_name"), Func->GetName());
+	if (const UClass* OwnerClass = Func->GetOwnerClass())
+	{
+		Obj->SetStringField(TEXT("class"), OwnerClass->GetName());
+		Obj->SetStringField(TEXT("class_path"), OwnerClass->GetPathName());
+	}
+	Obj->SetStringField(TEXT("event_kind"), EventKind);
+	Obj->SetBoolField(TEXT("blueprint_event"), IsAddEventNodeBlueprintEventFunction(Func));
+	Obj->SetArrayField(TEXT("parameters"), AddEventNodeFunctionParametersToJsonValues(Func));
+	return Obj;
+}
+
+static TArray<TSharedPtr<FJsonValue>> AddEventNodeCandidateFunctionsToJsonValues(const UBlueprint* BP, int32 Limit = 25)
+{
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	if (!BP || Limit <= 0)
+	{
+		return Rows;
+	}
+
+	TSet<FName> SeenFunctionNames;
+	if (BP->ParentClass)
+	{
+		for (UClass* TestClass = BP->ParentClass; TestClass && Rows.Num() < Limit; TestClass = TestClass->GetSuperClass())
+		{
+			for (TFieldIterator<UFunction> FuncIt(TestClass, EFieldIterationFlags::None); FuncIt && Rows.Num() < Limit; ++FuncIt)
+			{
+				UFunction* Func = *FuncIt;
+				if (!Func || Func->GetOwnerClass() != TestClass || !IsAddEventNodeBlueprintEventFunction(Func))
+				{
+					continue;
+				}
+
+				const FName FunctionName = Func->GetFName();
+				if (SeenFunctionNames.Contains(FunctionName))
+				{
+					continue;
+				}
+				SeenFunctionNames.Add(FunctionName);
+				Rows.Add(MakeShared<FJsonValueObject>(AddEventNodeFunctionToJson(Func, TEXT("parent_override"))));
+			}
+		}
+	}
+
+	for (const FBPInterfaceDescription& InterfaceDesc : BP->ImplementedInterfaces)
+	{
+		if (Rows.Num() >= Limit)
+		{
+			break;
+		}
+
+		UClass* InterfaceClass = InterfaceDesc.Interface;
+		if (!InterfaceClass)
+		{
+			continue;
+		}
+
+		for (TFieldIterator<UFunction> FuncIt(InterfaceClass, EFieldIterationFlags::None); FuncIt && Rows.Num() < Limit; ++FuncIt)
+		{
+			UFunction* Func = *FuncIt;
+			if (!Func || Func->GetOwnerClass() != InterfaceClass || !IsAddEventNodeBlueprintEventFunction(Func))
+			{
+				continue;
+			}
+
+			const FName FunctionName = Func->GetFName();
+			if (SeenFunctionNames.Contains(FunctionName))
+			{
+				continue;
+			}
+			SeenFunctionNames.Add(FunctionName);
+			Rows.Add(MakeShared<FJsonValueObject>(AddEventNodeFunctionToJson(Func, TEXT("interface_event"))));
+		}
+	}
+
+	return Rows;
+}
+
+static TArray<FString> AddEventNodeCustomEventNames(const UBlueprint* BP, int32 Limit = 25)
+{
+	TArray<FString> Names;
+	if (!BP || Limit <= 0)
+	{
+		return Names;
+	}
+
+	TArray<UEdGraph*> AllGraphs;
+	const_cast<UBlueprint*>(BP)->GetAllGraphs(AllGraphs);
+	for (const UEdGraph* Graph : AllGraphs)
+	{
+		if (!Graph)
+		{
+			continue;
+		}
+		for (const UEdGraphNode* Node : Graph->Nodes)
+		{
+			if (Names.Num() >= Limit)
+			{
+				Names.Sort();
+				return Names;
+			}
+			const UK2Node_CustomEvent* CustomEvent = Cast<UK2Node_CustomEvent>(Node);
+			if (CustomEvent && !CustomEvent->CustomFunctionName.IsNone())
+			{
+				Names.AddUnique(CustomEvent->CustomFunctionName.ToString());
+			}
+		}
+	}
+	Names.Sort();
+	return Names;
+}
+
+static TArray<FString> AddEventNodeEventGraphNames(const UBlueprint* BP)
+{
+	TArray<FString> Names;
+	if (!BP)
+	{
+		return Names;
+	}
+	for (const UEdGraph* Graph : BP->UbergraphPages)
+	{
+		if (Graph)
+		{
+			Names.Add(Graph->GetName());
+		}
+	}
+	Names.Sort();
+	return Names;
+}
+
+static TSharedPtr<FJsonObject> MakeAddEventNodeReadArgs(const FString& AssetPath, const FString& GraphName)
+{
+	TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+	if (!AssetPath.IsEmpty())
+	{
+		Args->SetStringField(TEXT("asset_path"), AssetPath);
+	}
+	if (!GraphName.IsEmpty())
+	{
+		Args->SetStringField(TEXT("graph_name"), GraphName);
+	}
+	return Args;
+}
+
+static TSharedPtr<FJsonObject> MakeAddEventNodeErrorData(
+	const UBlueprint* BP,
+	const FString& FailureCause,
+	const FString& AssetPath,
+	const FString& EventName,
+	const FString& FunctionName,
+	const FString& EventKind,
+	const FString& ReadAction,
+	const FString& GraphName,
+	const TArray<FString>& RecoveryHints)
+{
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetStringField(TEXT("failure_cause"), FailureCause);
+	ErrorData->SetStringField(TEXT("event_kind"), EventKind);
+	if (!AssetPath.IsEmpty())
+	{
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+	}
+	if (!EventName.IsEmpty())
+	{
+		ErrorData->SetStringField(TEXT("event_name"), EventName);
+	}
+	if (!FunctionName.IsEmpty())
+	{
+		ErrorData->SetStringField(TEXT("function_name"), FunctionName);
+	}
+	ErrorData->SetArrayField(TEXT("accepted_parameters"), AddEventNodeStringsToJsonValues(AddEventNodeAcceptedParameters()));
+	ErrorData->SetArrayField(TEXT("accepted_replication_modes"), AddEventNodeStringsToJsonValues(AddEventNodeAcceptedReplicationModes()));
+	ErrorData->SetArrayField(TEXT("candidate_actions"), AddEventNodeStringsToJsonValues(AddEventNodeCandidateActions()));
+	ErrorData->SetStringField(TEXT("read_action"), ReadAction);
+	ErrorData->SetObjectField(TEXT("read_args"), MakeAddEventNodeReadArgs(AssetPath, GraphName));
+	ErrorData->SetArrayField(TEXT("recovery_hints"), AddEventNodeStringsToJsonValues(RecoveryHints));
+
+	if (BP)
+	{
+		ErrorData->SetArrayField(TEXT("candidate_functions"), AddEventNodeCandidateFunctionsToJsonValues(BP));
+		ErrorData->SetArrayField(TEXT("existing_custom_events"), AddEventNodeStringsToJsonValues(AddEventNodeCustomEventNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_event_graphs"), AddEventNodeStringsToJsonValues(AddEventNodeEventGraphNames(BP)));
+	}
+
+	return ErrorData;
+}
+
 // ============================================================
 //  MonolithBlueprintInternal helpers
 // ============================================================
@@ -1439,8 +1722,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddNode(const TShared
 			}
 		}
 
-		bool bReliable = false;
-		if (Params->TryGetBoolField(TEXT("reliable"), bReliable) && bReliable)
+		bool bRequestedReliableValue = false;
+		if (Params->TryGetBoolField(TEXT("reliable"), bRequestedReliableValue) && bRequestedReliableValue)
 		{
 			EventNode->FunctionFlags |= FUNC_NetReliable;
 			bNetFlagsChanged = true;
@@ -3103,8 +3386,8 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 				EventNode->FunctionFlags |= (FUNC_Net | NetFlag);
 		}
 
-		bool bReliable = false;
-		if (Params->TryGetBoolField(TEXT("reliable"), bReliable) && bReliable)
+		bool bPreviewReliable = false;
+		if (Params->TryGetBoolField(TEXT("reliable"), bPreviewReliable) && bPreviewReliable)
 			EventNode->FunctionFlags |= FUNC_NetReliable;
 
 		Node = EventNode;
@@ -3897,14 +4180,44 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 	UBlueprint* BP = MonolithBlueprintInternal::LoadBlueprintFromParams(Params, AssetPath);
 	if (!BP)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Verify asset_path with project.search or blueprint.list_graphs before retrying."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			nullptr,
+			TEXT("blueprint_not_found"),
+			AssetPath,
+			FString(),
+			FString(),
+			TEXT("unknown"),
+			TEXT("blueprint.list_graphs"),
+			FString(),
+			RecoveryHints);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Blueprint not found: %s"), *AssetPath))
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("project.search"), TEXT("blueprint.list_graphs") });
 	}
 
 	FString EventName;
 	Params->TryGetStringField(TEXT("event_name"), EventName);
 	if (EventName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: event_name"));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Pass event_name as a custom event name, parent BlueprintEvent function name, friendly alias, or implemented interface BlueprintEvent name."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			TEXT("missing_event_name"),
+			AssetPath,
+			EventName,
+			FString(),
+			TEXT("unknown"),
+			TEXT("blueprint.get_functions"),
+			FString(),
+			RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: event_name"), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("blueprint.get_functions"), TEXT("blueprint.get_interfaces") });
 	}
 
 	// Resolve graph — must be an event graph
@@ -3933,9 +4246,24 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 
 	if (!Graph)
 	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Call blueprint.list_graphs and retry with an event graph from available_event_graphs."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			TEXT("event_graph_not_found"),
+			AssetPath,
+			EventName,
+			FString(),
+			TEXT("unknown"),
+			TEXT("blueprint.list_graphs"),
+			GraphName,
+			RecoveryHints);
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("Event graph not found: '%s'. Event nodes can only be placed in event graphs (ubergraph pages)."),
-			GraphName.IsEmpty() ? TEXT("EventGraph") : *GraphName));
+			GraphName.IsEmpty() ? TEXT("EventGraph") : *GraphName))
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("blueprint.list_graphs"), TEXT("blueprint.get_graph_summary") });
 	}
 
 	// Parse position
@@ -3947,6 +4275,16 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 		PosX = (int32)(*PosArray)[0]->AsNumber();
 		PosY = (int32)(*PosArray)[1]->AsNumber();
 	}
+
+	FString Replication;
+	const bool bReplicationProvided = Params->TryGetStringField(TEXT("replication"), Replication);
+	FString ReplicationMode = Replication;
+	ReplicationMode.TrimStartAndEndInline();
+	ReplicationMode = ReplicationMode.ToLower();
+
+	bool bRequestedReliableValue = false;
+	const bool bReliableRequested = Params->TryGetBoolField(TEXT("reliable"), bRequestedReliableValue) && bRequestedReliableValue;
+	const bool bRpcModeRequested = bReplicationProvided && !ReplicationMode.IsEmpty() && ReplicationMode != TEXT("none");
 
 	// Alias table: friendly names -> actual UE function names on AActor (or other classes)
 	static const TMap<FString, FString> EventAliases = {
@@ -4051,6 +4389,106 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 		}
 	}
 
+	const FString ResolvedEventKind = (DeclaringClass && EventFunc)
+		? (DeclaringClass->HasAnyClassFlags(CLASS_Interface) ? TEXT("interface_event") : TEXT("parent_override"))
+		: TEXT("custom_event");
+	const FString ResolvedFunctionName = EventFunc ? EventFName.ToString() : EventName;
+
+	if (EventFunc && !IsAddEventNodeBlueprintEventFunction(EventFunc))
+	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("add_event_node only creates custom events or BlueprintEvent overrides; use blueprint.add_node with node_type=CallFunction for callable functions, or choose a unique custom event name."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			TEXT("parent_function_not_blueprint_event"),
+			AssetPath,
+			EventName,
+			ResolvedFunctionName,
+			TEXT("parent_override"),
+			TEXT("blueprint.get_functions"),
+			Graph->GetName(),
+			RecoveryHints);
+		ErrorData->SetObjectField(TEXT("matched_function"), AddEventNodeFunctionToJson(EventFunc, TEXT("parent_function")));
+		return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Function '%s' exists on parent class '%s' but is not a BlueprintEvent override"),
+				*ResolvedFunctionName,
+				DeclaringClass ? *DeclaringClass->GetName() : TEXT("<unknown>")), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("blueprint.get_functions"), TEXT("blueprint.add_node"), TEXT("blueprint.search_functions") });
+	}
+
+	if (!IsSupportedAddEventNodeReplicationMode(ReplicationMode))
+	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Use replication=none, multicast, server, or client; omit reliable unless a server/client/multicast custom event is requested."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			TEXT("invalid_replication_mode"),
+			AssetPath,
+			EventName,
+			ResolvedFunctionName,
+			ResolvedEventKind,
+			TEXT("monolith.discover"),
+			Graph->GetName(),
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("replication"), Replication);
+		return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid replication mode '%s' for add_event_node. Expected: none, multicast, server, or client."),
+				*Replication), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("monolith.discover"), TEXT("blueprint.resolve_node") });
+	}
+
+	if ((bRpcModeRequested || bReliableRequested) && ResolvedEventKind != TEXT("custom_event"))
+	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("RPC flags are only valid for custom events; omit replication/reliable for parent override or interface event nodes."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			ResolvedEventKind == TEXT("interface_event") ? TEXT("rpc_not_supported_for_interface_event") : TEXT("rpc_not_supported_for_parent_override"),
+			AssetPath,
+			EventName,
+			ResolvedFunctionName,
+			ResolvedEventKind,
+			TEXT("blueprint.get_graph_data"),
+			Graph->GetName(),
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("replication"), ReplicationMode.IsEmpty() ? TEXT("none") : ReplicationMode);
+		ErrorData->SetBoolField(TEXT("reliable"), bReliableRequested);
+		return FMonolithActionResult::Error(FString::Printf(
+				TEXT("RPC options are not supported for %s event '%s'; only custom events can use replication/reliable"),
+				*ResolvedEventKind,
+				*ResolvedFunctionName), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("blueprint.get_graph_data"), TEXT("blueprint.add_event_node") });
+	}
+
+	if (ResolvedEventKind == TEXT("custom_event") && bReliableRequested && !bRpcModeRequested)
+	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Set replication to server, client, or multicast when reliable=true, or omit reliable for a local custom event."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+			BP,
+			TEXT("rpc_reliable_requires_replication"),
+			AssetPath,
+			EventName,
+			ResolvedFunctionName,
+			ResolvedEventKind,
+			TEXT("monolith.discover"),
+			Graph->GetName(),
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("replication"), ReplicationMode.IsEmpty() ? TEXT("none") : ReplicationMode);
+		ErrorData->SetBoolField(TEXT("reliable"), true);
+		return FMonolithActionResult::Error(
+				TEXT("reliable=true requires replication=server, client, or multicast for custom events"), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("monolith.discover"), TEXT("blueprint.resolve_node") });
+	}
+
 	// If we found a native event in the inheritance chain, create an override event node
 	if (DeclaringClass && EventFunc)
 	{
@@ -4058,9 +4496,26 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 		UK2Node_Event* ExistingOverride = FBlueprintEditorUtils::FindOverrideForFunction(BP, DeclaringClass, EventFName);
 		if (ExistingOverride)
 		{
+			TArray<FString> RecoveryHints;
+			RecoveryHints.Add(TEXT("Read the existing event node with blueprint.get_graph_data, then reuse it or remove it before retrying."));
+			TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+				BP,
+				ResolvedEventKind == TEXT("interface_event") ? TEXT("duplicate_interface_event") : TEXT("duplicate_parent_override"),
+				AssetPath,
+				EventName,
+				ResolvedFunctionName,
+				ResolvedEventKind,
+				TEXT("blueprint.get_graph_data"),
+				Graph->GetName(),
+				RecoveryHints);
+			ErrorData->SetStringField(TEXT("existing_node_id"), ExistingOverride->NodeGuid.ToString(EGuidFormats::DigitsWithHyphens));
+			ErrorData->SetStringField(TEXT("existing_node_name"), ExistingOverride->GetName());
 			return FMonolithActionResult::Error(FString::Printf(
 				TEXT("Override event '%s' already exists in this Blueprint (node: %s)"),
-				*ResolvedEventName, *ExistingOverride->GetName()));
+				*ResolvedEventName, *ExistingOverride->GetName()))
+				.WithErrorData(ErrorData)
+				.WithHint(RecoveryHints[0])
+				.WithRelatedActions({ TEXT("blueprint.get_graph_data"), TEXT("blueprint.get_node_details") });
 		}
 
 		UK2Node_Event* EventNode = NewObject<UK2Node_Event>(Graph);
@@ -4076,6 +4531,9 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 
 		TSharedPtr<FJsonObject> Root = MonolithBlueprintInternal::SerializeNode(EventNode);
 		Root->SetStringField(TEXT("event_name"), ResolvedEventName);
+		Root->SetStringField(TEXT("requested_event_name"), EventName);
+		Root->SetStringField(TEXT("function_name"), ResolvedFunctionName);
+		Root->SetStringField(TEXT("event_kind"), ResolvedEventKind);
 		Root->SetBoolField(TEXT("is_override"), true);
 		Root->SetStringField(TEXT("class"), DeclaringClass->GetName());
 		Root->SetStringField(TEXT("graph"), Graph->GetName());
@@ -4087,8 +4545,23 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 		// Check for duplicate custom event names first
 		if (MonolithBlueprintInternal::HasCustomEventNamed(BP, FName(*EventName)))
 		{
+			TArray<FString> RecoveryHints;
+			RecoveryHints.Add(TEXT("Choose a unique event_name or read the existing custom event node with blueprint.get_graph_data before wiring it."));
+			TSharedPtr<FJsonObject> ErrorData = MakeAddEventNodeErrorData(
+				BP,
+				TEXT("duplicate_custom_event_name"),
+				AssetPath,
+				EventName,
+				EventName,
+				TEXT("custom_event"),
+				TEXT("blueprint.get_graph_data"),
+				Graph->GetName(),
+				RecoveryHints);
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("A custom event named '%s' already exists in this Blueprint"), *EventName));
+				TEXT("A custom event named '%s' already exists in this Blueprint"), *EventName))
+				.WithErrorData(ErrorData)
+				.WithHint(RecoveryHints[0])
+				.WithRelatedActions({ TEXT("blueprint.get_graph_data"), TEXT("blueprint.get_graph_summary") });
 		}
 
 		UK2Node_CustomEvent* EventNode = NewObject<UK2Node_CustomEvent>(Graph);
@@ -4101,14 +4574,13 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 
 		// RPC / Multicast replication flags (Phase 5A)
 		bool bNetFlagsChanged = false;
-		FString Replication;
-		if (Params->TryGetStringField(TEXT("replication"), Replication) && !Replication.IsEmpty() && Replication != TEXT("none"))
+		if (bRpcModeRequested)
 		{
 			const uint32 FlagsToClear = FUNC_Net | FUNC_NetMulticast | FUNC_NetServer | FUNC_NetClient;
 			EventNode->FunctionFlags &= ~FlagsToClear;
 
 			uint32 NetFlag = 0;
-			FString RepLower = Replication.ToLower();
+			FString RepLower = ReplicationMode;
 			if (RepLower == TEXT("multicast"))      NetFlag = FUNC_NetMulticast;
 			else if (RepLower == TEXT("server"))    NetFlag = FUNC_NetServer;
 			else if (RepLower == TEXT("client"))    NetFlag = FUNC_NetClient;
@@ -4120,8 +4592,7 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 			}
 		}
 
-		bool bReliable = false;
-		if (Params->TryGetBoolField(TEXT("reliable"), bReliable) && bReliable)
+		if (bReliableRequested)
 		{
 			EventNode->FunctionFlags |= FUNC_NetReliable;
 			bNetFlagsChanged = true;
@@ -4138,13 +4609,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleAddEventNode(const TS
 
 		TSharedPtr<FJsonObject> Root = MonolithBlueprintInternal::SerializeNode(EventNode);
 		Root->SetStringField(TEXT("event_name"), EventName);
+		Root->SetStringField(TEXT("function_name"), EventName);
+		Root->SetStringField(TEXT("event_kind"), TEXT("custom_event"));
 		Root->SetBoolField(TEXT("is_override"), false);
 		Root->SetStringField(TEXT("class"), TEXT("CustomEvent"));
 		Root->SetStringField(TEXT("graph"), Graph->GetName());
 		if (bNetFlagsChanged)
 		{
-			Root->SetStringField(TEXT("replication"), Replication.ToLower());
-			Root->SetBoolField(TEXT("reliable"), bReliable);
+			Root->SetStringField(TEXT("replication"), ReplicationMode);
+			Root->SetBoolField(TEXT("reliable"), bRequestedReliableValue);
 		}
 		return FMonolithActionResult::Success(Root);
 	}

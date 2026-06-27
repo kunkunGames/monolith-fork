@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_animation_remove",
+  "route_edit_domain": "widget_animation_remove",
+  "module_id": "asset_authoring.ui.widget_animation_remove",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_animation_remove",
+    "edit": "asset_operation.edit.ui.widget_animation_remove",
+    "save": "asset_operation.save.ui.widget_animation_remove",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_animation_remove"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-484"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-484",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_animation_remove",
+      "blueprint_type": "",
+      "workflow": "ui_animation_remove_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "create_animation_v2",
+        "remove_animation",
+        "save_asset",
+        "list_animations",
+        "get_animation_details",
+        "get_widget_tree"
+      ],
+      "description": "Create a Widget Blueprint with two animations, remove one animation, save, and verify only the retained animation remains"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-484",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchRemoveAnim"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchRemoveAnimLabel",
+            "anchor_preset": "center",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "x": 380,
+              "y": 72
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchRemoveAnimLabel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "widget_name": "BenchRemoveAnimLabel",
+            "text": "Animation Remove Benchmark",
+            "font_size": 24,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_animation_v2",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "animation_name": "KeepFade",
+            "duration_sec": 0.5,
+            "tracks": [
+              {
+                "widget_name": "BenchRemoveAnimLabel",
+                "property": "RenderOpacity",
+                "keys": [
+                  {
+                    "time": 0.0,
+                    "value": 0.25,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 0.5,
+                    "value": 1.0,
+                    "interp": "linear"
+                  }
+                ]
+              }
+            ],
+            "compile_once": false
+          },
+          "contains": [
+            "KeepFade"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_animation_v2",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "animation_name": "RemoveFade",
+            "duration_sec": 0.5,
+            "tracks": [
+              {
+                "widget_name": "BenchRemoveAnimLabel",
+                "property": "RenderOpacity",
+                "keys": [
+                  {
+                    "time": 0.0,
+                    "value": 1.0,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 0.5,
+                    "value": 0.0,
+                    "interp": "linear"
+                  }
+                ]
+              }
+            ],
+            "compile_once": true
+          },
+          "contains": [
+            "RemoveFade"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "remove_animation",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "animation_name": "RemoveFade",
+            "compile": true
+          },
+          "contains": [
+            "RemoveFade",
+            "removed",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_animations",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim"
+          },
+          "contains": [
+            "KeepFade"
+          ],
+          "not_contains": [
+            "RemoveFade"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim",
+            "animation_name": "KeepFade"
+          },
+          "contains": [
+            "BenchRemoveAnimLabel",
+            "MovieSceneFloatTrack",
+            "keyframe_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchRemoveAnim"
+          },
+          "contains": [
+            "BenchRemoveAnimLabel",
+            "TextBlock",
+            "Animation Remove Benchmark"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_animation_remove",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_animation_remove_roundtrip",
+      "description": "Create a Widget Blueprint with two animations, remove one animation, save, and verify only the retained animation remains",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUIAnimationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "create_animation_v2",
+          "remove_animation",
+          "save_asset",
+          "list_animations",
+          "get_animation_details",
+          "get_widget_tree"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

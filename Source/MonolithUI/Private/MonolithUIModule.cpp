@@ -116,7 +116,7 @@ void FMonolithUIModule::StartupModule()
     // CommonUI on a fresh install) load AFTER stock UMG. Without this re-scan,
     // those classes are missing from the registry until something forces a
     // RescanWidgetTypes call.
-    GMonolithUIPostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([]()
+    GMonolithUIPostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([]()
     {
         if (UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get())
         {
@@ -140,7 +140,7 @@ void FMonolithUIModule::ShutdownModule()
 {
     if (GMonolithUIPostEngineInitHandle.IsValid())
     {
-        FCoreDelegates::OnPostEngineInit.Remove(GMonolithUIPostEngineInitHandle);
+        FCoreDelegates::GetOnPostEngineInit().Remove(GMonolithUIPostEngineInitHandle);
         GMonolithUIPostEngineInitHandle.Reset();
     }
 

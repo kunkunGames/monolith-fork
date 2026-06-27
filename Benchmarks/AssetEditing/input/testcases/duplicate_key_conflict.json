@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "input",
+  "asset_type_slug": "input",
+  "edit_domain": "duplicate_key_conflict",
+  "route_edit_domain": "duplicate_key_conflict",
+  "module_id": "asset_authoring.input.duplicate_key_conflict",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.input.duplicate_key_conflict",
+    "edit": "asset_operation.edit.input.duplicate_key_conflict",
+    "save": "asset_operation.save.input.duplicate_key_conflict",
+    "readback_verify": "asset_operation.readback_verify.input.duplicate_key_conflict"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-517"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-517",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "input",
+      "edit_domain": "duplicate_key_conflict",
+      "blueprint_type": "",
+      "workflow": "input_duplicate_key_conflict_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_input_action",
+        "create_input_mapping_context",
+        "add_input_mapping",
+        "save_asset",
+        "get_input_mapping_context",
+        "validate_input_mappings",
+        "inspect_asset"
+      ],
+      "description": "Create two Enhanced Input Actions mapped to the same key in one mapping context, save, read back both mappings, and require validation to report a duplicate-key conflict"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-517",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractPrimary",
+              "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractAlt",
+              "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "create_input_action",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractPrimary",
+            "value_type": "Boolean",
+            "description": "Bench primary interact",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "IA_BenchInteractPrimary",
+            "Boolean"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "create_input_action",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractAlt",
+            "value_type": "Boolean",
+            "description": "Bench alternate interact",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "IA_BenchInteractAlt",
+            "Boolean"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "create_input_mapping_context",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict",
+            "description": "Bench duplicate-key conflict mapping",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "IMC_BenchConflict"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractPrimary",
+            "key": "E",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchInteractPrimary",
+            "E"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractAlt",
+            "key": "E",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchInteractAlt",
+            "E"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractPrimary"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchInteractAlt"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "get_input_mapping_context",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict"
+          },
+          "contains": [
+            "IA_BenchInteractPrimary",
+            "IA_BenchInteractAlt",
+            "E"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "validate_input_mappings",
+            "context_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict"
+            ]
+          },
+          "server_ok_only": true,
+          "contains": [
+            "duplicate_key_conflict",
+            "E",
+            "IA_BenchInteractPrimary",
+            "IA_BenchInteractAlt"
+          ],
+          "server_ok_reason": "validate_input_mappings reports duplicate key conflicts as isError; direct mapping read-back asserts both saved bindings"
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchConflict"
+          },
+          "contains": [
+            "IMC_BenchConflict",
+            "InputMappingContext"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "duplicate_key_conflict",
+      "blueprint_type": "",
+      "domain": "input",
+      "workflow": "input_duplicate_key_conflict_roundtrip",
+      "description": "Create two Enhanced Input Actions mapped to the same key in one mapping context, save, read back both mappings, and require validation to report a duplicate-key conflict",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/enhanced-input-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASInputAssetActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_input_action",
+          "create_input_mapping_context",
+          "add_input_mapping",
+          "save_asset",
+          "get_input_mapping_context",
+          "validate_input_mappings",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

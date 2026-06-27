@@ -20,6 +20,11 @@ bool FMonolithAsyncJobRegistryLifecycleTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Seeded status is pending"), Pending->GetStringField(TEXT("status")), TEXT("pending"));
 	TestEqual(TEXT("Namespace echoed"), Pending->GetStringField(TEXT("namespace")), TEXT("source"));
 	TestEqual(TEXT("Action echoed"), Pending->GetStringField(TEXT("action")), TEXT("trigger_reindex"));
+	TestTrue(TEXT("Default job is cancellable"), Pending->GetBoolField(TEXT("cancellable")));
+	TestTrue(TEXT("Default job supports progress"), Pending->GetBoolField(TEXT("supports_progress")));
+	TestFalse(TEXT("Cancel not requested by default"), Pending->GetBoolField(TEXT("cancel_requested")));
+	TestEqual(TEXT("Default poll action"), Pending->GetStringField(TEXT("poll_action")), TEXT("monolith.get_job"));
+	TestEqual(TEXT("Default cancel action"), Pending->GetStringField(TEXT("cancel_action")), TEXT("monolith.cancel_job"));
 
 	Registry.UpdateProgress(JobId, 42.0, TEXT("indexing"), TEXT("walking assets"));
 	TSharedPtr<FJsonObject> Running = Registry.GetJobJson(JobId);
@@ -55,6 +60,40 @@ bool FMonolithAsyncJobRegistryLifecycleTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> CompletedAfterCancel = Registry.GetJobJson(JobId);
 	TestEqual(TEXT("Completed status stays terminal after cancel request"), CompletedAfterCancel->GetStringField(TEXT("status")), TEXT("completed"));
 	TestTrue(TEXT("Cancel flag is still recorded on terminal completed job"), Registry.IsCancelRequested(JobId));
+
+	Registry.ResetForTests();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAsyncJobRegistryNonCancellableTest,
+	"Monolith.Core.AsyncJobRegistry.NonCancellable",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAsyncJobRegistryNonCancellableTest::RunTest(const FString& Parameters)
+{
+	FMonolithAsyncJobRegistry& Registry = FMonolithAsyncJobRegistry::Get();
+	Registry.ResetForTests();
+
+	const FString JobId = Registry.SubmitJob(
+		TEXT("source"),
+		TEXT("build_crg_graph"),
+		/*bCancellable=*/false,
+		/*bSupportsProgress=*/false,
+		TEXT("source.crg_graph_health"),
+		FString());
+	Registry.UpdateProgress(JobId, 0.0, TEXT("external_process"), TEXT("Started external graph build process."));
+
+	TSharedPtr<FJsonObject> Running = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Non-cancellable job is running before cancel request"), Running->GetStringField(TEXT("status")), TEXT("running"));
+	TestFalse(TEXT("Non-cancellable flag is surfaced"), Running->GetBoolField(TEXT("cancellable")));
+	TestFalse(TEXT("No progress support is surfaced"), Running->GetBoolField(TEXT("supports_progress")));
+	TestEqual(TEXT("External poll action is surfaced"), Running->GetStringField(TEXT("poll_action")), TEXT("source.crg_graph_health"));
+	TestFalse(TEXT("No cancel action is emitted"), Running->HasField(TEXT("cancel_action")));
+
+	Registry.RequestCancel(JobId);
+	TSharedPtr<FJsonObject> AfterCancel = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Non-cancellable job is not marked cancelled"), AfterCancel->GetStringField(TEXT("status")), TEXT("running"));
+	TestFalse(TEXT("Non-cancellable job does not record cancel requested"), AfterCancel->GetBoolField(TEXT("cancel_requested")));
 
 	Registry.ResetForTests();
 	return true;
@@ -109,11 +148,20 @@ bool FMonolithAsyncJobRegistryCancellationTest::RunTest(const FString& Parameter
 	Registry.RequestCancel(JobId);
 	TestTrue(TEXT("Cancel flag set"), Registry.IsCancelRequested(JobId));
 
-	TSharedPtr<FJsonObject> Cancelled = Registry.GetJobJson(JobId);
-	TestEqual(TEXT("Status uses double-l cancelled token"), Cancelled->GetStringField(TEXT("status")), TEXT("cancelled"));
+	TSharedPtr<FJsonObject> CancelRequested = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Status remains running until producer acknowledges cancellation"), CancelRequested->GetStringField(TEXT("status")), TEXT("running"));
+	TestTrue(TEXT("Row reports cancel_requested"), CancelRequested->GetBoolField(TEXT("cancel_requested")));
 
-	// Cancelled is terminal: late producer updates must not mask the user's
-	// cancellation request with a fake completion or failure.
+	Registry.UpdateProgress(JobId, 50.0, TEXT("winding_down"), TEXT("producer still winding down"));
+	TSharedPtr<FJsonObject> StillRunning = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Progress can update while cancellation is pending"), StillRunning->GetStringField(TEXT("status")), TEXT("running"));
+
+	Registry.CancelJob(JobId, TEXT("producer acknowledged cancellation"));
+	TSharedPtr<FJsonObject> Cancelled = Registry.GetJobJson(JobId);
+	TestEqual(TEXT("Status uses double-l cancelled token after producer ack"), Cancelled->GetStringField(TEXT("status")), TEXT("cancelled"));
+
+	// Cancelled is terminal: late producer updates must not mask acknowledged
+	// cancellation with a fake completion or failure.
 	Registry.UpdateProgress(JobId, 90.0, TEXT("late"), TEXT("ignored"));
 	TSharedPtr<FJsonObject> StillCancelledAfterProgress = Registry.GetJobJson(JobId);
 	TestEqual(TEXT("Cancelled status ignores late progress"), StillCancelledAfterProgress->GetStringField(TEXT("status")), TEXT("cancelled"));
@@ -122,8 +170,8 @@ bool FMonolithAsyncJobRegistryCancellationTest::RunTest(const FString& Parameter
 		const TSharedPtr<FJsonObject>* ProgressObj = nullptr;
 		if (StillCancelledAfterProgress->TryGetObjectField(TEXT("progress"), ProgressObj) && ProgressObj)
 		{
-			TestEqual(TEXT("Cancelled progress percent is not overwritten"), (*ProgressObj)->GetNumberField(TEXT("percent")), 25.0);
-			TestEqual(TEXT("Cancelled progress stage is not overwritten"), (*ProgressObj)->GetStringField(TEXT("stage")), TEXT("building"));
+			TestEqual(TEXT("Cancelled progress percent is not overwritten"), (*ProgressObj)->GetNumberField(TEXT("percent")), 50.0);
+			TestEqual(TEXT("Cancelled progress stage is not overwritten"), (*ProgressObj)->GetStringField(TEXT("stage")), TEXT("cancelled"));
 		}
 	}
 

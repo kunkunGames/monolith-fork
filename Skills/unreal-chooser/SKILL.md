@@ -14,7 +14,7 @@ monolith_discover({ namespace: "chooser" })                      # all actions i
 monolith_discover({ namespace: "chooser", action: "<action>", mode: "schema" })  # exact params
 ```
 
-The discover-first block is the authority. The inline signatures below are a snapshot of the live catalog (~1,600 actions across all namespaces) and can drift between versions — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"`.
+The discover-first block is the authority. The inline signatures below are a snapshot of the live catalog (~1,900 actions across all namespaces) and can drift between versions — for the exact, full, current schema of any action call `monolith_discover` with `mode: "schema"`.
 
 ## When to use
 

@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "blendspace_1d_aimoffset_1d",
+  "route_edit_domain": "blendspace_1d_aimoffset_1d",
+  "module_id": "asset_authoring.animation.blendspace_1d_aimoffset_1d",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.blendspace_1d_aimoffset_1d",
+    "edit": "asset_operation.edit.animation.blendspace_1d_aimoffset_1d",
+    "save": "asset_operation.save.animation.blendspace_1d_aimoffset_1d",
+    "readback_verify": "asset_operation.readback_verify.animation.blendspace_1d_aimoffset_1d"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-385"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-385",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "blendspace_1d_aimoffset_1d",
+      "blueprint_type": "",
+      "workflow": "animation_1d_blendspace_aimoffset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blend_space_1d",
+        "set_blend_space_axis",
+        "create_aim_offset_1d",
+        "save_asset",
+        "get_blend_space_info",
+        "inspect_asset"
+      ],
+      "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-385",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed",
+              "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_blend_space_1d",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "axis_name": "Speed1D",
+            "axis_min": 0,
+            "axis_max": 600
+          },
+          "contains": [
+            "BS1D_BenchSpeed",
+            "SkeletalCube_Skeleton",
+            "Speed1D"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_blend_space_axis",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed",
+            "axis": "X",
+            "name": "Speed1DEdited",
+            "min": 0,
+            "max": 720,
+            "grid_divisions": 6,
+            "snap_to_grid": true
+          },
+          "contains": [
+            "X",
+            "Speed1DEdited",
+            "grid_divisions",
+            "6",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_aim_offset_1d",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "axis_name": "Yaw1D",
+            "axis_min": -90,
+            "axis_max": 90
+          },
+          "contains": [
+            "AO1D_BenchYaw",
+            "SkeletalCube_Skeleton",
+            "Yaw1D"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_blend_space_axis",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw",
+            "axis": "X",
+            "name": "Yaw1DEdited",
+            "min": -120,
+            "max": 120,
+            "grid_divisions": 8,
+            "snap_to_grid": true
+          },
+          "contains": [
+            "X",
+            "Yaw1DEdited",
+            "grid_divisions",
+            "8",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_blend_space_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed"
+          },
+          "contains": [
+            "BS1D_BenchSpeed",
+            "Speed1DEdited",
+            "grid_divisions",
+            "6"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_blend_space_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw"
+          },
+          "contains": [
+            "AO1D_BenchYaw",
+            "Yaw1DEdited",
+            "grid_divisions",
+            "8"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS1D_BenchSpeed"
+          },
+          "contains": [
+            "BS1D_BenchSpeed",
+            "BlendSpace1D"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO1D_BenchYaw"
+          },
+          "contains": [
+            "AO1D_BenchYaw",
+            "AimOffsetBlendSpace1D"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blendspace_1d_aimoffset_1d",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_1d_blendspace_aimoffset_roundtrip",
+      "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blend_space_1d",
+          "set_blend_space_axis",
+          "create_aim_offset_1d",
+          "save_asset",
+          "get_blend_space_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

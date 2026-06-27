@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "system_timing",
+  "route_edit_domain": "system_timing",
+  "module_id": "asset_authoring.niagara.system_timing",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.system_timing",
+    "edit": "asset_operation.edit.niagara.system_timing",
+    "save": "asset_operation.save.niagara.system_timing",
+    "readback_verify": "asset_operation.readback_verify.niagara.system_timing"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-511"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-511",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "system_timing",
+      "blueprint_type": "",
+      "workflow": "niagara_system_timing_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "set_warmup_profile",
+        "set_fixed_tick_delta",
+        "set_require_current_frame_data",
+        "save_system",
+        "get_system_timing",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-511",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile"
+          },
+          "contains": [
+            "NS_BenchTimingProfile"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_warmup_profile",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile",
+            "warmup_time": 0.3,
+            "warmup_tick_delta": 0.05
+          },
+          "contains": [
+            "warmup_time",
+            "0.3",
+            "warmup_tick_count",
+            "6",
+            "warmup_tick_delta",
+            "0.05"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_fixed_tick_delta",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile",
+            "enabled": true,
+            "fixed_delta_time": 0.025
+          },
+          "contains": [
+            "fixed_tick_delta_enabled",
+            "true",
+            "fixed_tick_delta_time",
+            "0.025"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_require_current_frame_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile",
+            "require": true
+          },
+          "contains": [
+            "require_current_frame_data",
+            "true"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_system_timing",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile"
+          },
+          "contains": [
+            "warmup_time",
+            "0.3",
+            "warmup_tick_count",
+            "6",
+            "warmup_tick_delta",
+            "0.05",
+            "fixed_tick_delta_enabled",
+            "true",
+            "fixed_tick_delta_time",
+            "0.025",
+            "require_current_frame_data",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchTimingProfile"
+          },
+          "contains": [
+            "NS_BenchTimingProfile",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "system_timing",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_system_timing_roundtrip",
+      "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/niagara-overview-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithNiagara/Private/MonolithNiagaraTimingActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "set_warmup_profile",
+          "set_fixed_tick_delta",
+          "set_require_current_frame_data",
+          "save_system",
+          "get_system_timing",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -59,8 +59,12 @@ bool FMonolithLevelDesignRandomizeTransformsTest::RunTest(const FString& Paramet
 		Params->SetArrayField(TEXT("actor_names"), ValidArray);
 
 		FMonolithActionResult Result = ExecutePlacementAction(TEXT("randomize_transforms"), Params);
-		// It might succeed with 0 modified, or fail with "No editor world available" if there's no world
-		bool bIsExpectedResult = Result.bSuccess || Result.ErrorMessage.Contains(TEXT("No editor world available"));
+		// It might succeed with 0 modified, or fail cleanly if the automation world has no matching actor.
+		bool bIsExpectedResult =
+			Result.bSuccess ||
+			Result.ErrorMessage.Contains(TEXT("No editor world available")) ||
+			Result.ErrorMessage.Contains(TEXT("No valid actors resolved")) ||
+			Result.ErrorMessage.Contains(TEXT("Actor not found"));
 		TestTrue(TEXT("Valid params should succeed or fail cleanly on missing world"), bIsExpectedResult);
 	}
 

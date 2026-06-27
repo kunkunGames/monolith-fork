@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_graph",
+  "route_edit_domain": "graph",
+  "module_id": "asset_authoring.material.graph",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.graph",
+    "edit": "asset_operation.edit.material.graph",
+    "save": "asset_operation.save.material.graph",
+    "readback_verify": "asset_operation.readback_verify.material.graph"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-296"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-296",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_graph",
+      "blueprint_type": "",
+      "workflow": "material_graph_build_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "recompile_material",
+        "save_material",
+        "get_full_connection_graph",
+        "export_material_graph",
+        "validate_material",
+        "get_compilation_stats"
+      ],
+      "description": "Create a base Material, build a graph, compile/save it, and read/export graph topology back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-296",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchGraphBuilt"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BaseTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BaseTint"
+                  },
+                  "pos": [
+                    -420,
+                    -120
+                  ]
+                },
+                {
+                  "id": "RoughnessValue",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchRoughness"
+                  },
+                  "pos": [
+                    -420,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BaseTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "RoughnessValue",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "recompile_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt",
+            "include_stats": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt"
+          },
+          "contains": [
+            "BaseColor",
+            "Roughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "export_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt",
+            "include_properties": true
+          },
+          "contains": [
+            "BaseTint",
+            "BenchRoughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_material reports invalid graph/material state as isError; graph topology is asserted separately"
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_compilation_stats",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchGraphBuilt"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "get_compilation_stats is a schema/stats smoke for the compiled material; graph content is asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_graph",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_graph_build_roundtrip",
+      "description": "Create a base Material, build a graph, compile/save it, and read/export graph topology back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "recompile_material",
+          "save_material",
+          "get_full_connection_graph",
+          "export_material_graph",
+          "validate_material",
+          "get_compilation_stats"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

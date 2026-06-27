@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "blackboard_inheritance_duplicate",
+  "route_edit_domain": "blackboard_inheritance_duplicate",
+  "module_id": "asset_authoring.ai.blackboard_inheritance_duplicate",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.blackboard_inheritance_duplicate",
+    "edit": "asset_operation.edit.ai.blackboard_inheritance_duplicate",
+    "save": "asset_operation.save.ai.blackboard_inheritance_duplicate",
+    "readback_verify": "asset_operation.readback_verify.ai.blackboard_inheritance_duplicate"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-349"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-349",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "blackboard_inheritance_duplicate",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_inheritance_duplicate_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "batch_add_bb_keys",
+        "save_asset",
+        "add_bb_key",
+        "duplicate_blackboard",
+        "get_blackboard",
+        "compare_blackboards"
+      ],
+      "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-349",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchParent",
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchChild",
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchChildCopy"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchParent"
+          },
+          "contains": [
+            "BB_BenchParent"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "batch_add_bb_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchParent",
+            "keys": [
+              {
+                "name": "TargetActor",
+                "type": "Object",
+                "base_class": "/Script/Engine.Actor",
+                "description": "Inherited target"
+              },
+              {
+                "name": "Alertness",
+                "type": "Float",
+                "description": "Inherited alertness"
+              }
+            ]
+          },
+          "contains": [
+            "TargetActor",
+            "Alertness"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchParent"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild",
+            "parent_bb": "/Game/Benchmarks/AssetAuthoring/BB_BenchParent"
+          },
+          "contains": [
+            "BB_BenchChild"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild",
+            "key_name": "LocalRoute",
+            "key_type": "Name",
+            "description": "Child route key"
+          },
+          "contains": [
+            "LocalRoute"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "duplicate_blackboard",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChildCopy"
+          },
+          "contains": [
+            "BB_BenchChildCopy"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChildCopy"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_blackboard",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild"
+          },
+          "contains": [
+            "TargetActor",
+            "Alertness",
+            "LocalRoute",
+            "inherited"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_blackboard",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchChildCopy"
+          },
+          "contains": [
+            "TargetActor",
+            "Alertness",
+            "LocalRoute"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "compare_blackboards",
+            "path_a": "/Game/Benchmarks/AssetAuthoring/BB_BenchChild",
+            "path_b": "/Game/Benchmarks/AssetAuthoring/BB_BenchChildCopy"
+          },
+          "contains": [
+            "only_in_a",
+            "only_in_b",
+            "type_changed",
+            "same"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blackboard_inheritance_duplicate",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_blackboard_inheritance_duplicate_roundtrip",
+      "description": "Create parent/child Blackboards, inherit parent keys, duplicate the child Blackboard, save, and read inherited/local keys back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blackboard",
+          "batch_add_bb_keys",
+          "save_asset",
+          "add_bb_key",
+          "duplicate_blackboard",
+          "get_blackboard",
+          "compare_blackboards"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -7,8 +7,8 @@
 //   - `detail=true` (canonical) inlines the full per-action param schema.
 //   - `verbose=true` is an accepted alias for `detail=true`.
 //   - `filter` substring-matches name OR description (case-insensitive).
-//   - Default (no limit) returns the FULL action list (discoverability gate).
-//   - Pagination (offset/limit) is opt-in; limit=0 = ALL; out-of-range clamps.
+//   - Default returns a bounded action page with total/cursor metadata.
+//   - Pagination supports offset/limit; explicit limit=0 = ALL; out-of-range clamps.
 //   - Unknown namespace still errors.
 //
 // Lives under Private/Tests/ for the same UBT auto-include reason as the other
@@ -90,6 +90,57 @@ namespace MonolithDiscoverTerseTestDetail
 }
 
 // ---------------------------------------------------------------------------
+// Test 0: root/default summary is bounded by namespace count, not action count.
+// Namespace-scoped discover remains the explicit paginated action-list route.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverRootSummaryBoundedTest,
+	"Monolith.Discover.Terse.RootSummaryBounded",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverRootSummaryBoundedTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	const FMonolithActionResult R = Discover(MakeShared<FJsonObject>());
+	TestTrue(TEXT("root discover succeeds"), R.bSuccess);
+	TestTrue(TEXT("result object present"), R.Result.IsValid());
+	if (!R.bSuccess || !R.Result.IsValid())
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("root mode is summary"), R.Result->GetStringField(TEXT("mode")), FString(TEXT("summary")));
+	TestEqual(TEXT("root projection is summary"), R.Result->GetStringField(TEXT("projection")), FString(TEXT("summary")));
+	bool bTruncated = true;
+	TestTrue(TEXT("truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+	TestFalse(TEXT("root summary is not action-list truncated"), bTruncated);
+	const TSharedPtr<FJsonObject>* Limits = nullptr;
+	TestTrue(TEXT("limits object present"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+
+	const TArray<TSharedPtr<FJsonValue>>* Namespaces = nullptr;
+	TestTrue(TEXT("namespaces array present"), R.Result->TryGetArrayField(TEXT("namespaces"), Namespaces) && Namespaces && Namespaces->Num() > 0);
+	if (!Namespaces)
+	{
+		return false;
+	}
+	for (const TSharedPtr<FJsonValue>& Value : *Namespaces)
+	{
+		TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+		TestTrue(TEXT("namespace row is object"), Obj.IsValid());
+		if (!Obj.IsValid())
+		{
+			continue;
+		}
+		TestTrue(TEXT("namespace row has namespace"), Obj->HasTypedField<EJson::String>(TEXT("namespace")));
+		TestTrue(TEXT("namespace row has action_count"), Obj->HasField(TEXT("action_count")));
+		TestTrue(TEXT("namespace row has action listing hint"), Obj->HasTypedField<EJson::String>(TEXT("actions_hint")));
+		TestFalse(TEXT("namespace row omits action array in summary"), Obj->HasField(TEXT("actions")));
+	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
 // Test 1: Terse default — each action obj has action+description, NO `params`;
 // top-level `schema_hint` present.
 // ---------------------------------------------------------------------------
@@ -120,6 +171,12 @@ bool FMonolithDiscoverTerseDefaultTest::RunTest(const FString& /*Parameters*/)
 			{
 				TestTrue(TEXT("action obj has 'action'"), (*Obj)->HasField(TEXT("action")));
 				TestTrue(TEXT("action obj has 'description'"), (*Obj)->HasField(TEXT("description")));
+				TestTrue(TEXT("action obj has available_offline metadata"), (*Obj)->HasField(TEXT("available_offline")));
+				TestTrue(TEXT("action obj has requires_live_editor metadata"), (*Obj)->HasField(TEXT("requires_live_editor")));
+				TestTrue(TEXT("action obj has mutates_assets metadata"), (*Obj)->HasField(TEXT("mutates_assets")));
+				TestTrue(TEXT("action obj has writes_logs metadata"), (*Obj)->HasField(TEXT("writes_logs")));
+				TestTrue(TEXT("action obj has long_running metadata"), (*Obj)->HasField(TEXT("long_running")));
+				TestTrue(TEXT("action obj has supports_progress metadata"), (*Obj)->HasField(TEXT("supports_progress")));
 				TestFalse(TEXT("terse action obj has NO 'params'"), (*Obj)->HasField(TEXT("params")));
 			}
 		}
@@ -269,20 +326,23 @@ bool FMonolithDiscoverFilterTest::RunTest(const FString& /*Parameters*/)
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: default returns FULL list — no limit => array length == total ==
-// full action count; NO next_offset (nothing truncated).
+// Test 5: default returns a bounded page — no limit => array length <= default
+// limit, total still reports full count, and cursor fields appear only when more
+// data remains.
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FMonolithDiscoverFullListTest,
-	"Monolith.Discover.Terse.FullList",
+	FMonolithDiscoverDefaultPageTest,
+	"Monolith.Discover.Terse.DefaultPage",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FMonolithDiscoverFullListTest::RunTest(const FString& /*Parameters*/)
+bool FMonolithDiscoverDefaultPageTest::RunTest(const FString& /*Parameters*/)
 {
 	using namespace MonolithDiscoverTerseTestDetail;
 
+	const int32 DefaultLimit = 50;
 	const int32 Full = FullActionCount();
 	TestTrue(TEXT("namespace has at least one action"), Full > 0);
+	const int32 ExpectedReturned = Full < DefaultLimit ? Full : DefaultLimit;
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
@@ -294,22 +354,51 @@ bool FMonolithDiscoverFullListTest::RunTest(const FString& /*Parameters*/)
 	TestNotNull(TEXT("actions array present"), Arr);
 	if (Arr)
 	{
-		TestEqual(TEXT("default array length == full action count"), Arr->Num(), Full);
+		TestEqual(TEXT("default array length is bounded by default limit"), Arr->Num(), ExpectedReturned);
 	}
 	if (R.bSuccess && R.Result.IsValid())
 	{
 		int32 Total = -1;
 		R.Result->TryGetNumberField(TEXT("total"), Total);
 		TestEqual(TEXT("total == full action count"), Total, Full);
-		TestFalse(TEXT("no next_offset when nothing truncated"), R.Result->HasField(TEXT("next_offset")));
+
+		bool bTruncated = false;
+		TestTrue(TEXT("truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+		TestEqual(TEXT("truncated reflects default page remainder"), bTruncated, Full > DefaultLimit);
+
+		const TSharedPtr<FJsonObject>* Limits = nullptr;
+		TestTrue(TEXT("limits object present"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+		if (Limits)
+		{
+			int32 LimitValue = -1;
+			int32 OffsetValue = -1;
+			int32 ReturnedValue = -1;
+			(*Limits)->TryGetNumberField(TEXT("limit"), LimitValue);
+			(*Limits)->TryGetNumberField(TEXT("offset"), OffsetValue);
+			(*Limits)->TryGetNumberField(TEXT("returned"), ReturnedValue);
+			TestEqual(TEXT("limits.limit is default page size"), LimitValue, DefaultLimit);
+			TestEqual(TEXT("limits.offset defaults to 0"), OffsetValue, 0);
+			TestEqual(TEXT("limits.returned matches action array"), ReturnedValue, ExpectedReturned);
+		}
+
+		if (Full > DefaultLimit)
+		{
+			TestTrue(TEXT("next_offset present when default page truncates"), R.Result->HasField(TEXT("next_offset")));
+			TestTrue(TEXT("next_cursor present when default page truncates"), R.Result->HasField(TEXT("next_cursor")));
+		}
+		else
+		{
+			TestFalse(TEXT("no next_offset when default page reaches end"), R.Result->HasField(TEXT("next_offset")));
+			TestFalse(TEXT("no next_cursor when default page reaches end"), R.Result->HasField(TEXT("next_cursor")));
+		}
 	}
 	return true;
 }
 
 // ---------------------------------------------------------------------------
-// Test 6: opt-in pagination — offset:1,limit:1 => exactly 1 action, total=full
-// count, next_offset present when more remain; limit:0 returns ALL; out-of-range
-// offset/limit clamp without error.
+// Test 6: pagination — offset:1,limit:1 => exactly 1 action, total=full count,
+// next cursor present when more remain; explicit limit:0 returns ALL;
+// out-of-range offset/limit clamp without error.
 // ---------------------------------------------------------------------------
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithDiscoverPaginationTest,
@@ -347,16 +436,39 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 
 			// More remain after offset 1 + limit 1 when Full > 2 ; equals when Full == 2.
 			const bool bMoreRemain = (1 + 1) < Full;
+			bool bTruncated = false;
+			TestTrue(TEXT("truncated field present under pagination"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+			TestEqual(TEXT("truncated matches pagination remainder"), bTruncated, bMoreRemain);
+
+			const TSharedPtr<FJsonObject>* Limits = nullptr;
+			TestTrue(TEXT("limits object present under pagination"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+			if (Limits)
+			{
+				int32 LimitValue = -1;
+				int32 OffsetValue = -1;
+				int32 ReturnedValue = -1;
+				(*Limits)->TryGetNumberField(TEXT("limit"), LimitValue);
+				(*Limits)->TryGetNumberField(TEXT("offset"), OffsetValue);
+				(*Limits)->TryGetNumberField(TEXT("returned"), ReturnedValue);
+				TestEqual(TEXT("limits.limit reflects request"), LimitValue, 1);
+				TestEqual(TEXT("limits.offset reflects clamped request"), OffsetValue, 1);
+				TestEqual(TEXT("limits.returned reflects page length"), ReturnedValue, 1);
+			}
 			if (bMoreRemain)
 			{
 				TestTrue(TEXT("next_offset present when more remain"), R.Result->HasField(TEXT("next_offset")));
+				TestTrue(TEXT("next_cursor present when more remain"), R.Result->HasField(TEXT("next_cursor")));
 				int32 NextOffset = -1;
 				R.Result->TryGetNumberField(TEXT("next_offset"), NextOffset);
 				TestEqual(TEXT("next_offset == offset + limit"), NextOffset, 2);
+				FString NextCursor;
+				R.Result->TryGetStringField(TEXT("next_cursor"), NextCursor);
+				TestEqual(TEXT("next_cursor == offset + limit"), NextCursor, TEXT("2"));
 			}
 			else
 			{
 				TestFalse(TEXT("no next_offset when slice reaches end"), R.Result->HasField(TEXT("next_offset")));
+				TestFalse(TEXT("no next_cursor when slice reaches end"), R.Result->HasField(TEXT("next_cursor")));
 			}
 		}
 	}
@@ -378,6 +490,22 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 		if (R.Result.IsValid())
 		{
 			TestFalse(TEXT("limit:0 emits no next_offset"), R.Result->HasField(TEXT("next_offset")));
+			TestFalse(TEXT("limit:0 emits no next_cursor"), R.Result->HasField(TEXT("next_cursor")));
+			bool bTruncated = true;
+			TestTrue(TEXT("limit:0 truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+			TestFalse(TEXT("limit:0 is not truncated"), bTruncated);
+
+			const TSharedPtr<FJsonObject>* Limits = nullptr;
+			TestTrue(TEXT("limit:0 limits object present"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+			if (Limits)
+			{
+				int32 LimitValue = -1;
+				int32 ReturnedValue = -1;
+				(*Limits)->TryGetNumberField(TEXT("limit"), LimitValue);
+				(*Limits)->TryGetNumberField(TEXT("returned"), ReturnedValue);
+				TestEqual(TEXT("limits.limit preserves explicit all sentinel"), LimitValue, 0);
+				TestEqual(TEXT("limits.returned reports full list"), ReturnedValue, Full);
+			}
 		}
 	}
 
@@ -402,6 +530,10 @@ bool FMonolithDiscoverPaginationTest::RunTest(const FString& /*Parameters*/)
 			R.Result->TryGetNumberField(TEXT("total"), Total);
 			TestEqual(TEXT("total unaffected by clamped offset"), Total, Full);
 			TestFalse(TEXT("no next_offset when offset clamped past end"), R.Result->HasField(TEXT("next_offset")));
+			TestFalse(TEXT("no next_cursor when offset clamped past end"), R.Result->HasField(TEXT("next_cursor")));
+			bool bTruncated = true;
+			TestTrue(TEXT("out-of-range truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+			TestFalse(TEXT("out-of-range page is not truncated"), bTruncated);
 		}
 	}
 	return true;

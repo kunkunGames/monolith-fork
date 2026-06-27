@@ -117,6 +117,11 @@
     ],
     "timeout_seconds": 5
   },
+  "analyzer_smoke": {
+    "enabled": true,
+    "script": "Analyzer/analyze_invocation_logs.py",
+    "timeout_seconds": 30
+  },
   "skill_drift": {
     "enabled": true,
     "script": "Scripts/check_skill_catalog_drift.ps1",
@@ -164,10 +169,10 @@
         }
       },
       {
-        "name": "BlueprintEditing",
-        "script": "Scripts/blueprint_editing_benchmark.py",
-        "manifest": "Benchmarks/BlueprintEditing/manifest.json",
-        "tasks": "Benchmarks/BlueprintEditing/tasks.jsonl",
+        "name": "AssetEditing",
+        "script": "Scripts/asset_editing_benchmark.py",
+        "manifest": "Benchmarks/AssetEditing/manifest.json",
+        "tasks": "Benchmarks/AssetEditing/tasks.jsonl",
         "manifest_count_field": "task_count",
         "manifest_path_field": "task_file",
         "default_path_attrs": {
@@ -197,6 +202,28 @@
           "DEFAULT_ACTIONS": "tasks",
           "DEFAULT_MANIFEST": "manifest"
         }
+      }
+    ]
+  },
+  "benchmark_contract_tests": {
+    "enabled": true,
+    "timeout_seconds": 60,
+    "tests": [
+      {
+        "name": "ActionGuidance",
+        "script": "Scripts/test_action_guidance_benchmark.py"
+      },
+      {
+        "name": "SourceIndex",
+        "script": "Scripts/test_source_index_benchmark.py"
+      },
+      {
+        "name": "ProjectIndex",
+        "script": "Scripts/test_project_index_benchmark.py"
+      },
+      {
+        "name": "AssetEditing",
+        "script": "Scripts/test_asset_editing_benchmark.py"
       }
     ]
   },

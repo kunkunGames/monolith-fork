@@ -49,6 +49,12 @@ private:
 	/** Resolve a node type string to a UClass* */
 	static UClass* ResolveNodeType(const FString& TypeName);
 
+	/** Validate cue-level properties before creating a package. */
+	static bool ValidateCuePropertyTypesBeforeCreate(const TSharedPtr<FJsonObject>& Props, FString& OutError);
+
+	/** Validate a complete SoundCue spec before creating a package. */
+	static bool ValidateSoundCueSpecBeforeCreate(const TSharedPtr<FJsonObject>& Spec, FString& OutError);
+
 	/** Build a node ID string from a USoundNode (index-based) */
 	static FString MakeNodeId(USoundCue* Cue, USoundNode* Node);
 

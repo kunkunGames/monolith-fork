@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "editor",
+  "asset_type_slug": "editor",
+  "edit_domain": "empty_map_asset",
+  "route_edit_domain": "empty_map_asset",
+  "module_id": "asset_authoring.editor.empty_map_asset",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.editor.empty_map_asset",
+    "edit": "asset_operation.edit.editor.empty_map_asset",
+    "readback_verify": "asset_operation.readback_verify.editor.empty_map_asset"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 0,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create": 1
+  },
+  "task_ids": [
+    "BEB-418"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-418",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "empty_map_asset",
+      "blueprint_type": "",
+      "workflow": "editor_empty_map_roundtrip",
+      "operation_semantics": "create",
+      "lifecycle_phase": "create",
+      "asset_operations": [
+        "creation_or_import",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_empty_map",
+        "inspect_asset"
+      ],
+      "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-418",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/Map_BenchEmpty"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "editor_query",
+          "args": {
+            "action": "create_empty_map",
+            "path": "/Game/Benchmarks/AssetAuthoring/Map_BenchEmpty",
+            "map_template": "blank"
+          },
+          "contains": [
+            "ok",
+            "true",
+            "Map_BenchEmpty",
+            "blank"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Map_BenchEmpty"
+          },
+          "contains": [
+            "Map_BenchEmpty",
+            "World"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "empty_map_asset",
+      "blueprint_type": "",
+      "domain": "editor",
+      "workflow": "editor_empty_map_roundtrip",
+      "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry",
+      "reference_context": [],
+      "operation_semantics": "create",
+      "lifecycle_phase": "create",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_empty_map",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": false,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create",
+        "lifecycle_phase": "create"
+      }
+    }
+  ]
+}

@@ -226,7 +226,7 @@ bool UMonolithMeshHandlePool::SaveHandle(const FString& HandleName, const FStrin
 		{
 			FString TrashedName = FString::Printf(TEXT("/Temp/__monolith_evicted_%s_%s"),
 				*AssetName, *FGuid::NewGuid().ToString(EGuidFormats::Short));
-			ExistingPackage->Rename(*TrashedName, nullptr, REN_DontCreateRedirectors | REN_NonTransactional | REN_ForceNoResetLoaders);
+			ExistingPackage->Rename(*TrashedName, nullptr, REN_DontCreateRedirectors | REN_NonTransactional | REN_AllowPackageLinkerMismatch);
 		}
 	}
 

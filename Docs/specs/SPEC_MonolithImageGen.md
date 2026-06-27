@@ -348,7 +348,7 @@ All P1 actions return a structured object:
 
 | Gate | Required proof |
 |------|----------------|
-| Build | Primary Monolith/Go `GoGameEditor Win64 Development` build succeeds after action registration. |
+| Build | Primary Monolith `<Project>Editor Win64 Development` build succeeds after action registration. |
 | Schema | Action registration tests prove `generate_svg`, `import_generated_svg`, `validate_svg`, and `generate_msdf_from_svg` are present; live `monolith_discover({ namespace: "imagegen", action: "<svg action>", mode: "schema" })` should also show exact params when an editor MCP endpoint is attached. |
 | Sanitizer unit tests | Reject `script`, `onload`, `foreignObject`, external `href`, CSS imports, DTD/entity expansion, oversized inputs, path command bombs, and invalid XML. |
 | Geometry validation tests | Reject bow-tie self-intersections, open contours, duplicate adjacent points, zero-area contours, wrong hole winding, overlapping filled shapes, invalid path grammar, and unflattened transforms under `msdf_source`. |
@@ -365,7 +365,7 @@ P1 verification evidence:
 
 | Date | Gate | Evidence |
 |------|------|----------|
-| 2026-06-05 | Build | `GoGameEditor Win64 Development` UBT build succeeded after SVG action registration. |
+| 2026-06-05 | Build | `<Project>Editor Win64 Development` UBT build succeeded after SVG action registration. |
 | 2026-06-05 | SVG automation | `Saved/Automation/MonolithImageGenSvgSource_20260605/index.json` reports 6/6 `MonolithImageGen.SvgSource` tests passing with no warnings or failures. |
 | 2026-06-05 | MSDF Texture2D/material automation | `Saved/Automation/MonolithImageGenSvgSourceMsdf_20260605/index.json` reports 9/9 `MonolithImageGen.SvgSource` tests passing with no warnings or failures, including Texture2D setting checks, channel samples, invalid-source rejection, and material preview render decoding. |
 | 2026-06-05 | Texture role regression | `Saved/Automation/MonolithImageGenTextureRoles_20260605_SvgSource/index.json` reports no failures; the one warning is the existing timeout fixture against `127.0.0.1:9`. |

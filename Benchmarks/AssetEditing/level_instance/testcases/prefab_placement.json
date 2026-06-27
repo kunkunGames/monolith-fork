@@ -1,0 +1,313 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "level_instance",
+  "asset_type_slug": "level_instance",
+  "edit_domain": "prefab_placement",
+  "route_edit_domain": "prefab_placement",
+  "module_id": "asset_authoring.level_instance.prefab_placement",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.level_instance.prefab_placement",
+    "edit": "asset_operation.edit.level_instance.prefab_placement",
+    "save": "asset_operation.save.level_instance.prefab_placement",
+    "readback_verify": "asset_operation.readback_verify.level_instance.prefab_placement"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-489"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-489",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "level_instance",
+      "edit_domain": "prefab_placement",
+      "blueprint_type": "",
+      "workflow": "level_instance_blueprint_prefab_placement_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_actors",
+        "delete_assets",
+        "spawn_actor",
+        "create_blueprint_prefab",
+        "save_asset",
+        "place_blueprint_actor",
+        "get_actor_info",
+        "get_components",
+        "inspect_asset"
+      ],
+      "description": "Create a dialog-free Blueprint prefab from temporary actors, place an instance in the editor world, read back the placed actor, clean up the scene actor, save, and inspect the prefab asset"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-489",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabPlaceSourceA"
+            ]
+          }
+        },
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabPlaceSourceB"
+            ]
+          }
+        },
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabPlaced"
+            ]
+          }
+        },
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              0,
+              0,
+              80
+            ],
+            "name": "AE_BenchPrefabPlaceSourceA",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchPrefabPlaceSourceA",
+            "Actor"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              140,
+              0,
+              80
+            ],
+            "name": "AE_BenchPrefabPlaceSourceB",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchPrefabPlaceSourceB",
+            "Actor"
+          ]
+        },
+        {
+          "tool": "level_instance_query",
+          "args": {
+            "action": "create_blueprint_prefab",
+            "actor_names": [
+              "AE_BenchPrefabPlaceSourceA",
+              "AE_BenchPrefabPlaceSourceB"
+            ],
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement",
+            "center_pivot": true,
+            "keep_source_actors": true
+          },
+          "contains": [
+            "BP_BenchPrefabPlacement",
+            "source_actor_count",
+            "2",
+            "component_count"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabPlaceSourceA",
+              "AE_BenchPrefabPlaceSourceB"
+            ]
+          },
+          "contains": [
+            "deleted"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement"
+          }
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "place_blueprint_actor",
+            "blueprint": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement",
+            "location": [
+              260,
+              0,
+              80
+            ],
+            "rotation": [
+              0,
+              0,
+              45
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "label": "AE_BenchPrefabPlaced",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchPrefabPlaced",
+            "BP_BenchPrefabPlacement_C",
+            "location"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "get_actor_info",
+            "actor_name": "AE_BenchPrefabPlaced"
+          },
+          "contains": [
+            "AE_BenchPrefabPlaced",
+            "BP_BenchPrefabPlacement_C",
+            "components"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabPlaced"
+            ]
+          },
+          "contains": [
+            "deleted"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_components",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement"
+          },
+          "contains": [
+            "BP_BenchPrefabPlacement",
+            "DefaultSceneRoot"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabPlacement"
+          },
+          "contains": [
+            "BP_BenchPrefabPlacement",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "prefab_placement",
+      "blueprint_type": "",
+      "domain": "level_instance",
+      "workflow": "level_instance_blueprint_prefab_placement_roundtrip",
+      "description": "Create a dialog-free Blueprint prefab from temporary actors, place an instance in the editor world, read back the placed actor, clean up the scene actor, save, and inspect the prefab asset",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/level-instancing-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithLevelDesign/Private/MonolithLevelDesignPlacementActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithScene/Private/MonolithMeshSceneActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_actors",
+          "delete_assets",
+          "spawn_actor",
+          "create_blueprint_prefab",
+          "save_asset",
+          "place_blueprint_actor",
+          "get_actor_info",
+          "get_components",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "worldgen",
+  "asset_type_slug": "worldgen",
+  "edit_domain": "fire_escape_static_mesh",
+  "route_edit_domain": "fire_escape_static_mesh",
+  "module_id": "asset_authoring.worldgen.fire_escape_static_mesh",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.worldgen.fire_escape_static_mesh",
+    "edit": "asset_operation.edit.worldgen.fire_escape_static_mesh",
+    "save": "asset_operation.save.worldgen.fire_escape_static_mesh",
+    "readback_verify": "asset_operation.readback_verify.worldgen.fire_escape_static_mesh"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-478"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-478",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "fire_escape_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_fire_escape_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_fire_escape",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a multi-floor fire escape StaticMesh with landings, stairs, railings, and ladder metadata, save it, and inspect the generated mesh asset"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-478",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchWorldgenFireEscape"
+            ]
+          }
+        },
+        {
+          "tool": "worldgen_query",
+          "args": {
+            "action": "create_fire_escape",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape",
+            "floor_count": 3,
+            "floor_height": 300.0,
+            "landing_width": 150.0,
+            "landing_depth": 115.0,
+            "stair_width": 90.0,
+            "railing_height": 102.0,
+            "has_ladder": true,
+            "ladder_height": 160.0,
+            "location": [
+              -360.0,
+              0.0,
+              0.0
+            ],
+            "rotation": 180.0,
+            "label": "AE_BenchWorldgenFireEscape",
+            "folder": "MonolithBenchmarks/AssetEditing/WorldGen",
+            "overwrite": true
+          },
+          "contains": [
+            "SM_BenchWorldgenFireEscape",
+            "fire_escape",
+            "floor_count",
+            "3",
+            "has_ladder",
+            "true",
+            "triangle_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape"
+          },
+          "contains": [
+            "SM_BenchWorldgenFireEscape",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape"
+          },
+          "contains": [
+            "extent",
+            "volume_cm3",
+            "surface_area_cm2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchWorldgenFireEscape"
+          },
+          "contains": [
+            "SM_BenchWorldgenFireEscape",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "fire_escape_static_mesh",
+      "blueprint_type": "",
+      "domain": "worldgen",
+      "workflow": "worldgen_fire_escape_static_mesh_roundtrip",
+      "description": "Generate a multi-floor fire escape StaticMesh with landings, stairs, railings, and ladder metadata, save it, and inspect the generated mesh asset",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithWorldGen/Private/MonolithMeshArchFeatureActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "delete_actors",
+          "create_fire_escape",
+          "save_asset",
+          "get_mesh_info",
+          "get_mesh_bounds",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

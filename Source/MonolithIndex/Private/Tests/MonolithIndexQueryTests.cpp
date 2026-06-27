@@ -45,6 +45,65 @@ bool FProjectSearchHandlesEmptyQueryTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchOffsetRejectsWrongTypeTest, "Monolith.IndexGuard.Project.SearchOffsetRejectsWrongType", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchOffsetRejectsWrongTypeTest::RunTest(const FString& Parameters)
+{
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT("Health"));
+	Params->SetStringField(TEXT("offset"), TEXT("NotANumber"));
+
+	FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+
+	TestFalse(TEXT("Search action should reject wrong offset type"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchCursorRejectsNonNumericTest, "Monolith.IndexGuard.Project.SearchCursorRejectsNonNumeric", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchCursorRejectsNonNumericTest::RunTest(const FString& Parameters)
+{
+	auto Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("query"), TEXT("Health"));
+	Params->SetStringField(TEXT("cursor"), TEXT("NotANumber"));
+
+	FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+
+	TestFalse(TEXT("Search action should reject non-numeric cursor"), Result.bSuccess);
+	TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchProjectionParamsRejectMalformedTest, "Monolith.IndexGuard.Project.SearchProjectionParamsRejectMalformed", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectSearchProjectionParamsRejectMalformedTest::RunTest(const FString& Parameters)
+{
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("Health"));
+		Params->SetNumberField(TEXT("detail"), 1);
+
+		FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search action should reject numeric detail"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	{
+		auto Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("Health"));
+		Params->SetStringField(TEXT("projection"), TEXT("verbose"));
+
+		FMonolithActionResult Result = FProjectSearchAction::Execute(Params);
+		TestFalse(TEXT("Search action should reject unsupported projection"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindByTypeClampsLimitTest, "Monolith.IndexGuard.Project.FindByTypeClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FProjectFindByTypeClampsLimitTest::RunTest(const FString& Parameters)
@@ -280,14 +339,21 @@ namespace
 			Dep(B, C, TEXT("Hard"));
 			Dep(C, A, TEXT("Soft"));
 			Dep(B, D, TEXT("Hard"));
-			for (int32 Index = 0; Index < 120; ++Index)
+			auto AddDetailNode = [&](int64 AssetId, const TCHAR* Name)
 			{
 				FIndexedNode Node;
-				Node.AssetId = E;
+				Node.AssetId = AssetId;
 				Node.NodeType = TEXT("Function");
-				Node.NodeName = FString::Printf(TEXT("SaveNode%d"), Index);
+				Node.NodeName = Name;
 				Node.NodeClass = TEXT("K2Node_CallFunction");
 				Db.InsertNode(Node);
+			};
+			AddDetailNode(A, TEXT("AReadyNode"));
+			AddDetailNode(B, TEXT("BReadyNode"));
+			AddDetailNode(C, TEXT("CReadyNode"));
+			for (int32 Index = 0; Index < 120; ++Index)
+			{
+				AddDetailNode(E, *FString::Printf(TEXT("SaveNode%d"), Index));
 			}
 			Db.WriteMeta(TEXT("schema_version"), TEXT("2"));
 			TSharedPtr<FJsonObject> Crg = FMonolithIndexReview::RepairCrgCache(Db, true);
@@ -388,6 +454,69 @@ bool FProjectHealthWarnsOnOrphanDependencyTest::RunTest(const FString& Parameter
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectHealthWarnsOnPartialEmptyBlueprintDetailCoverageTest, "Monolith.IndexGuard.Project.HealthWarnsOnPartialEmptyBlueprintDetailCoverage", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectHealthWarnsOnPartialEmptyBlueprintDetailCoverageTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	FSQLiteDatabase* Raw = T.Db.GetRawDatabase();
+	TestTrue(TEXT("raw DB available"), Raw != nullptr);
+	TestTrue(TEXT("remove one Blueprint asset detail node"),
+		Raw && Raw->Execute(*FString::Printf(TEXT("DELETE FROM nodes WHERE asset_id = %lld;"), T.A)));
+
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("partial empty Blueprint detail coverage yields warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	TSharedPtr<FJsonObject> Semantic = R->GetObjectField(TEXT("semantic_readiness"));
+	TestTrue(TEXT("semantic readiness present"), Semantic.IsValid());
+	if (!Semantic.IsValid())
+	{
+		return false;
+	}
+	TestTrue(TEXT("some blueprint assets still have indexed nodes"), Semantic->GetIntegerField(TEXT("blueprint_like_assets_with_nodes")) > 0);
+	TestTrue(TEXT("empty blueprint asset counted"), Semantic->GetIntegerField(TEXT("blueprint_like_assets_without_nodes")) > 0);
+	const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+	TestTrue(TEXT("partial empty coverage check emitted"), R->TryGetArrayField(TEXT("checks"), Checks) && Checks && Checks->ContainsByPredicate([](const TSharedPtr<FJsonValue>& Value)
+	{
+		TSharedPtr<FJsonObject> Obj = Value->AsObject();
+		return Obj.IsValid()
+			&& Obj->GetStringField(TEXT("check")) == TEXT("semantic:empty_blueprint_detail_samples")
+			&& Obj->GetStringField(TEXT("result")) == TEXT("warning");
+	}));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectHealthWarnsOnEmptyBlueprintDetailCoverageTest, "Monolith.IndexGuard.Project.HealthWarnsOnEmptyBlueprintDetailCoverage", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectHealthWarnsOnEmptyBlueprintDetailCoverageTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+	FSQLiteDatabase* Raw = T.Db.GetRawDatabase();
+	TestTrue(TEXT("raw DB available"), Raw != nullptr);
+	TestTrue(TEXT("remove indexed Blueprint nodes"), Raw && Raw->Execute(TEXT("DELETE FROM nodes;")));
+
+	TSharedPtr<FJsonObject> R = FMonolithIndexReview::Health(T.Db, true);
+	TestEqual(TEXT("empty Blueprint detail coverage yields warning status"), R->GetStringField(TEXT("status")), FString(TEXT("warning")));
+	TSharedPtr<FJsonObject> Semantic = R->GetObjectField(TEXT("semantic_readiness"));
+	TestTrue(TEXT("semantic readiness present"), Semantic.IsValid());
+	if (!Semantic.IsValid())
+	{
+		return false;
+	}
+	TestTrue(TEXT("blueprint-like fixture assets counted"), Semantic->GetIntegerField(TEXT("blueprint_like_assets")) > 0);
+	TestEqual(TEXT("no blueprint assets have indexed nodes"), Semantic->GetIntegerField(TEXT("blueprint_like_assets_with_nodes")), 0);
+	const TArray<TSharedPtr<FJsonValue>>* Samples = nullptr;
+	TestTrue(TEXT("empty blueprint samples present"), Semantic->TryGetArrayField(TEXT("empty_blueprint_samples"), Samples) && Samples && Samples->Num() > 0);
+	const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+	TestTrue(TEXT("semantic coverage check emitted"), R->TryGetArrayField(TEXT("checks"), Checks) && Checks && Checks->ContainsByPredicate([](const TSharedPtr<FJsonValue>& Value)
+	{
+		TSharedPtr<FJsonObject> Obj = Value->AsObject();
+		return Obj.IsValid()
+			&& Obj->GetStringField(TEXT("check")) == TEXT("semantic:blueprint_detail_coverage")
+			&& Obj->GetStringField(TEXT("result")) == TEXT("warning");
+	}));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectRepairFtsDryRunTest, "Monolith.IndexGuard.Project.RepairFtsDryRun", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectRepairFtsDryRunTest::RunTest(const FString& Parameters)
 {
@@ -465,6 +594,52 @@ bool FProjectSearchContentInclusiveFtsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("datatable row FTS result present"), Sources.Contains(TEXT("datatable_row")));
 	TestTrue(TEXT("actor FTS result present"), Sources.Contains(TEXT("actor")));
 	TestTrue(TEXT("supplemental value FTS result present"), Sources.Contains(TEXT("supplemental_value")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectSearchOffsetSlicesFusedRankingTest, "Monolith.IndexGuard.Project.SearchOffsetSlicesFusedRanking", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FProjectSearchOffsetSlicesFusedRankingTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	const FString Probe = TEXT("PagedProbeAlpha");
+	auto AddProbeNode = [&](int64 AssetId)
+	{
+		FIndexedNode Node;
+		Node.AssetId = AssetId;
+		Node.NodeType = TEXT("Function");
+		Node.NodeName = Probe;
+		Node.NodeClass = TEXT("K2Node_CallFunction");
+		TestTrue(TEXT("probe node inserted"), T.Db.InsertNode(Node) > 0);
+	};
+	AddProbeNode(T.A);
+	AddProbeNode(T.B);
+	AddProbeNode(T.C);
+	AddProbeNode(T.D);
+	AddProbeNode(T.E);
+
+	FProjectSearchOptions AllOptions = FProjectSearchOptions::AssetNodeOnly();
+	const TArray<FSearchResult> All = T.Db.FullTextSearch(Probe, 5, AllOptions);
+	TestEqual(TEXT("all probe assets returned"), All.Num(), 5);
+	if (All.Num() < 4)
+	{
+		return false;
+	}
+
+	FProjectSearchOptions FirstOptions = FProjectSearchOptions::AssetNodeOnly();
+	const TArray<FSearchResult> FirstPage = T.Db.FullTextSearch(Probe, 2, FirstOptions);
+	TestEqual(TEXT("first page size"), FirstPage.Num(), 2);
+	TestEqual(TEXT("first page starts at all[0]"), FirstPage[0].AssetPath, All[0].AssetPath);
+	TestEqual(TEXT("first page second result is all[1]"), FirstPage[1].AssetPath, All[1].AssetPath);
+
+	FProjectSearchOptions SecondOptions = FProjectSearchOptions::AssetNodeOnly();
+	SecondOptions.Offset = 2;
+	const TArray<FSearchResult> SecondPage = T.Db.FullTextSearch(Probe, 2, SecondOptions);
+	TestEqual(TEXT("second page size"), SecondPage.Num(), 2);
+	TestEqual(TEXT("second page starts at all[2]"), SecondPage[0].AssetPath, All[2].AssetPath);
+	TestEqual(TEXT("second page second result is all[3]"), SecondPage[1].AssetPath, All[3].AssetPath);
 
 	return true;
 }
@@ -957,23 +1132,25 @@ bool FProjectSearchTagsUsesPreparedLikeTest::RunTest(const FString& Parameters)
 	FSQLiteDatabase* RawDB = Db.GetRawDatabase();
 	TestTrue(TEXT("raw db valid"), RawDB != nullptr);
 
-	FSQLitePreparedStatement Stmt;
-	TestTrue(TEXT("statement created"), Stmt.Create(*RawDB, TEXT("SELECT tag_name FROM tags WHERE tag_name LIKE ? ESCAPE '\\' ORDER BY tag_name LIMIT ?;")));
-
 	// Test case: Query contains underscore which is a wildcard in SQL
 	FString Query = TEXT("Melee_S");
 	FString EscapedQuery = Query.Replace(TEXT("\\"), TEXT("\\\\")).Replace(TEXT("%"), TEXT("\\%")).Replace(TEXT("_"), TEXT("\\_"));
 	FString LikePattern = TEXT("%") + EscapedQuery + TEXT("%");
 
-	Stmt.SetBindingValueByIndex(1, LikePattern);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(10));
-
 	TArray<FString> Results;
-	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		FString TagName;
-		Stmt.GetColumnValueByIndex(0, TagName);
-		Results.Add(TagName);
+		FSQLitePreparedStatement Stmt;
+		TestTrue(TEXT("statement created"), Stmt.Create(*RawDB, TEXT("SELECT tag_name FROM tags WHERE tag_name LIKE ? ESCAPE '\\' ORDER BY tag_name LIMIT ?;")));
+
+		Stmt.SetBindingValueByIndex(1, LikePattern);
+		Stmt.SetBindingValueByIndex(2, static_cast<int64>(10));
+
+		while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			FString TagName;
+			Stmt.GetColumnValueByIndex(0, TagName);
+			Results.Add(TagName);
+		}
 	}
 
 	TestEqual(TEXT("escaped wildcard returns exactly 1 tag"), Results.Num(), 1);

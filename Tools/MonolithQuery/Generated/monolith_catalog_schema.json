@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Monolith offline action catalog snapshot",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "generator",
+    "source",
+    "source_hash",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "generator": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "source_root": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "partial": {
+      "type": "boolean"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "namespace",
+          "action",
+          "full_name",
+          "available_offline",
+          "requires_live_editor",
+          "mutates_assets",
+          "writes_logs",
+          "long_running",
+          "supports_progress",
+          "skill",
+          "planning_signals",
+          "preconditions_status",
+          "output_contract_status",
+          "next_actions_status",
+          "implementation_status"
+        ],
+        "properties": {
+          "namespace": { "type": "string" },
+          "action": { "type": "string" },
+          "full_name": { "type": "string" },
+          "summary": { "type": "string" },
+          "source_file": { "type": "string" },
+          "source_line": { "type": "integer" },
+          "source": { "type": "string" },
+          "available_offline": { "type": "boolean" },
+          "requires_live_editor": { "type": "boolean" },
+          "mutates_assets": { "type": "boolean" },
+          "writes_logs": { "type": "boolean" },
+          "long_running": { "type": "boolean" },
+          "supports_progress": { "type": "boolean" },
+          "skill": { "type": "string" },
+          "planning_signals": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "preconditions_status": { "type": "string" },
+          "output_contract_status": { "type": "string" },
+          "next_actions_status": { "type": "string" },
+          "proof_anchor": { "type": "string" },
+          "implementation_status": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "proof_anchors": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,3389 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.material",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+  "task_count": 552,
+  "module_count": 21,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.material",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: material",
+      "task_count": 20,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.material.base",
+        "asset_authoring.material.batch_layout_replace",
+        "asset_authoring.material.custom_hlsl",
+        "asset_authoring.material.decal_domain",
+        "asset_authoring.material.expression_crud",
+        "asset_authoring.material.function",
+        "asset_authoring.material.function_instance",
+        "asset_authoring.material.function_maintenance",
+        "asset_authoring.material.function_parameter_group_rename",
+        "asset_authoring.material.graph",
+        "asset_authoring.material.graph_clear_import",
+        "asset_authoring.material.instance_parameters",
+        "asset_authoring.material.instance_reparent",
+        "asset_authoring.material.instance_single_param_delete_batch",
+        "asset_authoring.material.layer_assets",
+        "asset_authoring.material.parameter_inventory",
+        "asset_authoring.material.pbr_material_from_disk",
+        "asset_authoring.material.postprocess_emissive",
+        "asset_authoring.material.preview_render",
+        "asset_authoring.material.texture_import_settings"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.material.base",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "base"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/base",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.batch_layout_replace",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "batch_layout_replace"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/batch_layout_replace",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_batch_layout_replace"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.custom_hlsl",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "custom_hlsl"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/custom_hlsl",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_custom_hlsl"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.decal_domain",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "decal_domain"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/decal_domain",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "decal_domain"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.expression_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "expression_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/expression_crud",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_expression_crud"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.function",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.function_instance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_instance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_instance",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_instance"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.function_maintenance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_maintenance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_maintenance",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_maintenance"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.function_parameter_group_rename",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_parameter_group_rename"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_parameter_group_rename",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_parameter_group_rename"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.graph",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "graph"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/graph",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_graph"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.graph_clear_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "graph_clear_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/graph_clear_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_graph_clear_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.instance_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_parameters"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_parameters"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.instance_reparent",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_reparent"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_reparent",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_reparent"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.instance_single_param_delete_batch",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_single_param_delete_batch"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_single_param_delete_batch",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_single_param_delete_batch"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.layer_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "layer_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/layer_assets",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_layer_assets"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.parameter_inventory",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "parameter_inventory"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/parameter_inventory",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "parameter_inventory"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.pbr_material_from_disk",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "pbr_material_from_disk"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/pbr_material_from_disk",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "pbr_material_from_disk"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.postprocess_emissive",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "postprocess_emissive"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/postprocess_emissive",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "postprocess_emissive"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.preview_render",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "preview_render"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/preview_render",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "preview_render"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.material.texture_import_settings",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "texture_import_settings"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/texture_import_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_texture_import_settings"
+        ]
+      },
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json",
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.material": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: material",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ]
+      },
+      "task_count": 20,
+      "task_ids": [
+        "BEB-294",
+        "BEB-295",
+        "BEB-296",
+        "BEB-297",
+        "BEB-298",
+        "BEB-299",
+        "BEB-336",
+        "BEB-366",
+        "BEB-389",
+        "BEB-391",
+        "BEB-398",
+        "BEB-399",
+        "BEB-400",
+        "BEB-410",
+        "BEB-411",
+        "BEB-445",
+        "BEB-448",
+        "BEB-456",
+        "BEB-465",
+        "BEB-500"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-294",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material",
+          "blueprint_type": "",
+          "workflow": "material_instance_save_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "create_material_instance",
+            "save_material",
+            "validate_material",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a Material, edit material properties, create a MIC, save both, and validate/read them back"
+        },
+        {
+          "id": "BEB-295",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function",
+          "blueprint_type": "",
+          "workflow": "material_function_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "save_material",
+            "get_function_info",
+            "export_function_graph"
+          ],
+          "description": "Create a Material Function, build function input/output expressions, save it, and inspect graph structure"
+        },
+        {
+          "id": "BEB-296",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_graph",
+          "blueprint_type": "",
+          "workflow": "material_graph_build_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "recompile_material",
+            "save_material",
+            "get_full_connection_graph",
+            "export_material_graph",
+            "validate_material",
+            "get_compilation_stats"
+          ],
+          "description": "Create a base Material, build a graph, compile/save it, and read/export graph topology back"
+        },
+        {
+          "id": "BEB-297",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "pbr_material_from_disk",
+          "blueprint_type": "",
+          "workflow": "pbr_material_from_disk_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_pbr_material_from_disk",
+            "save_material",
+            "get_material_properties",
+            "get_full_connection_graph",
+            "validate_material",
+            "get_texture_properties"
+          ],
+          "description": "Import disk PBR texture maps, create and save a Material graph, then read back material and texture metadata"
+        },
+        {
+          "id": "BEB-298",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_reparent",
+          "blueprint_type": "",
+          "workflow": "material_mic_duplicate_reparent_clear_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameters",
+            "duplicate_material",
+            "set_instance_parent",
+            "clear_instance_parameter",
+            "save_material",
+            "get_instance_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create two parent Materials, duplicate a MIC, reparent the duplicate, clear one override, save, and inspect the remaining override"
+        },
+        {
+          "id": "BEB-299",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_instance",
+          "blueprint_type": "",
+          "workflow": "material_function_instance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "create_function_instance",
+            "set_function_instance_parameter",
+            "save_material",
+            "get_function_instance_info",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material Function, create a function instance, edit its scalar override, save, and inspect override metadata"
+        },
+        {
+          "id": "BEB-336",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_parameters",
+          "blueprint_type": "",
+          "workflow": "material_instance_parameter_overrides_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameters",
+            "save_material",
+            "get_instance_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back"
+        },
+        {
+          "id": "BEB-366",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_custom_hlsl",
+          "blueprint_type": "",
+          "workflow": "material_custom_hlsl_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "create_custom_hlsl_node",
+            "update_custom_hlsl_node",
+            "save_material",
+            "export_material_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back"
+        },
+        {
+          "id": "BEB-389",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_expression_crud",
+          "blueprint_type": "",
+          "workflow": "material_expression_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "duplicate_expression",
+            "rename_expression",
+            "set_expression_property",
+            "disconnect_expression",
+            "connect_expressions",
+            "delete_expression",
+            "save_material",
+            "get_all_expressions",
+            "get_expression_details",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back"
+        },
+        {
+          "id": "BEB-391",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_batch_layout_replace",
+          "blueprint_type": "",
+          "workflow": "material_batch_layout_replace_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "move_expression",
+            "replace_expression",
+            "auto_layout",
+            "batch_set_material_property",
+            "batch_recompile",
+            "save_material",
+            "get_material_properties",
+            "get_expression_details",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back"
+        },
+        {
+          "id": "BEB-398",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_maintenance",
+          "blueprint_type": "",
+          "workflow": "material_function_maintenance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "set_function_metadata",
+            "layout_function_expressions",
+            "update_material_function",
+            "delete_function_expression",
+            "save_material",
+            "get_function_info",
+            "export_function_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Material Function, edit library metadata, layout and update it, delete an unconnected expression, save it, and read metadata/graph back"
+        },
+        {
+          "id": "BEB-399",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_single_param_delete_batch",
+          "blueprint_type": "",
+          "workflow": "material_instance_single_param_delete_batch_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameter",
+            "delete_expressions",
+            "save_material",
+            "get_instance_parameters",
+            "get_all_expressions",
+            "get_full_connection_graph"
+          ],
+          "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back"
+        },
+        {
+          "id": "BEB-400",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_graph_clear_import",
+          "blueprint_type": "",
+          "workflow": "material_graph_clear_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "export_material_graph",
+            "clear_graph",
+            "import_material_graph",
+            "save_material",
+            "get_all_expressions",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create a Material graph, clear every expression, import a replacement graph through import_material_graph merge mode, save, and read the imported topology back"
+        },
+        {
+          "id": "BEB-410",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_texture_import_settings",
+          "blueprint_type": "",
+          "workflow": "material_texture_import_settings_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture",
+            "save_asset",
+            "get_texture_properties",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the material namespace with normal-map settings, save it, and read compression/sRGB/LOD metadata back"
+        },
+        {
+          "id": "BEB-411",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_parameter_group_rename",
+          "blueprint_type": "",
+          "workflow": "material_function_parameter_group_rename_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "rename_function_parameter_group",
+            "save_material",
+            "export_function_graph",
+            "get_function_info",
+            "inspect_asset"
+          ],
+          "description": "Create a Material Function with a grouped scalar parameter, rename the function parameter group, save it, and export graph metadata to verify the new group"
+        },
+        {
+          "id": "BEB-445",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_layer_assets",
+          "blueprint_type": "",
+          "workflow": "material_layer_blend_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "set_function_metadata",
+            "save_material",
+            "get_layer_info",
+            "inspect_assets_batch"
+          ],
+          "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
+        },
+        {
+          "id": "BEB-448",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "decal_domain",
+          "blueprint_type": "",
+          "workflow": "material_decal_domain_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "save_material",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a Deferred Decal material, edit material-domain and translucent blend settings, save it, and read the material properties back"
+        },
+        {
+          "id": "BEB-456",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "preview_render",
+          "blueprint_type": "",
+          "workflow": "material_preview_render_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "save_material",
+            "render_preview",
+            "get_compilation_stats",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a material, edit render-facing material properties, save it, render a thumbnail preview PNG, and read compilation stats back"
+        },
+        {
+          "id": "BEB-465",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "parameter_inventory",
+          "blueprint_type": "",
+          "workflow": "material_parameter_inventory_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "save_material",
+            "get_material_parameters",
+            "list_material_instances",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
+        },
+        {
+          "id": "BEB-500",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "postprocess_emissive",
+          "blueprint_type": "",
+          "workflow": "material_postprocess_emissive_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "recompile_material",
+            "save_material",
+            "get_material_properties",
+            "get_full_connection_graph",
+            "validate_material",
+            "inspect_asset"
+          ],
+          "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "decal_domain": [
+            "BEB-448"
+          ],
+          "material": [
+            "BEB-294"
+          ],
+          "material_batch_layout_replace": [
+            "BEB-391"
+          ],
+          "material_custom_hlsl": [
+            "BEB-366"
+          ],
+          "material_expression_crud": [
+            "BEB-389"
+          ],
+          "material_function": [
+            "BEB-295"
+          ],
+          "material_function_instance": [
+            "BEB-299"
+          ],
+          "material_function_maintenance": [
+            "BEB-398"
+          ],
+          "material_function_parameter_group_rename": [
+            "BEB-411"
+          ],
+          "material_graph": [
+            "BEB-296"
+          ],
+          "material_graph_clear_import": [
+            "BEB-400"
+          ],
+          "material_instance_parameters": [
+            "BEB-336"
+          ],
+          "material_instance_reparent": [
+            "BEB-298"
+          ],
+          "material_instance_single_param_delete_batch": [
+            "BEB-399"
+          ],
+          "material_layer_assets": [
+            "BEB-445"
+          ],
+          "material_texture_import_settings": [
+            "BEB-410"
+          ],
+          "parameter_inventory": [
+            "BEB-465"
+          ],
+          "pbr_material_from_disk": [
+            "BEB-297"
+          ],
+          "postprocess_emissive": [
+            "BEB-500"
+          ],
+          "preview_render": [
+            "BEB-456"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ],
+          "edit": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ],
+          "readback_verify": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ],
+          "save": [
+            "BEB-294",
+            "BEB-295",
+            "BEB-296",
+            "BEB-297",
+            "BEB-298",
+            "BEB-299",
+            "BEB-336",
+            "BEB-366",
+            "BEB-389",
+            "BEB-391",
+            "BEB-398",
+            "BEB-399",
+            "BEB-400",
+            "BEB-410",
+            "BEB-411",
+            "BEB-445",
+            "BEB-448",
+            "BEB-456",
+            "BEB-465",
+            "BEB-500"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.material.base",
+        "asset_authoring.material.batch_layout_replace",
+        "asset_authoring.material.custom_hlsl",
+        "asset_authoring.material.decal_domain",
+        "asset_authoring.material.expression_crud",
+        "asset_authoring.material.function",
+        "asset_authoring.material.function_instance",
+        "asset_authoring.material.function_maintenance",
+        "asset_authoring.material.function_parameter_group_rename",
+        "asset_authoring.material.graph",
+        "asset_authoring.material.graph_clear_import",
+        "asset_authoring.material.instance_parameters",
+        "asset_authoring.material.instance_reparent",
+        "asset_authoring.material.instance_single_param_delete_batch",
+        "asset_authoring.material.layer_assets",
+        "asset_authoring.material.parameter_inventory",
+        "asset_authoring.material.pbr_material_from_disk",
+        "asset_authoring.material.postprocess_emissive",
+        "asset_authoring.material.preview_render",
+        "asset_authoring.material.texture_import_settings"
+      ],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.base": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.base",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "base"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/base",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-294"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-294",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material",
+          "blueprint_type": "",
+          "workflow": "material_instance_save_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "create_material_instance",
+            "save_material",
+            "validate_material",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a Material, edit material properties, create a MIC, save both, and validate/read them back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-294"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-294"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-294"
+          ],
+          "edit": [
+            "BEB-294"
+          ],
+          "readback_verify": [
+            "BEB-294"
+          ],
+          "save": [
+            "BEB-294"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.batch_layout_replace": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.batch_layout_replace",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "batch_layout_replace"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/batch_layout_replace",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_batch_layout_replace"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-391"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-391",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_batch_layout_replace",
+          "blueprint_type": "",
+          "workflow": "material_batch_layout_replace_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "move_expression",
+            "replace_expression",
+            "auto_layout",
+            "batch_set_material_property",
+            "batch_recompile",
+            "save_material",
+            "get_material_properties",
+            "get_expression_details",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create two Materials, capture real expression names, move/replace/layout one graph, batch-edit properties, batch-recompile, save, and read the edited graph and properties back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-391"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-391"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-391"
+          ],
+          "edit": [
+            "BEB-391"
+          ],
+          "readback_verify": [
+            "BEB-391"
+          ],
+          "save": [
+            "BEB-391"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.custom_hlsl": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.custom_hlsl",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "custom_hlsl"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/custom_hlsl",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_custom_hlsl"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-366"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-366",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_custom_hlsl",
+          "blueprint_type": "",
+          "workflow": "material_custom_hlsl_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "create_custom_hlsl_node",
+            "update_custom_hlsl_node",
+            "save_material",
+            "export_material_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-366"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-366"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-366"
+          ],
+          "edit": [
+            "BEB-366"
+          ],
+          "readback_verify": [
+            "BEB-366"
+          ],
+          "save": [
+            "BEB-366"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.decal_domain": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.decal_domain",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "decal_domain"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/decal_domain",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "decal_domain"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-448"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-448",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "decal_domain",
+          "blueprint_type": "",
+          "workflow": "material_decal_domain_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "save_material",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a Deferred Decal material, edit material-domain and translucent blend settings, save it, and read the material properties back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-448"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-448"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-448"
+          ],
+          "edit": [
+            "BEB-448"
+          ],
+          "readback_verify": [
+            "BEB-448"
+          ],
+          "save": [
+            "BEB-448"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.expression_crud": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.expression_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "expression_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/expression_crud",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_expression_crud"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-389"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-389",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_expression_crud",
+          "blueprint_type": "",
+          "workflow": "material_expression_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "duplicate_expression",
+            "rename_expression",
+            "set_expression_property",
+            "disconnect_expression",
+            "connect_expressions",
+            "delete_expression",
+            "save_material",
+            "get_all_expressions",
+            "get_expression_details",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-389"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-389"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-389"
+          ],
+          "edit": [
+            "BEB-389"
+          ],
+          "readback_verify": [
+            "BEB-389"
+          ],
+          "save": [
+            "BEB-389"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.function",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-295"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-295",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function",
+          "blueprint_type": "",
+          "workflow": "material_function_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "save_material",
+            "get_function_info",
+            "export_function_graph"
+          ],
+          "description": "Create a Material Function, build function input/output expressions, save it, and inspect graph structure"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-295"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-295"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-295"
+          ],
+          "edit": [
+            "BEB-295"
+          ],
+          "readback_verify": [
+            "BEB-295"
+          ],
+          "save": [
+            "BEB-295"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.function_instance": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.function_instance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_instance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_instance",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_instance"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-299"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-299",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_instance",
+          "blueprint_type": "",
+          "workflow": "material_function_instance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "create_function_instance",
+            "set_function_instance_parameter",
+            "save_material",
+            "get_function_instance_info",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material Function, create a function instance, edit its scalar override, save, and inspect override metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-299"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-299"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-299"
+          ],
+          "edit": [
+            "BEB-299"
+          ],
+          "readback_verify": [
+            "BEB-299"
+          ],
+          "save": [
+            "BEB-299"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.function_maintenance": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.function_maintenance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_maintenance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_maintenance",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_maintenance"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-398"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-398",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_maintenance",
+          "blueprint_type": "",
+          "workflow": "material_function_maintenance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "set_function_metadata",
+            "layout_function_expressions",
+            "update_material_function",
+            "delete_function_expression",
+            "save_material",
+            "get_function_info",
+            "export_function_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Material Function, edit library metadata, layout and update it, delete an unconnected expression, save it, and read metadata/graph back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-398"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-398"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-398"
+          ],
+          "edit": [
+            "BEB-398"
+          ],
+          "readback_verify": [
+            "BEB-398"
+          ],
+          "save": [
+            "BEB-398"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.function_parameter_group_rename": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.function_parameter_group_rename",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "function_parameter_group_rename"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/function_parameter_group_rename",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_function_parameter_group_rename"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-411"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-411",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_function_parameter_group_rename",
+          "blueprint_type": "",
+          "workflow": "material_function_parameter_group_rename_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "build_function_graph",
+            "rename_function_parameter_group",
+            "save_material",
+            "export_function_graph",
+            "get_function_info",
+            "inspect_asset"
+          ],
+          "description": "Create a Material Function with a grouped scalar parameter, rename the function parameter group, save it, and export graph metadata to verify the new group"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-411"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-411"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-411"
+          ],
+          "edit": [
+            "BEB-411"
+          ],
+          "readback_verify": [
+            "BEB-411"
+          ],
+          "save": [
+            "BEB-411"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.graph": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.graph",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "graph"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/graph",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_graph"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-296"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-296",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_graph",
+          "blueprint_type": "",
+          "workflow": "material_graph_build_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "recompile_material",
+            "save_material",
+            "get_full_connection_graph",
+            "export_material_graph",
+            "validate_material",
+            "get_compilation_stats"
+          ],
+          "description": "Create a base Material, build a graph, compile/save it, and read/export graph topology back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-296"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-296"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-296"
+          ],
+          "edit": [
+            "BEB-296"
+          ],
+          "readback_verify": [
+            "BEB-296"
+          ],
+          "save": [
+            "BEB-296"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.graph_clear_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.graph_clear_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "graph_clear_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/graph_clear_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_graph_clear_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-400"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-400",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_graph_clear_import",
+          "blueprint_type": "",
+          "workflow": "material_graph_clear_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "export_material_graph",
+            "clear_graph",
+            "import_material_graph",
+            "save_material",
+            "get_all_expressions",
+            "get_full_connection_graph",
+            "validate_material"
+          ],
+          "description": "Create a Material graph, clear every expression, import a replacement graph through import_material_graph merge mode, save, and read the imported topology back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-400"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-400"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-400"
+          ],
+          "edit": [
+            "BEB-400"
+          ],
+          "readback_verify": [
+            "BEB-400"
+          ],
+          "save": [
+            "BEB-400"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.instance_parameters": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.instance_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_parameters"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_parameters",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_parameters"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-336"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-336",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_parameters",
+          "blueprint_type": "",
+          "workflow": "material_instance_parameter_overrides_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameters",
+            "save_material",
+            "get_instance_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material and MIC, batch-set scalar/vector overrides, save, and read the overrides back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-336"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-336"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-336"
+          ],
+          "edit": [
+            "BEB-336"
+          ],
+          "readback_verify": [
+            "BEB-336"
+          ],
+          "save": [
+            "BEB-336"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.instance_reparent": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.instance_reparent",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_reparent"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_reparent",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_reparent"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-298"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-298",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_reparent",
+          "blueprint_type": "",
+          "workflow": "material_mic_duplicate_reparent_clear_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameters",
+            "duplicate_material",
+            "set_instance_parent",
+            "clear_instance_parameter",
+            "save_material",
+            "get_instance_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create two parent Materials, duplicate a MIC, reparent the duplicate, clear one override, save, and inspect the remaining override"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-298"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-298"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-298"
+          ],
+          "edit": [
+            "BEB-298"
+          ],
+          "readback_verify": [
+            "BEB-298"
+          ],
+          "save": [
+            "BEB-298"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.instance_single_param_delete_batch": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.instance_single_param_delete_batch",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "instance_single_param_delete_batch"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/instance_single_param_delete_batch",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_instance_single_param_delete_batch"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-399"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-399",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_instance_single_param_delete_batch",
+          "blueprint_type": "",
+          "workflow": "material_instance_single_param_delete_batch_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "set_instance_parameter",
+            "delete_expressions",
+            "save_material",
+            "get_instance_parameters",
+            "get_all_expressions",
+            "get_full_connection_graph"
+          ],
+          "description": "Create a parameterized Material and MIC, set one MIC parameter through the single-parameter path, batch-delete unused expressions from the base graph, save, and read both changes back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-399"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-399"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-399"
+          ],
+          "edit": [
+            "BEB-399"
+          ],
+          "readback_verify": [
+            "BEB-399"
+          ],
+          "save": [
+            "BEB-399"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.layer_assets": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.layer_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "layer_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/layer_assets",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_layer_assets"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-445"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-445",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_layer_assets",
+          "blueprint_type": "",
+          "workflow": "material_layer_blend_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material_function",
+            "set_function_metadata",
+            "save_material",
+            "get_layer_info",
+            "inspect_assets_batch"
+          ],
+          "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-445"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-445"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-445"
+          ],
+          "edit": [
+            "BEB-445"
+          ],
+          "readback_verify": [
+            "BEB-445"
+          ],
+          "save": [
+            "BEB-445"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.parameter_inventory": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.parameter_inventory",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "parameter_inventory"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/parameter_inventory",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "parameter_inventory"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-465"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-465",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "parameter_inventory",
+          "blueprint_type": "",
+          "workflow": "material_parameter_inventory_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "create_material_instance",
+            "save_material",
+            "get_material_parameters",
+            "list_material_instances",
+            "inspect_asset"
+          ],
+          "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-465"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-465"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-465"
+          ],
+          "edit": [
+            "BEB-465"
+          ],
+          "readback_verify": [
+            "BEB-465"
+          ],
+          "save": [
+            "BEB-465"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.pbr_material_from_disk": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.pbr_material_from_disk",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "pbr_material_from_disk"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/pbr_material_from_disk",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "pbr_material_from_disk"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-297"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-297",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "pbr_material_from_disk",
+          "blueprint_type": "",
+          "workflow": "pbr_material_from_disk_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_pbr_material_from_disk",
+            "save_material",
+            "get_material_properties",
+            "get_full_connection_graph",
+            "validate_material",
+            "get_texture_properties"
+          ],
+          "description": "Import disk PBR texture maps, create and save a Material graph, then read back material and texture metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-297"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-297"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-297"
+          ],
+          "edit": [
+            "BEB-297"
+          ],
+          "readback_verify": [
+            "BEB-297"
+          ],
+          "save": [
+            "BEB-297"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.postprocess_emissive": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.postprocess_emissive",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "postprocess_emissive"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/postprocess_emissive",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "postprocess_emissive"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-500"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-500",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "postprocess_emissive",
+          "blueprint_type": "",
+          "workflow": "material_postprocess_emissive_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "build_material_graph",
+            "recompile_material",
+            "save_material",
+            "get_material_properties",
+            "get_full_connection_graph",
+            "validate_material",
+            "inspect_asset"
+          ],
+          "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-500"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-500"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-500"
+          ],
+          "edit": [
+            "BEB-500"
+          ],
+          "readback_verify": [
+            "BEB-500"
+          ],
+          "save": [
+            "BEB-500"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.preview_render": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.preview_render",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "preview_render"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/preview_render",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "preview_render"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-456"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-456",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "preview_render",
+          "blueprint_type": "",
+          "workflow": "material_preview_render_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "set_material_property",
+            "save_material",
+            "render_preview",
+            "get_compilation_stats",
+            "get_material_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a material, edit render-facing material properties, save it, render a thumbnail preview PNG, and read compilation stats back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-456"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-456"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-456"
+          ],
+          "edit": [
+            "BEB-456"
+          ],
+          "readback_verify": [
+            "BEB-456"
+          ],
+          "save": [
+            "BEB-456"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    },
+    "asset_authoring.material.texture_import_settings": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.material.texture_import_settings",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "material",
+        "texture_import_settings"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: material/texture_import_settings",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "material"
+        ],
+        "edit_domain": [
+          "material_texture_import_settings"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-410"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-410",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "material",
+          "edit_domain": "material_texture_import_settings",
+          "blueprint_type": "",
+          "workflow": "material_texture_import_settings_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture",
+            "save_asset",
+            "get_texture_properties",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the material namespace with normal-map settings, save it, and read compression/sRGB/LOD metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-410"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-410"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-410"
+          ],
+          "edit": [
+            "BEB-410"
+          ],
+          "readback_verify": [
+            "BEB-410"
+          ],
+          "save": [
+            "BEB-410"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.material",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.material",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/material.json"
+    }
+  }
+}

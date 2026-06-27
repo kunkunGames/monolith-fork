@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "imagegen",
+  "asset_type_slug": "imagegen",
+  "edit_domain": "svg_source_boundary",
+  "route_edit_domain": "svg_source_boundary",
+  "module_id": "asset_authoring.imagegen.svg_source_boundary",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.imagegen.svg_source_boundary",
+    "edit": "asset_operation.edit.imagegen.svg_source_boundary",
+    "save": "asset_operation.save.imagegen.svg_source_boundary",
+    "readback_verify": "asset_operation.readback_verify.imagegen.svg_source_boundary"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-376"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-376",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "imagegen",
+      "edit_domain": "svg_source_boundary",
+      "blueprint_type": "",
+      "workflow": "imagegen_svg_source_boundary_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "generate_svg",
+        "validate_svg",
+        "import_generated_svg"
+      ],
+      "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-376",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "generate_svg",
+            "svg_spec": {
+              "viewBox": "0 0 64 64",
+              "width": 64,
+              "height": 64,
+              "rects": [
+                {
+                  "x": 12,
+                  "y": 12,
+                  "width": 40,
+                  "height": 40,
+                  "fill": "black"
+                }
+              ]
+            },
+            "profile": "msdf_source",
+            "destination": "/Game/Benchmarks/AssetAuthoring/V_BenchVectorGlyph",
+            "overwrite_policy": "unique",
+            "save": true,
+            "strict": true
+          },
+          "contains": [
+            "V_BenchVectorGlyph",
+            "source_svg_path",
+            "msdf_ready",
+            "true"
+          ],
+          "capture": {
+            "svg_file": "$.source_svg_path"
+          }
+        },
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "validate_svg",
+            "file_path": "${svg_file}",
+            "profile": "msdf_source",
+            "strict": true
+          },
+          "contains": [
+            "msdf_ready",
+            "true",
+            "geometry_valid",
+            "true"
+          ]
+        },
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "import_generated_svg",
+            "file_path": "${svg_file}",
+            "profile": "msdf_source",
+            "destination": "/Game/Benchmarks/AssetAuthoring/V_BenchVectorGlyphImported",
+            "overwrite_policy": "unique",
+            "provider": "benchmark-svg",
+            "model": "fixture-vector-v1",
+            "save": true,
+            "strict": true
+          },
+          "contains": [
+            "V_BenchVectorGlyphImported",
+            "source_svg_path",
+            "benchmark-svg"
+          ],
+          "capture": {
+            "imported_svg_file": "$.source_svg_path"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "imagegen_query",
+          "args": {
+            "action": "validate_svg",
+            "file_path": "${imported_svg_file}",
+            "profile": "msdf_source",
+            "strict": true
+          },
+          "contains": [
+            "msdf_ready",
+            "true",
+            "geometry_valid",
+            "true"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "svg_source_boundary",
+      "blueprint_type": "",
+      "domain": "imagegen",
+      "workflow": "imagegen_svg_source_boundary_roundtrip",
+      "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "generate_svg",
+          "validate_svg",
+          "import_generated_svg"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

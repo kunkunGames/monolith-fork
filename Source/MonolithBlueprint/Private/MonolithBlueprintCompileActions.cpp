@@ -23,6 +23,313 @@
 #include "UObject/UObjectIterator.h"
 #include "Engine/Blueprint.h"
 
+namespace
+{
+	TArray<TSharedPtr<FJsonValue>> CreateBlueprintStringsToJsonValues(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Out;
+	}
+
+	TArray<FString> CreateBlueprintAcceptedParameters()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("save_path"));
+		Values.Add(TEXT("parent_class"));
+		Values.Add(TEXT("blueprint_type"));
+		Values.Add(TEXT("skip_save"));
+		return Values;
+	}
+
+	TArray<FString> CreateBlueprintAcceptedTypes()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("Normal"));
+		Values.Add(TEXT("Const"));
+		Values.Add(TEXT("MacroLibrary"));
+		Values.Add(TEXT("Interface"));
+		Values.Add(TEXT("FunctionLibrary"));
+		return Values;
+	}
+
+	TArray<FString> CreateBlueprintCandidateActions()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("blueprint.create_blueprint"));
+		Values.Add(TEXT("blueprint.duplicate_blueprint"));
+		Values.Add(TEXT("blueprint.save_asset"));
+		Values.Add(TEXT("project.search"));
+		return Values;
+	}
+
+	void AddUniqueCreateBlueprintLookupName(TArray<FString>& Names, const FString& Candidate)
+	{
+		const FString Trimmed = Candidate.TrimStartAndEnd();
+		if (!Trimmed.IsEmpty())
+		{
+			Names.AddUnique(Trimmed);
+		}
+	}
+
+	TArray<FString> CreateBlueprintClassLookupNames(const FString& ClassName)
+	{
+		TArray<FString> Names;
+		const FString Trimmed = ClassName.TrimStartAndEnd();
+		AddUniqueCreateBlueprintLookupName(Names, Trimmed);
+		if (Trimmed.EndsWith(TEXT("_C")))
+		{
+			AddUniqueCreateBlueprintLookupName(Names, Trimmed.LeftChop(2));
+		}
+		if (!Trimmed.StartsWith(TEXT("A")))
+		{
+			AddUniqueCreateBlueprintLookupName(Names, TEXT("A") + Trimmed);
+		}
+		if (!Trimmed.StartsWith(TEXT("U")))
+		{
+			AddUniqueCreateBlueprintLookupName(Names, TEXT("U") + Trimmed);
+		}
+		if (Trimmed.Len() > 1 && (Trimmed.StartsWith(TEXT("A")) || Trimmed.StartsWith(TEXT("U"))))
+		{
+			AddUniqueCreateBlueprintLookupName(Names, Trimmed.Mid(1));
+		}
+		return Names;
+	}
+
+	UClass* ResolveCreateBlueprintParentClass(const FString& ClassName)
+	{
+		for (const FString& CandidateName : CreateBlueprintClassLookupNames(ClassName))
+		{
+			if (UClass* Candidate = FindFirstObject<UClass>(*CandidateName, EFindFirstObjectOptions::NativeFirst))
+			{
+				return Candidate;
+			}
+		}
+		return nullptr;
+	}
+
+	struct FCreateBlueprintClassCandidate
+	{
+		UClass* Class = nullptr;
+		int32 Score = 0;
+	};
+
+	int32 CreateBlueprintClassCandidateScore(const UClass* Class, const FString& Query)
+	{
+		if (!Class)
+		{
+			return 1000;
+		}
+		const FString CleanQuery = Query.TrimStartAndEnd();
+		if (CleanQuery.IsEmpty())
+		{
+			return 500;
+		}
+
+		const FString Name = Class->GetName();
+		const FString CppName = FString(Class->GetPrefixCPP()) + Name;
+		if (Name.Equals(CleanQuery, ESearchCase::IgnoreCase) || CppName.Equals(CleanQuery, ESearchCase::IgnoreCase))
+		{
+			return 0;
+		}
+		if (Name.StartsWith(CleanQuery, ESearchCase::IgnoreCase) || CppName.StartsWith(CleanQuery, ESearchCase::IgnoreCase))
+		{
+			return 10;
+		}
+		if (Name.Contains(CleanQuery, ESearchCase::IgnoreCase) || CppName.Contains(CleanQuery, ESearchCase::IgnoreCase))
+		{
+			return 20;
+		}
+		return 1000;
+	}
+
+	TSharedPtr<FJsonObject> CreateBlueprintClassCandidateToJson(const UClass* Class)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		if (!Class)
+		{
+			return Obj;
+		}
+		Obj->SetStringField(TEXT("name"), Class->GetName());
+		Obj->SetStringField(TEXT("cpp_name"), FString(Class->GetPrefixCPP()) + Class->GetName());
+		Obj->SetStringField(TEXT("path"), Class->GetPathName());
+		Obj->SetBoolField(TEXT("native"), Class->HasAnyClassFlags(CLASS_Native));
+		Obj->SetBoolField(TEXT("abstract"), Class->HasAnyClassFlags(CLASS_Abstract));
+		return Obj;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> CreateBlueprintParentClassCandidatesToJsonValues(const FString& Query, int32 Limit = 12)
+	{
+		TArray<FCreateBlueprintClassCandidate> Candidates;
+		for (TObjectIterator<UClass> It; It; ++It)
+		{
+			UClass* Class = *It;
+			if (!Class || Class->HasAnyClassFlags(CLASS_Deprecated))
+			{
+				continue;
+			}
+			if (!FKismetEditorUtilities::CanCreateBlueprintOfClass(Class))
+			{
+				continue;
+			}
+			const int32 Score = CreateBlueprintClassCandidateScore(Class, Query);
+			if (Score >= 1000)
+			{
+				continue;
+			}
+			FCreateBlueprintClassCandidate Candidate;
+			Candidate.Class = Class;
+			Candidate.Score = Score;
+			Candidates.Add(Candidate);
+		}
+
+		if (Candidates.Num() == 0)
+		{
+			const TArray<FString> FallbackNames = {
+				TEXT("Actor"),
+				TEXT("Pawn"),
+				TEXT("Character"),
+				TEXT("ActorComponent"),
+				TEXT("SceneComponent"),
+				TEXT("Object")
+			};
+			for (const FString& FallbackName : FallbackNames)
+			{
+				if (UClass* Class = ResolveCreateBlueprintParentClass(FallbackName))
+				{
+					if (FKismetEditorUtilities::CanCreateBlueprintOfClass(Class))
+					{
+						FCreateBlueprintClassCandidate Candidate;
+						Candidate.Class = Class;
+						Candidate.Score = 900;
+						Candidates.Add(Candidate);
+					}
+				}
+			}
+		}
+
+		Candidates.Sort([](const FCreateBlueprintClassCandidate& A, const FCreateBlueprintClassCandidate& B)
+		{
+			if (A.Score != B.Score)
+			{
+				return A.Score < B.Score;
+			}
+			const FString AName = A.Class ? A.Class->GetName() : FString();
+			const FString BName = B.Class ? B.Class->GetName() : FString();
+			return AName < BName;
+		});
+
+		TArray<TSharedPtr<FJsonValue>> Out;
+		const int32 Count = FMath::Min(Candidates.Num(), Limit);
+		Out.Reserve(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			Out.Add(MakeShared<FJsonValueObject>(CreateBlueprintClassCandidateToJson(Candidates[Index].Class)));
+		}
+		return Out;
+	}
+
+	TArray<FString> CreateBlueprintRecoveryHints(const FString& FailureCause)
+	{
+		TArray<FString> Hints;
+		if (FailureCause == TEXT("missing_save_path") || FailureCause == TEXT("invalid_save_path"))
+		{
+			Hints.Add(TEXT("Retry with save_path set to a package asset path such as /Game/Folder/BP_MyActor."));
+			Hints.Add(TEXT("Use monolith.discover for the blueprint.create_blueprint parameter contract."));
+		}
+		else if (FailureCause == TEXT("missing_parent_class") || FailureCause == TEXT("parent_class_not_found"))
+		{
+			Hints.Add(TEXT("Retry with parent_class set to one of error_data.candidate_parent_classes[].name."));
+			Hints.Add(TEXT("Common parent_class values include Actor, Pawn, Character, ActorComponent, and Object."));
+		}
+		else if (FailureCause == TEXT("target_path_exists"))
+		{
+			Hints.Add(TEXT("Choose a new save_path, or delete/rename the existing asset before retrying create_blueprint."));
+			Hints.Add(TEXT("Use blueprint.duplicate_blueprint when the intent is to clone an existing Blueprint to a new_path."));
+		}
+		else
+		{
+			Hints.Add(TEXT("Use monolith.discover for the blueprint.create_blueprint parameter contract and retry with corrected inputs."));
+		}
+		return Hints;
+	}
+
+	TSharedPtr<FJsonObject> CreateBlueprintSchemaReadArgs()
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("namespace"), TEXT("blueprint"));
+		Args->SetStringField(TEXT("action"), TEXT("create_blueprint"));
+		return Args;
+	}
+
+	TSharedPtr<FJsonObject> CreateBlueprintProjectSearchReadArgs(const FString& SavePath, const FString& AssetName)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("query"), AssetName.IsEmpty() ? SavePath : AssetName);
+		Args->SetBoolField(TEXT("include_content"), false);
+		Args->SetNumberField(TEXT("limit"), 5);
+		return Args;
+	}
+
+	TSharedPtr<FJsonObject> MakeCreateBlueprintErrorData(
+		const FString& FailureCause,
+		const FString& SavePath,
+		const FString& ParentClassName,
+		const FString& BlueprintType,
+		const FString& AssetName = FString(),
+		bool bIncludeParentCandidates = false)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), FailureCause);
+		if (!SavePath.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("save_path"), SavePath);
+		}
+		if (!AssetName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("asset_name"), AssetName);
+		}
+		if (!ParentClassName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("parent_class"), ParentClassName);
+		}
+		if (!BlueprintType.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("blueprint_type"), BlueprintType);
+		}
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), CreateBlueprintStringsToJsonValues(CreateBlueprintAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("accepted_blueprint_types"), CreateBlueprintStringsToJsonValues(CreateBlueprintAcceptedTypes()));
+		ErrorData->SetArrayField(TEXT("candidate_actions"), CreateBlueprintStringsToJsonValues(CreateBlueprintCandidateActions()));
+		ErrorData->SetStringField(TEXT("schema_read_action"), TEXT("monolith.discover"));
+		ErrorData->SetObjectField(TEXT("schema_read_args"), CreateBlueprintSchemaReadArgs());
+		ErrorData->SetArrayField(TEXT("recovery_hints"), CreateBlueprintStringsToJsonValues(CreateBlueprintRecoveryHints(FailureCause)));
+
+		if (bIncludeParentCandidates)
+		{
+			ErrorData->SetArrayField(TEXT("candidate_parent_classes"), CreateBlueprintParentClassCandidatesToJsonValues(ParentClassName));
+		}
+
+		if (FailureCause == TEXT("target_path_exists"))
+		{
+			ErrorData->SetStringField(TEXT("read_action"), TEXT("project.search"));
+			ErrorData->SetObjectField(TEXT("read_args"), CreateBlueprintProjectSearchReadArgs(SavePath, AssetName));
+			ErrorData->SetStringField(TEXT("offending_save_path"), SavePath);
+		}
+		else
+		{
+			ErrorData->SetStringField(TEXT("read_action"), TEXT("monolith.discover"));
+			ErrorData->SetObjectField(TEXT("read_args"), CreateBlueprintSchemaReadArgs());
+		}
+
+		return ErrorData;
+	}
+}
+
 // ============================================================
 //  Registration
 // ============================================================
@@ -410,14 +717,26 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: save_path"))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("missing_save_path"),
+				SavePath,
+				FString(),
+				FString()));
 	}
 
 	FString ParentClassName;
 	Params->TryGetStringField(TEXT("parent_class"), ParentClassName);
 	if (ParentClassName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_class"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_class"))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("missing_parent_class"),
+				SavePath,
+				ParentClassName,
+				FString(),
+				FString(),
+				true));
 	}
 
 	FString BlueprintTypeStr;
@@ -431,23 +750,37 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	int32 LastSlash;
 	if (!SavePath.FindLastChar(TEXT('/'), LastSlash))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid save_path — must contain at least one '/': %s"), *SavePath));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid save_path — must contain at least one '/': %s"), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("invalid_save_path"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr));
 	}
 	FString AssetName = SavePath.Mid(LastSlash + 1);
 	if (AssetName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("save_path must not end with '/': %s"), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("invalid_save_path"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr));
 	}
 
-	// Resolve parent class — try exact, then with 'A' prefix
-	UClass* ParentClass = FindFirstObject<UClass>(*ParentClassName, EFindFirstObjectOptions::NativeFirst);
+	// Resolve parent class — try exact, common C++ prefixes, and stripped prefixes.
+	UClass* ParentClass = ResolveCreateBlueprintParentClass(ParentClassName);
 	if (!ParentClass)
 	{
-		ParentClass = FindFirstObject<UClass>(*(TEXT("A") + ParentClassName), EFindFirstObjectOptions::NativeFirst);
-	}
-	if (!ParentClass)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Parent class not found: %s"), *ParentClassName));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Parent class not found: %s"), *ParentClassName))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("parent_class_not_found"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName,
+				true))
+			.WithHint(TEXT("Retry with parent_class set to one of error_data.candidate_parent_classes[].name."));
 	}
 
 	// Parse blueprint type
@@ -465,7 +798,14 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	if (ExistingAsset.IsValid())
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Blueprint already exists at '%s'. Use duplicate_blueprint or delete it first."), *SavePath));
+			TEXT("Blueprint already exists at '%s'. Use duplicate_blueprint or delete it first."), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("target_path_exists"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName))
+			.WithHint(TEXT("Choose a different save_path, delete or rename the existing asset, or use blueprint.duplicate_blueprint to clone to a new_path."));
 	}
 	UBlueprint* ExistingBP = FindObject<UBlueprint>(nullptr, *(SavePath + TEXT(".") + AssetName));
 	if (!ExistingBP)
@@ -479,13 +819,26 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	if (ExistingBP)
 	{
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Blueprint already exists at '%s'. Use duplicate_blueprint or delete it first."), *SavePath));
+			TEXT("Blueprint already exists at '%s'. Use duplicate_blueprint or delete it first."), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("target_path_exists"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName))
+			.WithHint(TEXT("Choose a different save_path, delete or rename the existing asset, or use blueprint.duplicate_blueprint to clone to a new_path."));
 	}
 
 	// Create the package — use the full save path as package name.
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
 	{
-		return FMonolithActionResult::Error(ValidationError);
+		return FMonolithActionResult::Error(ValidationError)
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("invalid_save_path"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName));
 	}
 	// CreatePackage returns either the existing in-memory UPackage at this
 	// path or a fresh RF_Public one (UObjectGlobals.cpp:1040-1050); it does
@@ -498,7 +851,13 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create package at path: %s"), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("package_create_failed"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName));
 	}
 
 	UBlueprint* NewBP = FKismetEditorUtilities::CreateBlueprint(
@@ -511,7 +870,14 @@ FMonolithActionResult FMonolithBlueprintCompileActions::HandleCreateBlueprint(co
 
 	if (!NewBP)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create Blueprint at: %s"), *SavePath));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to create Blueprint at: %s"), *SavePath))
+			.WithErrorData(MakeCreateBlueprintErrorData(
+				TEXT("blueprint_create_failed"),
+				SavePath,
+				ParentClassName,
+				BlueprintTypeStr,
+				AssetName,
+				true));
 	}
 
 	// Read skip_save param (default false)

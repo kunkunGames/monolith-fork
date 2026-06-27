@@ -82,6 +82,20 @@ void FMonolithMeshValidationActions::RegisterActions(FMonolithToolRegistry& Regi
 		{ TEXT("game readiness checklist"), TEXT("shippable mesh"), TEXT("missing collision"), TEXT("lightmap UV check"), TEXT("pivot and scale"), TEXT("asset QA") },
 		{ TEXT("check_mesh"), TEXT("audit_mesh"), TEXT("verify_mesh"), TEXT("mesh_health_check") },
 		{ TEXT("is this static mesh game ready"), TEXT("check this mesh for missing collision and LODs"), TEXT("run a QA pass on this asset") });
+	FMonolithToolRegistry::Get().SetActionPlanningMetadata(TEXT("mesh"), TEXT("validate_game_ready"),
+		TEXT("unreal-mesh"),
+		{
+			TEXT("asset_path must identify a loadable UStaticMesh."),
+			TEXT("The UStaticMesh must have render data and LOD0.")
+		},
+		{
+			TEXT("asset_path:string"),
+			TEXT("checks[]:{name,result,severity,message,degenerate_count?}"),
+			TEXT("game_ready:boolean"),
+			TEXT("critical_failures:number"),
+			TEXT("high_failures:number"),
+			TEXT("total_checks:number")
+		});
 }
 
 // ============================================================================

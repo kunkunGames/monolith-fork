@@ -1,0 +1,298 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "sequence_from_poses",
+  "route_edit_domain": "sequence_from_poses",
+  "module_id": "asset_authoring.animation.sequence_from_poses",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.sequence_from_poses",
+    "edit": "asset_operation.edit.animation.sequence_from_poses",
+    "save": "asset_operation.save.animation.sequence_from_poses",
+    "readback_verify": "asset_operation.readback_verify.animation.sequence_from_poses"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-520"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-520",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "sequence_from_poses",
+      "blueprint_type": "",
+      "workflow": "animation_sequence_from_poses_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "get_skeleton_info",
+        "build_sequence_from_poses",
+        "save_asset",
+        "get_sequence_info",
+        "list_bone_tracks",
+        "get_bone_track_keys",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-520",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_skeleton_info",
+            "asset_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "bone_count",
+            "bones"
+          ],
+          "capture": {
+            "pose_bone": "$.bones[0].name"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "build_sequence_from_poses",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "frame_rate": 12,
+            "frames": [
+              {
+                "bones": [
+                  {
+                    "name": "${pose_bone}",
+                    "location": [
+                      0,
+                      0,
+                      0
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0,
+                      1
+                    ],
+                    "scale": [
+                      1,
+                      1,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "bones": [
+                  {
+                    "name": "${pose_bone}",
+                    "location": [
+                      5,
+                      0,
+                      0
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0,
+                      1
+                    ],
+                    "scale": [
+                      1,
+                      1,
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "bones": [
+                  {
+                    "name": "${pose_bone}",
+                    "location": [
+                      10,
+                      0,
+                      0
+                    ],
+                    "rotation": [
+                      0,
+                      0,
+                      0,
+                      1
+                    ],
+                    "scale": [
+                      1,
+                      1,
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "contains": [
+            "A_BenchPoseFrames",
+            "frame_count",
+            "3",
+            "frame_rate",
+            "12",
+            "bone_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames"
+          },
+          "contains": [
+            "A_BenchPoseFrames",
+            "SkeletalCube_Skeleton",
+            "sample_rate",
+            "12",
+            "frame_rate",
+            "12/1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "list_bone_tracks",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames"
+          },
+          "contains": [
+            "${pose_bone}",
+            "count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_bone_track_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames",
+            "bone_name": "${pose_bone}",
+            "start_frame": 0,
+            "end_frame": 2
+          },
+          "contains": [
+            "${pose_bone}",
+            "num_keys",
+            "3",
+            "positions",
+            "10",
+            "rotations",
+            "scales"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseFrames"
+          },
+          "contains": [
+            "A_BenchPoseFrames",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sequence_from_poses",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_sequence_from_poses_roundtrip",
+      "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-sequences-in-unreal-engine",
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/Animation/IAnimationDataController",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-animation/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "get_skeleton_info",
+          "build_sequence_from_poses",
+          "save_asset",
+          "get_sequence_info",
+          "list_bone_tracks",
+          "get_bone_track_keys",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

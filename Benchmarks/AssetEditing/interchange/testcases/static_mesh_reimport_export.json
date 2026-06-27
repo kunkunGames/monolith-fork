@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_static_mesh_reimport_export",
+  "route_edit_domain": "static_mesh_reimport_export",
+  "module_id": "asset_authoring.interchange.static_mesh_reimport_export",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.static_mesh_reimport_export",
+    "edit": "asset_operation.edit.interchange.static_mesh_reimport_export",
+    "save": "asset_operation.save.interchange.static_mesh_reimport_export",
+    "readback_verify": "asset_operation.readback_verify.interchange.static_mesh_reimport_export"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-286"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-286",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_static_mesh_reimport_export",
+      "blueprint_type": "",
+      "workflow": "interchange_static_mesh_reimport_export_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_mesh",
+        "save_asset",
+        "can_reimport",
+        "update_reimport_path",
+        "reimport_asset",
+        "export_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-286",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_MESH_OBJ__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true",
+            "Wavefront OBJ static mesh"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_mesh",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_MESH_OBJ__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "imported",
+            "SM_BenchInterchangeCube",
+            "StaticMesh"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_reimport",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          },
+          "contains": [
+            "can_reimport",
+            "true",
+            "SM_BenchInterchangeCube.obj"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "update_reimport_path",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_MESH_REIMPORT_OBJ__",
+            "confirm": true
+          },
+          "contains": [
+            "updated_reimport_path",
+            "SM_BenchInterchangeCube_Reimport.obj"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "reimport_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube",
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "reimported",
+            "SM_BenchInterchangeCube_Reimport.obj"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "export_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube",
+            "file_path": "__ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ__",
+            "replace_existing": true,
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "exported",
+            "file_size_bytes"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "SM_BenchInterchangeCube_Reimport.obj",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_MESH_EXPORT_OBJ__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true",
+            "Wavefront OBJ static mesh"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeCube"
+          },
+          "contains": [
+            "SM_BenchInterchangeCube",
+            "StaticMesh",
+            "Triangles",
+            "12",
+            "SM_BenchInterchangeCube_Reimport.obj"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_static_mesh_reimport_export",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_static_mesh_reimport_export_roundtrip",
+      "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "can_import",
+          "import_mesh",
+          "save_asset",
+          "can_reimport",
+          "update_reimport_path",
+          "reimport_asset",
+          "export_asset",
+          "get_import_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

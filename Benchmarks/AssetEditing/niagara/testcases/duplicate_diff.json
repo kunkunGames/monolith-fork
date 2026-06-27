@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_duplicate_diff",
+  "route_edit_domain": "duplicate_diff",
+  "module_id": "asset_authoring.niagara.duplicate_diff",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.duplicate_diff",
+    "edit": "asset_operation.edit.niagara.duplicate_diff",
+    "save": "asset_operation.save.niagara.duplicate_diff",
+    "readback_verify": "asset_operation.readback_verify.niagara.duplicate_diff"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-363"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-363",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_duplicate_diff",
+      "blueprint_type": "",
+      "workflow": "niagara_duplicate_diff_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "save_system",
+        "duplicate_system",
+        "add_user_parameter",
+        "set_system_property",
+        "export_system_spec",
+        "diff_systems"
+      ],
+      "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-363",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase",
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase"
+          },
+          "contains": [
+            "NS_BenchDiffBase"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase",
+            "name": "DiffEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "DiffEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "duplicate_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone"
+          },
+          "contains": [
+            "NS_BenchDiffClone",
+            "emitter_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_user_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone",
+            "name": "BenchCloneScale",
+            "type": "float",
+            "default": "2.25"
+          },
+          "contains": [
+            "BenchCloneScale",
+            "NiagaraFloat"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_system_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone",
+            "property": "WarmupTime",
+            "value": "0.35"
+          },
+          "contains": [
+            "System property set"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "export_system_spec",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone",
+            "include_values": true
+          },
+          "contains": [
+            "DiffEmitter",
+            "BenchCloneScale",
+            "warmup_time",
+            "0.333333"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "diff_systems",
+            "asset_path_a": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffBase",
+            "asset_path_b": "/Game/Benchmarks/AssetAuthoring/NS_BenchDiffClone",
+            "detail_level": "full"
+          },
+          "contains": [
+            "NS_BenchDiffBase",
+            "NS_BenchDiffClone",
+            "BenchCloneScale",
+            "added_in_b"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_duplicate_diff",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_duplicate_diff_roundtrip",
+      "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "save_system",
+          "duplicate_system",
+          "add_user_parameter",
+          "set_system_property",
+          "export_system_spec",
+          "diff_systems"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

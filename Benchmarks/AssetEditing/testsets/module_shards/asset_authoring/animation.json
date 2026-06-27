@@ -1,0 +1,4705 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.animation",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+  "task_count": 552,
+  "module_count": 29,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.animation",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: animation",
+      "task_count": 28,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.animation.aim_offset_axis",
+        "asset_authoring.animation.anim_blueprint_motion_matching",
+        "asset_authoring.animation.anim_blueprint_state_machine",
+        "asset_authoring.animation.blendspace_1d_aimoffset_1d",
+        "asset_authoring.animation.blendspace_interpolation",
+        "asset_authoring.animation.blendspace_sample_edit",
+        "asset_authoring.animation.blendspace_samples",
+        "asset_authoring.animation.bone_track_keys",
+        "asset_authoring.animation.chooser_context_class",
+        "asset_authoring.animation.chooser_result_reference_rewrite",
+        "asset_authoring.animation.chooser_table",
+        "asset_authoring.animation.chooser_tree_duplicate_remap",
+        "asset_authoring.animation.composite_mirror_table",
+        "asset_authoring.animation.core",
+        "asset_authoring.animation.ik_retargeter_pose_settings",
+        "asset_authoring.animation.ikrig_retargeter",
+        "asset_authoring.animation.ikrig_solver_stack",
+        "asset_authoring.animation.montage",
+        "asset_authoring.animation.montage_blend_slot",
+        "asset_authoring.animation.montage_from_sections",
+        "asset_authoring.animation.notify_point_crud",
+        "asset_authoring.animation.notify_state_timing",
+        "asset_authoring.animation.pose_search_database",
+        "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.sequence_curve_marker_cleanup",
+        "asset_authoring.animation.sequence_events",
+        "asset_authoring.animation.sequence_from_poses",
+        "asset_authoring.animation.sequence_root_additive_duplicate"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.animation.aim_offset_axis",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "aim_offset_axis"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/aim_offset_axis",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "aim_offset_axis"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.anim_blueprint_motion_matching",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "anim_blueprint_motion_matching"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/anim_blueprint_motion_matching",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "anim_blueprint_motion_matching"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.anim_blueprint_state_machine",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "anim_blueprint_state_machine"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/anim_blueprint_state_machine",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "anim_blueprint_state_machine"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.blendspace_1d_aimoffset_1d",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_1d_aimoffset_1d"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_1d_aimoffset_1d",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_1d_aimoffset_1d"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.blendspace_interpolation",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_interpolation"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_interpolation",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_interpolation"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.blendspace_sample_edit",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_sample_edit"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_sample_edit",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_sample_edit"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.blendspace_samples",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_samples"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_samples",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_samples"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.bone_track_keys",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "bone_track_keys"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/bone_track_keys",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "bone_track_keys"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.chooser_context_class",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_context_class"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_context_class",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_context_class"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.chooser_result_reference_rewrite",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_result_reference_rewrite"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_result_reference_rewrite",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_result_reference_rewrite"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.chooser_table",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_table"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_table",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_table"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.chooser_tree_duplicate_remap",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_tree_duplicate_remap"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_tree_duplicate_remap",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_tree_duplicate_remap"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.composite_mirror_table",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "composite_mirror_table"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/composite_mirror_table",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "composite_mirror_table"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.core",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "core"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/core",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "animation_core"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.ik_retargeter_pose_settings",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ik_retargeter_pose_settings"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ik_retargeter_pose_settings",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ik_retargeter_pose_settings"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.ikrig_retargeter",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ikrig_retargeter"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ikrig_retargeter",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ikrig_retargeter"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.ikrig_solver_stack",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ikrig_solver_stack"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ikrig_solver_stack",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ikrig_solver_stack"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.montage",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.montage_blend_slot",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_blend_slot"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_blend_slot",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_blend_slot"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.montage_from_sections",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_from_sections"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_from_sections",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_from_sections"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.notify_point_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_point_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_point_crud",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_point_crud"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.notify_state_timing",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_state_timing"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_state_timing",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_state_timing"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.pose_search_database",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "pose_search_database"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/pose_search_database",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_database"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.pose_search_normalization_set",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "pose_search_normalization_set"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/pose_search_normalization_set",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_normalization_set"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.sequence_curve_marker_cleanup",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_curve_marker_cleanup"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_curve_marker_cleanup",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_curve_marker_cleanup"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.sequence_events",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_events"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_events",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "animation_sequence_events"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.sequence_from_poses",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_from_poses"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_from_poses",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_from_poses"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.animation.sequence_root_additive_duplicate",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_root_additive_duplicate"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_root_additive_duplicate",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_root_additive_duplicate"
+        ]
+      },
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json",
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.animation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: animation",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ]
+      },
+      "task_count": 28,
+      "task_ids": [
+        "BEB-309",
+        "BEB-310",
+        "BEB-311",
+        "BEB-312",
+        "BEB-313",
+        "BEB-314",
+        "BEB-315",
+        "BEB-334",
+        "BEB-353",
+        "BEB-354",
+        "BEB-365",
+        "BEB-385",
+        "BEB-386",
+        "BEB-395",
+        "BEB-403",
+        "BEB-404",
+        "BEB-412",
+        "BEB-413",
+        "BEB-425",
+        "BEB-431",
+        "BEB-432",
+        "BEB-444",
+        "BEB-451",
+        "BEB-493",
+        "BEB-494",
+        "BEB-495",
+        "BEB-502",
+        "BEB-520"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-309",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "animation_core",
+          "blueprint_type": "",
+          "workflow": "animation_core_assets_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "set_sequence_properties",
+            "save_asset",
+            "create_blend_space",
+            "create_anim_blueprint",
+            "get_sequence_info",
+            "get_blend_space_info",
+            "get_abp_info"
+          ],
+          "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata"
+        },
+        {
+          "id": "BEB-310",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_samples",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_bake_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "bake_blend_space",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create three AnimSequences and a BlendSpace, add non-collinear samples, bake runtime triangulation, save, and inspect samples"
+        },
+        {
+          "id": "BEB-311",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "aim_offset_axis",
+          "blueprint_type": "",
+          "workflow": "animation_aim_offset_axis_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_aim_offset",
+            "set_blend_space_axis",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AimOffset BlendSpace, edit both axes, save, and inspect axis metadata"
+        },
+        {
+          "id": "BEB-312",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage",
+          "blueprint_type": "",
+          "workflow": "animation_montage_sections_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_montage",
+            "add_montage_slot",
+            "add_montage_section",
+            "add_montage_anim_segment",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence and Montage from the engine skeletal cube skeleton, add slot/sections/segment, save, and inspect montage layout"
+        },
+        {
+          "id": "BEB-313",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "animation_sequence_events",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_curve_sync_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_curve",
+            "set_curve_keys",
+            "add_sync_marker",
+            "save_asset",
+            "get_curve_keys",
+            "get_sync_markers",
+            "get_sequence_info"
+          ],
+          "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back"
+        },
+        {
+          "id": "BEB-314",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ikrig_retargeter",
+          "blueprint_type": "",
+          "workflow": "animation_ikrig_retargeter_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "save_asset",
+            "get_ikrig_info",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata"
+        },
+        {
+          "id": "BEB-315",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ik_retargeter_pose_settings",
+          "blueprint_type": "",
+          "workflow": "animation_ik_retargeter_pose_settings_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "set_retarget_pose",
+            "set_retarget_root_settings",
+            "save_asset",
+            "get_retarget_pose",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back"
+        },
+        {
+          "id": "BEB-334",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_table",
+          "blueprint_type": "",
+          "workflow": "chooser_table_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_chooser_cell",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells"
+        },
+        {
+          "id": "BEB-353",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_result_reference_rewrite",
+          "blueprint_type": "",
+          "workflow": "chooser_result_reference_rewrite_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_result_asset_reference",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table row that selects one Texture2D, rewrite the result asset reference to another Texture2D, save, and inspect the compiled chooser"
+        },
+        {
+          "id": "BEB-354",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_tree_duplicate_remap",
+          "blueprint_type": "",
+          "workflow": "chooser_tree_duplicate_remap_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "validate_chooser",
+            "save_asset",
+            "duplicate_chooser_tree",
+            "inspect_chooser",
+            "inspect_asset"
+          ],
+          "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference"
+        },
+        {
+          "id": "BEB-365",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "pose_search_database",
+          "blueprint_type": "",
+          "workflow": "animation_pose_search_database_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "set_database_entry_tags",
+            "get_pose_search_database",
+            "validate_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create a PoseSearch schema/database, add and edit an animation database entry, save, and read database metadata back"
+        },
+        {
+          "id": "BEB-385",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_1d_aimoffset_1d",
+          "blueprint_type": "",
+          "workflow": "animation_1d_blendspace_aimoffset_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blend_space_1d",
+            "set_blend_space_axis",
+            "create_aim_offset_1d",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata"
+        },
+        {
+          "id": "BEB-386",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "composite_mirror_table",
+          "blueprint_type": "",
+          "workflow": "animation_composite_mirror_table_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_composite",
+            "add_composite_segment",
+            "create_mirror_data_table",
+            "save_asset",
+            "get_composite_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata"
+        },
+        {
+          "id": "BEB-395",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_root_additive_duplicate",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_root_additive_duplicate_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "duplicate_sequence",
+            "set_root_motion_settings",
+            "set_additive_settings",
+            "get_sequence_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back"
+        },
+        {
+          "id": "BEB-403",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "pose_search_normalization_set",
+          "blueprint_type": "",
+          "workflow": "animation_pose_search_normalization_set_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "create_normalization_set",
+            "add_database_to_normalization_set",
+            "set_database_normalization_set",
+            "save_asset",
+            "get_pose_search_database",
+            "validate_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back"
+        },
+        {
+          "id": "BEB-404",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_context_class",
+          "blueprint_type": "",
+          "workflow": "chooser_context_class_retarget_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_context_object_class",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table with a class context entry, retarget the context object class, save, and inspect/validate the new context class"
+        },
+        {
+          "id": "BEB-412",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "anim_blueprint_state_machine",
+          "blueprint_type": "",
+          "workflow": "animation_abp_state_machine_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_anim_blueprint",
+            "build_state_machine",
+            "add_state_to_machine",
+            "add_transition",
+            "save_asset",
+            "get_state_machines",
+            "get_abp_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back"
+        },
+        {
+          "id": "BEB-413",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "anim_blueprint_motion_matching",
+          "blueprint_type": "",
+          "workflow": "animation_motion_matching_abp_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "create_anim_blueprint",
+            "build_motion_matching_node",
+            "save_asset",
+            "get_anim_graph_output_connection",
+            "get_nodes",
+            "get_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
+        },
+        {
+          "id": "BEB-425",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_from_sections",
+          "blueprint_type": "",
+          "workflow": "animation_montage_from_sections_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_montage_from_sections",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
+        },
+        {
+          "id": "BEB-431",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_point_crud",
+          "blueprint_type": "",
+          "workflow": "animation_notify_point_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_notify",
+            "remove_notify",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
+        },
+        {
+          "id": "BEB-432",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_state_timing",
+          "blueprint_type": "",
+          "workflow": "animation_notify_state_timing_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_notify_state",
+            "set_notify_time",
+            "set_notify_duration",
+            "set_notify_properties",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
+        },
+        {
+          "id": "BEB-444",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_sample_edit",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_edit_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "edit_blendspace_sample",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace with three samples, edit one sample's position and animation, save it, and verify the edited sample data"
+        },
+        {
+          "id": "BEB-451",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "bone_track_keys",
+          "blueprint_type": "",
+          "workflow": "animation_bone_track_keys_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "get_skeleton_info",
+            "set_bone_track_keys",
+            "save_asset",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
+        },
+        {
+          "id": "BEB-493",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_interpolation",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_interpolation_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blend_space",
+            "set_blend_space_interpolation",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace, edit its interpolation mode and triangulation preference, save it, and verify authored interpolation metadata"
+        },
+        {
+          "id": "BEB-494",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_blend_slot",
+          "blueprint_type": "",
+          "workflow": "animation_montage_blend_slot_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_montage",
+            "add_montage_slot",
+            "set_montage_slot",
+            "set_montage_blend",
+            "save_asset",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimMontage, add and rename a slot, edit blend timings, save it, and verify slot plus blend metadata"
+        },
+        {
+          "id": "BEB-495",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ikrig_solver_stack",
+          "blueprint_type": "",
+          "workflow": "animation_ikrig_solver_stack_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "add_ik_solver",
+            "remove_ik_solver",
+            "save_asset",
+            "get_ikrig_info",
+            "inspect_asset"
+          ],
+          "description": "Create an IKRig asset, add and remove a solver stack entry, save it, and verify the solver stack read-back"
+        },
+        {
+          "id": "BEB-502",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_curve_marker_cleanup",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_curve_marker_cleanup_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_curve",
+            "set_curve_keys",
+            "add_sync_marker",
+            "rename_sync_marker",
+            "remove_curve",
+            "remove_sync_marker",
+            "save_asset",
+            "list_curves",
+            "get_sync_markers",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add curve and sync-marker metadata, rename the marker, remove both authored items, save, and verify cleanup"
+        },
+        {
+          "id": "BEB-520",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_from_poses",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_from_poses_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_skeleton_info",
+            "build_sequence_from_poses",
+            "save_asset",
+            "get_sequence_info",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "aim_offset_axis": [
+            "BEB-311"
+          ],
+          "anim_blueprint_motion_matching": [
+            "BEB-413"
+          ],
+          "anim_blueprint_state_machine": [
+            "BEB-412"
+          ],
+          "animation_core": [
+            "BEB-309"
+          ],
+          "animation_sequence_events": [
+            "BEB-313"
+          ],
+          "blendspace_1d_aimoffset_1d": [
+            "BEB-385"
+          ],
+          "blendspace_interpolation": [
+            "BEB-493"
+          ],
+          "blendspace_sample_edit": [
+            "BEB-444"
+          ],
+          "blendspace_samples": [
+            "BEB-310"
+          ],
+          "bone_track_keys": [
+            "BEB-451"
+          ],
+          "chooser_context_class": [
+            "BEB-404"
+          ],
+          "chooser_result_reference_rewrite": [
+            "BEB-353"
+          ],
+          "chooser_table": [
+            "BEB-334"
+          ],
+          "chooser_tree_duplicate_remap": [
+            "BEB-354"
+          ],
+          "composite_mirror_table": [
+            "BEB-386"
+          ],
+          "ik_retargeter_pose_settings": [
+            "BEB-315"
+          ],
+          "ikrig_retargeter": [
+            "BEB-314"
+          ],
+          "ikrig_solver_stack": [
+            "BEB-495"
+          ],
+          "montage": [
+            "BEB-312"
+          ],
+          "montage_blend_slot": [
+            "BEB-494"
+          ],
+          "montage_from_sections": [
+            "BEB-425"
+          ],
+          "notify_point_crud": [
+            "BEB-431"
+          ],
+          "notify_state_timing": [
+            "BEB-432"
+          ],
+          "pose_search_database": [
+            "BEB-365"
+          ],
+          "pose_search_normalization_set": [
+            "BEB-403"
+          ],
+          "sequence_curve_marker_cleanup": [
+            "BEB-502"
+          ],
+          "sequence_from_poses": [
+            "BEB-520"
+          ],
+          "sequence_root_additive_duplicate": [
+            "BEB-395"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ],
+          "edit": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ],
+          "readback_verify": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ],
+          "save": [
+            "BEB-309",
+            "BEB-310",
+            "BEB-311",
+            "BEB-312",
+            "BEB-313",
+            "BEB-314",
+            "BEB-315",
+            "BEB-334",
+            "BEB-353",
+            "BEB-354",
+            "BEB-365",
+            "BEB-385",
+            "BEB-386",
+            "BEB-395",
+            "BEB-403",
+            "BEB-404",
+            "BEB-412",
+            "BEB-413",
+            "BEB-425",
+            "BEB-431",
+            "BEB-432",
+            "BEB-444",
+            "BEB-451",
+            "BEB-493",
+            "BEB-494",
+            "BEB-495",
+            "BEB-502",
+            "BEB-520"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.animation.aim_offset_axis",
+        "asset_authoring.animation.anim_blueprint_motion_matching",
+        "asset_authoring.animation.anim_blueprint_state_machine",
+        "asset_authoring.animation.blendspace_1d_aimoffset_1d",
+        "asset_authoring.animation.blendspace_interpolation",
+        "asset_authoring.animation.blendspace_sample_edit",
+        "asset_authoring.animation.blendspace_samples",
+        "asset_authoring.animation.bone_track_keys",
+        "asset_authoring.animation.chooser_context_class",
+        "asset_authoring.animation.chooser_result_reference_rewrite",
+        "asset_authoring.animation.chooser_table",
+        "asset_authoring.animation.chooser_tree_duplicate_remap",
+        "asset_authoring.animation.composite_mirror_table",
+        "asset_authoring.animation.core",
+        "asset_authoring.animation.ik_retargeter_pose_settings",
+        "asset_authoring.animation.ikrig_retargeter",
+        "asset_authoring.animation.ikrig_solver_stack",
+        "asset_authoring.animation.montage",
+        "asset_authoring.animation.montage_blend_slot",
+        "asset_authoring.animation.montage_from_sections",
+        "asset_authoring.animation.notify_point_crud",
+        "asset_authoring.animation.notify_state_timing",
+        "asset_authoring.animation.pose_search_database",
+        "asset_authoring.animation.pose_search_normalization_set",
+        "asset_authoring.animation.sequence_curve_marker_cleanup",
+        "asset_authoring.animation.sequence_events",
+        "asset_authoring.animation.sequence_from_poses",
+        "asset_authoring.animation.sequence_root_additive_duplicate"
+      ],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.aim_offset_axis": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.aim_offset_axis",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "aim_offset_axis"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/aim_offset_axis",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "aim_offset_axis"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-311"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-311",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "aim_offset_axis",
+          "blueprint_type": "",
+          "workflow": "animation_aim_offset_axis_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_aim_offset",
+            "set_blend_space_axis",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AimOffset BlendSpace, edit both axes, save, and inspect axis metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-311"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-311"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-311"
+          ],
+          "edit": [
+            "BEB-311"
+          ],
+          "readback_verify": [
+            "BEB-311"
+          ],
+          "save": [
+            "BEB-311"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.anim_blueprint_motion_matching": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.anim_blueprint_motion_matching",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "anim_blueprint_motion_matching"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/anim_blueprint_motion_matching",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "anim_blueprint_motion_matching"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-413"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-413",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "anim_blueprint_motion_matching",
+          "blueprint_type": "",
+          "workflow": "animation_motion_matching_abp_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "create_anim_blueprint",
+            "build_motion_matching_node",
+            "save_asset",
+            "get_anim_graph_output_connection",
+            "get_nodes",
+            "get_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-413"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-413"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-413"
+          ],
+          "edit": [
+            "BEB-413"
+          ],
+          "readback_verify": [
+            "BEB-413"
+          ],
+          "save": [
+            "BEB-413"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.anim_blueprint_state_machine": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.anim_blueprint_state_machine",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "anim_blueprint_state_machine"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/anim_blueprint_state_machine",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "anim_blueprint_state_machine"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-412"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-412",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "anim_blueprint_state_machine",
+          "blueprint_type": "",
+          "workflow": "animation_abp_state_machine_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_anim_blueprint",
+            "build_state_machine",
+            "add_state_to_machine",
+            "add_transition",
+            "save_asset",
+            "get_state_machines",
+            "get_abp_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-412"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-412"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-412"
+          ],
+          "edit": [
+            "BEB-412"
+          ],
+          "readback_verify": [
+            "BEB-412"
+          ],
+          "save": [
+            "BEB-412"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.blendspace_1d_aimoffset_1d": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.blendspace_1d_aimoffset_1d",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_1d_aimoffset_1d"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_1d_aimoffset_1d",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_1d_aimoffset_1d"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-385"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-385",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_1d_aimoffset_1d",
+          "blueprint_type": "",
+          "workflow": "animation_1d_blendspace_aimoffset_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blend_space_1d",
+            "set_blend_space_axis",
+            "create_aim_offset_1d",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create BlendSpace1D and AimOffset1D assets, edit their axes, save, and inspect axis metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-385"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-385"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-385"
+          ],
+          "edit": [
+            "BEB-385"
+          ],
+          "readback_verify": [
+            "BEB-385"
+          ],
+          "save": [
+            "BEB-385"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.blendspace_interpolation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.blendspace_interpolation",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_interpolation"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_interpolation",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_interpolation"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-493"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-493",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_interpolation",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_interpolation_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blend_space",
+            "set_blend_space_interpolation",
+            "save_asset",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace, edit its interpolation mode and triangulation preference, save it, and verify authored interpolation metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-493"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-493"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-493"
+          ],
+          "edit": [
+            "BEB-493"
+          ],
+          "readback_verify": [
+            "BEB-493"
+          ],
+          "save": [
+            "BEB-493"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.blendspace_sample_edit": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.blendspace_sample_edit",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_sample_edit"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_sample_edit",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_sample_edit"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-444"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-444",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_sample_edit",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_edit_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "edit_blendspace_sample",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create a BlendSpace with three samples, edit one sample's position and animation, save it, and verify the edited sample data"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-444"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-444"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-444"
+          ],
+          "edit": [
+            "BEB-444"
+          ],
+          "readback_verify": [
+            "BEB-444"
+          ],
+          "save": [
+            "BEB-444"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.blendspace_samples": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.blendspace_samples",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "blendspace_samples"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/blendspace_samples",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "blendspace_samples"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-310"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-310",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "blendspace_samples",
+          "blueprint_type": "",
+          "workflow": "animation_blendspace_sample_bake_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_blend_space",
+            "add_blendspace_sample",
+            "bake_blend_space",
+            "get_blend_space_info",
+            "inspect_asset"
+          ],
+          "description": "Create three AnimSequences and a BlendSpace, add non-collinear samples, bake runtime triangulation, save, and inspect samples"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-310"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-310"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-310"
+          ],
+          "edit": [
+            "BEB-310"
+          ],
+          "readback_verify": [
+            "BEB-310"
+          ],
+          "save": [
+            "BEB-310"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.bone_track_keys": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.bone_track_keys",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "bone_track_keys"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/bone_track_keys",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "bone_track_keys"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-451"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-451",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "bone_track_keys",
+          "blueprint_type": "",
+          "workflow": "animation_bone_track_keys_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "get_skeleton_info",
+            "set_bone_track_keys",
+            "save_asset",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-451"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-451"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-451"
+          ],
+          "edit": [
+            "BEB-451"
+          ],
+          "readback_verify": [
+            "BEB-451"
+          ],
+          "save": [
+            "BEB-451"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.chooser_context_class": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.chooser_context_class",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_context_class"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_context_class",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_context_class"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-404"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-404",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_context_class",
+          "blueprint_type": "",
+          "workflow": "chooser_context_class_retarget_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_context_object_class",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table with a class context entry, retarget the context object class, save, and inspect/validate the new context class"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-404"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-404"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-404"
+          ],
+          "edit": [
+            "BEB-404"
+          ],
+          "readback_verify": [
+            "BEB-404"
+          ],
+          "save": [
+            "BEB-404"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.chooser_result_reference_rewrite": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.chooser_result_reference_rewrite",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_result_reference_rewrite"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_result_reference_rewrite",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_result_reference_rewrite"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-353"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-353",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_result_reference_rewrite",
+          "blueprint_type": "",
+          "workflow": "chooser_result_reference_rewrite_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_result_asset_reference",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table row that selects one Texture2D, rewrite the result asset reference to another Texture2D, save, and inspect the compiled chooser"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-353"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-353"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-353"
+          ],
+          "edit": [
+            "BEB-353"
+          ],
+          "readback_verify": [
+            "BEB-353"
+          ],
+          "save": [
+            "BEB-353"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.chooser_table": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.chooser_table",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_table"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_table",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_table"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-334"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-334",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_table",
+          "blueprint_type": "",
+          "workflow": "chooser_table_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "set_chooser_cell",
+            "validate_chooser",
+            "save_asset",
+            "inspect_chooser"
+          ],
+          "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-334"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-334"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-334"
+          ],
+          "edit": [
+            "BEB-334"
+          ],
+          "readback_verify": [
+            "BEB-334"
+          ],
+          "save": [
+            "BEB-334"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.chooser_tree_duplicate_remap": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.chooser_tree_duplicate_remap",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "chooser_tree_duplicate_remap"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/chooser_tree_duplicate_remap",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "chooser_tree_duplicate_remap"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-354"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-354",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "chooser_tree_duplicate_remap",
+          "blueprint_type": "",
+          "workflow": "chooser_tree_duplicate_remap_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_texture_from_bytes",
+            "create_chooser_table",
+            "add_chooser_column",
+            "add_chooser_row",
+            "validate_chooser",
+            "save_asset",
+            "duplicate_chooser_tree",
+            "inspect_chooser",
+            "inspect_asset"
+          ],
+          "description": "Create a Chooser Table with an asset result, duplicate the chooser tree with remap rules, save, and inspect the duplicate's remapped result reference"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-354"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-354"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-354"
+          ],
+          "edit": [
+            "BEB-354"
+          ],
+          "readback_verify": [
+            "BEB-354"
+          ],
+          "save": [
+            "BEB-354"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.composite_mirror_table": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.composite_mirror_table",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "composite_mirror_table"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/composite_mirror_table",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "composite_mirror_table"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-386"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-386",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "composite_mirror_table",
+          "blueprint_type": "",
+          "workflow": "animation_composite_mirror_table_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_composite",
+            "add_composite_segment",
+            "create_mirror_data_table",
+            "save_asset",
+            "get_composite_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-386"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-386"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-386"
+          ],
+          "edit": [
+            "BEB-386"
+          ],
+          "readback_verify": [
+            "BEB-386"
+          ],
+          "save": [
+            "BEB-386"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.core": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.core",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "core"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/core",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "animation_core"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-309"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-309",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "animation_core",
+          "blueprint_type": "",
+          "workflow": "animation_core_assets_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "set_sequence_properties",
+            "save_asset",
+            "create_blend_space",
+            "create_anim_blueprint",
+            "get_sequence_info",
+            "get_blend_space_info",
+            "get_abp_info"
+          ],
+          "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-309"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-309"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-309"
+          ],
+          "edit": [
+            "BEB-309"
+          ],
+          "readback_verify": [
+            "BEB-309"
+          ],
+          "save": [
+            "BEB-309"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.ik_retargeter_pose_settings": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.ik_retargeter_pose_settings",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ik_retargeter_pose_settings"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ik_retargeter_pose_settings",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ik_retargeter_pose_settings"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-315"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-315",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ik_retargeter_pose_settings",
+          "blueprint_type": "",
+          "workflow": "animation_ik_retargeter_pose_settings_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "set_retarget_pose",
+            "set_retarget_root_settings",
+            "save_asset",
+            "get_retarget_pose",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-315"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-315"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-315"
+          ],
+          "edit": [
+            "BEB-315"
+          ],
+          "readback_verify": [
+            "BEB-315"
+          ],
+          "save": [
+            "BEB-315"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.ikrig_retargeter": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.ikrig_retargeter",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ikrig_retargeter"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ikrig_retargeter",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ikrig_retargeter"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-314"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-314",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ikrig_retargeter",
+          "blueprint_type": "",
+          "workflow": "animation_ikrig_retargeter_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "create_ik_retargeter",
+            "set_retargeter_rigs",
+            "save_asset",
+            "get_ikrig_info",
+            "get_retargeter_info",
+            "inspect_asset"
+          ],
+          "description": "Create source/target IK Rig assets and an IK Retargeter, assign rigs/preview meshes, save them, and inspect retarget metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-314"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-314"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-314"
+          ],
+          "edit": [
+            "BEB-314"
+          ],
+          "readback_verify": [
+            "BEB-314"
+          ],
+          "save": [
+            "BEB-314"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.ikrig_solver_stack": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.ikrig_solver_stack",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "ikrig_solver_stack"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/ikrig_solver_stack",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "ikrig_solver_stack"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-495"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-495",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "ikrig_solver_stack",
+          "blueprint_type": "",
+          "workflow": "animation_ikrig_solver_stack_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ik_rig",
+            "add_ik_solver",
+            "remove_ik_solver",
+            "save_asset",
+            "get_ikrig_info",
+            "inspect_asset"
+          ],
+          "description": "Create an IKRig asset, add and remove a solver stack entry, save it, and verify the solver stack read-back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-495"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-495"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-495"
+          ],
+          "edit": [
+            "BEB-495"
+          ],
+          "readback_verify": [
+            "BEB-495"
+          ],
+          "save": [
+            "BEB-495"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.montage": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.montage",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-312"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-312",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage",
+          "blueprint_type": "",
+          "workflow": "animation_montage_sections_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_montage",
+            "add_montage_slot",
+            "add_montage_section",
+            "add_montage_anim_segment",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence and Montage from the engine skeletal cube skeleton, add slot/sections/segment, save, and inspect montage layout"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-312"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-312"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-312"
+          ],
+          "edit": [
+            "BEB-312"
+          ],
+          "readback_verify": [
+            "BEB-312"
+          ],
+          "save": [
+            "BEB-312"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.montage_blend_slot": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.montage_blend_slot",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_blend_slot"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_blend_slot",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_blend_slot"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-494"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-494",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_blend_slot",
+          "blueprint_type": "",
+          "workflow": "animation_montage_blend_slot_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_montage",
+            "add_montage_slot",
+            "set_montage_slot",
+            "set_montage_blend",
+            "save_asset",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimMontage, add and rename a slot, edit blend timings, save it, and verify slot plus blend metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-494"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-494"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-494"
+          ],
+          "edit": [
+            "BEB-494"
+          ],
+          "readback_verify": [
+            "BEB-494"
+          ],
+          "save": [
+            "BEB-494"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.montage_from_sections": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.montage_from_sections",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "montage_from_sections"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/montage_from_sections",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "montage_from_sections"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-425"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-425",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "montage_from_sections",
+          "blueprint_type": "",
+          "workflow": "animation_montage_from_sections_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_montage_from_sections",
+            "get_montage_info",
+            "inspect_asset"
+          ],
+          "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-425"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-425"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-425"
+          ],
+          "edit": [
+            "BEB-425"
+          ],
+          "readback_verify": [
+            "BEB-425"
+          ],
+          "save": [
+            "BEB-425"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.notify_point_crud": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.notify_point_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_point_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_point_crud",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_point_crud"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-431"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-431",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_point_crud",
+          "blueprint_type": "",
+          "workflow": "animation_notify_point_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_notify",
+            "remove_notify",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-431"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-431"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-431"
+          ],
+          "edit": [
+            "BEB-431"
+          ],
+          "readback_verify": [
+            "BEB-431"
+          ],
+          "save": [
+            "BEB-431"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.notify_state_timing": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.notify_state_timing",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "notify_state_timing"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/notify_state_timing",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "notify_state_timing"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-432"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-432",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "notify_state_timing",
+          "blueprint_type": "",
+          "workflow": "animation_notify_state_timing_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_notify_state",
+            "set_notify_time",
+            "set_notify_duration",
+            "set_notify_properties",
+            "save_asset",
+            "get_sequence_notifies",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-432"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-432"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-432"
+          ],
+          "edit": [
+            "BEB-432"
+          ],
+          "readback_verify": [
+            "BEB-432"
+          ],
+          "save": [
+            "BEB-432"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.pose_search_database": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.pose_search_database",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "pose_search_database"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/pose_search_database",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_database"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-365"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-365",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "pose_search_database",
+          "blueprint_type": "",
+          "workflow": "animation_pose_search_database_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "set_database_entry_tags",
+            "get_pose_search_database",
+            "validate_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create a PoseSearch schema/database, add and edit an animation database entry, save, and read database metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-365"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-365"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-365"
+          ],
+          "edit": [
+            "BEB-365"
+          ],
+          "readback_verify": [
+            "BEB-365"
+          ],
+          "save": [
+            "BEB-365"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.pose_search_normalization_set": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.pose_search_normalization_set",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "pose_search_normalization_set"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/pose_search_normalization_set",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "pose_search_normalization_set"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-403"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-403",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "pose_search_normalization_set",
+          "blueprint_type": "",
+          "workflow": "animation_pose_search_normalization_set_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "create_pose_search_schema",
+            "create_pose_search_database",
+            "add_database_entry",
+            "create_normalization_set",
+            "add_database_to_normalization_set",
+            "set_database_normalization_set",
+            "save_asset",
+            "get_pose_search_database",
+            "validate_pose_search_database",
+            "inspect_asset"
+          ],
+          "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-403"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-403"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-403"
+          ],
+          "edit": [
+            "BEB-403"
+          ],
+          "readback_verify": [
+            "BEB-403"
+          ],
+          "save": [
+            "BEB-403"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.sequence_curve_marker_cleanup": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.sequence_curve_marker_cleanup",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_curve_marker_cleanup"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_curve_marker_cleanup",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_curve_marker_cleanup"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-502"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-502",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_curve_marker_cleanup",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_curve_marker_cleanup_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_curve",
+            "set_curve_keys",
+            "add_sync_marker",
+            "rename_sync_marker",
+            "remove_curve",
+            "remove_sync_marker",
+            "save_asset",
+            "list_curves",
+            "get_sync_markers",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, add curve and sync-marker metadata, rename the marker, remove both authored items, save, and verify cleanup"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-502"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-502"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-502"
+          ],
+          "edit": [
+            "BEB-502"
+          ],
+          "readback_verify": [
+            "BEB-502"
+          ],
+          "save": [
+            "BEB-502"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.sequence_events": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.sequence_events",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_events"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_events",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "animation_sequence_events"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-313"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-313",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "animation_sequence_events",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_curve_sync_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "add_curve",
+            "set_curve_keys",
+            "add_sync_marker",
+            "save_asset",
+            "get_curve_keys",
+            "get_sync_markers",
+            "get_sequence_info"
+          ],
+          "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-313"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-313"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-313"
+          ],
+          "edit": [
+            "BEB-313"
+          ],
+          "readback_verify": [
+            "BEB-313"
+          ],
+          "save": [
+            "BEB-313"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.sequence_from_poses": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.sequence_from_poses",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_from_poses"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_from_poses",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_from_poses"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-520"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-520",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_from_poses",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_from_poses_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_skeleton_info",
+            "build_sequence_from_poses",
+            "save_asset",
+            "get_sequence_info",
+            "list_bone_tracks",
+            "get_bone_track_keys",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-520"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-520"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-520"
+          ],
+          "edit": [
+            "BEB-520"
+          ],
+          "readback_verify": [
+            "BEB-520"
+          ],
+          "save": [
+            "BEB-520"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    },
+    "asset_authoring.animation.sequence_root_additive_duplicate": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.animation.sequence_root_additive_duplicate",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "animation",
+        "sequence_root_additive_duplicate"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: animation/sequence_root_additive_duplicate",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "animation"
+        ],
+        "edit_domain": [
+          "sequence_root_additive_duplicate"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-395"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-395",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "sequence_root_additive_duplicate",
+          "blueprint_type": "",
+          "workflow": "animation_sequence_root_additive_duplicate_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_sequence",
+            "save_asset",
+            "duplicate_sequence",
+            "set_root_motion_settings",
+            "set_additive_settings",
+            "get_sequence_info",
+            "inspect_asset"
+          ],
+          "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-395"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-395"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-395"
+          ],
+          "edit": [
+            "BEB-395"
+          ],
+          "readback_verify": [
+            "BEB-395"
+          ],
+          "save": [
+            "BEB-395"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.animation",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.animation",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/animation.json"
+    }
+  }
+}

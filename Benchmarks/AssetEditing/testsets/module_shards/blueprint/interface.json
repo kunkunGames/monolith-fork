@@ -1,0 +1,1888 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.interface",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
+  "task_count": 552,
+  "module_count": 4,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.interface",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Interface",
+      "task_count": 29,
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ]
+      },
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.interface.compilation",
+        "blueprint.interface.function",
+        "blueprint.interface.general"
+      ]
+    },
+    {
+      "module_id": "blueprint.interface.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.interface.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/function",
+      "task_count": 15,
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.interface.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/general",
+      "task_count": 12,
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json",
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.interface": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.interface",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Interface",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ]
+      },
+      "task_count": 29,
+      "task_ids": [
+        "BEB-007",
+        "BEB-014",
+        "BEB-021",
+        "BEB-040",
+        "BEB-041",
+        "BEB-042",
+        "BEB-055",
+        "BEB-056",
+        "BEB-069",
+        "BEB-070",
+        "BEB-083",
+        "BEB-084",
+        "BEB-163",
+        "BEB-226",
+        "BEB-227",
+        "BEB-228",
+        "BEB-229",
+        "BEB-230",
+        "BEB-231",
+        "BEB-232",
+        "BEB-233",
+        "BEB-234",
+        "BEB-235",
+        "BEB-266",
+        "BEB-267",
+        "BEB-268",
+        "BEB-269",
+        "BEB-270",
+        "BEB-552"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-007",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query 'BPI_TestInterface'"
+        },
+        {
+          "id": "BEB-014",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query 'Blueprint Interface'"
+        },
+        {
+          "id": "BEB-021",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query '/Game/Benchmarks/BPI_TestInterface'"
+        },
+        {
+          "id": "BEB-040",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Interface fixture"
+        },
+        {
+          "id": "BEB-041",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Interface fixture without EventGraph"
+        },
+        {
+          "id": "BEB-042",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Interface fixture"
+        },
+        {
+          "id": "BEB-055",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Interface fixture BPI_TestInterface"
+        },
+        {
+          "id": "BEB-056",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Interface fixture BPI_TestInterface"
+        },
+        {
+          "id": "BEB-069",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Interface fixture"
+        },
+        {
+          "id": "BEB-070",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read Interface fixture functions as variable_read substitute"
+        },
+        {
+          "id": "BEB-083",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_interface_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_interface_functions"
+          ],
+          "description": "Read setup-created function stubs for Interface fixture"
+        },
+        {
+          "id": "BEB-084",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read Interface function stubs through generic get_functions"
+        },
+        {
+          "id": "BEB-163",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "interface_signature_contract",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create an Interface function with a bool output, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-226",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetHealth function stub to Interface"
+        },
+        {
+          "id": "BEB-227",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float output on BenchIFaceGetHealth stub"
+        },
+        {
+          "id": "BEB-228",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetSpeed function stub to Interface"
+        },
+        {
+          "id": "BEB-229",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceOnDamaged function stub to Interface"
+        },
+        {
+          "id": "BEB-230",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float input on BenchIFaceOnDamaged stub"
+        },
+        {
+          "id": "BEB-231",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float output on BenchIFaceGetSpeed stub"
+        },
+        {
+          "id": "BEB-232",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceIsAlive function stub to Interface"
+        },
+        {
+          "id": "BEB-233",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "rename_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "rename_function",
+            "get_functions"
+          ],
+          "description": "Rename BenchIFaceIsAlive to BenchIFaceCheckAlive"
+        },
+        {
+          "id": "BEB-234",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "interface",
+          "edit_domain": "compilation",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Interface blueprint"
+        },
+        {
+          "id": "BEB-235",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "save_asset",
+          "domain": "interface",
+          "edit_domain": "compilation",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "save",
+            "readback_verify"
+          ],
+          "actions": [
+            "save_asset"
+          ],
+          "description": "Save Interface blueprint to disk"
+        },
+        {
+          "id": "BEB-266",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetScore function stub to Interface"
+        },
+        {
+          "id": "BEB-267",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set int Score output on BenchIFaceGetScore Interface stub"
+        },
+        {
+          "id": "BEB-268",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceCanTarget function stub to Interface"
+        },
+        {
+          "id": "BEB-269",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set bool bCanTarget output on BenchIFaceCanTarget Interface stub"
+        },
+        {
+          "id": "BEB-270",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "rename_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "rename_function",
+            "get_functions"
+          ],
+          "description": "Rename BenchIFaceCanTarget to BenchIFaceCanTargetRenamed on Interface"
+        },
+        {
+          "id": "BEB-552",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "Interface add_function must reject duplicate contract function names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-552"
+          ],
+          "edit_execute": [
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-234",
+            "BEB-235",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270"
+          ],
+          "graph_read": [
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056"
+          ],
+          "type_discovery": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021"
+          ],
+          "variable_read": [
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084"
+          ],
+          "workflow_execute": [
+            "BEB-163"
+          ]
+        },
+        "by_edit_domain": {
+          "compilation": [
+            "BEB-234",
+            "BEB-235"
+          ],
+          "function": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ],
+          "general": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021",
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056",
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ],
+          "read_only": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021",
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056",
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084",
+            "BEB-234",
+            "BEB-235"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ],
+          "readback_verify": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021",
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056",
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084",
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-234",
+            "BEB-235",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ],
+          "save": [
+            "BEB-235"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.interface.compilation",
+        "blueprint.interface.function",
+        "blueprint.interface.general"
+      ],
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json"
+    },
+    "blueprint.interface.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.interface.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-234",
+        "BEB-235"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-234",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "interface",
+          "edit_domain": "compilation",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Interface blueprint"
+        },
+        {
+          "id": "BEB-235",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "save_asset",
+          "domain": "interface",
+          "edit_domain": "compilation",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "save",
+            "readback_verify"
+          ],
+          "actions": [
+            "save_asset"
+          ],
+          "description": "Save Interface blueprint to disk"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-234",
+            "BEB-235"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-234",
+            "BEB-235"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-234",
+            "BEB-235"
+          ],
+          "save": [
+            "BEB-235"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json"
+    },
+    "blueprint.interface.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.interface.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 15,
+      "task_ids": [
+        "BEB-163",
+        "BEB-226",
+        "BEB-227",
+        "BEB-228",
+        "BEB-229",
+        "BEB-230",
+        "BEB-231",
+        "BEB-232",
+        "BEB-233",
+        "BEB-266",
+        "BEB-267",
+        "BEB-268",
+        "BEB-269",
+        "BEB-270",
+        "BEB-552"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-163",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "interface_signature_contract",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create an Interface function with a bool output, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-226",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetHealth function stub to Interface"
+        },
+        {
+          "id": "BEB-227",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float output on BenchIFaceGetHealth stub"
+        },
+        {
+          "id": "BEB-228",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetSpeed function stub to Interface"
+        },
+        {
+          "id": "BEB-229",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceOnDamaged function stub to Interface"
+        },
+        {
+          "id": "BEB-230",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float input on BenchIFaceOnDamaged stub"
+        },
+        {
+          "id": "BEB-231",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set typed float output on BenchIFaceGetSpeed stub"
+        },
+        {
+          "id": "BEB-232",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceIsAlive function stub to Interface"
+        },
+        {
+          "id": "BEB-233",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "rename_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "rename_function",
+            "get_functions"
+          ],
+          "description": "Rename BenchIFaceIsAlive to BenchIFaceCheckAlive"
+        },
+        {
+          "id": "BEB-266",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceGetScore function stub to Interface"
+        },
+        {
+          "id": "BEB-267",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set int Score output on BenchIFaceGetScore Interface stub"
+        },
+        {
+          "id": "BEB-268",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchIFaceCanTarget function stub to Interface"
+        },
+        {
+          "id": "BEB-269",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_params",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_params",
+            "get_function_signature"
+          ],
+          "description": "Set bool bCanTarget output on BenchIFaceCanTarget Interface stub"
+        },
+        {
+          "id": "BEB-270",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "rename_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "rename_function",
+            "get_functions"
+          ],
+          "description": "Rename BenchIFaceCanTarget to BenchIFaceCanTargetRenamed on Interface"
+        },
+        {
+          "id": "BEB-552",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "interface",
+          "edit_domain": "function",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "Interface add_function must reject duplicate contract function names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-552"
+          ],
+          "edit_execute": [
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270"
+          ],
+          "workflow_execute": [
+            "BEB-163"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ],
+          "readback_verify": [
+            "BEB-163",
+            "BEB-226",
+            "BEB-227",
+            "BEB-228",
+            "BEB-229",
+            "BEB-230",
+            "BEB-231",
+            "BEB-232",
+            "BEB-233",
+            "BEB-266",
+            "BEB-267",
+            "BEB-268",
+            "BEB-269",
+            "BEB-270",
+            "BEB-552"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json"
+    },
+    "blueprint.interface.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.interface.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Interface",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Interface/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Interface"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 12,
+      "task_ids": [
+        "BEB-007",
+        "BEB-014",
+        "BEB-021",
+        "BEB-040",
+        "BEB-041",
+        "BEB-042",
+        "BEB-055",
+        "BEB-056",
+        "BEB-069",
+        "BEB-070",
+        "BEB-083",
+        "BEB-084"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-007",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query 'BPI_TestInterface'"
+        },
+        {
+          "id": "BEB-014",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query 'Blueprint Interface'"
+        },
+        {
+          "id": "BEB-021",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Interface fixture with project.search query '/Game/Benchmarks/BPI_TestInterface'"
+        },
+        {
+          "id": "BEB-040",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Interface fixture"
+        },
+        {
+          "id": "BEB-041",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Interface fixture without EventGraph"
+        },
+        {
+          "id": "BEB-042",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Interface fixture"
+        },
+        {
+          "id": "BEB-055",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Interface fixture BPI_TestInterface"
+        },
+        {
+          "id": "BEB-056",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Interface fixture BPI_TestInterface"
+        },
+        {
+          "id": "BEB-069",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Interface fixture"
+        },
+        {
+          "id": "BEB-070",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read Interface fixture functions as variable_read substitute"
+        },
+        {
+          "id": "BEB-083",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_interface_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_interface_functions"
+          ],
+          "description": "Read setup-created function stubs for Interface fixture"
+        },
+        {
+          "id": "BEB-084",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "interface",
+          "edit_domain": "",
+          "blueprint_type": "Interface",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read Interface function stubs through generic get_functions"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056"
+          ],
+          "type_discovery": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021"
+          ],
+          "variable_read": [
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021",
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056",
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-007",
+            "BEB-014",
+            "BEB-021",
+            "BEB-040",
+            "BEB-041",
+            "BEB-042",
+            "BEB-055",
+            "BEB-056",
+            "BEB-069",
+            "BEB-070",
+            "BEB-083",
+            "BEB-084"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.interface",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.interface",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/interface.json"
+    }
+  }
+}

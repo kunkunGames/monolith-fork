@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "effect_modifier_crud",
+  "route_edit_domain": "effect_modifier_crud",
+  "module_id": "asset_authoring.gas.effect_modifier_crud",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.effect_modifier_crud",
+    "edit": "asset_operation.edit.gas.effect_modifier_crud",
+    "save": "asset_operation.save.gas.effect_modifier_crud",
+    "readback_verify": "asset_operation.readback_verify.gas.effect_modifier_crud"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-469"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-469",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "effect_modifier_crud",
+      "blueprint_type": "",
+      "workflow": "gas_effect_modifier_crud_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_gameplay_effect",
+        "add_modifier",
+        "set_modifier",
+        "remove_modifier",
+        "save_asset",
+        "list_modifiers",
+        "get_gameplay_effect",
+        "inspect_asset"
+      ],
+      "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-469",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_gameplay_effect",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud",
+            "duration_policy": "instant"
+          },
+          "contains": [
+            "GE_BenchModifierCrud"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "add_modifier",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud",
+            "attribute": "GoCharacterAttributeSet.Health",
+            "operation": "Add",
+            "magnitude": {
+              "type": "scalable_float",
+              "value": -12.0
+            }
+          },
+          "contains": [
+            "modifier_index",
+            "0",
+            "GoCharacterAttributeSet.Health",
+            "Add"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "add_modifier",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud",
+            "attribute": "GoCharacterAttributeSet.MaxHealth",
+            "operation": "Add",
+            "magnitude": {
+              "type": "scalable_float",
+              "value": 25.0
+            }
+          },
+          "contains": [
+            "modifier_index",
+            "1",
+            "GoCharacterAttributeSet.MaxHealth",
+            "Add"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "set_modifier",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud",
+            "modifier_index": 1,
+            "operation": "Override",
+            "magnitude": {
+              "type": "scalable_float",
+              "value": 33.0
+            }
+          },
+          "contains": [
+            "GoCharacterAttributeSet.MaxHealth",
+            "Override",
+            "33"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "remove_modifier",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud",
+            "modifier_index": 0
+          },
+          "contains": [
+            "remaining_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "list_modifiers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud"
+          },
+          "contains": [
+            "count",
+            "1",
+            "GoCharacterAttributeSet.MaxHealth",
+            "Override",
+            "33"
+          ],
+          "not_contains": [
+            "GoCharacterAttributeSet.Health",
+            "-12"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_gameplay_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud"
+          },
+          "contains": [
+            "GE_BenchModifierCrud",
+            "modifiers",
+            "GoCharacterAttributeSet.MaxHealth",
+            "Override"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchModifierCrud"
+          },
+          "contains": [
+            "GE_BenchModifierCrud",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "effect_modifier_crud",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_effect_modifier_crud_roundtrip",
+      "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-ability-system-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASEffectActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_gameplay_effect",
+          "add_modifier",
+          "set_modifier",
+          "remove_modifier",
+          "save_asset",
+          "list_modifiers",
+          "get_gameplay_effect",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

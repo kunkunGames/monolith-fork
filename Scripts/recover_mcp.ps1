@@ -121,6 +121,134 @@ function Get-NewestEditorLog {
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 }
 
+function Set-HeadlessAssetEditorRestoreState {
+    param([string]$Root)
+
+    $ini = Join-Path $Root 'Saved\Config\WindowsEditor\EditorPerProjectUserSettings.ini'
+    $iniDir = Split-Path -Parent $ini
+    if (-not (Test-Path $iniDir)) {
+        New-Item -ItemType Directory -Path $iniDir -Force | Out-Null
+    }
+
+    $lines = @()
+    if (Test-Path $ini) {
+        $lines = @(Get-Content -LiteralPath $ini)
+    }
+
+    $out = New-Object System.Collections.Generic.List[string]
+    $inAssetSection = $false
+    $inLoadingSection = $false
+    $assetSectionSeen = $false
+    $loadingSectionSeen = $false
+    $cleanShutdownSeen = $false
+    $debuggerSeen = $false
+    $restoreSeen = $false
+
+    function Complete-AssetSection {
+        if ($inAssetSection) {
+            if (-not $cleanShutdownSeen) { $out.Add('CleanShutdown=True') }
+            if (-not $debuggerSeen) { $out.Add('DebuggerAttached=False') }
+        }
+    }
+
+    function Complete-LoadingSection {
+        if ($inLoadingSection -and -not $restoreSeen) {
+            $out.Add('RestoreOpenAssetTabsOnRestart=NeverRestore')
+        }
+    }
+
+    foreach ($line in $lines) {
+        if ($line -match '^\[.+\]\s*$') {
+            Complete-AssetSection
+            Complete-LoadingSection
+            $inAssetSection = ($line -eq '[AssetEditorSubsystem]')
+            $inLoadingSection = ($line -eq '[/Script/UnrealEd.EditorLoadingSavingSettings]')
+            if ($inAssetSection) {
+                $assetSectionSeen = $true
+                $cleanShutdownSeen = $false
+                $debuggerSeen = $false
+            }
+            if ($inLoadingSection) {
+                $loadingSectionSeen = $true
+                $restoreSeen = $false
+            }
+            $out.Add($line)
+            continue
+        }
+
+        if ($inAssetSection) {
+            if ($line -match '^CleanShutdown=') {
+                if (-not $cleanShutdownSeen) { $out.Add('CleanShutdown=True') }
+                $cleanShutdownSeen = $true
+                continue
+            }
+            if ($line -match '^DebuggerAttached=') {
+                if (-not $debuggerSeen) { $out.Add('DebuggerAttached=False') }
+                $debuggerSeen = $true
+                continue
+            }
+            if ($line -match '^OpenAssetsAtExit=') {
+                continue
+            }
+        }
+
+        if ($inLoadingSection -and $line -match '^RestoreOpenAssetTabsOnRestart=') {
+            if (-not $restoreSeen) { $out.Add('RestoreOpenAssetTabsOnRestart=NeverRestore') }
+            $restoreSeen = $true
+            continue
+        }
+
+        $out.Add($line)
+    }
+
+    Complete-AssetSection
+    Complete-LoadingSection
+
+    if (-not $assetSectionSeen) {
+        if ($out.Count -gt 0 -and $out[$out.Count - 1] -ne '') { $out.Add('') }
+        $out.Add('[AssetEditorSubsystem]')
+        $out.Add('CleanShutdown=True')
+        $out.Add('DebuggerAttached=False')
+    }
+    if (-not $loadingSectionSeen) {
+        if ($out.Count -gt 0 -and $out[$out.Count - 1] -ne '') { $out.Add('') }
+        $out.Add('[/Script/UnrealEd.EditorLoadingSavingSettings]')
+        $out.Add('RestoreOpenAssetTabsOnRestart=NeverRestore')
+    }
+
+    Set-Content -LiteralPath $ini -Value $out -Encoding UTF8
+}
+
+function Initialize-HeadlessEditorConfigState {
+    param([string]$Root)
+
+    $configDir = Join-Path $Root 'Saved\HeadlessMcp\Config\WindowsEditor'
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+
+    $layoutIni = Join-Path $configDir 'EditorLayout.ini'
+    if (Test-Path $layoutIni) {
+        Remove-Item -LiteralPath $layoutIni -Force
+    }
+
+    $perProjectIni = Join-Path $configDir 'EditorPerProjectUserSettings.ini'
+    $perProjectLines = @(
+        '[AssetEditorSubsystem]',
+        'CleanShutdown=True',
+        'DebuggerAttached=False',
+        '',
+        '[/Script/UnrealEd.EditorLoadingSavingSettings]',
+        'RestoreOpenAssetTabsOnRestart=NeverRestore'
+    )
+    Set-Content -LiteralPath $perProjectIni -Value $perProjectLines -Encoding UTF8
+
+    return [PSCustomObject]@{
+        LayoutIni = $layoutIni
+        PerProjectIni = $perProjectIni
+    }
+}
+
 $health = Get-MonolithHealth
 if ($health) {
     Write-UpResult -Health $health -ElapsedSec 0
@@ -149,7 +277,11 @@ if ($editorProcs.Count -gt 0 -and -not $ForceLaunch) {
 }
 else {
     Write-Output ("INFO launching {0}" -f $wrapper)
+    Set-HeadlessAssetEditorRestoreState -Root $hostRoot
+    $headlessConfig = Initialize-HeadlessEditorConfigState -Root $hostRoot
     $headlessArgs = @(
+        ("-EditorLayoutINI={0}" -f $headlessConfig.LayoutIni),
+        ("-EditorPerProjectUserSettingsINI={0}" -f $headlessConfig.PerProjectIni),
         '-ini:EditorPerProjectUserSettings:AssetEditorSubsystem:CleanShutdown=True',
         '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.EditorLoadingSavingSettings]:RestoreOpenAssetTabsOnRestart=NeverRestore'
     )

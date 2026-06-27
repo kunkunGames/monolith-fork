@@ -16,7 +16,7 @@ cannot become a green-on-broken grader.
 The benchmark-ROI report (`Saved/Monolith/LogAnalysis/_benchmark_roi_report.md`, PART B) ranked the
 `ai` namespace as the one greenfield surface worth a new benchmark — but with an explicit caveat:
 there is **no real-usage failure corpus** for `ai` (66 logged calls ever, all synthetic), so a
-clean-fixture happy-path suite would "inherit the exact BlueprintEditing blind spot" (a perfect
+clean-fixture happy-path suite would "inherit the exact AssetEditing blind spot" (a perfect
 score over actions that fail in production). The verdict: *build only if the adversarial categories
 ship on day one.*
 
@@ -82,7 +82,7 @@ python Scripts/ai_capability_benchmark.py compare `
 ```
 
 `generate`, `setup_fixtures`, `preflight`, `run`, and `compare` mirror the gold-standard
-BlueprintEditing runner one-for-one. **`run` requires the single shared editor** (`ai` is an
+AssetEditing runner one-for-one. **`run` requires the single shared editor** (`ai` is an
 editor-only namespace; there is no offline `monolith_query.exe` equivalent), so a scored run is left
 to a coordinated session — see `RESULTS.md`.
 

@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "pose_search_normalization_set",
+  "route_edit_domain": "pose_search_normalization_set",
+  "module_id": "asset_authoring.animation.pose_search_normalization_set",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.pose_search_normalization_set",
+    "edit": "asset_operation.edit.animation.pose_search_normalization_set",
+    "save": "asset_operation.save.animation.pose_search_normalization_set",
+    "readback_verify": "asset_operation.readback_verify.animation.pose_search_normalization_set"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-403"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-403",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "pose_search_normalization_set",
+      "blueprint_type": "",
+      "workflow": "animation_pose_search_normalization_set_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "create_pose_search_schema",
+        "create_pose_search_database",
+        "add_database_entry",
+        "create_normalization_set",
+        "add_database_to_normalization_set",
+        "set_database_normalization_set",
+        "save_asset",
+        "get_pose_search_database",
+        "validate_pose_search_database",
+        "inspect_asset"
+      ],
+      "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-403",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchPoseSearchNorm",
+              "/Game/Benchmarks/AssetAuthoring/PSS_BenchNormSchema",
+              "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase",
+              "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseSearchNorm",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchPoseSearchNorm",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_pose_search_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchNormSchema",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "sample_rate": 30,
+            "add_default_channels": true
+          },
+          "contains": [
+            "PSS_BenchNormSchema"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_pose_search_database",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase",
+            "schema_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchNormSchema"
+          },
+          "contains": [
+            "PSD_BenchNormDatabase",
+            "PSS_BenchNormSchema"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_database_entry",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseSearchNorm",
+            "enabled": true,
+            "mirror_option": "UnmirroredOnly"
+          },
+          "contains": [
+            "A_BenchPoseSearchNorm"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_normalization_set",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet"
+          },
+          "contains": [
+            "PSN_BenchNormalizationSet"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_database_to_normalization_set",
+            "set_path": "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase"
+          },
+          "contains": [
+            "PSN_BenchNormalizationSet",
+            "PSD_BenchNormDatabase",
+            "count",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_database_normalization_set",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase",
+            "set_path": "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet"
+          },
+          "contains": [
+            "PSD_BenchNormDatabase",
+            "PSN_BenchNormalizationSet"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchPoseSearchNorm"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchNormSchema"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_pose_search_database",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase"
+          },
+          "contains": [
+            "PSS_BenchNormSchema",
+            "A_BenchPoseSearchNorm",
+            "normalization_set",
+            "PSN_BenchNormalizationSet"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "validate_pose_search_database",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchNormDatabase"
+          },
+          "contains": [
+            "valid"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSN_BenchNormalizationSet"
+          },
+          "contains": [
+            "PSN_BenchNormalizationSet",
+            "PoseSearchNormalizationSet"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "pose_search_normalization_set",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_pose_search_normalization_set_roundtrip",
+      "description": "Create a PoseSearch NormalizationSet, attach a database to it, assign it back to the database, save both assets, and read the normalization reference back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "create_pose_search_schema",
+          "create_pose_search_database",
+          "add_database_entry",
+          "create_normalization_set",
+          "add_database_to_normalization_set",
+          "set_database_normalization_set",
+          "save_asset",
+          "get_pose_search_database",
+          "validate_pose_search_database",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

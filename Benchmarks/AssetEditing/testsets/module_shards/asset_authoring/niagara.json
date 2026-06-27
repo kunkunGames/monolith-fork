@@ -1,0 +1,4771 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.niagara",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+  "task_count": 552,
+  "module_count": 29,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.niagara",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: niagara",
+      "task_count": 28,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.niagara.clear_emitter_modules",
+        "asset_authoring.niagara.curve_di_key_edit",
+        "asset_authoring.niagara.custom_hlsl_update",
+        "asset_authoring.niagara.data_interface_curve",
+        "asset_authoring.niagara.duplicate_diff",
+        "asset_authoring.niagara.dynamic_input",
+        "asset_authoring.niagara.effect_type_scalability",
+        "asset_authoring.niagara.emitter_properties",
+        "asset_authoring.niagara.emitter_template_spec",
+        "asset_authoring.niagara.emitter_topology",
+        "asset_authoring.niagara.event_handler_metadata",
+        "asset_authoring.niagara.hlsl_function",
+        "asset_authoring.niagara.import_system_spec",
+        "asset_authoring.niagara.mesh_ribbon_renderer",
+        "asset_authoring.niagara.module_duplicate_capture",
+        "asset_authoring.niagara.module_script",
+        "asset_authoring.niagara.module_stack_state",
+        "asset_authoring.niagara.npc_parameter_remove",
+        "asset_authoring.niagara.renderer_material",
+        "asset_authoring.niagara.renderer_property_binding",
+        "asset_authoring.niagara.sidecar_assets",
+        "asset_authoring.niagara.sim_stage_lifetime",
+        "asset_authoring.niagara.sprite_renderer_subuv",
+        "asset_authoring.niagara.system",
+        "asset_authoring.niagara.system_effect_type_assignment",
+        "asset_authoring.niagara.system_timing",
+        "asset_authoring.niagara.user_parameter_remove",
+        "asset_authoring.niagara.user_parameters"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.niagara.clear_emitter_modules",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "clear_emitter_modules"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/clear_emitter_modules",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_clear_emitter_modules"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.curve_di_key_edit",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "curve_di_key_edit"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/curve_di_key_edit",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "curve_di_key_edit"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.custom_hlsl_update",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "custom_hlsl_update"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/custom_hlsl_update",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "custom_hlsl_update"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.data_interface_curve",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "data_interface_curve"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/data_interface_curve",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_data_interface_curve"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.duplicate_diff",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "duplicate_diff"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/duplicate_diff",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_duplicate_diff"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.dynamic_input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "dynamic_input"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/dynamic_input",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_dynamic_input"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.effect_type_scalability",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "effect_type_scalability"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/effect_type_scalability",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_effect_type_scalability"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.emitter_properties",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_properties"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_properties",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_properties"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.emitter_template_spec",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_template_spec"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_template_spec",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_template_spec"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.emitter_topology",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_topology"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_topology",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_topology"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.event_handler_metadata",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "event_handler_metadata"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/event_handler_metadata",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_event_handler_metadata"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.hlsl_function",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "hlsl_function"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/hlsl_function",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_hlsl_function"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.import_system_spec",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "import_system_spec"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/import_system_spec",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_import_system_spec"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.mesh_ribbon_renderer",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "mesh_ribbon_renderer"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/mesh_ribbon_renderer",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_mesh_ribbon_renderer"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.module_duplicate_capture",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_duplicate_capture"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_duplicate_capture",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_duplicate_capture"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.module_script",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_script"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_script",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_script"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.module_stack_state",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_stack_state"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_stack_state",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_stack_state"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.npc_parameter_remove",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "npc_parameter_remove"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/npc_parameter_remove",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "npc_parameter_remove"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.renderer_material",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "renderer_material"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/renderer_material",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_renderer_material"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.renderer_property_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "renderer_property_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/renderer_property_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_renderer_property_binding"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.sidecar_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sidecar_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sidecar_assets",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sidecar_assets"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.sim_stage_lifetime",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sim_stage_lifetime"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sim_stage_lifetime",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sim_stage_lifetime"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.sprite_renderer_subuv",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sprite_renderer_subuv"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sprite_renderer_subuv",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sprite_renderer_subuv"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.system",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_system"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.system_effect_type_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system_effect_type_assignment"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system_effect_type_assignment",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "system_effect_type_assignment"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.system_timing",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system_timing"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system_timing",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "system_timing"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.user_parameter_remove",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "user_parameter_remove"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/user_parameter_remove",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "user_parameter_remove"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.niagara.user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "user_parameters"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/user_parameters",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_user_parameters"
+        ]
+      },
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json",
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.niagara": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: niagara",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ]
+      },
+      "task_count": 28,
+      "task_ids": [
+        "BEB-321",
+        "BEB-322",
+        "BEB-323",
+        "BEB-360",
+        "BEB-361",
+        "BEB-362",
+        "BEB-363",
+        "BEB-364",
+        "BEB-377",
+        "BEB-378",
+        "BEB-379",
+        "BEB-394",
+        "BEB-414",
+        "BEB-421",
+        "BEB-422",
+        "BEB-423",
+        "BEB-424",
+        "BEB-434",
+        "BEB-435",
+        "BEB-436",
+        "BEB-437",
+        "BEB-438",
+        "BEB-464",
+        "BEB-467",
+        "BEB-503",
+        "BEB-509",
+        "BEB-510",
+        "BEB-511"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-321",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_system",
+          "blueprint_type": "",
+          "workflow": "niagara_system_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_system_property",
+            "set_emitter_loop_profile",
+            "set_fixed_bounds",
+            "save_system",
+            "list_emitters",
+            "get_system_summary",
+            "get_emitter_timing_summary",
+            "get_system_property",
+            "validate_system"
+          ],
+          "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
+        },
+        {
+          "id": "BEB-322",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sidecar_assets",
+          "blueprint_type": "",
+          "workflow": "niagara_sidecar_assets_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_npc",
+            "add_npc_parameter",
+            "set_npc_default",
+            "create_effect_type",
+            "set_effect_type_property",
+            "save_system",
+            "get_npc",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back"
+        },
+        {
+          "id": "BEB-323",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_script",
+          "blueprint_type": "",
+          "workflow": "niagara_hlsl_module_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "save_system",
+            "get_ordered_modules",
+            "get_module_graph",
+            "get_system_summary"
+          ],
+          "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order"
+        },
+        {
+          "id": "BEB-360",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sprite_renderer_subuv",
+          "blueprint_type": "",
+          "workflow": "niagara_sprite_renderer_subuv_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "configure_subuv",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_system_summary"
+          ],
+          "description": "Create a Niagara System, normalize its renderer slot, add a Sprite renderer, configure SubUV, save, and inspect renderer properties"
+        },
+        {
+          "id": "BEB-361",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_user_parameters",
+          "blueprint_type": "",
+          "workflow": "niagara_user_parameter_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_user_parameter",
+            "rename_user_parameter",
+            "set_parameter_default",
+            "save_system",
+            "get_user_parameters",
+            "get_parameter_value",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
+        },
+        {
+          "id": "BEB-362",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sim_stage_lifetime",
+          "blueprint_type": "",
+          "workflow": "niagara_sim_stage_lifetime_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_simulation_stage",
+            "set_sim_stage_iteration_count",
+            "set_sim_stage_execute_behavior",
+            "set_particle_lifetime",
+            "save_system",
+            "get_simulation_stages",
+            "list_emitters",
+            "validate_system"
+          ],
+          "description": "Create a GPU Niagara emitter, add a simulation stage, edit iteration/execute behavior and particle lifetime, save, and read stage metadata back"
+        },
+        {
+          "id": "BEB-363",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_duplicate_diff",
+          "blueprint_type": "",
+          "workflow": "niagara_duplicate_diff_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_system",
+            "duplicate_system",
+            "add_user_parameter",
+            "set_system_property",
+            "export_system_spec",
+            "diff_systems"
+          ],
+          "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
+        },
+        {
+          "id": "BEB-364",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_event_handler_metadata",
+          "blueprint_type": "",
+          "workflow": "niagara_event_handler_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_event_handler",
+            "save_system",
+            "get_event_handlers",
+            "list_emitters",
+            "inspect_asset"
+          ],
+          "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
+        },
+        {
+          "id": "BEB-377",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_mesh_ribbon_renderer",
+          "blueprint_type": "",
+          "workflow": "niagara_mesh_ribbon_renderer_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_mesh",
+            "configure_ribbon",
+            "set_spawn_shape",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_ordered_modules",
+            "validate_system"
+          ],
+          "description": "Create a Niagara System, add Mesh and Ribbon renderers, assign an engine StaticMesh, configure a ribbon trail and spawn shape, then read renderer and module metadata back"
+        },
+        {
+          "id": "BEB-378",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_duplicate_capture",
+          "blueprint_type": "",
+          "workflow": "niagara_module_duplicate_capture_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "duplicate_module",
+            "set_module_input_value",
+            "save_system",
+            "get_ordered_modules",
+            "get_module_inputs",
+            "validate_system"
+          ],
+          "description": "Create a Niagara HLSL module, add it to an emitter, capture the returned module GUID, duplicate that module, edit the duplicate input, save, and read both GUIDs back"
+        },
+        {
+          "id": "BEB-379",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_stack_state",
+          "blueprint_type": "",
+          "workflow": "niagara_module_stack_state_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "move_module",
+            "set_module_enabled",
+            "save_system",
+            "get_ordered_modules",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create two Niagara HLSL modules, add both to an emitter, move one module ahead of the other, disable the remaining module, save, and read stack order/state back"
+        },
+        {
+          "id": "BEB-394",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_effect_type_scalability",
+          "blueprint_type": "",
+          "workflow": "niagara_effect_type_scalability_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_effect_type",
+            "set_scalability_settings",
+            "save_system",
+            "get_scalability_settings",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
+        },
+        {
+          "id": "BEB-414",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_topology",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_topology_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "duplicate_emitter",
+            "rename_emitter",
+            "save_system",
+            "list_emitters",
+            "get_system_summary",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
+        },
+        {
+          "id": "BEB-421",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_hlsl_function",
+          "blueprint_type": "",
+          "workflow": "niagara_hlsl_function_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_function_from_hlsl",
+            "save_system",
+            "get_module_graph",
+            "get_custom_hlsl_text",
+            "inspect_asset"
+          ],
+          "description": "Create a reusable Niagara function script from HLSL, save it, and read back the generated graph plus CustomHlsl body"
+        },
+        {
+          "id": "BEB-422",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_template_spec",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_template_spec_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_emitter_as_template",
+            "create_system_from_spec",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara emitter template asset, build a new system from a JSON spec that consumes the template, save it, and export the authored spec back"
+        },
+        {
+          "id": "BEB-423",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_import_system_spec",
+          "blueprint_type": "",
+          "workflow": "niagara_import_system_spec_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_emitter_as_template",
+            "import_system_spec",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, import a JSON spec into it from a self-created emitter template, save, and verify overwrite-spec topology"
+        },
+        {
+          "id": "BEB-424",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_clear_emitter_modules",
+          "blueprint_type": "",
+          "workflow": "niagara_clear_emitter_modules_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "clear_emitter_modules",
+            "save_system",
+            "get_ordered_modules",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
+        },
+        {
+          "id": "BEB-434",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_properties",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_property_alias_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_emitter_property",
+            "save_system",
+            "get_emitter_property",
+            "list_emitters"
+          ],
+          "description": "Create a Niagara System, edit emitter data through direct property aliases, save, and read each property back"
+        },
+        {
+          "id": "BEB-435",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_renderer_property_binding",
+          "blueprint_type": "",
+          "workflow": "niagara_renderer_property_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_property",
+            "set_renderer_binding",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_renderer_bindings"
+          ],
+          "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
+        },
+        {
+          "id": "BEB-436",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_renderer_material",
+          "blueprint_type": "",
+          "workflow": "niagara_renderer_material_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "save_material",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_material",
+            "save_system",
+            "list_renderers",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
+        },
+        {
+          "id": "BEB-437",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_dynamic_input",
+          "blueprint_type": "",
+          "workflow": "niagara_dynamic_input_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "get_dynamic_input_inputs",
+            "add_dynamic_input",
+            "set_dynamic_input_value",
+            "list_dynamic_inputs",
+            "get_dynamic_input_tree",
+            "get_dynamic_input_value",
+            "remove_dynamic_input",
+            "save_system",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module stack, attach an engine Add_Float dynamic input to a module input, edit its value, remove it, save, and read back the final literal input state"
+        },
+        {
+          "id": "BEB-438",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_data_interface_curve",
+          "blueprint_type": "",
+          "workflow": "niagara_data_interface_curve_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_di_properties",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "set_module_input_di",
+            "save_system",
+            "get_module_inputs",
+            "list_system_data_interfaces",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module with a curve data-interface input, assign curve keys, save the system, and read DI keys back through module and system inspection"
+        },
+        {
+          "id": "BEB-464",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "user_parameter_remove",
+          "blueprint_type": "",
+          "workflow": "niagara_user_parameter_remove_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "add_user_parameter",
+            "remove_user_parameter",
+            "save_system",
+            "get_user_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add two user parameters, remove one stale parameter, save, and verify only the kept parameter remains"
+        },
+        {
+          "id": "BEB-467",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "custom_hlsl_update",
+          "blueprint_type": "",
+          "workflow": "niagara_custom_hlsl_update_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_function_from_hlsl",
+            "set_custom_hlsl_text",
+            "save_system",
+            "get_custom_hlsl_text",
+            "get_module_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
+        },
+        {
+          "id": "BEB-503",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "system_effect_type_assignment",
+          "blueprint_type": "",
+          "workflow": "niagara_system_effect_type_assignment_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_effect_type",
+            "set_effect_type",
+            "save_system",
+            "get_system_summary",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System and EffectType asset, assign the EffectType to the system, save both assets, and verify the relationship plus scalability metadata"
+        },
+        {
+          "id": "BEB-509",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "curve_di_key_edit",
+          "blueprint_type": "",
+          "workflow": "niagara_curve_di_key_edit_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "set_module_input_di",
+            "configure_curve_keys",
+            "save_system",
+            "get_module_inputs",
+            "list_system_data_interfaces",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
+        },
+        {
+          "id": "BEB-510",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "npc_parameter_remove",
+          "blueprint_type": "",
+          "workflow": "niagara_npc_parameter_remove_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_npc",
+            "add_npc_parameter",
+            "set_npc_default",
+            "remove_npc_parameter",
+            "save_system",
+            "get_npc",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara Parameter Collection, add kept and retired parameters, remove the retired parameter, save, and verify the final collection state"
+        },
+        {
+          "id": "BEB-511",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "system_timing",
+          "blueprint_type": "",
+          "workflow": "niagara_system_timing_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "set_warmup_profile",
+            "set_fixed_tick_delta",
+            "set_require_current_frame_data",
+            "save_system",
+            "get_system_timing",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "curve_di_key_edit": [
+            "BEB-509"
+          ],
+          "custom_hlsl_update": [
+            "BEB-467"
+          ],
+          "niagara_clear_emitter_modules": [
+            "BEB-424"
+          ],
+          "niagara_data_interface_curve": [
+            "BEB-438"
+          ],
+          "niagara_duplicate_diff": [
+            "BEB-363"
+          ],
+          "niagara_dynamic_input": [
+            "BEB-437"
+          ],
+          "niagara_effect_type_scalability": [
+            "BEB-394"
+          ],
+          "niagara_emitter_properties": [
+            "BEB-434"
+          ],
+          "niagara_emitter_template_spec": [
+            "BEB-422"
+          ],
+          "niagara_emitter_topology": [
+            "BEB-414"
+          ],
+          "niagara_event_handler_metadata": [
+            "BEB-364"
+          ],
+          "niagara_hlsl_function": [
+            "BEB-421"
+          ],
+          "niagara_import_system_spec": [
+            "BEB-423"
+          ],
+          "niagara_mesh_ribbon_renderer": [
+            "BEB-377"
+          ],
+          "niagara_module_duplicate_capture": [
+            "BEB-378"
+          ],
+          "niagara_module_script": [
+            "BEB-323"
+          ],
+          "niagara_module_stack_state": [
+            "BEB-379"
+          ],
+          "niagara_renderer_material": [
+            "BEB-436"
+          ],
+          "niagara_renderer_property_binding": [
+            "BEB-435"
+          ],
+          "niagara_sidecar_assets": [
+            "BEB-322"
+          ],
+          "niagara_sim_stage_lifetime": [
+            "BEB-362"
+          ],
+          "niagara_sprite_renderer_subuv": [
+            "BEB-360"
+          ],
+          "niagara_system": [
+            "BEB-321"
+          ],
+          "niagara_user_parameters": [
+            "BEB-361"
+          ],
+          "npc_parameter_remove": [
+            "BEB-510"
+          ],
+          "system_effect_type_assignment": [
+            "BEB-503"
+          ],
+          "system_timing": [
+            "BEB-511"
+          ],
+          "user_parameter_remove": [
+            "BEB-464"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ],
+          "edit": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ],
+          "readback_verify": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ],
+          "save": [
+            "BEB-321",
+            "BEB-322",
+            "BEB-323",
+            "BEB-360",
+            "BEB-361",
+            "BEB-362",
+            "BEB-363",
+            "BEB-364",
+            "BEB-377",
+            "BEB-378",
+            "BEB-379",
+            "BEB-394",
+            "BEB-414",
+            "BEB-421",
+            "BEB-422",
+            "BEB-423",
+            "BEB-424",
+            "BEB-434",
+            "BEB-435",
+            "BEB-436",
+            "BEB-437",
+            "BEB-438",
+            "BEB-464",
+            "BEB-467",
+            "BEB-503",
+            "BEB-509",
+            "BEB-510",
+            "BEB-511"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.niagara.clear_emitter_modules",
+        "asset_authoring.niagara.curve_di_key_edit",
+        "asset_authoring.niagara.custom_hlsl_update",
+        "asset_authoring.niagara.data_interface_curve",
+        "asset_authoring.niagara.duplicate_diff",
+        "asset_authoring.niagara.dynamic_input",
+        "asset_authoring.niagara.effect_type_scalability",
+        "asset_authoring.niagara.emitter_properties",
+        "asset_authoring.niagara.emitter_template_spec",
+        "asset_authoring.niagara.emitter_topology",
+        "asset_authoring.niagara.event_handler_metadata",
+        "asset_authoring.niagara.hlsl_function",
+        "asset_authoring.niagara.import_system_spec",
+        "asset_authoring.niagara.mesh_ribbon_renderer",
+        "asset_authoring.niagara.module_duplicate_capture",
+        "asset_authoring.niagara.module_script",
+        "asset_authoring.niagara.module_stack_state",
+        "asset_authoring.niagara.npc_parameter_remove",
+        "asset_authoring.niagara.renderer_material",
+        "asset_authoring.niagara.renderer_property_binding",
+        "asset_authoring.niagara.sidecar_assets",
+        "asset_authoring.niagara.sim_stage_lifetime",
+        "asset_authoring.niagara.sprite_renderer_subuv",
+        "asset_authoring.niagara.system",
+        "asset_authoring.niagara.system_effect_type_assignment",
+        "asset_authoring.niagara.system_timing",
+        "asset_authoring.niagara.user_parameter_remove",
+        "asset_authoring.niagara.user_parameters"
+      ],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.clear_emitter_modules": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.clear_emitter_modules",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "clear_emitter_modules"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/clear_emitter_modules",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_clear_emitter_modules"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-424"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-424",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_clear_emitter_modules",
+          "blueprint_type": "",
+          "workflow": "niagara_clear_emitter_modules_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "clear_emitter_modules",
+            "save_system",
+            "get_ordered_modules",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-424"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-424"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-424"
+          ],
+          "edit": [
+            "BEB-424"
+          ],
+          "readback_verify": [
+            "BEB-424"
+          ],
+          "save": [
+            "BEB-424"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.curve_di_key_edit": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.curve_di_key_edit",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "curve_di_key_edit"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/curve_di_key_edit",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "curve_di_key_edit"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-509"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-509",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "curve_di_key_edit",
+          "blueprint_type": "",
+          "workflow": "niagara_curve_di_key_edit_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "set_module_input_di",
+            "configure_curve_keys",
+            "save_system",
+            "get_module_inputs",
+            "list_system_data_interfaces",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-509"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-509"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-509"
+          ],
+          "edit": [
+            "BEB-509"
+          ],
+          "readback_verify": [
+            "BEB-509"
+          ],
+          "save": [
+            "BEB-509"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.custom_hlsl_update": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.custom_hlsl_update",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "custom_hlsl_update"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/custom_hlsl_update",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "custom_hlsl_update"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-467"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-467",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "custom_hlsl_update",
+          "blueprint_type": "",
+          "workflow": "niagara_custom_hlsl_update_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_function_from_hlsl",
+            "set_custom_hlsl_text",
+            "save_system",
+            "get_custom_hlsl_text",
+            "get_module_graph",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-467"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-467"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-467"
+          ],
+          "edit": [
+            "BEB-467"
+          ],
+          "readback_verify": [
+            "BEB-467"
+          ],
+          "save": [
+            "BEB-467"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.data_interface_curve": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.data_interface_curve",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "data_interface_curve"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/data_interface_curve",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_data_interface_curve"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-438"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-438",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_data_interface_curve",
+          "blueprint_type": "",
+          "workflow": "niagara_data_interface_curve_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "get_di_properties",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "set_module_input_di",
+            "save_system",
+            "get_module_inputs",
+            "list_system_data_interfaces",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module with a curve data-interface input, assign curve keys, save the system, and read DI keys back through module and system inspection"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-438"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-438"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-438"
+          ],
+          "edit": [
+            "BEB-438"
+          ],
+          "readback_verify": [
+            "BEB-438"
+          ],
+          "save": [
+            "BEB-438"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.duplicate_diff": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.duplicate_diff",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "duplicate_diff"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/duplicate_diff",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_duplicate_diff"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-363"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-363",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_duplicate_diff",
+          "blueprint_type": "",
+          "workflow": "niagara_duplicate_diff_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_system",
+            "duplicate_system",
+            "add_user_parameter",
+            "set_system_property",
+            "export_system_spec",
+            "diff_systems"
+          ],
+          "description": "Create a Niagara System, duplicate it, mutate the clone, save both, then diff exported system specs"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-363"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-363"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-363"
+          ],
+          "edit": [
+            "BEB-363"
+          ],
+          "readback_verify": [
+            "BEB-363"
+          ],
+          "save": [
+            "BEB-363"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.dynamic_input": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.dynamic_input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "dynamic_input"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/dynamic_input",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_dynamic_input"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-437"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-437",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_dynamic_input",
+          "blueprint_type": "",
+          "workflow": "niagara_dynamic_input_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "get_dynamic_input_inputs",
+            "add_dynamic_input",
+            "set_dynamic_input_value",
+            "list_dynamic_inputs",
+            "get_dynamic_input_tree",
+            "get_dynamic_input_value",
+            "remove_dynamic_input",
+            "save_system",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara module stack, attach an engine Add_Float dynamic input to a module input, edit its value, remove it, save, and read back the final literal input state"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-437"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-437"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-437"
+          ],
+          "edit": [
+            "BEB-437"
+          ],
+          "readback_verify": [
+            "BEB-437"
+          ],
+          "save": [
+            "BEB-437"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.effect_type_scalability": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.effect_type_scalability",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "effect_type_scalability"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/effect_type_scalability",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_effect_type_scalability"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-394"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-394",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_effect_type_scalability",
+          "blueprint_type": "",
+          "workflow": "niagara_effect_type_scalability_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_effect_type",
+            "set_scalability_settings",
+            "save_system",
+            "get_scalability_settings",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-394"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-394"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-394"
+          ],
+          "edit": [
+            "BEB-394"
+          ],
+          "readback_verify": [
+            "BEB-394"
+          ],
+          "save": [
+            "BEB-394"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.emitter_properties": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.emitter_properties",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_properties"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_properties",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_properties"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-434"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-434",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_properties",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_property_alias_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_emitter_property",
+            "save_system",
+            "get_emitter_property",
+            "list_emitters"
+          ],
+          "description": "Create a Niagara System, edit emitter data through direct property aliases, save, and read each property back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-434"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-434"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-434"
+          ],
+          "edit": [
+            "BEB-434"
+          ],
+          "readback_verify": [
+            "BEB-434"
+          ],
+          "save": [
+            "BEB-434"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.emitter_template_spec": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.emitter_template_spec",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_template_spec"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_template_spec",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_template_spec"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-422"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-422",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_template_spec",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_template_spec_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_emitter_as_template",
+            "create_system_from_spec",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara emitter template asset, build a new system from a JSON spec that consumes the template, save it, and export the authored spec back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-422"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-422"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-422"
+          ],
+          "edit": [
+            "BEB-422"
+          ],
+          "readback_verify": [
+            "BEB-422"
+          ],
+          "save": [
+            "BEB-422"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.emitter_topology": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.emitter_topology",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "emitter_topology"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/emitter_topology",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_emitter_topology"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-414"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-414",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_emitter_topology",
+          "blueprint_type": "",
+          "workflow": "niagara_emitter_topology_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "duplicate_emitter",
+            "rename_emitter",
+            "save_system",
+            "list_emitters",
+            "get_system_summary",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add an emitter, duplicate and rename the copy, save it, and read the authored emitter topology back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-414"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-414"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-414"
+          ],
+          "edit": [
+            "BEB-414"
+          ],
+          "readback_verify": [
+            "BEB-414"
+          ],
+          "save": [
+            "BEB-414"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.event_handler_metadata": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.event_handler_metadata",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "event_handler_metadata"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/event_handler_metadata",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_event_handler_metadata"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-364"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-364",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_event_handler_metadata",
+          "blueprint_type": "",
+          "workflow": "niagara_event_handler_metadata_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_event_handler",
+            "save_system",
+            "get_event_handlers",
+            "list_emitters",
+            "inspect_asset"
+          ],
+          "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-364"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-364"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-364"
+          ],
+          "edit": [
+            "BEB-364"
+          ],
+          "readback_verify": [
+            "BEB-364"
+          ],
+          "save": [
+            "BEB-364"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.hlsl_function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.hlsl_function",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "hlsl_function"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/hlsl_function",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_hlsl_function"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-421"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-421",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_hlsl_function",
+          "blueprint_type": "",
+          "workflow": "niagara_hlsl_function_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_function_from_hlsl",
+            "save_system",
+            "get_module_graph",
+            "get_custom_hlsl_text",
+            "inspect_asset"
+          ],
+          "description": "Create a reusable Niagara function script from HLSL, save it, and read back the generated graph plus CustomHlsl body"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-421"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-421"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-421"
+          ],
+          "edit": [
+            "BEB-421"
+          ],
+          "readback_verify": [
+            "BEB-421"
+          ],
+          "save": [
+            "BEB-421"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.import_system_spec": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.import_system_spec",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "import_system_spec"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/import_system_spec",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_import_system_spec"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-423"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-423",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_import_system_spec",
+          "blueprint_type": "",
+          "workflow": "niagara_import_system_spec_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "save_emitter_as_template",
+            "import_system_spec",
+            "save_system",
+            "list_emitters",
+            "export_system_spec",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, import a JSON spec into it from a self-created emitter template, save, and verify overwrite-spec topology"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-423"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-423"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-423"
+          ],
+          "edit": [
+            "BEB-423"
+          ],
+          "readback_verify": [
+            "BEB-423"
+          ],
+          "save": [
+            "BEB-423"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.mesh_ribbon_renderer": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.mesh_ribbon_renderer",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "mesh_ribbon_renderer"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/mesh_ribbon_renderer",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_mesh_ribbon_renderer"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-377"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-377",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_mesh_ribbon_renderer",
+          "blueprint_type": "",
+          "workflow": "niagara_mesh_ribbon_renderer_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_mesh",
+            "configure_ribbon",
+            "set_spawn_shape",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_ordered_modules",
+            "validate_system"
+          ],
+          "description": "Create a Niagara System, add Mesh and Ribbon renderers, assign an engine StaticMesh, configure a ribbon trail and spawn shape, then read renderer and module metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-377"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-377"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-377"
+          ],
+          "edit": [
+            "BEB-377"
+          ],
+          "readback_verify": [
+            "BEB-377"
+          ],
+          "save": [
+            "BEB-377"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.module_duplicate_capture": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.module_duplicate_capture",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_duplicate_capture"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_duplicate_capture",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_duplicate_capture"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-378"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-378",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_duplicate_capture",
+          "blueprint_type": "",
+          "workflow": "niagara_module_duplicate_capture_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "duplicate_module",
+            "set_module_input_value",
+            "save_system",
+            "get_ordered_modules",
+            "get_module_inputs",
+            "validate_system"
+          ],
+          "description": "Create a Niagara HLSL module, add it to an emitter, capture the returned module GUID, duplicate that module, edit the duplicate input, save, and read both GUIDs back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-378"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-378"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-378"
+          ],
+          "edit": [
+            "BEB-378"
+          ],
+          "readback_verify": [
+            "BEB-378"
+          ],
+          "save": [
+            "BEB-378"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.module_script": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.module_script",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_script"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_script",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_script"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-323"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-323",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_script",
+          "blueprint_type": "",
+          "workflow": "niagara_hlsl_module_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "save_system",
+            "get_ordered_modules",
+            "get_module_graph",
+            "get_system_summary"
+          ],
+          "description": "Create a Niagara module script from HLSL, attach it to a new emitter stack, save, and inspect module graph/order"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-323"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-323"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-323"
+          ],
+          "edit": [
+            "BEB-323"
+          ],
+          "readback_verify": [
+            "BEB-323"
+          ],
+          "save": [
+            "BEB-323"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.module_stack_state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.module_stack_state",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "module_stack_state"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/module_stack_state",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_module_stack_state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-379"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-379",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_module_stack_state",
+          "blueprint_type": "",
+          "workflow": "niagara_module_stack_state_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_module_from_hlsl",
+            "create_system",
+            "create_emitter",
+            "request_compile",
+            "add_module",
+            "move_module",
+            "set_module_enabled",
+            "save_system",
+            "get_ordered_modules",
+            "validate_system",
+            "inspect_asset"
+          ],
+          "description": "Create two Niagara HLSL modules, add both to an emitter, move one module ahead of the other, disable the remaining module, save, and read stack order/state back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-379"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-379"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-379"
+          ],
+          "edit": [
+            "BEB-379"
+          ],
+          "readback_verify": [
+            "BEB-379"
+          ],
+          "save": [
+            "BEB-379"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.npc_parameter_remove": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.npc_parameter_remove",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "npc_parameter_remove"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/npc_parameter_remove",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "npc_parameter_remove"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-510"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-510",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "npc_parameter_remove",
+          "blueprint_type": "",
+          "workflow": "niagara_npc_parameter_remove_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_npc",
+            "add_npc_parameter",
+            "set_npc_default",
+            "remove_npc_parameter",
+            "save_system",
+            "get_npc",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara Parameter Collection, add kept and retired parameters, remove the retired parameter, save, and verify the final collection state"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-510"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-510"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-510"
+          ],
+          "edit": [
+            "BEB-510"
+          ],
+          "readback_verify": [
+            "BEB-510"
+          ],
+          "save": [
+            "BEB-510"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.renderer_material": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.renderer_material",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "renderer_material"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/renderer_material",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_renderer_material"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-436"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-436",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_renderer_material",
+          "blueprint_type": "",
+          "workflow": "niagara_renderer_material_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_material",
+            "save_material",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_material",
+            "save_system",
+            "list_renderers",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-436"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-436"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-436"
+          ],
+          "edit": [
+            "BEB-436"
+          ],
+          "readback_verify": [
+            "BEB-436"
+          ],
+          "save": [
+            "BEB-436"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.renderer_property_binding": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.renderer_property_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "renderer_property_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/renderer_property_binding",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_renderer_property_binding"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-435"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-435",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_renderer_property_binding",
+          "blueprint_type": "",
+          "workflow": "niagara_renderer_property_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "set_renderer_property",
+            "set_renderer_binding",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_renderer_bindings"
+          ],
+          "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-435"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-435"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-435"
+          ],
+          "edit": [
+            "BEB-435"
+          ],
+          "readback_verify": [
+            "BEB-435"
+          ],
+          "save": [
+            "BEB-435"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.sidecar_assets": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.sidecar_assets",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sidecar_assets"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sidecar_assets",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sidecar_assets"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-322"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-322",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sidecar_assets",
+          "blueprint_type": "",
+          "workflow": "niagara_sidecar_assets_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_npc",
+            "add_npc_parameter",
+            "set_npc_default",
+            "create_effect_type",
+            "set_effect_type_property",
+            "save_system",
+            "get_npc",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create Niagara Parameter Collection and EffectType sidecar assets, edit defaults/scalability, save, and read them back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-322"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-322"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-322"
+          ],
+          "edit": [
+            "BEB-322"
+          ],
+          "readback_verify": [
+            "BEB-322"
+          ],
+          "save": [
+            "BEB-322"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.sim_stage_lifetime": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.sim_stage_lifetime",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sim_stage_lifetime"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sim_stage_lifetime",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sim_stage_lifetime"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-362"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-362",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sim_stage_lifetime",
+          "blueprint_type": "",
+          "workflow": "niagara_sim_stage_lifetime_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_simulation_stage",
+            "set_sim_stage_iteration_count",
+            "set_sim_stage_execute_behavior",
+            "set_particle_lifetime",
+            "save_system",
+            "get_simulation_stages",
+            "list_emitters",
+            "validate_system"
+          ],
+          "description": "Create a GPU Niagara emitter, add a simulation stage, edit iteration/execute behavior and particle lifetime, save, and read stage metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-362"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-362"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-362"
+          ],
+          "edit": [
+            "BEB-362"
+          ],
+          "readback_verify": [
+            "BEB-362"
+          ],
+          "save": [
+            "BEB-362"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.sprite_renderer_subuv": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.sprite_renderer_subuv",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "sprite_renderer_subuv"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/sprite_renderer_subuv",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_sprite_renderer_subuv"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-360"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-360",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_sprite_renderer_subuv",
+          "blueprint_type": "",
+          "workflow": "niagara_sprite_renderer_subuv_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "remove_renderer",
+            "add_renderer",
+            "configure_subuv",
+            "save_system",
+            "list_renderers",
+            "list_renderer_properties",
+            "get_system_summary"
+          ],
+          "description": "Create a Niagara System, normalize its renderer slot, add a Sprite renderer, configure SubUV, save, and inspect renderer properties"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-360"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-360"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-360"
+          ],
+          "edit": [
+            "BEB-360"
+          ],
+          "readback_verify": [
+            "BEB-360"
+          ],
+          "save": [
+            "BEB-360"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.system": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.system",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_system"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-321"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-321",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_system",
+          "blueprint_type": "",
+          "workflow": "niagara_system_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "set_system_property",
+            "set_emitter_loop_profile",
+            "set_fixed_bounds",
+            "save_system",
+            "list_emitters",
+            "get_system_summary",
+            "get_emitter_timing_summary",
+            "get_system_property",
+            "validate_system"
+          ],
+          "description": "Create a Niagara System, add an emitter, edit warmup/timing/fixed bounds, save, validate, and read back system data"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-321"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-321"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-321"
+          ],
+          "edit": [
+            "BEB-321"
+          ],
+          "readback_verify": [
+            "BEB-321"
+          ],
+          "save": [
+            "BEB-321"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.system_effect_type_assignment": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.system_effect_type_assignment",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system_effect_type_assignment"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system_effect_type_assignment",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "system_effect_type_assignment"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-503"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-503",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "system_effect_type_assignment",
+          "blueprint_type": "",
+          "workflow": "niagara_system_effect_type_assignment_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_effect_type",
+            "set_effect_type",
+            "save_system",
+            "get_system_summary",
+            "get_effect_type",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System and EffectType asset, assign the EffectType to the system, save both assets, and verify the relationship plus scalability metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-503"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-503"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-503"
+          ],
+          "edit": [
+            "BEB-503"
+          ],
+          "readback_verify": [
+            "BEB-503"
+          ],
+          "save": [
+            "BEB-503"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.system_timing": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.system_timing",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "system_timing"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/system_timing",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "system_timing"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-511"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-511",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "system_timing",
+          "blueprint_type": "",
+          "workflow": "niagara_system_timing_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "set_warmup_profile",
+            "set_fixed_tick_delta",
+            "set_require_current_frame_data",
+            "save_system",
+            "get_system_timing",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, edit warmup, fixed tick delta, and current-frame-data timing fields, save, and read the system timing back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-511"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-511"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-511"
+          ],
+          "edit": [
+            "BEB-511"
+          ],
+          "readback_verify": [
+            "BEB-511"
+          ],
+          "save": [
+            "BEB-511"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.user_parameter_remove": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.user_parameter_remove",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "user_parameter_remove"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/user_parameter_remove",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "user_parameter_remove"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-464"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-464",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "user_parameter_remove",
+          "blueprint_type": "",
+          "workflow": "niagara_user_parameter_remove_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "add_user_parameter",
+            "remove_user_parameter",
+            "save_system",
+            "get_user_parameters",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add two user parameters, remove one stale parameter, save, and verify only the kept parameter remains"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-464"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-464"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-464"
+          ],
+          "edit": [
+            "BEB-464"
+          ],
+          "readback_verify": [
+            "BEB-464"
+          ],
+          "save": [
+            "BEB-464"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    },
+    "asset_authoring.niagara.user_parameters": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.niagara.user_parameters",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "niagara",
+        "user_parameters"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: niagara/user_parameters",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "niagara"
+        ],
+        "edit_domain": [
+          "niagara_user_parameters"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-361"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-361",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "niagara",
+          "edit_domain": "niagara_user_parameters",
+          "blueprint_type": "",
+          "workflow": "niagara_user_parameter_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_system",
+            "create_emitter",
+            "add_user_parameter",
+            "rename_user_parameter",
+            "set_parameter_default",
+            "save_system",
+            "get_user_parameters",
+            "get_parameter_value",
+            "inspect_asset"
+          ],
+          "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-361"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-361"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-361"
+          ],
+          "edit": [
+            "BEB-361"
+          ],
+          "readback_verify": [
+            "BEB-361"
+          ],
+          "save": [
+            "BEB-361"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.niagara",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.niagara",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/niagara.json"
+    }
+  }
+}

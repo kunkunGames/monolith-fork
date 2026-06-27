@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "blueprint",
+  "asset_type_slug": "blueprint",
+  "edit_domain": "blueprint_timeline_persistence",
+  "route_edit_domain": "timeline_persistence",
+  "module_id": "asset_authoring.blueprint.timeline_persistence",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.blueprint.timeline_persistence",
+    "edit": "asset_operation.edit.blueprint.timeline_persistence",
+    "save": "asset_operation.save.blueprint.timeline_persistence",
+    "readback_verify": "asset_operation.readback_verify.blueprint.timeline_persistence"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-407"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-407",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "blueprint",
+      "edit_domain": "blueprint_timeline_persistence",
+      "blueprint_type": "",
+      "workflow": "blueprint_timeline_persistence_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blueprint",
+        "add_timeline",
+        "compile_blueprint",
+        "add_timeline_track",
+        "set_timeline_keys",
+        "save_asset",
+        "get_timeline_data",
+        "inspect_asset"
+      ],
+      "description": "Create an Actor Blueprint, add a Timeline node plus float track keys, save it, and read the persisted timeline data back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-407",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor",
+            "parent_class": "Actor",
+            "blueprint_type": "Normal"
+          },
+          "contains": [
+            "BP_BenchTimelineActor",
+            "Actor",
+            "Normal"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "add_timeline",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor",
+            "timeline_name": "BenchTimeline",
+            "auto_play": true,
+            "loop": true,
+            "position": [
+              160,
+              96
+            ]
+          },
+          "contains": [
+            "BenchTimeline",
+            "auto_play",
+            "true",
+            "loop",
+            "true",
+            "EventGraph"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "compile_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor"
+          },
+          "contains": [
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "add_timeline_track",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor",
+            "timeline_name": "BenchTimeline",
+            "track_name": "BenchAlpha",
+            "track_type": "float"
+          },
+          "contains": [
+            "BenchTimeline",
+            "BenchAlpha",
+            "float"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_timeline_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor",
+            "timeline_name": "BenchTimeline",
+            "track_name": "BenchAlpha",
+            "keys": [
+              {
+                "time": 0.0,
+                "value": 0.0,
+                "interp_mode": "linear"
+              },
+              {
+                "time": 0.5,
+                "value": 1.0,
+                "interp_mode": "cubic"
+              },
+              {
+                "time": 1.0,
+                "value": 0.25,
+                "interp_mode": "linear"
+              }
+            ]
+          },
+          "contains": [
+            "BenchTimeline",
+            "BenchAlpha",
+            "keys_set",
+            "3"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "compile_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor"
+          },
+          "contains": [
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_timeline_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor",
+            "timeline_name": "BenchTimeline"
+          },
+          "contains": [
+            "BenchTimeline",
+            "auto_play",
+            "true",
+            "loop",
+            "true",
+            "float_tracks",
+            "BenchAlpha",
+            "num_keys",
+            "3",
+            "linear",
+            "cubic"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchTimelineActor"
+          },
+          "contains": [
+            "BP_BenchTimelineActor",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blueprint_timeline_persistence",
+      "blueprint_type": "",
+      "domain": "blueprint",
+      "workflow": "blueprint_timeline_persistence_roundtrip",
+      "description": "Create an Actor Blueprint, add a Timeline node plus float track keys, save it, and read the persisted timeline data back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blueprint",
+          "add_timeline",
+          "compile_blueprint",
+          "add_timeline_track",
+          "set_timeline_keys",
+          "save_asset",
+          "get_timeline_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

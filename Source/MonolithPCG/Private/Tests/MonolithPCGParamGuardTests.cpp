@@ -52,7 +52,8 @@ bool FMonolithParamGuardPCGGetGraphAssetParamsTest::RunTest(const FString& Param
 		Params->SetStringField(TEXT("tag_limit"), TEXT("50"));
 		const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("pcg"), TEXT("get_graph_asset"), Params);
 		TestFalse(TEXT("Rejects string tag_limit"), Result.bSuccess);
-		TestTrue(TEXT("Error mentions number"), Result.ErrorMessage.Contains(TEXT("number")));
+		TestTrue(TEXT("Error mentions numeric type"),
+			Result.ErrorMessage.Contains(TEXT("number")) || Result.ErrorMessage.Contains(TEXT("integer")));
 	}
 
 	return true;

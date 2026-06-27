@@ -141,11 +141,17 @@ bool FMonolithEditorActions::bAutomationRunActive = false;
 
 // --- Log capture ---
 
+FMonolithLogCapture* FMonolithEditorActions::GetLogCapture()
+{
+	return CachedLogCapture;
+}
+
 void FMonolithLogCapture::Serialize(const TCHAR* V, ELogVerbosity::Type Verbosity, const FName& Category)
 {
 	FScopeLock ScopeLock(&Lock);
 
 	FMonolithLogEntry Entry;
+	Entry.Sequence = NextSequence++;
 	Entry.Timestamp = FPlatformTime::Seconds();
 	Entry.Category = Category;
 	Entry.Verbosity = Verbosity;
@@ -270,6 +276,34 @@ TArray<FMonolithLogEntry> FMonolithLogCapture::GetEntriesSince(double SinceTimes
 	return Result;
 }
 
+TArray<FMonolithLogEntry> FMonolithLogCapture::GetEntriesAfter(int64 Sequence, const TArray<FName>& CategoryFilter, ELogVerbosity::Type MaxVerbosity, int32 Limit) const
+{
+	FScopeLock ScopeLock(&Lock);
+	TArray<FMonolithLogEntry> Result;
+
+	int32 Total = RingBuffer.Num();
+	int32 Start = bWrapped ? WriteIndex : 0;
+
+	for (int32 i = 0; i < Total && Result.Num() < Limit; ++i)
+	{
+		int32 Idx = (Start + i) % Total;
+		const FMonolithLogEntry& Entry = RingBuffer[Idx];
+
+		if (Entry.Sequence <= Sequence) continue;
+		if (Entry.Verbosity > MaxVerbosity) continue;
+		if (CategoryFilter.Num() > 0 && !CategoryFilter.Contains(Entry.Category)) continue;
+
+		Result.Add(Entry);
+	}
+	return Result;
+}
+
+int64 FMonolithLogCapture::GetLatestSequence() const
+{
+	FScopeLock ScopeLock(&Lock);
+	return NextSequence - 1;
+}
+
 int32 FMonolithLogCapture::CountErrorsSince(double SinceTimestamp) const
 {
 	FScopeLock ScopeLock(&Lock);
@@ -320,6 +354,7 @@ static ELogVerbosity::Type StringToVerbosity(const FString& S)
 static TSharedPtr<FJsonObject> LogEntryToJson(const FMonolithLogEntry& Entry)
 {
 	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetNumberField(TEXT("sequence"), static_cast<double>(Entry.Sequence));
 	Obj->SetNumberField(TEXT("timestamp"), Entry.Timestamp);
 	Obj->SetStringField(TEXT("category"), Entry.Category.ToString());
 	Obj->SetStringField(TEXT("verbosity"), VerbosityToString(Entry.Verbosity));

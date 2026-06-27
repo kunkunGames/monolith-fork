@@ -1,5 +1,6 @@
 #include "MonolithToolRegistry.h"
 #include "../Public/MonolithFuzzyMatch.h"
+#include "MonolithFuzzyMatch.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
@@ -151,6 +152,73 @@ namespace
 			Result.Add(MakeShared<FJsonValueString>(Value));
 		}
 		return Result;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildActionSuggestionRows(
+		const FString& Namespace,
+		const FString& RequestedAction,
+		const TArray<FString>& CandidateActions,
+		int32 MaxResults = 3)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		const int32 Count = FMath::Min(MaxResults, CandidateActions.Num());
+		Result.Reserve(Count);
+
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const FString& CandidateAction = CandidateActions[Index];
+			const int32 MaxLen = FMath::Max(RequestedAction.Len(), CandidateAction.Len());
+			const int32 Distance = FMonolithFuzzyMatch::EditDistanceBounded(
+				RequestedAction,
+				CandidateAction,
+				FMath::Max(MaxLen, 1),
+				/*bCaseInsensitive=*/true);
+			const double Score = MaxLen > 0
+				? FMath::Clamp(1.0 - (static_cast<double>(Distance) / static_cast<double>(MaxLen)), 0.0, 1.0)
+				: 0.0;
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("kind"), TEXT("action"));
+			Row->SetStringField(TEXT("namespace"), Namespace);
+			Row->SetStringField(TEXT("action"), CandidateAction);
+			Row->SetStringField(TEXT("action_id"), Namespace + TEXT(".") + CandidateAction);
+			Row->SetNumberField(TEXT("score"), Score);
+			Result.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		return Result;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BuildNamespaceSuggestionRows(
+		const TArray<MonolithFuzzyMatchDetail::FFuzzyCandidate>& CandidateNamespaces)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		Result.Reserve(CandidateNamespaces.Num());
+
+		for (const MonolithFuzzyMatchDetail::FFuzzyCandidate& Candidate : CandidateNamespaces)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("kind"), TEXT("namespace"));
+			Row->SetStringField(TEXT("namespace"), Candidate.Key);
+			Row->SetNumberField(TEXT("score"), Candidate.Score);
+			Result.Add(MakeShared<FJsonValueObject>(Row));
+		}
+
+		return Result;
+	}
+
+	void AttachLookupSuggestions(
+		FMonolithActionResult& Result,
+		const FString& Kind,
+		const TArray<TSharedPtr<FJsonValue>>& Suggestions)
+	{
+		if (!Result.ErrorData.IsValid())
+		{
+			Result.ErrorData = MakeShared<FJsonObject>();
+		}
+
+		Result.ErrorData->SetStringField(TEXT("kind"), Kind);
+		Result.ErrorData->SetArrayField(TEXT("suggestions"), Suggestions);
 	}
 
 	FString MakeMcpToolName(const FString& Namespace, const FString& Action)
@@ -939,6 +1007,7 @@ FString FMonolithToolRegistry::ResolveSkillForNamespace(const FString& Namespace
 		{ TEXT("ndisplay"), TEXT("unreal-ndisplay") },
 		{ TEXT("level_sequence"), TEXT("unreal-level-sequences") },
 		{ TEXT("config"), TEXT("unreal-config") },
+		{ TEXT("console"), TEXT("unreal-console") },
 		{ TEXT("source_control"), TEXT("unreal-source-control") },
 		{ TEXT("collection"), TEXT("unreal-collection") },
 		{ TEXT("localization"), TEXT("unreal-localization") },
@@ -1312,24 +1381,45 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 		// CC-05: surface "did you mean" suggestions for the agent so it can
 		// recover in one round-trip instead of guessing iteratively.
 		// Drop the lock before scoring (FindSimilarActions takes the lock again).
+		const bool bKnownNamespace = NamespaceActions.Contains(Namespace);
 		Lock.Unlock();
 
-		TArray<FString> Similar = FindSimilarActions(Namespace, Action, /*MaxResults=*/5);
+		TArray<FString> Similar;
+		TArray<MonolithFuzzyMatchDetail::FFuzzyCandidate> SimilarNamespaces;
+		if (bKnownNamespace)
+		{
+			Similar = FindSimilarActions(Namespace, Action, /*MaxResults=*/5);
+		}
+		else
+		{
+			SimilarNamespaces = MonolithFuzzyMatchDetail::ScoreFuzzyMatches(Namespace, GetNamespaces(), /*TopN=*/3);
+		}
 		SetPhaseMs(TEXT("lookup_ms"), LookupStartSeconds);
 
 		FMonolithActionResult R = FMonolithActionResult::Error(
 			FString::Printf(TEXT("Unknown action: %s.%s — call monolith_discover(\"%s\") to enumerate valid actions in this namespace."), *Namespace, *Action, *Namespace),
 			FMonolithJsonUtils::ErrMethodNotFound
 		);
-		if (Similar.Num() > 0)
+		if (bKnownNamespace)
 		{
-			AttachCandidateActions(R, Namespace, Similar);
+			if (Similar.Num() > 0)
+			{
+				AttachCandidateActions(R, Namespace, Similar);
+			}
+			else
+			{
+				// No close matches — guide the agent to discovery.
+				R.Hints.Add(FString::Printf(
+					TEXT("Use monolith_discover(\"%s\") to list available actions."), *Namespace));
+			}
+			AttachLookupSuggestions(R, TEXT("action"), BuildActionSuggestionRows(Namespace, Action, Similar));
 		}
 		else
 		{
-			// No close matches — guide the agent to discovery.
+			AttachLookupSuggestions(R, TEXT("namespace"), BuildNamespaceSuggestionRows(SimilarNamespaces));
 			R.Hints.Add(FString::Printf(
-				TEXT("Use monolith_discover(\"%s\") to list available actions."), *Namespace));
+				TEXT("Unknown namespace '%s'. Use monolith_discover({\"mode\":\"namespaces\"}) or monolith_find to choose a valid namespace."),
+				*Namespace));
 		}
 		EnrichUnknownActionFailure(R, Namespace, Action);
 		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
@@ -1475,12 +1565,14 @@ FMonolithActionResult FMonolithToolRegistry::ExecuteAction(
 				}
 			}
 
-			// Preserve the existing error code (default -32603) so callers that
-			// match on it stay compatible. Only the Hints array is additive here.
+			// Missing schema-required params are malformed input, so report the
+			// JSON-RPC invalid-params code while keeping the existing recovery
+			// guidance and structured error_data additive.
 			FMonolithActionResult R = FMonolithActionResult::Error(
 				FString::Printf(TEXT("Missing required param(s): [%s]. Provided keys: [%s] — inspect the action's parameter schema via monolith_discover(\"<namespace>\") and supply all required fields."),
 					*FString::Join(Missing, TEXT(", ")),
-					*FString::Join(Provided, TEXT(", "))));
+					*FString::Join(Provided, TEXT(", "))),
+				FMonolithJsonUtils::ErrInvalidParams);
 			if (AliasHints.Num() > 0)
 			{
 				R.Hints.Add(FString::Printf(TEXT("Accepted aliases: %s"),

@@ -164,7 +164,7 @@ is portable — a capable server scores 1.0 in any project, not only where AI as
 `get_ai_overview` accepts 0 results (broad recall). There is no `list_state_trees` discovery probe —
 the `ai` namespace exposes no such action.
 
-## Anti-gaming properties (mirrors BlueprintEditing v5.1)
+## Anti-gaming properties (mirrors AssetEditing)
 
 - **No green-on-empty:** discovery requires ≥1 result for the fixture-targeted queries.
 - **No green-on-broken:** the four adversarial categories (0.72 weight) require observed mutations,

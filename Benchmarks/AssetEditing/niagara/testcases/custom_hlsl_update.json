@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "custom_hlsl_update",
+  "route_edit_domain": "custom_hlsl_update",
+  "module_id": "asset_authoring.niagara.custom_hlsl_update",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.custom_hlsl_update",
+    "edit": "asset_operation.edit.niagara.custom_hlsl_update",
+    "save": "asset_operation.save.niagara.custom_hlsl_update",
+    "readback_verify": "asset_operation.readback_verify.niagara.custom_hlsl_update"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-467"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-467",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "custom_hlsl_update",
+      "blueprint_type": "",
+      "workflow": "niagara_custom_hlsl_update_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_function_from_hlsl",
+        "set_custom_hlsl_text",
+        "save_system",
+        "get_custom_hlsl_text",
+        "get_module_graph",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-467",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NF_BenchHlslUpdate"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_function_from_hlsl",
+            "name": "NF_BenchHlslUpdate",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NF_BenchHlslUpdate",
+            "hlsl": "OutValue = InValue * 2.0;",
+            "inputs": [
+              {
+                "name": "InValue",
+                "type": "float"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "OutValue",
+                "type": "float"
+              }
+            ],
+            "description": "Benchmark CustomHlsl update function"
+          },
+          "contains": [
+            "NF_BenchHlslUpdate",
+            "InValue",
+            "OutValue"
+          ],
+          "capture": {
+            "function_script_path": "$.asset_path"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_custom_hlsl_text",
+            "script_path": "${function_script_path}",
+            "hlsl": "OutValue = InValue * 3.0 + 1.0;"
+          },
+          "contains": [
+            "success",
+            "true",
+            "NF_BenchHlslUpdate",
+            "node_guid",
+            "length"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "${function_script_path}"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_custom_hlsl_text",
+            "script_path": "${function_script_path}"
+          },
+          "contains": [
+            "OutValue = InValue * 3.0 + 1.0;",
+            "OutValue"
+          ],
+          "not_contains": [
+            "OutValue = InValue * 2.0;"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_module_graph",
+            "script_path": "${function_script_path}"
+          },
+          "contains": [
+            "Function",
+            "InValue",
+            "OutValue",
+            "CustomHlsl"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NF_BenchHlslUpdate"
+          },
+          "contains": [
+            "NF_BenchHlslUpdate",
+            "NiagaraScript"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "custom_hlsl_update",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_custom_hlsl_update_roundtrip",
+      "description": "Create a Niagara function script from CustomHlsl, overwrite the CustomHlsl body, save it, and verify the updated script text",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/niagara-overview",
+        "source: Plugins/Monolith/Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_function_from_hlsl",
+          "set_custom_hlsl_text",
+          "save_system",
+          "get_custom_hlsl_text",
+          "get_module_graph",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

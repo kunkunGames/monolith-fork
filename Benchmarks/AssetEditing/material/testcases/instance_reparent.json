@@ -1,0 +1,399 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_instance_reparent",
+  "route_edit_domain": "instance_reparent",
+  "module_id": "asset_authoring.material.instance_reparent",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.instance_reparent",
+    "edit": "asset_operation.edit.material.instance_reparent",
+    "save": "asset_operation.save.material.instance_reparent",
+    "readback_verify": "asset_operation.readback_verify.material.instance_reparent"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-298"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-298",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_instance_reparent",
+      "blueprint_type": "",
+      "workflow": "material_mic_duplicate_reparent_clear_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "create_material_instance",
+        "set_instance_parameters",
+        "duplicate_material",
+        "set_instance_parent",
+        "clear_instance_parameter",
+        "save_material",
+        "get_instance_parameters",
+        "inspect_asset"
+      ],
+      "description": "Create two parent Materials, duplicate a MIC, reparent the duplicate, clear one override, save, and inspect the remaining override"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-298",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentA",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentB",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchVariant",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentA",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchVariantParentA"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentA",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BenchTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchTint"
+                  },
+                  "pos": [
+                    -420,
+                    -120
+                  ]
+                },
+                {
+                  "id": "BenchRoughness",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchRoughness"
+                  },
+                  "pos": [
+                    -420,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BenchTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "BenchRoughness",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "connections_made"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentB",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchVariantParentB"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentB",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BenchTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchTint"
+                  },
+                  "pos": [
+                    -420,
+                    -120
+                  ]
+                },
+                {
+                  "id": "BenchRoughness",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchRoughness"
+                  },
+                  "pos": [
+                    -420,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BenchTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "BenchRoughness",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "connections_made"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariant",
+            "parent_material": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentA"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariant",
+            "parameters": [
+              {
+                "name": "BenchTint",
+                "type": "vector",
+                "value": {
+                  "R": 0.2,
+                  "G": 0.7,
+                  "B": 1.0,
+                  "A": 1.0
+                }
+              },
+              {
+                "name": "BenchRoughness",
+                "type": "scalar",
+                "value": 0.42
+              }
+            ]
+          },
+          "contains": [
+            "set_count",
+            "2",
+            "BenchTint",
+            "BenchRoughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "duplicate_material",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariant",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy"
+          },
+          "contains": [
+            "MI_BenchVariantCopy",
+            "MaterialInstanceConstant"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_instance_parent",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy",
+            "new_parent": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentB"
+          },
+          "contains": [
+            "old_parent",
+            "M_BenchVariantParentA",
+            "new_parent",
+            "M_BenchVariantParentB",
+            "kept_parameters",
+            "BenchTint",
+            "BenchRoughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "clear_instance_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy",
+            "parameter_name": "BenchRoughness",
+            "parameter_type": "scalar"
+          },
+          "contains": [
+            "cleared",
+            "BenchRoughness",
+            "cleared_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentA"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchVariantParentB"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariant"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy"
+          },
+          "contains": [
+            "MI_BenchVariantCopy",
+            "M_BenchVariantParentB",
+            "BenchTint",
+            "is_overridden",
+            "total_overrides",
+            "1"
+          ],
+          "not_contains": [
+            "BenchRoughness"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchVariantCopy"
+          },
+          "contains": [
+            "MI_BenchVariantCopy",
+            "MaterialInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_instance_reparent",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_mic_duplicate_reparent_clear_roundtrip",
+      "description": "Create two parent Materials, duplicate a MIC, reparent the duplicate, clear one override, save, and inspect the remaining override",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "create_material_instance",
+          "set_instance_parameters",
+          "duplicate_material",
+          "set_instance_parent",
+          "clear_instance_parameter",
+          "save_material",
+          "get_instance_parameters",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

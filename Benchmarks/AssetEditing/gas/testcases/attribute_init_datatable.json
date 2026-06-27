@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "attribute_init_datatable",
+  "route_edit_domain": "attribute_init_datatable",
+  "module_id": "asset_authoring.gas.attribute_init_datatable",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.attribute_init_datatable",
+    "edit": "asset_operation.edit.gas.attribute_init_datatable",
+    "save": "asset_operation.save.gas.attribute_init_datatable",
+    "readback_verify": "asset_operation.readback_verify.gas.attribute_init_datatable"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-429"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-429",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "attribute_init_datatable",
+      "blueprint_type": "",
+      "workflow": "gas_attribute_init_datatable_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_attribute_init_datatable",
+        "save_asset",
+        "get_data_table_rows",
+        "get_attribute_set",
+        "inspect_asset"
+      ],
+      "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-429",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchCharacterAttributes"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_attribute_init_datatable",
+            "attribute_set": "GoCharacterAttributeSet",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCharacterAttributes",
+            "rows": [
+              {
+                "attribute": "Health",
+                "base_value": 80.0,
+                "min_value": 0.0,
+                "max_value": 100.0
+              },
+              {
+                "attribute": "MaxHealth",
+                "base_value": 100.0,
+                "min_value": 1.0,
+                "max_value": 100.0
+              }
+            ]
+          },
+          "contains": [
+            "DT_BenchCharacterAttributes",
+            "UGoCharacterAttributeSet",
+            "row_count",
+            "2",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCharacterAttributes"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCharacterAttributes"
+          },
+          "contains": [
+            "UGoCharacterAttributeSet.Health",
+            "BaseValue",
+            "80",
+            "UGoCharacterAttributeSet.MaxHealth",
+            "MaxValue",
+            "100",
+            "AttributeMetaData",
+            "row_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_attribute_set",
+            "attribute_set": "GoCharacterAttributeSet"
+          },
+          "contains": [
+            "UGoCharacterAttributeSet",
+            "Health",
+            "MaxHealth",
+            "Damage",
+            "Healing"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCharacterAttributes"
+          },
+          "contains": [
+            "DT_BenchCharacterAttributes",
+            "DataTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "attribute_init_datatable",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_attribute_init_datatable_roundtrip",
+      "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_attribute_init_datatable",
+          "save_asset",
+          "get_data_table_rows",
+          "get_attribute_set",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

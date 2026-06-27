@@ -4578,6 +4578,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateSequence(const TSha
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
@@ -8986,6 +8991,11 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SkeletonPath = Params->GetStringField(TEXT("skeleton_path"));
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	USkeleton* Skeleton = FMonolithAssetUtils::LoadAssetByPath<USkeleton>(SkeletonPath);
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
@@ -8997,11 +9007,6 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateBlendSpace(const TS
 
 	if (FMonolithAssetUtils::LoadAssetByPath<UObject>(AssetPath))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset already exists at '%s'"), *AssetPath));
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 
 	const bool bConfigureXAxis = Params->HasField(TEXT("axis_x_name")) || Params->HasField(TEXT("axis_x_min")) || Params->HasField(TEXT("axis_x_max"));
 	FString XName = TEXT("None");

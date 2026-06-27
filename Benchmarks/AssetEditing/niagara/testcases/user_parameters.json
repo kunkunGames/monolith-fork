@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_user_parameters",
+  "route_edit_domain": "user_parameters",
+  "module_id": "asset_authoring.niagara.user_parameters",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.user_parameters",
+    "edit": "asset_operation.edit.niagara.user_parameters",
+    "save": "asset_operation.save.niagara.user_parameters",
+    "readback_verify": "asset_operation.readback_verify.niagara.user_parameters"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-361"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-361",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_user_parameters",
+      "blueprint_type": "",
+      "workflow": "niagara_user_parameter_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "add_user_parameter",
+        "rename_user_parameter",
+        "set_parameter_default",
+        "save_system",
+        "get_user_parameters",
+        "get_parameter_value",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-361",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams"
+          },
+          "contains": [
+            "NS_BenchUserParams"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams",
+            "name": "ParamEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "ParamEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_user_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams",
+            "name": "BenchSpawnRate",
+            "type": "float",
+            "default": "12.5"
+          },
+          "contains": [
+            "resolved_type",
+            "NiagaraFloat",
+            "BenchSpawnRate"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "rename_user_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams",
+            "old_name": "BenchSpawnRate",
+            "new_name": "BenchSpawnRateFinal"
+          },
+          "contains": [
+            "BenchSpawnRate",
+            "BenchSpawnRateFinal",
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_parameter_default",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams",
+            "parameter": "BenchSpawnRateFinal",
+            "value": "24.0"
+          },
+          "contains": [
+            "Default set"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams"
+          },
+          "contains": [
+            "BenchSpawnRateFinal",
+            "NiagaraFloat"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_parameter_value",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams",
+            "parameter": "BenchSpawnRateFinal"
+          },
+          "contains": [
+            "BenchSpawnRateFinal",
+            "NiagaraFloat",
+            "24"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchUserParams"
+          },
+          "contains": [
+            "NS_BenchUserParams",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_user_parameters",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_user_parameter_roundtrip",
+      "description": "Create a Niagara System, add and edit a user float parameter, rename it, save, and read value/name back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "add_user_parameter",
+          "rename_user_parameter",
+          "set_parameter_default",
+          "save_system",
+          "get_user_parameters",
+          "get_parameter_value",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

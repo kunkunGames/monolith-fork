@@ -7,7 +7,7 @@
 | [SchemaCompleteness](SchemaCompleteness/README.md) | schema_completeness_score | Full catalog param types, required flags, planning signals | Scripts/schema_completeness_benchmark.py |
 | [OfflineParity](OfflineParity/README.md) | offline_parity_score | exe-vs-py result matching, version parity | Scripts/offline_parity_benchmark.py |
 | [ProjectIndex](ProjectIndex/README.md) | project_index_score | Asset search recall, gameplay tag lookup, schema adherence | Scripts/project_index_benchmark.py |
-| [BlueprintEditing](BlueprintEditing/README.md) | blueprint_editing_score | Edit action schemas, graph reads, variable reads, type discovery, workflow completeness | Scripts/blueprint_editing_benchmark.py |
+| [AssetEditing](AssetEditing/README.md) | asset_editing_score | Blueprint and cross-domain asset edit actions, graph reads, variable reads, type discovery, workflow completeness | Scripts/asset_editing_benchmark.py |
 
 ## Score Interpretation
 
@@ -59,10 +59,10 @@ python Scripts\project_index_benchmark.py run `
   --label current `
   --output-dir Saved\Monolith\Benchmarks\ProjectIndex\current
 
-# BlueprintEditing
-python Scripts\blueprint_editing_benchmark.py run `
+# AssetEditing
+python Scripts\asset_editing_benchmark.py run `
   --mcp-url http://localhost:9316/mcp `
-  --tasks Benchmarks\BlueprintEditing\tasks.jsonl `
+  --tasks Benchmarks\AssetEditing\tasks.jsonl `
   --label current `
-  --output-dir Saved\Monolith\Benchmarks\BlueprintEditing\current
+  --output-dir Saved\Monolith\Benchmarks\AssetEditing\current
 ```

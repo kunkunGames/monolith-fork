@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "parameter_inventory",
+  "route_edit_domain": "parameter_inventory",
+  "module_id": "asset_authoring.material.parameter_inventory",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.parameter_inventory",
+    "edit": "asset_operation.edit.material.parameter_inventory",
+    "save": "asset_operation.save.material.parameter_inventory",
+    "readback_verify": "asset_operation.readback_verify.material.parameter_inventory"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-465"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-465",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "parameter_inventory",
+      "blueprint_type": "",
+      "workflow": "material_parameter_inventory_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "create_material_instance",
+        "save_material",
+        "get_material_parameters",
+        "list_material_instances",
+        "inspect_asset"
+      ],
+      "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-465",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventory",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventoryChild"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchParameterInventory"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BenchInventoryTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchInventoryTint"
+                  },
+                  "pos": [
+                    -360,
+                    -120
+                  ]
+                },
+                {
+                  "id": "BenchInventoryRoughness",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchInventoryRoughness"
+                  },
+                  "pos": [
+                    -360,
+                    100
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BenchInventoryTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "BenchInventoryRoughness",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "M_BenchParameterInventory"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventory",
+            "parent_material": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory"
+          },
+          "contains": [
+            "MI_BenchParameterInventory"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventoryChild",
+            "parent_material": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventory"
+          },
+          "contains": [
+            "MI_BenchParameterInventoryChild"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventory"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventoryChild"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_material_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory"
+          },
+          "contains": [
+            "scalar_parameters",
+            "vector_parameters",
+            "BenchInventoryRoughness",
+            "BenchInventoryTint",
+            "total_parameters"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "list_material_instances",
+            "parent_path": "/Game/Benchmarks/AssetAuthoring/M_BenchParameterInventory",
+            "recursive": true
+          },
+          "contains": [
+            "parent",
+            "M_BenchParameterInventory",
+            "instance_count",
+            "MI_BenchParameterInventory",
+            "MI_BenchParameterInventoryChild",
+            "depth",
+            "recursive",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchParameterInventory"
+          },
+          "contains": [
+            "MI_BenchParameterInventory",
+            "MaterialInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "parameter_inventory",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_parameter_inventory_roundtrip",
+      "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/instanced-materials-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMaterial/Private/MonolithMaterialActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "create_material_instance",
+          "save_material",
+          "get_material_parameters",
+          "list_material_instances",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

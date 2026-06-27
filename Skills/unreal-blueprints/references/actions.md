@@ -81,8 +81,8 @@ Full per-action parameter signatures for the Monolith **blueprint** namespace, c
 | `remove_macro` [w] | `asset_path*`, `macro_name*` | Remove macro |
 | `rename_macro` [w] | `asset_path*`, `old_name*`, `new_name*` | Rename macro |
 | `add_event_dispatcher` [w] | `asset_path*`, `name*` | Create dispatcher |
-| `remove_event_dispatcher` [w] | `asset_path*`, `dispatcher_name*` | Remove dispatcher |
-| `set_event_dispatcher_params` [w] | `asset_path*`, `dispatcher_name*`, `params*` (`[{name,type}]`) | Replace signature |
+| `remove_event_dispatcher` [w] | `asset_path*`, `dispatcher_name?`, `name?`, `missing_ok=false`, `allow_missing=false` | Remove dispatcher; missing_ok returns no-op success when already absent |
+| `set_event_dispatcher_params` [w] | `asset_path*`, `dispatcher_name?`, `params*` (`[{name,type}]`) | Replace signature |
 | `set_function_params` [w] | `asset_path*`, `function_name*`, `inputs?`, `outputs?` (`[{name,type}]`) | Set signature |
 | `implement_interface` [w] | `asset_path*`, `interface_class*` | Add interface (no stubs) |
 | `remove_interface` [w] | `asset_path*`, `interface_class*`, `preserve_functions=false` | Remove interface |

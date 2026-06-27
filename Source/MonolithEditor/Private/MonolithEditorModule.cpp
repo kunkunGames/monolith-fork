@@ -125,7 +125,7 @@ public:
 		{
 			return;
 		}
-		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddRaw(
+		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddRaw(
 			this, &FMonolithHeadlessLayoutSaveGuard::HandlePostEngineInit);
 		bRegistered = true;
 	}
@@ -138,7 +138,7 @@ public:
 		}
 		if (PostEngineInitHandle.IsValid())
 		{
-			FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+			FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
 			PostEngineInitHandle.Reset();
 		}
 		if (TickerHandle.IsValid())
@@ -271,11 +271,11 @@ void FMonolithEditorModule::StartupModule()
 	// PART C — subscribe to the pre-Slate-modal broadcast so we can log modal context
 	// just before the blocking nested loop starves the in-process MCP server.
 #if WITH_EDITOR
-	PreSlateModalHandle = FCoreDelegates::PreSlateModal.AddRaw(this, &FMonolithEditorModule::OnPreSlateModal);
+	PreSlateModalHandle = FCoreDelegates::PreSlateModalWithContext.AddRaw(this, &FMonolithEditorModule::OnPreSlateModal);
 #endif
 }
 
-void FMonolithEditorModule::OnPreSlateModal()
+void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowContext& /*Context*/)
 {
 	// Always emit at least a timestamped "modal opening" line — text extraction below
 	// is best-effort (the window may not yet be on the modal stack at broadcast time).
@@ -311,7 +311,7 @@ void FMonolithEditorModule::ShutdownModule()
 #if WITH_EDITOR
 	if (PreSlateModalHandle.IsValid())
 	{
-		FCoreDelegates::PreSlateModal.Remove(PreSlateModalHandle);
+		FCoreDelegates::PreSlateModalWithContext.Remove(PreSlateModalHandle);
 		PreSlateModalHandle.Reset();
 	}
 #endif

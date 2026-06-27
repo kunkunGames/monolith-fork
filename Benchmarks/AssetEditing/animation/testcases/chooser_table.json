@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "chooser_table",
+  "route_edit_domain": "chooser_table",
+  "module_id": "asset_authoring.animation.chooser_table",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.chooser_table",
+    "edit": "asset_operation.edit.animation.chooser_table",
+    "save": "asset_operation.save.animation.chooser_table",
+    "readback_verify": "asset_operation.readback_verify.animation.chooser_table"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-334"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-334",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "chooser_table",
+      "blueprint_type": "",
+      "workflow": "chooser_table_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "create_chooser_table",
+        "add_chooser_column",
+        "add_chooser_row",
+        "set_chooser_cell",
+        "validate_chooser",
+        "save_asset",
+        "inspect_chooser"
+      ],
+      "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-334",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchChooserResult"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserResult",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "T_BenchChooserResult"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "create_chooser_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "output_type": "ObjectResult",
+            "output_class": "/Script/Engine.Texture2D",
+            "context_class": "/Script/CoreUObject.Object"
+          },
+          "contains": [
+            "CHT_BenchTextureChoice",
+            "ObjectResult",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "add_chooser_column",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "column_kind": "Bool"
+          },
+          "contains": [
+            "column_count",
+            "Bool"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "add_chooser_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "cells": [
+              true
+            ],
+            "output_psd": "/Game/Benchmarks/AssetAuthoring/T_BenchChooserResult"
+          },
+          "contains": [
+            "row_count",
+            "T_BenchChooserResult"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "set_chooser_cell",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "column_index": 0,
+            "row_index": 0,
+            "bool_value": false
+          },
+          "contains": [
+            "column_index",
+            "row_index"
+          ]
+        },
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "validate_chooser",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "expected_result_type": "ObjectResult"
+          },
+          "contains": [
+            "valid",
+            "true",
+            "ObjectResult"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice"
+          },
+          "contains": [
+            "saved",
+            "CHT_BenchTextureChoice"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "chooser_query",
+          "args": {
+            "action": "inspect_chooser",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CHT_BenchTextureChoice",
+            "include_cells": true,
+            "recursive": true
+          },
+          "contains": [
+            "CHT_BenchTextureChoice",
+            "ObjectResult",
+            "BoolColumn",
+            "T_BenchChooserResult",
+            "false",
+            "compiled"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "chooser_table",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "chooser_table_roundtrip",
+      "description": "Create a Chooser Table, add a bool predicate column, select a Texture2D result row, edit the cell, save, and inspect rows/cells",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "create_chooser_table",
+          "add_chooser_column",
+          "add_chooser_row",
+          "set_chooser_cell",
+          "validate_chooser",
+          "save_asset",
+          "inspect_chooser"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

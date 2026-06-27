@@ -2,6 +2,7 @@
 #include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceReview.h"
+#include "MonolithSourceSchema.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -175,6 +176,60 @@ bool FSourceDatabaseUsesDeleteJournalModeTest::RunTest(const FString& Parameters
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceResolveReadFileClassifiesFailuresTest, "Monolith.IndexGuard.Source.ResolveReadFileClassifiesFailures", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceResolveReadFileClassifiesFailuresTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceReadClass"), TEXT(".sqlite"));
+	const FString ExistingPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceReadExisting"), TEXT(".cpp"));
+	const FString IndexedMissingPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceReadIndexedMissing"), TEXT(".cpp"));
+	const FString AbsoluteMissingPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceReadAbsoluteMissing"), TEXT(".cpp"));
+
+	FFileHelper::SaveStringToFile(TEXT("LineOne\nLineTwo\n"), *ExistingPath);
+	IFileManager::Get().Delete(*IndexedMissingPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+	IFileManager::Get().Delete(*AbsoluteMissingPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+
+	FMonolithSourceDatabase DB;
+	TestTrue(TEXT("Temporary DB opens for writing"), DB.OpenForWriting(DbPath));
+	TestTrue(TEXT("Temporary DB creates schema"), DB.CreateTablesIfNeeded());
+
+	const int64 ModuleId = DB.InsertModule(TEXT("ReadClassModule"), FPaths::GetPath(ExistingPath), TEXT("Runtime"));
+	TestTrue(TEXT("Test module inserted"), ModuleId != 0);
+	TestTrue(TEXT("Existing file indexed"), DB.InsertFile(ExistingPath, ModuleId, TEXT("cpp"), 2, 0.0) != 0);
+	TestTrue(TEXT("Missing indexed file row inserted"), DB.InsertFile(IndexedMissingPath, ModuleId, TEXT("cpp"), 2, 0.0) != 0);
+
+	FMonolithSourceActions::FResolveReadResult Existing =
+		FMonolithSourceActions::ResolveAndReadFile(&DB, ExistingPath, 1, 1, 200);
+	TestTrue(TEXT("Existing absolute path resolves"), Existing.bResolved);
+	TestTrue(TEXT("Existing read returns line text"), Existing.Text.Contains(TEXT("LineOne")));
+	TestFalse(TEXT("Existing read has no error class"), !Existing.ErrorClass.IsEmpty());
+
+	FMonolithSourceActions::FResolveReadResult AbsoluteMissing =
+		FMonolithSourceActions::ResolveAndReadFile(&DB, AbsoluteMissingPath, 1, 1, 200);
+	TestFalse(TEXT("Missing absolute path does not resolve"), AbsoluteMissing.bResolved);
+	TestEqual(TEXT("Missing absolute path is path_not_found"), AbsoluteMissing.ErrorClass, FString(TEXT("path_not_found")));
+
+	FMonolithSourceActions::FResolveReadResult CoverageMiss =
+		FMonolithSourceActions::ResolveAndReadFile(&DB, TEXT("Definitely/Not/Indexed.cpp"), 1, 1, 200);
+	TestFalse(TEXT("Relative DB miss does not resolve"), CoverageMiss.bResolved);
+	TestEqual(TEXT("Relative DB miss is coverage_miss"), CoverageMiss.ErrorClass, FString(TEXT("coverage_miss")));
+
+	FMonolithSourceActions::FResolveReadResult IndexedUnreadable =
+		FMonolithSourceActions::ResolveAndReadFile(&DB, FPaths::GetCleanFilename(IndexedMissingPath), 1, 1, 200);
+	TestFalse(TEXT("Indexed missing backing file does not resolve"), IndexedUnreadable.bResolved);
+	TestEqual(TEXT("Indexed missing backing file is indexed_path_unreadable"), IndexedUnreadable.ErrorClass, FString(TEXT("indexed_path_unreadable")));
+
+	DB.Close();
+	IFileManager::Get().Delete(*ExistingPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+	IFileManager::Get().Delete(*IndexedMissingPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+	IFileManager::Get().Delete(*AbsoluteMissingPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*DbPath);
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
+	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceResetDatabaseRecreatesMalformedFileTest, "Monolith.IndexGuard.Source.ResetDatabaseRecreatesMalformedFile", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FSourceResetDatabaseRecreatesMalformedFileTest::RunTest(const FString& Parameters)
@@ -229,7 +284,7 @@ namespace
 			Db.InsertReference(Sc, Sa, TEXT("type"), FileId, 12);
 			Db.InsertReference(Sa, Sb, TEXT("call"), FileId, 2);
 			Db.InsertInheritance(Sc, Sa);
-			Db.SetMeta(TEXT("schema_version"), TEXT("1"));
+			Db.SetMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
 			TSharedPtr<FJsonObject> Crg = Db.RepairCrgCache(true);
 			return Sa > 0 && Sb > 0 && Sc > 0 && Sd > 0 && Se > 0
 				&& Crg.IsValid() && Crg->GetStringField(TEXT("status")) == TEXT("ok");
@@ -298,7 +353,7 @@ namespace
 			Db.InsertInheritance(RightClass, BaseClass);
 			Db.InsertInheritance(DiamondClass, LeftClass);
 			Db.InsertInheritance(DiamondClass, RightClass);
-			Db.SetMeta(TEXT("schema_version"), TEXT("1"));
+			Db.SetMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
 			return BaseClass > 0 && MidClass > 0 && ChildClass > 0
 				&& IndirectClass > 0 && IndirectChildClass > 0 && ImplOnlyClass > 0
 				&& LeftClass > 0 && RightClass > 0 && DiamondClass > 0
@@ -690,7 +745,7 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	Db.InsertReference(EngineSymbol, ProjectSymbol, TEXT("type"), EngineFile, 2);
 	Db.InsertReference(EngineSymbol, EngineLeafSymbol, TEXT("call"), EngineFile, 6);
 	Db.InsertInheritance(OrphanDerivedSymbol, OrphanBaseSymbol);
-	Db.SetMeta(TEXT("schema_version"), TEXT("1"));
+	Db.SetMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
 
 	TSharedPtr<FJsonObject> Built = Db.RepairCrgCache(true);
 	TestEqual(TEXT("initial CRG cache build ok"), Built->GetStringField(TEXT("status")), FString(TEXT("ok")));
@@ -1136,7 +1191,7 @@ bool FSourceBridgeCandidateNormalizationTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("asset candidates include normalized class seed"), AssetCandidates.Contains(TEXT("Inventory")));
 	TestTrue(TEXT("asset candidates include U-prefixed source class seed"), AssetCandidates.Contains(TEXT("UInventory")));
 
-	const TArray<FString> SymbolCandidates = MonolithSourceBridge::BuildSymbolAssetCandidates(TEXT("UGameplayInventory"), TEXT("Go::UGameplayInventory"));
+	const TArray<FString> SymbolCandidates = MonolithSourceBridge::BuildSymbolAssetCandidates(TEXT("UGameplayInventory"), TEXT("Project::UGameplayInventory"));
 	TestTrue(TEXT("symbol candidates include normalized asset token"), SymbolCandidates.Contains(TEXT("GameplayInventory")));
 	TestTrue(TEXT("symbol candidates include Blueprint-prefixed token"), SymbolCandidates.Contains(TEXT("BP_GameplayInventory")));
 	return true;

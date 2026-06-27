@@ -1,0 +1,338 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_slot_property_variable",
+  "route_edit_domain": "widget_slot_property_variable",
+  "module_id": "asset_authoring.ui.widget_slot_property_variable",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_slot_property_variable",
+    "edit": "asset_operation.edit.ui.widget_slot_property_variable",
+    "save": "asset_operation.save.ui.widget_slot_property_variable",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_slot_property_variable"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-408"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-408",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_slot_property_variable",
+      "blueprint_type": "",
+      "workflow": "ui_slot_property_variable_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_slot_property",
+        "set_widget_property",
+        "add_widget_variable",
+        "set_widget_is_variable",
+        "compile_widget",
+        "save_asset",
+        "get_widget_tree",
+        "list_widget_properties",
+        "get_variables",
+        "inspect_asset"
+      ],
+      "description": "Create a Widget Blueprint, apply CanvasPanel slot edits, set allowlisted TextBlock properties, expose widget variables, save, and read back tree/properties/variables"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-408",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchSlotProperty",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchEditableLabel",
+            "anchor_preset": "top_left",
+            "position": {
+              "x": 32,
+              "y": 32
+            },
+            "size": {
+              "x": 320,
+              "y": 48
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_slot_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_name": "BenchEditableLabel",
+            "position": {
+              "x": 64,
+              "y": 80
+            },
+            "size": {
+              "x": 420,
+              "y": 72
+            },
+            "alignment": {
+              "x": 0.25,
+              "y": 0.5
+            },
+            "z_order": 7,
+            "compile": false
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "CanvasPanelSlot",
+            "properties_set"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_widget_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_name": "BenchEditableLabel",
+            "property_name": "Text",
+            "value": "AssetEditing Slot",
+            "compile": false
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "Text"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_widget_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_name": "BenchEditableLabel",
+            "property_name": "LineHeightPercentage",
+            "value": 1.35,
+            "compile": false
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "LineHeightPercentage"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget_variable",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "var_name": "bBenchUiReady",
+            "var_type": "bool",
+            "default_value": "true",
+            "var_category": "AssetEditing"
+          },
+          "contains": [
+            "bBenchUiReady",
+            "bool"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_widget_is_variable",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_name": "BenchEditableLabel",
+            "is_variable": true
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "is_variable",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty"
+          },
+          "contains": [
+            "BenchEditableLabel",
+            "TextBlock",
+            "AssetEditing Slot",
+            "CanvasPanelSlot",
+            "64",
+            "80",
+            "420",
+            "72",
+            "0.25",
+            "7",
+            "is_variable",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_widget_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "widget_name": "BenchEditableLabel"
+          },
+          "contains": [
+            "LineHeightPercentage",
+            "current_value",
+            "1.35"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_variables",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty",
+            "include_bind_widgets": true
+          },
+          "contains": [
+            "bBenchUiReady",
+            "bool",
+            "true",
+            "BenchEditableLabel",
+            "tree_variable"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSlotProperty"
+          },
+          "contains": [
+            "WBP_BenchSlotProperty",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_slot_property_variable",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_slot_property_variable_roundtrip",
+      "description": "Create a Widget Blueprint, apply CanvasPanel slot edits, set allowlisted TextBlock properties, expose widget variables, save, and read back tree/properties/variables",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_slot_property",
+          "set_widget_property",
+          "add_widget_variable",
+          "set_widget_is_variable",
+          "compile_widget",
+          "save_asset",
+          "get_widget_tree",
+          "list_widget_properties",
+          "get_variables",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

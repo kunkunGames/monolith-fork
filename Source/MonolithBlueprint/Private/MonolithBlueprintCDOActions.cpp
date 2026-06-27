@@ -287,9 +287,9 @@ FMonolithActionResult FMonolithBlueprintCDOActions::HandleSetCDOProperty(const T
 	}
 
 	const TSharedPtr<FJsonValue> JsonVal = Params->TryGetField(TEXT("value"));
-	if (!JsonVal)
+	if (!JsonVal.IsValid() || JsonVal->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
+		return FMonolithActionResult::Error(TEXT("Missing or null required parameter: value"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// --- Load asset: Blueprint CDO or generic UObject (same dual-path as get_cdo_properties) ---

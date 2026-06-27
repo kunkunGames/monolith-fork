@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_renderer_material",
+  "route_edit_domain": "renderer_material",
+  "module_id": "asset_authoring.niagara.renderer_material",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.renderer_material",
+    "edit": "asset_operation.edit.niagara.renderer_material",
+    "save": "asset_operation.save.niagara.renderer_material",
+    "readback_verify": "asset_operation.readback_verify.niagara.renderer_material"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-436"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-436",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_renderer_material",
+      "blueprint_type": "",
+      "workflow": "niagara_renderer_material_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "save_material",
+        "create_system",
+        "create_emitter",
+        "remove_renderer",
+        "add_renderer",
+        "set_renderer_material",
+        "save_system",
+        "list_renderers",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-436",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchNiagaraSprite"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchNiagaraSprite",
+            "shading_model": "Unlit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchNiagaraSprite"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchNiagaraSprite"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial"
+          },
+          "contains": [
+            "NS_BenchRendererMaterial"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+            "name": "MaterialEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "MaterialEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "allow_error": true,
+          "args": {
+            "action": "remove_renderer",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+            "emitter": "MaterialEmitter",
+            "renderer_index": 0
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_renderer",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+            "emitter": "MaterialEmitter",
+            "class": "Sprite"
+          },
+          "contains": [
+            "renderer_index"
+          ],
+          "capture": {
+            "sprite_renderer": "$.renderer_index"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_renderer_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+            "emitter": "MaterialEmitter",
+            "renderer_index": "${sprite_renderer}",
+            "material": "/Game/Benchmarks/AssetAuthoring/M_BenchNiagaraSprite"
+          },
+          "contains": [
+            "Material set"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_renderers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial",
+            "emitter": "MaterialEmitter"
+          },
+          "contains": [
+            "NiagaraSpriteRendererProperties",
+            "sprite",
+            "M_BenchNiagaraSprite",
+            "count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchNiagaraSprite"
+          },
+          "contains": [
+            "M_BenchNiagaraSprite",
+            "Material"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererMaterial"
+          },
+          "contains": [
+            "NS_BenchRendererMaterial",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_renderer_material",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_renderer_material_roundtrip",
+      "description": "Create a Niagara Sprite renderer, assign a generated material, save the system, and read the renderer material back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "save_material",
+          "create_system",
+          "create_emitter",
+          "remove_renderer",
+          "add_renderer",
+          "set_renderer_material",
+          "save_system",
+          "list_renderers",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

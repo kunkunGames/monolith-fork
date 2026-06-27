@@ -22,6 +22,45 @@ static FMonolithActionResult MonolithGuidanceFailureNoop(const TSharedPtr<FJsonO
 	return FMonolithActionResult::Error(TEXT("forced handler failure"), FMonolithJsonUtils::ErrInvalidParams);
 }
 
+static bool AssertRecoveryPlanShape(
+	FAutomationTestBase& Test,
+	const FString& Label,
+	const TSharedPtr<FJsonObject>& Result)
+{
+	bool bOk = true;
+	const TSharedPtr<FJsonObject>* PlanPtr = nullptr;
+	bOk &= Test.TestTrue(*(Label + TEXT(" has recovery_plan object")),
+		Result.IsValid() && Result->TryGetObjectField(TEXT("recovery_plan"), PlanPtr) && PlanPtr && PlanPtr->IsValid());
+	if (!bOk)
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>& Plan = *PlanPtr;
+	FString EndpointUrl;
+	FString HealthUrl;
+	FString HeadlessLogGlob;
+	bOk &= Test.TestTrue(*(Label + TEXT(" has endpoint_url")),
+		Plan->TryGetStringField(TEXT("endpoint_url"), EndpointUrl) && EndpointUrl.Contains(TEXT("/mcp")));
+	bOk &= Test.TestTrue(*(Label + TEXT(" has health_url")),
+		Plan->TryGetStringField(TEXT("health_url"), HealthUrl) && HealthUrl.Contains(TEXT("/health")));
+	bOk &= Test.TestTrue(*(Label + TEXT(" has headless_log_glob")),
+		Plan->TryGetStringField(TEXT("headless_log_glob"), HeadlessLogGlob) && HeadlessLogGlob.Contains(TEXT("HeadlessEditor-*.log")));
+
+	const TSharedPtr<FJsonObject>* ListenerPtr = nullptr;
+	bOk &= Test.TestTrue(*(Label + TEXT(" has listener_status")),
+		Plan->TryGetObjectField(TEXT("listener_status"), ListenerPtr) && ListenerPtr && ListenerPtr->IsValid());
+
+	const TSharedPtr<FJsonObject>* EditorCandidatePtr = nullptr;
+	bOk &= Test.TestTrue(*(Label + TEXT(" has editor_candidate_status")),
+		Plan->TryGetObjectField(TEXT("editor_candidate_status"), EditorCandidatePtr) && EditorCandidatePtr && EditorCandidatePtr->IsValid());
+
+	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+	bOk &= Test.TestTrue(*(Label + TEXT(" has bounded_next_steps")),
+		Plan->TryGetArrayField(TEXT("bounded_next_steps"), Steps) && Steps && Steps->Num() >= 3);
+	return bOk;
+}
+
 // FMonolithParamSchema alias rewriting test
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaAliasesTest,
 	"Monolith.ParamSchema.ApplyAliases",
@@ -314,6 +353,7 @@ bool FMonolithActionFailureMissingRequiredDiagnosticShapeTest::RunTest(const FSt
 
 	bool bOk = true;
 	bOk &= TestFalse(TEXT("Missing required param fails before handler dispatch"), Result.bSuccess);
+	bOk &= TestEqual(TEXT("Missing required param uses invalid-params code"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	bOk &= TestTrue(TEXT("Discover is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.discover")));
 	bOk &= TestTrue(TEXT("Find is a related recovery action"), Result.RelatedActions.Contains(TEXT("monolith.find")));
 	bOk &= TestTrue(TEXT("Structured error data exists"), Result.ErrorData.IsValid());
@@ -371,6 +411,25 @@ bool FMonolithActionFailureMissingRequiredDiagnosticShapeTest::RunTest(const FSt
 		bOk &= TestTrue(TEXT("Generated planning signals included"),
 			Result.ErrorData->TryGetArrayField(TEXT("planning_signals"), PlanningSignals) && PlanningSignals && PlanningSignals->Num() > 0);
 	}
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithCoreReadinessRecoveryPlanTest,
+	"Monolith.Core.ReadinessRecoveryPlan",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithCoreReadinessRecoveryPlanTest::RunTest(const FString& Parameters)
+{
+	bool bOk = true;
+
+	const FMonolithActionResult Readiness = FMonolithCoreTools::HandleGetReadinessStatus(MakeShared<FJsonObject>());
+	bOk &= TestTrue(TEXT("get_readiness_status succeeds"), Readiness.bSuccess && Readiness.Result.IsValid());
+	bOk &= AssertRecoveryPlanShape(*this, TEXT("get_readiness_status"), Readiness.Result);
+
+	const FMonolithActionResult Status = FMonolithCoreTools::HandleStatus(MakeShared<FJsonObject>());
+	bOk &= TestTrue(TEXT("status succeeds"), Status.bSuccess && Status.Result.IsValid());
+	bOk &= AssertRecoveryPlanShape(*this, TEXT("status"), Status.Result);
 
 	return bOk;
 }

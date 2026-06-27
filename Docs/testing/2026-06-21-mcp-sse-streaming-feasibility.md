@@ -24,7 +24,7 @@ This record answers the open question from those slices: **is the transport now 
 
 ## 2. Engine Support — Now Present and Verified (UE 5.8)
 
-`GO.uproject` `EngineAssociation` is `5.8`, so the project builds against the patched `HTTPServer` module at `D:\Engine\UE_5.8\Engine\Source\Runtime\Online\HTTPServer`. The streaming primitives the transport needs are real in this build, not reference-only:
+The host `.uproject` `EngineAssociation` is `5.8`, so the project builds against the patched `HTTPServer` module at `D:\Engine\UE_5.8\Engine\Source\Runtime\Online\HTTPServer`. The streaming primitives the transport needs are real in this build, not reference-only:
 
 | Engine primitive | Location | What it provides |
 |---|---|---|
@@ -128,7 +128,7 @@ This record fixes the order so the eventual P1d Stage-2 code slice is grounded:
 | Engine has SPSC `StreamingBodyQueue` + `StreamingBodyComplete` | `HttpServerResponse.h:75-76`; drain logic `Private\HttpConnectionResponseWriteContext.cpp:30-145` |
 | Result-callback reentry capped at 2/stack, 3rd `checkf` | `Public\HttpResultCallback.h:7-15` |
 | Mid-stream teardown / silent-drop contract | `Private\HttpConnection.cpp:157-183` (`CompleteRead`) |
-| Project builds against UE 5.8 | `GO.uproject` `"EngineAssociation": "5.8"` |
+| Project builds against UE 5.8 | Host `.uproject` `"EngineAssociation": "5.8"` |
 | `ExecuteAction` is single synchronous buffered call, no sink | `MonolithHttpServer.cpp:1486` |
 | Tracker is redacted session observer, not per-request token store | `Public\MonolithMcpSessionTracker.h` (`FSessionRow`, `SessionCapacity=128`) |
 | Single-shot completion loop / batch coalescing | `MonolithHttpServer.cpp:459-528` (loop opens at `:462`) |

@@ -9,7 +9,7 @@
 ## MonolithGAS
 
 **Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
-**Namespace:** `gas` (142 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 142 (Phase J F8: +`grant_ability_to_pawn`; 2026-05-31 Go workflow P0/P3/P4: +DataAsset profile describe/validate/set and runtime event/cue probes)
+**Namespace:** `gas` (142 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 142 (Phase J F8: +`grant_ability_to_pawn`; 2026-05-31 DataAsset GAS workflow P0/P3/P4: +DataAsset profile describe/validate/set and runtime event/cue probes)
 **Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 142 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 `gas` actions registered.
 **Settings toggle:** `bEnableGAS` (default: True)
 
@@ -44,7 +44,7 @@ Related follow-up: [SPEC_MonolithGAS_GoWorkflowImprovements.md](SPEC_MonolithGAS
 - **F6 (2026-04-26)** — J1 spec relaxed to match impl (`warnings` omitted-when-empty, AttributeSet enumeration dropped, full-valid-list replaces Levenshtein "did you mean").
 - **F8 (2026-04-26)** — `gas::grant_ability_to_pawn` added (+1).
 - **F9 logging (2026-04-26)** — Observability adds + `LogMonolithGASUIBinding` / `LogMonolithGASUIBindingExt` retired into parent `LogMonolithGAS` category.
-- **Go workflow P0/P3/P4 (2026-05-31)** — `gas::describe_data_asset_gas_profile`, `gas::validate_data_asset_gas_profile`, `gas::set_data_asset_gas_fields`, `gas::start_event_cue_probe`, `gas::stop_event_cue_probe`, and `gas::expect_event_cue` added (+6). `gas::get_runtime_summary` now reports GAS namespace registration, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while remaining safe outside PIE.
+- **DataAsset GAS workflow P0/P3/P4 (2026-05-31)** — `gas::describe_data_asset_gas_profile`, `gas::validate_data_asset_gas_profile`, `gas::set_data_asset_gas_fields`, `gas::start_event_cue_probe`, `gas::stop_event_cue_probe`, and `gas::expect_event_cue` added (+6). `gas::get_runtime_summary` now reports GAS namespace registration, action count, `WITH_GBA`, ProjectIndex availability, and read-only fallback guidance while remaining safe outside PIE.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
 

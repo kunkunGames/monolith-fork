@@ -579,6 +579,7 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 		FMonolithActionHandler::CreateStatic(&FMonolithLevelSequenceActions::ListSavedReplays),
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return, clamped to 1..500. Default: 100."))
+			.Range(TEXT("limit"), 1, 500)
 			.Optional(TEXT("include_files"), TEXT("boolean"), TEXT("When true, include bounded replay/demo file metadata rows in addition to top-level replay containers. Default: false."))
 			.Optional(TEXT("include_nested_files"), TEXT("boolean"), TEXT("When include_files is true, include files under replay container subdirectories. Default: true."))
 			.Build());
@@ -591,6 +592,7 @@ void FMonolithLevelSequenceActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("include_files"), TEXT("boolean"), TEXT("For replay containers, include bounded child file metadata. Default: true."))
 			.Optional(TEXT("include_nested_files"), TEXT("boolean"), TEXT("When include_files is true, include files recursively under the container. Default: true."))
 			.Optional(TEXT("file_limit"), TEXT("integer"), TEXT("Maximum child file rows to return, clamped to 0..500. Default: 100."))
+			.Range(TEXT("file_limit"), 0, 500)
 			.Build());
 
 	Registry.RegisterAction(TEXT("level_sequence"), TEXT("list_directors"),

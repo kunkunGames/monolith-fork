@@ -1012,9 +1012,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	if (SeqIndex < 0 || SeqIndex >= NumAssets)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid sequence_index %d (database has %d entries)"), SeqIndex, NumAssets));
 
-	FPoseSearchDatabaseAnimationAsset* Entry = Database->GetMutableDatabaseAnimationAsset(SeqIndex);
-	if (!Entry)
+	const FPoseSearchDatabaseAnimationAsset* ExistingEntry = Database->GetDatabaseAnimationAsset(SeqIndex);
+	if (!ExistingEntry)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get mutable entry at index %d"), SeqIndex));
+	FPoseSearchDatabaseAnimationAsset Entry = *ExistingEntry;
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Sequence Properties")));
 	Database->Modify();
@@ -1025,7 +1026,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 		bool bTemp;
 		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
 			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-		Entry->SetIsEnabled(bTemp);
+		Entry.SetIsEnabled(bTemp);
 	}
 
 	if (Params->HasField(TEXT("disable_reselection")))
@@ -1033,7 +1034,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 		bool bTemp;
 		if (!Params->TryGetBoolField(TEXT("disable_reselection"), bTemp))
 			return FMonolithActionResult::Error(TEXT("Parameter 'disable_reselection' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-		Entry->SetDisableReselection(bTemp);
+		Entry.SetDisableReselection(bTemp);
 	}
 
 	if (Params->HasField(TEXT("mirror_option")))
@@ -1042,11 +1043,11 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 		if (!Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
 			return FMonolithActionResult::Error(TEXT("Parameter 'mirror_option' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
+			Entry.MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::MirroredOnly;
+			Entry.MirrorOption = EPoseSearchMirrorOption::MirroredOnly;
 		else if (MirrorStr.Equals(TEXT("UnmirroredAndMirrored"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredAndMirrored;
+			Entry.MirrorOption = EPoseSearchMirrorOption::UnmirroredAndMirrored;
 		else
 		{
 			GEditor->EndTransaction();
@@ -1056,7 +1057,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 
 	if (Params->HasField(TEXT("sampling_range_start")) || Params->HasField(TEXT("sampling_range_end")))
 	{
-		FFloatInterval CurrentRange = Entry->GetSamplingRange();
+		FFloatInterval CurrentRange = Entry.GetSamplingRange();
 		float Start = CurrentRange.Min;
 		if (Params->HasField(TEXT("sampling_range_start")))
 		{
@@ -1073,8 +1074,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 				return FMonolithActionResult::Error(TEXT("Parameter 'sampling_range_end' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 			End = static_cast<float>(TempVal);
 		}
-		Entry->SetSamplingRange(FFloatInterval(Start, End));
+		Entry.SetSamplingRange(FFloatInterval(Start, End));
 	}
+	Database->SetAnimationAssetAt(Entry, SeqIndex);
 #endif // WITH_EDITORONLY_DATA
 
 	GEditor->EndTransaction();
@@ -1085,17 +1087,17 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetNumberField(TEXT("sequence_index"), SeqIndex);
 
-	if (UObject* AnimAsset = Entry->GetAnimationAsset())
+	if (UObject* AnimAsset = Entry.GetAnimationAsset())
 	{
 		Root->SetStringField(TEXT("animation"), AnimAsset->GetPathName());
 	}
 
 #if WITH_EDITORONLY_DATA
-	Root->SetBoolField(TEXT("enabled"), Entry->IsEnabled());
-	Root->SetBoolField(TEXT("disable_reselection"), Entry->IsDisableReselection());
+	Root->SetBoolField(TEXT("enabled"), Entry.IsEnabled());
+	Root->SetBoolField(TEXT("disable_reselection"), Entry.IsDisableReselection());
 
 	FString MirrorStr;
-	switch (Entry->GetMirrorOption())
+	switch (Entry.GetMirrorOption())
 	{
 	case EPoseSearchMirrorOption::UnmirroredOnly:      MirrorStr = TEXT("UnmirroredOnly"); break;
 	case EPoseSearchMirrorOption::MirroredOnly:        MirrorStr = TEXT("MirroredOnly"); break;
@@ -1104,7 +1106,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseSequencePrope
 	}
 	Root->SetStringField(TEXT("mirror_option"), MirrorStr);
 
-	FFloatInterval Range = Entry->GetSamplingRange();
+	FFloatInterval Range = Entry.GetSamplingRange();
 	Root->SetNumberField(TEXT("sampling_range_start"), Range.Min);
 	Root->SetNumberField(TEXT("sampling_range_end"), Range.Max);
 #endif
@@ -1622,9 +1624,10 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 	if (EntryIndex < 0 || EntryIndex >= NumAssets)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid entry_index %d (database has %d entries)"), EntryIndex, NumAssets));
 
-	FPoseSearchDatabaseAnimationAsset* Entry = Database->GetMutableDatabaseAnimationAsset(EntryIndex);
-	if (!Entry)
+	const FPoseSearchDatabaseAnimationAsset* ExistingEntry = Database->GetDatabaseAnimationAsset(EntryIndex);
+	if (!ExistingEntry)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to get mutable entry at index %d"), EntryIndex));
+	FPoseSearchDatabaseAnimationAsset Entry = *ExistingEntry;
 
 #if WITH_EDITORONLY_DATA
 	GEditor->BeginTransaction(FText::FromString(TEXT("Set PoseSearch Database Entry Tags")));
@@ -1635,7 +1638,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 		bool bTemp;
 		if (!Params->TryGetBoolField(TEXT("enabled"), bTemp))
 			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-		Entry->SetIsEnabled(bTemp);
+		Entry.SetIsEnabled(bTemp);
 	}
 
 	if (Params->HasField(TEXT("disable_reselection")))
@@ -1643,7 +1646,7 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 		bool bTemp;
 		if (!Params->TryGetBoolField(TEXT("disable_reselection"), bTemp))
 			return FMonolithActionResult::Error(TEXT("Parameter 'disable_reselection' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
-		Entry->SetDisableReselection(bTemp);
+		Entry.SetDisableReselection(bTemp);
 	}
 
 	if (Params->HasField(TEXT("mirror_option")))
@@ -1652,17 +1655,19 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 		if (!Params->TryGetStringField(TEXT("mirror_option"), MirrorStr))
 			return FMonolithActionResult::Error(TEXT("Parameter 'mirror_option' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		if (MirrorStr.Equals(TEXT("UnmirroredOnly"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
+			Entry.MirrorOption = EPoseSearchMirrorOption::UnmirroredOnly;
 		else if (MirrorStr.Equals(TEXT("MirroredOnly"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::MirroredOnly;
+			Entry.MirrorOption = EPoseSearchMirrorOption::MirroredOnly;
 		else if (MirrorStr.Equals(TEXT("UnmirroredAndMirrored"), ESearchCase::IgnoreCase))
-			Entry->MirrorOption = EPoseSearchMirrorOption::UnmirroredAndMirrored;
+			Entry.MirrorOption = EPoseSearchMirrorOption::UnmirroredAndMirrored;
 		else
 		{
 			GEditor->EndTransaction();
 			return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid mirror_option: '%s'. Use UnmirroredOnly, MirroredOnly, or UnmirroredAndMirrored"), *MirrorStr));
 		}
 	}
+
+	Database->SetAnimationAssetAt(Entry, EntryIndex);
 
 	GEditor->EndTransaction();
 	Database->MarkPackageDirty();
@@ -1671,14 +1676,14 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleSetDatabaseEntryTags(con
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("database_path"), DatabasePath);
 	Root->SetNumberField(TEXT("entry_index"), EntryIndex);
-	if (UObject* AnimAsset = Entry->GetAnimationAsset())
+	if (UObject* AnimAsset = Entry.GetAnimationAsset())
 	{
 		Root->SetStringField(TEXT("animation"), AnimAsset->GetPathName());
 	}
-	Root->SetBoolField(TEXT("enabled"), Entry->IsEnabled());
-	Root->SetBoolField(TEXT("disable_reselection"), Entry->IsDisableReselection());
+	Root->SetBoolField(TEXT("enabled"), Entry.IsEnabled());
+	Root->SetBoolField(TEXT("disable_reselection"), Entry.IsDisableReselection());
 	FString MirrorStr;
-	switch (Entry->GetMirrorOption())
+	switch (Entry.GetMirrorOption())
 	{
 	case EPoseSearchMirrorOption::UnmirroredOnly:        MirrorStr = TEXT("UnmirroredOnly"); break;
 	case EPoseSearchMirrorOption::MirroredOnly:          MirrorStr = TEXT("MirroredOnly"); break;

@@ -2,6 +2,7 @@
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithPackagePathValidator.h"
 
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
@@ -28,6 +29,35 @@
 
 namespace
 {
+	bool SaveBlackboardPackage(UBlackboardData* BB, FString& OutError)
+	{
+		if (!BB)
+		{
+			OutError = TEXT("Cannot save null Blackboard");
+			return false;
+		}
+
+		UPackage* Package = BB->GetOutermost();
+		if (!Package)
+		{
+			OutError = FString::Printf(TEXT("Blackboard has no outer package: %s"), *BB->GetName());
+			return false;
+		}
+
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		if (!UPackage::SavePackage(Package, BB, *PackageFilename, SaveArgs))
+		{
+			OutError = FString::Printf(TEXT("Failed to save Blackboard package: %s"), *Package->GetName());
+			return false;
+		}
+
+		return true;
+	}
+
 	/** Get a string for the key type class (human-readable) */
 	FString KeyTypeToString(const UBlackboardKeyType* KeyType)
 	{
@@ -463,6 +493,11 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 		// save_path includes the asset name, use it as-is for the package
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackagePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Check path is free
 	FString PathError;
 	if (!MonolithAI::EnsureAssetPathFree(PackagePath, AssetName, PathError))
@@ -507,9 +542,15 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleCreateBlackboard(const
 	// Notify asset registry and mark dirty
 	FAssetRegistryModule::AssetCreated(BB);
 	BB->MarkPackageDirty();
+	FString SaveError;
+	if (!SaveBlackboardPackage(BB, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
 
 	TSharedPtr<FJsonObject> Result = MonolithAI::MakeAssetResult(PackagePath, TEXT("Blackboard created"));
 	Result->SetStringField(TEXT("name"), AssetName);
+	Result->SetBoolField(TEXT("saved"), true);
 	if (BB->Parent)
 	{
 		Result->SetStringField(TEXT("parent"), BB->Parent->GetPathName());
@@ -723,6 +764,11 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleDuplicateBlackboard(co
 	NewBB->SetFlags(RF_Public | RF_Standalone);
 	FAssetRegistryModule::AssetCreated(NewBB);
 	NewBB->MarkPackageDirty();
+	FString SaveError;
+	if (!SaveBlackboardPackage(NewBB, SaveError))
+	{
+		return FMonolithActionResult::Error(SaveError);
+	}
 
 	// Best-effort skipped_keys diagnostic: any source key not present on the destination
 	// (e.g. KeyType class unloaded or invalid). StaticDuplicateObject is atomic, so
@@ -751,6 +797,7 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleDuplicateBlackboard(co
 	Result->SetStringField(TEXT("source_path"), SourcePath);
 	Result->SetStringField(TEXT("asset_path"), DestPath);
 	Result->SetStringField(TEXT("name"), NewBB->GetName());
+	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetNumberField(TEXT("key_count"), NewBB->Keys.Num());
 	Result->SetNumberField(TEXT("source_key_count"), SourceKeyCount);
 	Result->SetBoolField(TEXT("overwrite"), bOverwrite);

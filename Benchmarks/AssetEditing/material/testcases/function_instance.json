@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_function_instance",
+  "route_edit_domain": "function_instance",
+  "module_id": "asset_authoring.material.function_instance",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.function_instance",
+    "edit": "asset_operation.edit.material.function_instance",
+    "save": "asset_operation.save.material.function_instance",
+    "readback_verify": "asset_operation.readback_verify.material.function_instance"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-299"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-299",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_function_instance",
+      "blueprint_type": "",
+      "workflow": "material_function_instance_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material_function",
+        "build_function_graph",
+        "create_function_instance",
+        "set_function_instance_parameter",
+        "save_material",
+        "get_function_instance_info",
+        "inspect_asset"
+      ],
+      "description": "Create a parameterized Material Function, create a function instance, edit its scalar override, save, and inspect override metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-299",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/MF_BenchFunctionVariant",
+              "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_function",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchFunctionVariant",
+            "description": "Benchmark function instance parent",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmark"
+            ],
+            "type": "MaterialFunction"
+          },
+          "contains": [
+            "MF_BenchFunctionVariant",
+            "MaterialFunction",
+            "Benchmark function instance"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_function_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchFunctionVariant",
+            "clear_existing": true,
+            "graph_spec": {
+              "outputs": [
+                {
+                  "id": "BenchOutput",
+                  "name": "BenchOutput",
+                  "description": "Benchmark scalar output"
+                }
+              ],
+              "nodes": [
+                {
+                  "id": "BenchScaleParam",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchScale",
+                    "DefaultValue": 1.0
+                  },
+                  "pos": [
+                    -360,
+                    0
+                  ]
+                }
+              ],
+              "connections": [
+                {
+                  "from": "BenchScaleParam",
+                  "to": "BenchOutput"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "connections_made",
+            "output_count"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_function_instance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant",
+            "parent": "/Game/Benchmarks/AssetAuthoring/MF_BenchFunctionVariant",
+            "scalar_overrides": {
+              "BenchScale": 1.5
+            }
+          },
+          "contains": [
+            "MFI_BenchFunctionVariant",
+            "MF_BenchFunctionVariant",
+            "MaterialFunctionInstance",
+            "overrides_applied",
+            "scalar"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_function_instance_parameter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant",
+            "parameter_name": "BenchScale",
+            "scalar_value": 2.25
+          },
+          "contains": [
+            "MFI_BenchFunctionVariant",
+            "BenchScale",
+            "scalar",
+            "2.25"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchFunctionVariant"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_function_instance_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant"
+          },
+          "contains": [
+            "MFI_BenchFunctionVariant",
+            "MF_BenchFunctionVariant",
+            "MaterialFunctionInstance",
+            "BenchScale",
+            "2.25",
+            "total_overrides",
+            "1",
+            "BenchOutput"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MFI_BenchFunctionVariant"
+          },
+          "contains": [
+            "MFI_BenchFunctionVariant",
+            "MaterialFunctionInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_function_instance",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_function_instance_roundtrip",
+      "description": "Create a parameterized Material Function, create a function instance, edit its scalar override, save, and inspect override metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material_function",
+          "build_function_graph",
+          "create_function_instance",
+          "set_function_instance_parameter",
+          "save_material",
+          "get_function_instance_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

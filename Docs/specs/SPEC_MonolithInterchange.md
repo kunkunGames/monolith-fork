@@ -70,4 +70,4 @@
 | Registration | `FMonolithInterchangeModule::StartupModule` registers 16 `interchange` actions. |
 | Ownership cleanup | `MonolithMesh` no longer registers or unregisters the `interchange` namespace. |
 | Parameter guard | `FMonolithParamGuardInterchangeImportMalformedParamsTest` rejects malformed import params through the new module. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

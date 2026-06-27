@@ -20,8 +20,8 @@
  * Answers agent queries like "which sequence is 12 frames at 15fps", "which sequences fire notify
  * Footstep", "what category is ANS_M001_Walk", and "which AnimBP drives AnimSource X".
  *
- * Gated by WITH_PAPERZD: the PaperZD plugin is a project/marketplace plugin (GO.uproject
- * Plugins[] Enabled:true here) but not guaranteed in arbitrary Monolith checkouts, so when the
+ * Gated by WITH_PAPERZD: the PaperZD plugin is a project/marketplace plugin (host .uproject
+ * Plugins[] Enabled:true) but not guaranteed in arbitrary Monolith checkouts, so when the
  * plugin is absent this indexer is neither compiled nor registered.
  */
 class FPaperZDIndexer : public IMonolithIndexer

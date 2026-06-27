@@ -1,0 +1,2127 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.actorcomponent",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+  "task_count": 552,
+  "module_count": 8,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.actorcomponent",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: ActorComponent",
+      "task_count": 28,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.actorcomponent.compilation",
+        "blueprint.actorcomponent.event",
+        "blueprint.actorcomponent.function",
+        "blueprint.actorcomponent.general",
+        "blueprint.actorcomponent.node",
+        "blueprint.actorcomponent.state",
+        "blueprint.actorcomponent.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.actorcomponent.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/event",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/function",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/general",
+      "task_count": 11,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/node",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/state",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actorcomponent.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/variable",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json",
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.actorcomponent": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: ActorComponent",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ]
+      },
+      "task_count": 28,
+      "task_ids": [
+        "BEB-006",
+        "BEB-020",
+        "BEB-037",
+        "BEB-038",
+        "BEB-039",
+        "BEB-053",
+        "BEB-054",
+        "BEB-067",
+        "BEB-068",
+        "BEB-081",
+        "BEB-082",
+        "BEB-162",
+        "BEB-216",
+        "BEB-217",
+        "BEB-218",
+        "BEB-219",
+        "BEB-220",
+        "BEB-221",
+        "BEB-222",
+        "BEB-223",
+        "BEB-224",
+        "BEB-225",
+        "BEB-241",
+        "BEB-261",
+        "BEB-262",
+        "BEB-263",
+        "BEB-264",
+        "BEB-265"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-006",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover ActorComponent fixture with project.search query 'BC_TestComponent'"
+        },
+        {
+          "id": "BEB-020",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover ActorComponent fixture with project.search query '/Game/Benchmarks/BC_TestComponent'"
+        },
+        {
+          "id": "BEB-037",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-038",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read ActorComponent fixture default graph data"
+        },
+        {
+          "id": "BEB-039",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-053",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for ActorComponent fixture BC_TestComponent"
+        },
+        {
+          "id": "BEB-054",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for ActorComponent fixture BC_TestComponent"
+        },
+        {
+          "id": "BEB-067",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-068",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-081",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-082",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for ActorComponent"
+        },
+        {
+          "id": "BEB-162",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "actorcomponent_toggle_contract",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "add_node",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create an ActorComponent toggle function, add a bool input and VariableSet node, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-216",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCompActivate function graph to ActorComponent"
+        },
+        {
+          "id": "BEB-217",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchCompOnActivated custom event to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-218",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString CallFunction node to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-219",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchCompLevel variable to ActorComponent"
+        },
+        {
+          "id": "BEB-220",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set BenchCompLevel default to 0 (just created)"
+        },
+        {
+          "id": "BEB-221",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add ComponentID VariableGet node to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-222",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "event",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCompOnChanged event dispatcher to ActorComponent"
+        },
+        {
+          "id": "BEB-223",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "component",
+          "edit_domain": "compilation",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate ActorComponent blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-224",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "component",
+          "edit_domain": "state",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout ActorComponent EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-225",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "component",
+          "edit_domain": "compilation",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile ActorComponent blueprint"
+        },
+        {
+          "id": "BEB-241",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on ActorComponent EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-261",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add string BenchCompDebugName variable to ActorComponent"
+        },
+        {
+          "id": "BEB-262",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bComponentActive fixture variable default to true for ActorComponent"
+        },
+        {
+          "id": "BEB-263",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCompRefreshState function graph to ActorComponent"
+        },
+        {
+          "id": "BEB-264",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add ComponentID VariableGet node to BenchCompRefreshState graph"
+        },
+        {
+          "id": "BEB-265",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "event",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCompOnRefresh event dispatcher to ActorComponent"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-216",
+            "BEB-217",
+            "BEB-218",
+            "BEB-219",
+            "BEB-220",
+            "BEB-221",
+            "BEB-222",
+            "BEB-223",
+            "BEB-224",
+            "BEB-225",
+            "BEB-241",
+            "BEB-261",
+            "BEB-262",
+            "BEB-263",
+            "BEB-264",
+            "BEB-265"
+          ],
+          "graph_read": [
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054"
+          ],
+          "type_discovery": [
+            "BEB-006",
+            "BEB-020"
+          ],
+          "variable_read": [
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082"
+          ],
+          "workflow_execute": [
+            "BEB-162"
+          ]
+        },
+        "by_edit_domain": {
+          "compilation": [
+            "BEB-223",
+            "BEB-225"
+          ],
+          "event": [
+            "BEB-222",
+            "BEB-265"
+          ],
+          "function": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-263"
+          ],
+          "general": [
+            "BEB-006",
+            "BEB-020",
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054",
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082"
+          ],
+          "node": [
+            "BEB-218",
+            "BEB-221",
+            "BEB-241",
+            "BEB-264"
+          ],
+          "state": [
+            "BEB-224"
+          ],
+          "variable": [
+            "BEB-219",
+            "BEB-220",
+            "BEB-261",
+            "BEB-262"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-218",
+            "BEB-219",
+            "BEB-220",
+            "BEB-221",
+            "BEB-222",
+            "BEB-241",
+            "BEB-261",
+            "BEB-262",
+            "BEB-263",
+            "BEB-264",
+            "BEB-265"
+          ],
+          "read_only": [
+            "BEB-006",
+            "BEB-020",
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054",
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082",
+            "BEB-223",
+            "BEB-224",
+            "BEB-225"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-218",
+            "BEB-219",
+            "BEB-220",
+            "BEB-221",
+            "BEB-222",
+            "BEB-241",
+            "BEB-261",
+            "BEB-262",
+            "BEB-263",
+            "BEB-264",
+            "BEB-265"
+          ],
+          "readback_verify": [
+            "BEB-006",
+            "BEB-020",
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054",
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082",
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-218",
+            "BEB-219",
+            "BEB-220",
+            "BEB-221",
+            "BEB-222",
+            "BEB-223",
+            "BEB-224",
+            "BEB-225",
+            "BEB-241",
+            "BEB-261",
+            "BEB-262",
+            "BEB-263",
+            "BEB-264",
+            "BEB-265"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.actorcomponent.compilation",
+        "blueprint.actorcomponent.event",
+        "blueprint.actorcomponent.function",
+        "blueprint.actorcomponent.general",
+        "blueprint.actorcomponent.node",
+        "blueprint.actorcomponent.state",
+        "blueprint.actorcomponent.variable"
+      ],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-223",
+        "BEB-225"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-223",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "component",
+          "edit_domain": "compilation",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate ActorComponent blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-225",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "component",
+          "edit_domain": "compilation",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile ActorComponent blueprint"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-223",
+            "BEB-225"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-223",
+            "BEB-225"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-223",
+            "BEB-225"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-222",
+        "BEB-265"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-222",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "event",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCompOnChanged event dispatcher to ActorComponent"
+        },
+        {
+          "id": "BEB-265",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "event",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCompOnRefresh event dispatcher to ActorComponent"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-222",
+            "BEB-265"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-222",
+            "BEB-265"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-222",
+            "BEB-265"
+          ],
+          "readback_verify": [
+            "BEB-222",
+            "BEB-265"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-162",
+        "BEB-216",
+        "BEB-217",
+        "BEB-263"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-162",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "actorcomponent_toggle_contract",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_params",
+            "add_node",
+            "compile_blueprint",
+            "get_function_signature"
+          ],
+          "description": "Create an ActorComponent toggle function, add a bool input and VariableSet node, compile clean, read back the signature"
+        },
+        {
+          "id": "BEB-216",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCompActivate function graph to ActorComponent"
+        },
+        {
+          "id": "BEB-217",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchCompOnActivated custom event to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-263",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "function",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCompRefreshState function graph to ActorComponent"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-216",
+            "BEB-217",
+            "BEB-263"
+          ],
+          "workflow_execute": [
+            "BEB-162"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-263"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-263"
+          ],
+          "readback_verify": [
+            "BEB-162",
+            "BEB-216",
+            "BEB-217",
+            "BEB-263"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 11,
+      "task_ids": [
+        "BEB-006",
+        "BEB-020",
+        "BEB-037",
+        "BEB-038",
+        "BEB-039",
+        "BEB-053",
+        "BEB-054",
+        "BEB-067",
+        "BEB-068",
+        "BEB-081",
+        "BEB-082"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-006",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover ActorComponent fixture with project.search query 'BC_TestComponent'"
+        },
+        {
+          "id": "BEB-020",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover ActorComponent fixture with project.search query '/Game/Benchmarks/BC_TestComponent'"
+        },
+        {
+          "id": "BEB-037",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-038",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read ActorComponent fixture default graph data"
+        },
+        {
+          "id": "BEB-039",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-053",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for ActorComponent fixture BC_TestComponent"
+        },
+        {
+          "id": "BEB-054",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for ActorComponent fixture BC_TestComponent"
+        },
+        {
+          "id": "BEB-067",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-068",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-081",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for ActorComponent fixture"
+        },
+        {
+          "id": "BEB-082",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "component",
+          "edit_domain": "",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for ActorComponent"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054"
+          ],
+          "type_discovery": [
+            "BEB-006",
+            "BEB-020"
+          ],
+          "variable_read": [
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-006",
+            "BEB-020",
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054",
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-006",
+            "BEB-020",
+            "BEB-037",
+            "BEB-038",
+            "BEB-039",
+            "BEB-053",
+            "BEB-054",
+            "BEB-067",
+            "BEB-068",
+            "BEB-081",
+            "BEB-082"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-218",
+        "BEB-221",
+        "BEB-241",
+        "BEB-264"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-218",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString CallFunction node to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-221",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add ComponentID VariableGet node to ActorComponent EventGraph"
+        },
+        {
+          "id": "BEB-241",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on ActorComponent EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-264",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "component",
+          "edit_domain": "node",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add ComponentID VariableGet node to BenchCompRefreshState graph"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-218",
+            "BEB-221",
+            "BEB-241",
+            "BEB-264"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-218",
+            "BEB-221",
+            "BEB-241",
+            "BEB-264"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-218",
+            "BEB-221",
+            "BEB-241",
+            "BEB-264"
+          ],
+          "readback_verify": [
+            "BEB-218",
+            "BEB-221",
+            "BEB-241",
+            "BEB-264"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-224"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-224",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "component",
+          "edit_domain": "state",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout ActorComponent EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-224"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-224"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-224"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    },
+    "blueprint.actorcomponent.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actorcomponent.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "ActorComponent",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: ActorComponent/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "ActorComponent"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-219",
+        "BEB-220",
+        "BEB-261",
+        "BEB-262"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-219",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchCompLevel variable to ActorComponent"
+        },
+        {
+          "id": "BEB-220",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set BenchCompLevel default to 0 (just created)"
+        },
+        {
+          "id": "BEB-261",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add string BenchCompDebugName variable to ActorComponent"
+        },
+        {
+          "id": "BEB-262",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "component",
+          "edit_domain": "variable",
+          "blueprint_type": "ActorComponent",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bComponentActive fixture variable default to true for ActorComponent"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-219",
+            "BEB-220",
+            "BEB-261",
+            "BEB-262"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-219",
+            "BEB-220",
+            "BEB-261",
+            "BEB-262"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-219",
+            "BEB-220",
+            "BEB-261",
+            "BEB-262"
+          ],
+          "readback_verify": [
+            "BEB-219",
+            "BEB-220",
+            "BEB-261",
+            "BEB-262"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actorcomponent",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actorcomponent",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actorcomponent.json"
+    }
+  }
+}

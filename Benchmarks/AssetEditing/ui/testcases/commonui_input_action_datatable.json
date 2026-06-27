@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_input_action_datatable",
+  "route_edit_domain": "commonui_input_action_datatable",
+  "module_id": "asset_authoring.ui.commonui_input_action_datatable",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_input_action_datatable",
+    "edit": "asset_operation.edit.ui.commonui_input_action_datatable",
+    "save": "asset_operation.save.ui.commonui_input_action_datatable",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_input_action_datatable"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-337"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-337",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_input_action_datatable",
+      "blueprint_type": "",
+      "workflow": "commonui_input_action_datatable_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_input_action_data_table",
+        "add_input_action_row",
+        "save_asset",
+        "get_data_table_rows",
+        "inspect_asset"
+      ],
+      "description": "Create a CommonUI input-action DataTable, add keyboard/gamepad glyph rows, save, and read the rows back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-337",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActions"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_input_action_data_table",
+            "package_path": "/Game/Benchmarks/AssetAuthoring",
+            "asset_name": "DT_BenchCommonActions"
+          },
+          "contains": [
+            "DT_BenchCommonActions"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_input_action_row",
+            "table_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActions",
+            "row_name": "BenchAccept",
+            "display_name": "Bench Accept",
+            "hold_display_name": "Hold Bench Accept",
+            "nav_bar_priority": 10,
+            "keyboard_key": "(Key=(KeyName=E))",
+            "gamepad_key": "(Key=(KeyName=Gamepad_FaceButton_Bottom))"
+          },
+          "contains": [
+            "BenchAccept"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActions"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActions"
+          },
+          "contains": [
+            "BenchAccept",
+            "Bench Accept",
+            "DefaultGamepadInputTypeInfo"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchCommonActions"
+          },
+          "contains": [
+            "DT_BenchCommonActions",
+            "DataTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_input_action_datatable",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "commonui_input_action_datatable_roundtrip",
+      "description": "Create a CommonUI input-action DataTable, add keyboard/gamepad glyph rows, save, and read the rows back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_input_action_data_table",
+          "add_input_action_row",
+          "save_asset",
+          "get_data_table_rows",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

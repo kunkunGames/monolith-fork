@@ -261,11 +261,10 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 // --- create_widget_blueprint ---
 FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSharedPtr<FJsonObject>& Params)
 {
-    FMonolithActionResult ParamError;
     FString SavePath;
-    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("save_path"), SavePath, ParamError))
+    if (!Params.IsValid() || !Params->TryGetStringField(TEXT("save_path"), SavePath))
     {
-        return ParamError;
+        return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
     }
 
     // Defensive: reject malformed paths (e.g. "//Game/...") before they reach CreatePackage,

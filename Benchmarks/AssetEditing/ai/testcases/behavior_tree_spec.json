@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "behavior_tree_spec",
+  "route_edit_domain": "behavior_tree_spec",
+  "module_id": "asset_authoring.ai.behavior_tree_spec",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree_spec",
+    "edit": "asset_operation.edit.ai.behavior_tree_spec",
+    "save": "asset_operation.save.ai.behavior_tree_spec",
+    "readback_verify": "asset_operation.readback_verify.ai.behavior_tree_spec"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-327"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-327",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree_spec",
+      "blueprint_type": "",
+      "workflow": "ai_behavior_tree_spec_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_behavior_tree_from_spec",
+        "save_asset",
+        "get_behavior_tree",
+        "get_bt_graph",
+        "validate_behavior_tree"
+      ],
+      "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-327",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "build_behavior_tree_from_spec",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol",
+            "strict_mode": true,
+            "spec": {
+              "root": {
+                "type": "Selector",
+                "name": "BenchRootSelector",
+                "children": [
+                  {
+                    "type": "BTTask_Wait",
+                    "name": "BenchWait",
+                    "properties": {
+                      "WaitTime": 0.1
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "contains": [
+            "BT_BenchSpecPatrol",
+            "node_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_behavior_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol"
+          },
+          "contains": [
+            "Selector",
+            "BTTask_Wait",
+            "BenchWait"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_bt_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol"
+          },
+          "contains": [
+            "Selector",
+            "BTTask_Wait"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "validate_behavior_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchSpecPatrol"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_behavior_tree reports invalid tree state as isError; graph node content is asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "behavior_tree_spec",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_behavior_tree_spec_roundtrip",
+      "description": "Build a BehaviorTree from a declarative spec, save it, and inspect graph/task layout",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "build_behavior_tree_from_spec",
+          "save_asset",
+          "get_behavior_tree",
+          "get_bt_graph",
+          "validate_behavior_tree"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

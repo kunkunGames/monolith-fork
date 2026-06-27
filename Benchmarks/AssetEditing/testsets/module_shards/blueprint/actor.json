@@ -1,0 +1,3110 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.actor",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+  "task_count": 552,
+  "module_count": 9,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.actor",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Actor",
+      "task_count": 43,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.actor.compilation",
+        "blueprint.actor.component",
+        "blueprint.actor.event",
+        "blueprint.actor.function",
+        "blueprint.actor.general",
+        "blueprint.actor.node",
+        "blueprint.actor.state",
+        "blueprint.actor.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.actor.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.component",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "component"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/component",
+      "task_count": 7,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "component"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/event",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/function",
+      "task_count": 7,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/general",
+      "task_count": 13,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/node",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/state",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.actor.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/variable",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json",
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.actor": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Actor",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ]
+      },
+      "task_count": 43,
+      "task_ids": [
+        "BEB-001",
+        "BEB-008",
+        "BEB-009",
+        "BEB-015",
+        "BEB-022",
+        "BEB-023",
+        "BEB-024",
+        "BEB-043",
+        "BEB-044",
+        "BEB-057",
+        "BEB-058",
+        "BEB-071",
+        "BEB-072",
+        "BEB-155",
+        "BEB-164",
+        "BEB-165",
+        "BEB-166",
+        "BEB-167",
+        "BEB-168",
+        "BEB-169",
+        "BEB-170",
+        "BEB-171",
+        "BEB-172",
+        "BEB-173",
+        "BEB-174",
+        "BEB-175",
+        "BEB-236",
+        "BEB-242",
+        "BEB-271",
+        "BEB-272",
+        "BEB-273",
+        "BEB-274",
+        "BEB-275",
+        "BEB-276",
+        "BEB-277",
+        "BEB-278",
+        "BEB-521",
+        "BEB-542",
+        "BEB-543",
+        "BEB-544",
+        "BEB-545",
+        "BEB-546",
+        "BEB-547"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-001",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'BPB_TestActor'"
+        },
+        {
+          "id": "BEB-008",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'Benchmarks'"
+        },
+        {
+          "id": "BEB-009",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'Actor Blueprint'"
+        },
+        {
+          "id": "BEB-015",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query '/Game/Benchmarks/BPB_TestActor'"
+        },
+        {
+          "id": "BEB-022",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Actor fixture"
+        },
+        {
+          "id": "BEB-023",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Actor fixture default graph data"
+        },
+        {
+          "id": "BEB-024",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Actor fixture"
+        },
+        {
+          "id": "BEB-043",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Actor fixture BPB_TestActor"
+        },
+        {
+          "id": "BEB-044",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Actor fixture BPB_TestActor"
+        },
+        {
+          "id": "BEB-057",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Actor fixture"
+        },
+        {
+          "id": "BEB-058",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Actor fixture"
+        },
+        {
+          "id": "BEB-071",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Actor fixture"
+        },
+        {
+          "id": "BEB-072",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Actor"
+        },
+        {
+          "id": "BEB-155",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "build_function",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Add a function, build its body (two wired PrintString nodes in the function graph), compile clean, read back the function"
+        },
+        {
+          "id": "BEB-164",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "actor_component_property_assembly",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "set_component_property",
+            "compile_blueprint",
+            "get_components"
+          ],
+          "description": "Add a PointLightComponent to the Actor, set Intensity, compile clean, read back the component"
+        },
+        {
+          "id": "BEB-165",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Actor",
+          "workflow": "duplicate_function_graph",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "duplicate_graph",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Create a function graph, duplicate it, compile clean, read back the duplicated graph name"
+        },
+        {
+          "id": "BEB-166",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString CallFunction node to Actor EventGraph"
+        },
+        {
+          "id": "BEB-167",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchActorInit function graph to Actor"
+        },
+        {
+          "id": "BEB-168",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchActorOnReady custom event node to Actor EventGraph"
+        },
+        {
+          "id": "BEB-169",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchActorLevel variable to Actor"
+        },
+        {
+          "id": "BEB-170",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set MaxHealth fixture variable default to 100.0 (idempotent)"
+        },
+        {
+          "id": "BEB-171",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add StaticMeshComponent BenchMeshComp to Actor"
+        },
+        {
+          "id": "BEB-172",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchActorOnDied event dispatcher to Actor"
+        },
+        {
+          "id": "BEB-173",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_replicated_variable",
+            "get_variables"
+          ],
+          "description": "Add replicated bool BenchActorNetFlag to Actor"
+        },
+        {
+          "id": "BEB-174",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Actor EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-175",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Actor blueprint"
+        },
+        {
+          "id": "BEB-236",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Actor EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-242",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire Health (float) -> PrintString.Duration on Actor EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-271",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add SpringArmComponent BenchCameraBoom to Actor"
+        },
+        {
+          "id": "BEB-272",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_component_property",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_component_property",
+            "get_component_details"
+          ],
+          "description": "Set TargetArmLength=350.0 on Actor BenchCameraBoom component"
+        },
+        {
+          "id": "BEB-273",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "duplicate_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "duplicate_component",
+            "get_components"
+          ],
+          "description": "Duplicate Actor BenchCameraBoom component to BenchCameraBoomCopy"
+        },
+        {
+          "id": "BEB-274",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "delete_variable",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_variable",
+            "remove_variable",
+            "get_variables"
+          ],
+          "description": "Add then remove a variable; get_variables must no longer list it"
+        },
+        {
+          "id": "BEB-275",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "delete_function",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "remove_function",
+            "get_functions"
+          ],
+          "description": "Add then remove a function; get_functions must no longer list it"
+        },
+        {
+          "id": "BEB-276",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "delete_component",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "remove_component",
+            "get_components"
+          ],
+          "description": "Add then remove a component; get_components must no longer list it"
+        },
+        {
+          "id": "BEB-277",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "delete_node",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "remove_node",
+            "get_graph_data"
+          ],
+          "description": "Add then remove a node; get_graph_data must no longer contain its id"
+        },
+        {
+          "id": "BEB-278",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "set_pin_default",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "set_pin_default",
+            "get_node_details"
+          ],
+          "description": "Set a PrintString InString pin literal and read it back"
+        },
+        {
+          "id": "BEB-521",
+          "category": "negative_compile",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint",
+            "create_blueprint",
+            "remove_function",
+            "add_function",
+            "set_function_params",
+            "save_asset"
+          ],
+          "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error"
+        },
+        {
+          "id": "BEB-542",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_variable",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_variable",
+            "remove_variable"
+          ],
+          "description": "add_variable must reject a duplicate member variable name"
+        },
+        {
+          "id": "BEB-543",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "add_function must reject a duplicate function name"
+        },
+        {
+          "id": "BEB-544",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_component",
+            "remove_component"
+          ],
+          "description": "add_component must reject a duplicate component name (regression: silent suffix bug)"
+        },
+        {
+          "id": "BEB-545",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node"
+          ],
+          "description": "add_event_node must reject a duplicate custom event name"
+        },
+        {
+          "id": "BEB-546",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_dispatcher",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_dispatcher",
+            "remove_event_dispatcher"
+          ],
+          "description": "add_event_dispatcher must reject a duplicate dispatcher name"
+        },
+        {
+          "id": "BEB-547",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_local_variable",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_local_variable",
+            "add_function",
+            "remove_local_variable"
+          ],
+          "description": "add_local_variable must reject a duplicate local variable name (regression: silent duplicate bug)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545",
+            "BEB-546",
+            "BEB-547"
+          ],
+          "edit_execute": [
+            "BEB-166",
+            "BEB-167",
+            "BEB-168",
+            "BEB-169",
+            "BEB-170",
+            "BEB-171",
+            "BEB-172",
+            "BEB-173",
+            "BEB-174",
+            "BEB-175",
+            "BEB-236",
+            "BEB-242",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-274",
+            "BEB-275",
+            "BEB-276",
+            "BEB-277",
+            "BEB-278"
+          ],
+          "graph_read": [
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044"
+          ],
+          "negative_compile": [
+            "BEB-521"
+          ],
+          "type_discovery": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015"
+          ],
+          "variable_read": [
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072"
+          ],
+          "workflow_execute": [
+            "BEB-155",
+            "BEB-164",
+            "BEB-165"
+          ]
+        },
+        "by_edit_domain": {
+          "compilation": [
+            "BEB-175",
+            "BEB-521"
+          ],
+          "component": [
+            "BEB-164",
+            "BEB-171",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-276",
+            "BEB-544"
+          ],
+          "event": [
+            "BEB-172",
+            "BEB-546"
+          ],
+          "function": [
+            "BEB-155",
+            "BEB-167",
+            "BEB-168",
+            "BEB-275",
+            "BEB-543",
+            "BEB-545",
+            "BEB-547"
+          ],
+          "general": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015",
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044",
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072"
+          ],
+          "node": [
+            "BEB-166",
+            "BEB-236",
+            "BEB-242",
+            "BEB-277",
+            "BEB-278"
+          ],
+          "state": [
+            "BEB-165",
+            "BEB-174"
+          ],
+          "variable": [
+            "BEB-169",
+            "BEB-170",
+            "BEB-173",
+            "BEB-274",
+            "BEB-542"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-521"
+          ],
+          "edit": [
+            "BEB-155",
+            "BEB-164",
+            "BEB-165",
+            "BEB-166",
+            "BEB-167",
+            "BEB-168",
+            "BEB-169",
+            "BEB-170",
+            "BEB-171",
+            "BEB-172",
+            "BEB-173",
+            "BEB-236",
+            "BEB-242",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-274",
+            "BEB-275",
+            "BEB-276",
+            "BEB-277",
+            "BEB-278",
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545",
+            "BEB-546",
+            "BEB-547"
+          ],
+          "read_only": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015",
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044",
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072",
+            "BEB-174",
+            "BEB-175"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-521"
+          ],
+          "edit": [
+            "BEB-155",
+            "BEB-164",
+            "BEB-165",
+            "BEB-166",
+            "BEB-167",
+            "BEB-168",
+            "BEB-169",
+            "BEB-170",
+            "BEB-171",
+            "BEB-172",
+            "BEB-173",
+            "BEB-236",
+            "BEB-242",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-274",
+            "BEB-275",
+            "BEB-276",
+            "BEB-277",
+            "BEB-278",
+            "BEB-521",
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545",
+            "BEB-546",
+            "BEB-547"
+          ],
+          "readback_verify": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015",
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044",
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072",
+            "BEB-155",
+            "BEB-164",
+            "BEB-165",
+            "BEB-166",
+            "BEB-167",
+            "BEB-168",
+            "BEB-169",
+            "BEB-170",
+            "BEB-171",
+            "BEB-172",
+            "BEB-173",
+            "BEB-174",
+            "BEB-175",
+            "BEB-236",
+            "BEB-242",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-274",
+            "BEB-275",
+            "BEB-276",
+            "BEB-277",
+            "BEB-278",
+            "BEB-521",
+            "BEB-542",
+            "BEB-543",
+            "BEB-544",
+            "BEB-545",
+            "BEB-546",
+            "BEB-547"
+          ],
+          "save": [
+            "BEB-521"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.actor.compilation",
+        "blueprint.actor.component",
+        "blueprint.actor.event",
+        "blueprint.actor.function",
+        "blueprint.actor.general",
+        "blueprint.actor.node",
+        "blueprint.actor.state",
+        "blueprint.actor.variable"
+      ],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-175",
+        "BEB-521"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-175",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Actor blueprint"
+        },
+        {
+          "id": "BEB-521",
+          "category": "negative_compile",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint",
+            "create_blueprint",
+            "remove_function",
+            "add_function",
+            "set_function_params",
+            "save_asset"
+          ],
+          "description": "Deliberately break a scratch blueprint function signature with an invalid struct type and require a reported compile error"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-175"
+          ],
+          "negative_compile": [
+            "BEB-521"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-521"
+          ],
+          "read_only": [
+            "BEB-175"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-521"
+          ],
+          "edit": [
+            "BEB-521"
+          ],
+          "readback_verify": [
+            "BEB-175",
+            "BEB-521"
+          ],
+          "save": [
+            "BEB-521"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.component": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.component",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "component"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/component",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "component"
+        ]
+      },
+      "task_count": 7,
+      "task_ids": [
+        "BEB-164",
+        "BEB-171",
+        "BEB-271",
+        "BEB-272",
+        "BEB-273",
+        "BEB-276",
+        "BEB-544"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-164",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "actor_component_property_assembly",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "set_component_property",
+            "compile_blueprint",
+            "get_components"
+          ],
+          "description": "Add a PointLightComponent to the Actor, set Intensity, compile clean, read back the component"
+        },
+        {
+          "id": "BEB-171",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add StaticMeshComponent BenchMeshComp to Actor"
+        },
+        {
+          "id": "BEB-271",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add SpringArmComponent BenchCameraBoom to Actor"
+        },
+        {
+          "id": "BEB-272",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_component_property",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_component_property",
+            "get_component_details"
+          ],
+          "description": "Set TargetArmLength=350.0 on Actor BenchCameraBoom component"
+        },
+        {
+          "id": "BEB-273",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "duplicate_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "duplicate_component",
+            "get_components"
+          ],
+          "description": "Duplicate Actor BenchCameraBoom component to BenchCameraBoomCopy"
+        },
+        {
+          "id": "BEB-276",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "delete_component",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "remove_component",
+            "get_components"
+          ],
+          "description": "Add then remove a component; get_components must no longer list it"
+        },
+        {
+          "id": "BEB-544",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_component",
+            "remove_component"
+          ],
+          "description": "add_component must reject a duplicate component name (regression: silent suffix bug)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-544"
+          ],
+          "edit_execute": [
+            "BEB-171",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-276"
+          ],
+          "workflow_execute": [
+            "BEB-164"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-164",
+            "BEB-171",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-276",
+            "BEB-544"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-164",
+            "BEB-171",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-276",
+            "BEB-544"
+          ],
+          "readback_verify": [
+            "BEB-164",
+            "BEB-171",
+            "BEB-271",
+            "BEB-272",
+            "BEB-273",
+            "BEB-276",
+            "BEB-544"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-172",
+        "BEB-546"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-172",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchActorOnDied event dispatcher to Actor"
+        },
+        {
+          "id": "BEB-546",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_dispatcher",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_dispatcher",
+            "remove_event_dispatcher"
+          ],
+          "description": "add_event_dispatcher must reject a duplicate dispatcher name"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-546"
+          ],
+          "edit_execute": [
+            "BEB-172"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-172",
+            "BEB-546"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-172",
+            "BEB-546"
+          ],
+          "readback_verify": [
+            "BEB-172",
+            "BEB-546"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 7,
+      "task_ids": [
+        "BEB-155",
+        "BEB-167",
+        "BEB-168",
+        "BEB-275",
+        "BEB-543",
+        "BEB-545",
+        "BEB-547"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-155",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "build_function",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Add a function, build its body (two wired PrintString nodes in the function graph), compile clean, read back the function"
+        },
+        {
+          "id": "BEB-167",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchActorInit function graph to Actor"
+        },
+        {
+          "id": "BEB-168",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchActorOnReady custom event node to Actor EventGraph"
+        },
+        {
+          "id": "BEB-275",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "delete_function",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "remove_function",
+            "get_functions"
+          ],
+          "description": "Add then remove a function; get_functions must no longer list it"
+        },
+        {
+          "id": "BEB-543",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "add_function must reject a duplicate function name"
+        },
+        {
+          "id": "BEB-545",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node"
+          ],
+          "description": "add_event_node must reject a duplicate custom event name"
+        },
+        {
+          "id": "BEB-547",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_local_variable",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_local_variable",
+            "add_function",
+            "remove_local_variable"
+          ],
+          "description": "add_local_variable must reject a duplicate local variable name (regression: silent duplicate bug)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-543",
+            "BEB-545",
+            "BEB-547"
+          ],
+          "edit_execute": [
+            "BEB-167",
+            "BEB-168",
+            "BEB-275"
+          ],
+          "workflow_execute": [
+            "BEB-155"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-155",
+            "BEB-167",
+            "BEB-168",
+            "BEB-275",
+            "BEB-543",
+            "BEB-545",
+            "BEB-547"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-155",
+            "BEB-167",
+            "BEB-168",
+            "BEB-275",
+            "BEB-543",
+            "BEB-545",
+            "BEB-547"
+          ],
+          "readback_verify": [
+            "BEB-155",
+            "BEB-167",
+            "BEB-168",
+            "BEB-275",
+            "BEB-543",
+            "BEB-545",
+            "BEB-547"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 13,
+      "task_ids": [
+        "BEB-001",
+        "BEB-008",
+        "BEB-009",
+        "BEB-015",
+        "BEB-022",
+        "BEB-023",
+        "BEB-024",
+        "BEB-043",
+        "BEB-044",
+        "BEB-057",
+        "BEB-058",
+        "BEB-071",
+        "BEB-072"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-001",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'BPB_TestActor'"
+        },
+        {
+          "id": "BEB-008",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'Benchmarks'"
+        },
+        {
+          "id": "BEB-009",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query 'Actor Blueprint'"
+        },
+        {
+          "id": "BEB-015",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Actor fixture with project.search query '/Game/Benchmarks/BPB_TestActor'"
+        },
+        {
+          "id": "BEB-022",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Actor fixture"
+        },
+        {
+          "id": "BEB-023",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Actor fixture default graph data"
+        },
+        {
+          "id": "BEB-024",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Actor fixture"
+        },
+        {
+          "id": "BEB-043",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Actor fixture BPB_TestActor"
+        },
+        {
+          "id": "BEB-044",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Actor fixture BPB_TestActor"
+        },
+        {
+          "id": "BEB-057",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Actor fixture"
+        },
+        {
+          "id": "BEB-058",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Actor fixture"
+        },
+        {
+          "id": "BEB-071",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Actor fixture"
+        },
+        {
+          "id": "BEB-072",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Actor"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044"
+          ],
+          "type_discovery": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015"
+          ],
+          "variable_read": [
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015",
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044",
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-001",
+            "BEB-008",
+            "BEB-009",
+            "BEB-015",
+            "BEB-022",
+            "BEB-023",
+            "BEB-024",
+            "BEB-043",
+            "BEB-044",
+            "BEB-057",
+            "BEB-058",
+            "BEB-071",
+            "BEB-072"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-166",
+        "BEB-236",
+        "BEB-242",
+        "BEB-277",
+        "BEB-278"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-166",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString CallFunction node to Actor EventGraph"
+        },
+        {
+          "id": "BEB-236",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Actor EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-242",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire Health (float) -> PrintString.Duration on Actor EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-277",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "delete_node",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "remove_node",
+            "get_graph_data"
+          ],
+          "description": "Add then remove a node; get_graph_data must no longer contain its id"
+        },
+        {
+          "id": "BEB-278",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Actor",
+          "workflow": "set_pin_default",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "set_pin_default",
+            "get_node_details"
+          ],
+          "description": "Set a PrintString InString pin literal and read it back"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-166",
+            "BEB-236",
+            "BEB-242",
+            "BEB-277",
+            "BEB-278"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-166",
+            "BEB-236",
+            "BEB-242",
+            "BEB-277",
+            "BEB-278"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-166",
+            "BEB-236",
+            "BEB-242",
+            "BEB-277",
+            "BEB-278"
+          ],
+          "readback_verify": [
+            "BEB-166",
+            "BEB-236",
+            "BEB-242",
+            "BEB-277",
+            "BEB-278"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-165",
+        "BEB-174"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-165",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Actor",
+          "workflow": "duplicate_function_graph",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "duplicate_graph",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Create a function graph, duplicate it, compile clean, read back the duplicated graph name"
+        },
+        {
+          "id": "BEB-174",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Actor EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-174"
+          ],
+          "workflow_execute": [
+            "BEB-165"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-165"
+          ],
+          "read_only": [
+            "BEB-174"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-165"
+          ],
+          "readback_verify": [
+            "BEB-165",
+            "BEB-174"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    },
+    "blueprint.actor.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.actor.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Actor",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Actor/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Actor"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-169",
+        "BEB-170",
+        "BEB-173",
+        "BEB-274",
+        "BEB-542"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-169",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchActorLevel variable to Actor"
+        },
+        {
+          "id": "BEB-170",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set MaxHealth fixture variable default to 100.0 (idempotent)"
+        },
+        {
+          "id": "BEB-173",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_replicated_variable",
+            "get_variables"
+          ],
+          "description": "Add replicated bool BenchActorNetFlag to Actor"
+        },
+        {
+          "id": "BEB-274",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "delete_variable",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_variable",
+            "remove_variable",
+            "get_variables"
+          ],
+          "description": "Add then remove a variable; get_variables must no longer list it"
+        },
+        {
+          "id": "BEB-542",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_variable",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Actor",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_variable",
+            "remove_variable"
+          ],
+          "description": "add_variable must reject a duplicate member variable name"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-542"
+          ],
+          "edit_execute": [
+            "BEB-169",
+            "BEB-170",
+            "BEB-173",
+            "BEB-274"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-169",
+            "BEB-170",
+            "BEB-173",
+            "BEB-274",
+            "BEB-542"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-169",
+            "BEB-170",
+            "BEB-173",
+            "BEB-274",
+            "BEB-542"
+          ],
+          "readback_verify": [
+            "BEB-169",
+            "BEB-170",
+            "BEB-173",
+            "BEB-274",
+            "BEB-542"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.actor",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.actor",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/actor.json"
+    }
+  }
+}

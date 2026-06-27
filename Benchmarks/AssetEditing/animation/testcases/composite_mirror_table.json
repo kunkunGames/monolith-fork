@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "composite_mirror_table",
+  "route_edit_domain": "composite_mirror_table",
+  "module_id": "asset_authoring.animation.composite_mirror_table",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.composite_mirror_table",
+    "edit": "asset_operation.edit.animation.composite_mirror_table",
+    "save": "asset_operation.save.animation.composite_mirror_table",
+    "readback_verify": "asset_operation.readback_verify.animation.composite_mirror_table"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-386"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-386",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "composite_mirror_table",
+      "blueprint_type": "",
+      "workflow": "animation_composite_mirror_table_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "create_composite",
+        "add_composite_segment",
+        "create_mirror_data_table",
+        "save_asset",
+        "get_composite_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-386",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeSource",
+              "/Game/Benchmarks/AssetAuthoring/AC_BenchComposite",
+              "/Game/Benchmarks/AssetAuthoring/MDT_BenchMirror"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeSource",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchCompositeSource",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_composite",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AC_BenchComposite",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "AC_BenchComposite",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_composite_segment",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AC_BenchComposite",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeSource",
+            "start_pos": 0.0,
+            "play_rate": 1.1,
+            "looping_count": 2
+          },
+          "contains": [
+            "segment_index",
+            "0",
+            "A_BenchCompositeSource",
+            "play_rate",
+            "1.1",
+            "looping_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_mirror_data_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MDT_BenchMirror",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "find_replace": [
+              {
+                "find": "Bone",
+                "replace": "Bone",
+                "method": "RegularExpression"
+              }
+            ]
+          },
+          "contains": [
+            "MDT_BenchMirror",
+            "SkeletalCube_Skeleton",
+            "expression_count",
+            "row_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeSource"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AC_BenchComposite"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MDT_BenchMirror"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_composite_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AC_BenchComposite"
+          },
+          "contains": [
+            "AC_BenchComposite",
+            "segment_count",
+            "1",
+            "A_BenchCompositeSource",
+            "looping_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MDT_BenchMirror"
+          },
+          "contains": [
+            "MDT_BenchMirror",
+            "MirrorDataTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "composite_mirror_table",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_composite_mirror_table_roundtrip",
+      "description": "Create an AnimComposite with a sequence segment and a MirrorDataTable from the same skeleton, save both, and inspect metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "create_composite",
+          "add_composite_segment",
+          "create_mirror_data_table",
+          "save_asset",
+          "get_composite_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

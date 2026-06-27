@@ -1,0 +1,359 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_animation_advanced_events",
+  "route_edit_domain": "widget_animation_advanced_events",
+  "module_id": "asset_authoring.ui.widget_animation_advanced_events",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_animation_advanced_events",
+    "edit": "asset_operation.edit.ui.widget_animation_advanced_events",
+    "save": "asset_operation.save.ui.widget_animation_advanced_events",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_animation_advanced_events"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-343"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-343",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_animation_advanced_events",
+      "blueprint_type": "",
+      "workflow": "ui_animation_advanced_events_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "add_bezier_eased_segment",
+        "bake_spring_animation",
+        "create_animation_v2",
+        "add_animation_event_track",
+        "bind_animation_to_event",
+        "compile_widget",
+        "save_asset",
+        "list_animations",
+        "get_animation_details",
+        "inspect_asset"
+      ],
+      "description": "Create a Widget Blueprint, author Bezier and spring animation tracks, add timed animation events, bind a widget event to an animation, save, and read animation tracks back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-343",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchAdvancedAnim"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "widget_class": "Button",
+            "widget_name": "BenchAnimatedButton",
+            "anchor_preset": "center",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "x": 220,
+              "y": 64
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchAnimatedButton",
+            "Button"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_bezier_eased_segment",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "BezierEase",
+            "widget_name": "BenchAnimatedButton",
+            "property": "RenderOpacity",
+            "from_value": 0.0,
+            "to_value": 1.0,
+            "start_time": 0.0,
+            "end_time": 0.6,
+            "bezier": [
+              0.42,
+              0.0,
+              0.58,
+              1.0
+            ]
+          },
+          "contains": [
+            "BezierEase",
+            "keys_inserted",
+            "2"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "bake_spring_animation",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "SpringBounce",
+            "widget_name": "BenchAnimatedButton",
+            "property": "RenderOpacity",
+            "from_value": 0.0,
+            "to_value": 1.0,
+            "stiffness": 110.0,
+            "damping": 12.0,
+            "mass": 1.0,
+            "fps": 30.0,
+            "duration": 1.2,
+            "compile_once": false
+          },
+          "contains": [
+            "SpringBounce",
+            "keys_inserted"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_animation_v2",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "IntroWithEvents",
+            "duration_sec": 0.5,
+            "tracks": [
+              {
+                "widget_name": "BenchAnimatedButton",
+                "property": "RenderOpacity",
+                "keys": [
+                  {
+                    "time": 0.0,
+                    "value": 0.25,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 0.5,
+                    "value": 1.0,
+                    "interp": "linear"
+                  }
+                ]
+              }
+            ],
+            "compile_once": false
+          },
+          "contains": [
+            "IntroWithEvents"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_animation_event_track",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "IntroWithEvents",
+            "events": [
+              {
+                "time": 0.0,
+                "event_name": "OnIntroStart"
+              },
+              {
+                "time": 0.3,
+                "event_name": "OnIntroMid"
+              }
+            ]
+          },
+          "contains": [
+            "IntroWithEvents",
+            "events_inserted",
+            "2"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "bind_animation_to_event",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "BezierEase",
+            "widget_event": "OnHovered",
+            "animation_event": "Started"
+          },
+          "contains": [
+            "binding_created",
+            "true",
+            "OnHovered_PlayBezierEase"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_animations",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim"
+          },
+          "contains": [
+            "BezierEase",
+            "SpringBounce",
+            "IntroWithEvents"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "BezierEase"
+          },
+          "contains": [
+            "BezierEase",
+            "BenchAnimatedButton",
+            "MovieSceneFloatTrack",
+            "keyframe_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim",
+            "animation_name": "IntroWithEvents"
+          },
+          "contains": [
+            "IntroWithEvents",
+            "MovieSceneEventTrack",
+            "keyframe_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAdvancedAnim"
+          },
+          "contains": [
+            "WBP_BenchAdvancedAnim",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_animation_advanced_events",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_animation_advanced_events_roundtrip",
+      "description": "Create a Widget Blueprint, author Bezier and spring animation tracks, add timed animation events, bind a widget event to an animation, save, and read animation tracks back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "add_bezier_eased_segment",
+          "bake_spring_animation",
+          "create_animation_v2",
+          "add_animation_event_track",
+          "bind_animation_to_event",
+          "compile_widget",
+          "save_asset",
+          "list_animations",
+          "get_animation_details",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

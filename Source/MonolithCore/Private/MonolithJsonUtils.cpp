@@ -94,7 +94,7 @@ TSharedRef<FJsonValueArray> FMonolithJsonUtils::StringArrayToJson(const TArray<F
 //  FJsonObject key access — single cohesion endpoint (UE 5.8 migration).
 //  UE 5.8 stores FJsonObject keys as UE::FSharedString (= TSharedString<TCHAR>);
 //  operator* yields a const TCHAR*, from which FString constructs directly. This
-//  is the ONLY place in Monolith/Go that knows that engine detail.
+//  is the only Monolith JSON adapter that knows that engine detail.
 // =============================================================================
 
 FString FMonolithJsonUtils::FieldKeyToString(const FJsonObject::FStringType& Key)

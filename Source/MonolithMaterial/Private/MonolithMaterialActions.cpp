@@ -9,6 +9,7 @@
 #include "Materials/MaterialExpression.h"
 #include "Materials/MaterialExpressionParameter.h"
 #include "Materials/MaterialExpressionTextureBase.h"
+#include "Materials/MaterialExpressionUtils.h"
 #include "Materials/MaterialExpressionTextureSample.h"
 #include "Materials/MaterialExpressionTextureSampleParameter.h"
 #include "Materials/MaterialExpressionCustom.h"
@@ -851,6 +852,39 @@ TSharedPtr<FJsonObject> FMonolithMaterialActions::SerializeExpression(const UMat
 	return ExprJson;
 }
 
+static void AddExpressionReadbackFields(
+	const UMaterialExpression* Expression,
+	const TSharedPtr<FJsonObject>& Json,
+	const FString& FieldPrefix)
+{
+	if (!Expression || !Json.IsValid())
+	{
+		return;
+	}
+
+	Json->SetStringField(FieldPrefix + TEXT("class"), Expression->GetClass()->GetName());
+
+	if (const auto* TexSampleParam = Cast<UMaterialExpressionTextureSampleParameter>(Expression))
+	{
+		Json->SetStringField(FieldPrefix + TEXT("parameter_name"), TexSampleParam->ParameterName.ToString());
+		if (TexSampleParam->Texture)
+		{
+			Json->SetStringField(FieldPrefix + TEXT("texture"), TexSampleParam->Texture->GetPathName());
+		}
+	}
+	else if (const auto* Param = Cast<UMaterialExpressionParameter>(Expression))
+	{
+		Json->SetStringField(FieldPrefix + TEXT("parameter_name"), Param->ParameterName.ToString());
+	}
+	else if (const auto* TexBase = Cast<UMaterialExpressionTextureBase>(Expression))
+	{
+		if (TexBase->Texture)
+		{
+			Json->SetStringField(FieldPrefix + TEXT("texture"), TexBase->Texture->GetPathName());
+		}
+	}
+}
+
 /** Map string property name to EMaterialProperty. */
 static EMaterialProperty ParseMaterialProperty(const FString& PropName)
 {
@@ -1190,6 +1224,8 @@ FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSh
 			ConnJson->SetStringField(TEXT("from_output"), FromOutputName);
 			ConnJson->SetStringField(TEXT("to"), Expr->GetName());
 			ConnJson->SetStringField(TEXT("to_input"), Expr->GetInputName(i).ToString());
+			AddExpressionReadbackFields(Input->Expression, ConnJson, TEXT("from_"));
+			AddExpressionReadbackFields(Expr, ConnJson, TEXT("to_"));
 
 			ConnectionsArray.Add(MakeShared<FJsonValueObject>(ConnJson));
 		}
@@ -1207,6 +1243,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFullConnectionGraph(const TSh
 			OutJson->SetStringField(TEXT("property"), Entry.Name);
 			OutJson->SetStringField(TEXT("expression"), Input->Expression->GetName());
 			OutJson->SetNumberField(TEXT("output_index"), Input->OutputIndex);
+			AddExpressionReadbackFields(Input->Expression, OutJson, TEXT("expression_"));
 			MaterialOutputsArray.Add(MakeShared<FJsonValueObject>(OutJson));
 		}
 	}
@@ -2775,6 +2812,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Parse optional properties
 	FString BlendModeStr = TEXT("Opaque");
 	Params->TryGetStringField(TEXT("blend_mode"), BlendModeStr);
@@ -2810,11 +2852,6 @@ FMonolithActionResult FMonolithMaterialActions::CreateMaterial(const TSharedPtr<
 	}
 
 	// Create package and material
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
-
 	UPackage* Pkg = CreatePackage(*AssetPath);
 	if (!Pkg)
 	{
@@ -9819,6 +9856,7 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInstanceInfo(const TS
 
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetStringField(TEXT("asset_path"), AssetPath);
+	ResultJson->SetStringField(TEXT("asset_class"), LoadedAsset->GetClass()->GetName());
 
 	// --- Parent chain ---
 	if (MFI->Parent)
@@ -10359,7 +10397,7 @@ static void PopulateTextureMetadata(UTexture* Tex, const TSharedPtr<FJsonObject>
 #endif
 
 	// Recommended sampler type for material usage
-	EMaterialSamplerType SamplerType = UMaterialExpressionTextureBase::GetSamplerTypeForTexture(Tex);
+	EMaterialSamplerType SamplerType = MaterialExpressionUtils::GetSamplerTypeForTexture(Tex);
 	UEnum* SamplerEnum = StaticEnum<EMaterialSamplerType>();
 	if (SamplerEnum)
 	{

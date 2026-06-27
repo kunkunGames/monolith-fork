@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "eqs_query_mutation",
+  "route_edit_domain": "eqs_query_mutation",
+  "module_id": "asset_authoring.ai.eqs_query_mutation",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.eqs_query_mutation",
+    "edit": "asset_operation.edit.ai.eqs_query_mutation",
+    "save": "asset_operation.save.ai.eqs_query_mutation",
+    "readback_verify": "asset_operation.readback_verify.ai.eqs_query_mutation"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-326"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-326",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "eqs_query_mutation",
+      "blueprint_type": "",
+      "workflow": "ai_eqs_query_mutation_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_eqs_query",
+        "add_eqs_generator",
+        "add_eqs_test",
+        "reorder_eqs_tests",
+        "remove_eqs_test",
+        "duplicate_eqs_query",
+        "save_asset",
+        "get_eqs_query",
+        "inspect_asset"
+      ],
+      "description": "Create an EQS query, add two tests, reorder and remove tests, duplicate the query, save both assets, and inspect the edited structure"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-326",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+              "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutationClone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_eqs_query",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation"
+          },
+          "contains": [
+            "EQS_BenchMutation"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_eqs_generator",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "generator_class": "EnvQueryGenerator_SimpleGrid",
+            "properties": {
+              "GridSize": 250.0,
+              "SpaceBetween": 125.0
+            }
+          },
+          "contains": [
+            "EnvQueryGenerator_SimpleGrid",
+            "option_index"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_eqs_test",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "option_index": 0,
+            "test_class": "EnvQueryTest_Distance"
+          },
+          "contains": [
+            "EnvQueryTest_Distance",
+            "test_index"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_eqs_test",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "option_index": 0,
+            "test_class": "EnvQueryTest_Distance"
+          },
+          "contains": [
+            "EnvQueryTest_Distance",
+            "test_index"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "reorder_eqs_tests",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "option_index": 0,
+            "new_order": [
+              1,
+              0
+            ]
+          },
+          "contains": [
+            "Reordered",
+            "2"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "remove_eqs_test",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "option_index": 0,
+            "test_index": 1
+          },
+          "contains": [
+            "removed_test_index",
+            "1",
+            "remaining_tests",
+            "1"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "duplicate_eqs_query",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutationClone"
+          },
+          "contains": [
+            "EQS query duplicated",
+            "option_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutationClone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_eqs_query",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutation"
+          },
+          "contains": [
+            "EnvQueryGenerator_SimpleGrid",
+            "EnvQueryTest_Distance"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_eqs_query",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutationClone"
+          },
+          "contains": [
+            "EnvQueryGenerator_SimpleGrid",
+            "EnvQueryTest_Distance"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/EQS_BenchMutationClone"
+          },
+          "contains": [
+            "EQS_BenchMutationClone"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "eqs_query_mutation",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_eqs_query_mutation_roundtrip",
+      "description": "Create an EQS query, add two tests, reorder and remove tests, duplicate the query, save both assets, and inspect the edited structure",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_eqs_query",
+          "add_eqs_generator",
+          "add_eqs_test",
+          "reorder_eqs_tests",
+          "remove_eqs_test",
+          "duplicate_eqs_query",
+          "save_asset",
+          "get_eqs_query",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

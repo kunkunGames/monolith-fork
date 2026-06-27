@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "static_mesh_export",
+  "route_edit_domain": "static_mesh_export",
+  "module_id": "asset_authoring.mesh.static_mesh_export",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_export",
+    "edit": "asset_operation.edit.mesh.static_mesh_export",
+    "save": "asset_operation.save.mesh.static_mesh_export",
+    "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_export"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-301"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-301",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_export",
+      "blueprint_type": "",
+      "workflow": "mesh_static_mesh_fbx_export_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_mesh",
+        "save_asset",
+        "export_mesh",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Import a deterministic StaticMesh OBJ, save it, export it to FBX, and inspect the mesh asset metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-301",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchMeshExport"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "import_mesh",
+            "files": [
+              "__ASSET_AUTHORING_STATIC_MESH_EXPORT_OBJ__"
+            ],
+            "destination": "/Game/Benchmarks/AssetAuthoring",
+            "replace_existing": true,
+            "combine_meshes": true,
+            "auto_generate_collision": true,
+            "material_import": "skip"
+          },
+          "contains": [
+            "SM_BenchMeshExport",
+            "StaticMesh",
+            "triangle_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMeshExport"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "export_mesh",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMeshExport",
+            "file_path": "__ASSET_AUTHORING_STATIC_MESH_EXPORT_FBX__",
+            "replace_existing": true
+          },
+          "contains": [
+            "SM_BenchMeshExport",
+            "StaticMesh",
+            "file_size_bytes"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMeshExport"
+          },
+          "contains": [
+            "SM_BenchMeshExport",
+            "StaticMesh",
+            "triangles",
+            "12"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMeshExport"
+          },
+          "contains": [
+            "SM_BenchMeshExport",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "static_mesh_export",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_static_mesh_fbx_export_roundtrip",
+      "description": "Import a deterministic StaticMesh OBJ, save it, export it to FBX, and inspect the mesh asset metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_mesh",
+          "save_asset",
+          "export_mesh",
+          "get_mesh_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

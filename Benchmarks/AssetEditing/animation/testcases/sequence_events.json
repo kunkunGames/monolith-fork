@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "animation_sequence_events",
+  "route_edit_domain": "sequence_events",
+  "module_id": "asset_authoring.animation.sequence_events",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.sequence_events",
+    "edit": "asset_operation.edit.animation.sequence_events",
+    "save": "asset_operation.save.animation.sequence_events",
+    "readback_verify": "asset_operation.readback_verify.animation.sequence_events"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-313"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-313",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "animation_sequence_events",
+      "blueprint_type": "",
+      "workflow": "animation_sequence_curve_sync_metadata_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "add_curve",
+        "set_curve_keys",
+        "add_sync_marker",
+        "save_asset",
+        "get_curve_keys",
+        "get_sync_markers",
+        "get_sequence_info"
+      ],
+      "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-313",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchEventMeta",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_curve",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta.A_BenchEventMeta",
+            "curve_name": "BenchSpeedCurve",
+            "curve_type": "Float"
+          },
+          "contains": [
+            "BenchSpeedCurve"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_curve_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta.A_BenchEventMeta",
+            "curve_name": "BenchSpeedCurve",
+            "keys_json": "[{\"time\":0.0,\"value\":0.25,\"interp\":\"linear\"},{\"time\":0.1,\"value\":1.0,\"interp\":\"linear\"}]"
+          },
+          "contains": [
+            "BenchSpeedCurve",
+            "num_keys",
+            "2"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_sync_marker",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta.A_BenchEventMeta",
+            "marker_name": "BenchPlant",
+            "time": 0.0,
+            "track_index": 0
+          },
+          "contains": [
+            "BenchPlant"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_curve_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta.A_BenchEventMeta",
+            "curve_name": "BenchSpeedCurve"
+          },
+          "contains": [
+            "BenchSpeedCurve",
+            "0.25",
+            "1"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sync_markers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta.A_BenchEventMeta"
+          },
+          "contains": [
+            "BenchPlant"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchEventMeta"
+          },
+          "contains": [
+            "A_BenchEventMeta",
+            "SkeletalCube_Skeleton"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "animation_sequence_events",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_sequence_curve_sync_metadata_roundtrip",
+      "description": "Create an AnimSequence, add curve and sync-marker metadata, save it, and read event metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "add_curve",
+          "set_curve_keys",
+          "add_sync_marker",
+          "save_asset",
+          "get_curve_keys",
+          "get_sync_markers",
+          "get_sequence_info"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

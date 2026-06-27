@@ -24,7 +24,7 @@ bool FMonolithMaterialSecurityPathTest::RunTest(const FString& Parameters)
 		Payload->SetStringField(TEXT("asset_path"), Path);
 
 		// Call the action
-		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create"), Payload);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("material"), TEXT("create_material"), Payload);
 
 		// Verify it failed gracefully and returned the validation error
 		TestFalse(*FString::Printf(TEXT("Action should fail on malformed path: %s"), *Path), Result.bSuccess);

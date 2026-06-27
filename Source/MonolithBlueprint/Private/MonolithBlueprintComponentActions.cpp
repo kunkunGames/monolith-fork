@@ -3,12 +3,17 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "Dom/JsonValue.h"
+#include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Engine/SkinnedAsset.h"
+#include "GameFramework/Actor.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "UObject/UObjectIterator.h"
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -104,6 +109,578 @@ static USCS_Node* FindParentNode(USimpleConstructionScript* SCS, USCS_Node* Chil
 	return nullptr;
 }
 
+namespace
+{
+	constexpr int32 MaxAddComponentClassCandidates = 25;
+
+	struct FAddComponentClassCandidate
+	{
+		UClass* Class = nullptr;
+		FString ClassName;
+		FString DisplayName;
+		FString Path;
+		FString MatchKind;
+		int32 Score = 0;
+		bool bIsSceneComponent = false;
+		bool bIsAbstract = false;
+	};
+
+	struct FAddComponentClassResolution
+	{
+		UClass* Class = nullptr;
+		FString FailureCause;
+		FString ResolvedFrom;
+		FString MatchedNonComponentClass;
+		TArray<FAddComponentClassCandidate> Candidates;
+		bool bCandidatesTruncated = false;
+	};
+
+	static TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Out;
+	}
+
+	static TArray<FString> AddComponentAcceptedParameters()
+	{
+		return {
+			TEXT("asset_path"),
+			TEXT("component_class"),
+			TEXT("component_name"),
+			TEXT("parent"),
+			TEXT("attach_socket")
+		};
+	}
+
+	static TSharedPtr<FJsonObject> AddComponentAcceptedAliases()
+	{
+		return MakeShared<FJsonObject>();
+	}
+
+	static FString JsonTypeName(EJson Type)
+	{
+		switch (Type)
+		{
+		case EJson::None: return TEXT("none");
+		case EJson::Null: return TEXT("null");
+		case EJson::String: return TEXT("string");
+		case EJson::Number: return TEXT("number");
+		case EJson::Boolean: return TEXT("boolean");
+		case EJson::Array: return TEXT("array");
+		case EJson::Object: return TEXT("object");
+		default: return TEXT("unknown");
+		}
+	}
+
+	static FString JsonValueToDisplayString(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid())
+		{
+			return FString();
+		}
+		switch (Value->Type)
+		{
+		case EJson::String:
+			return Value->AsString();
+		case EJson::Number:
+			return FString::SanitizeFloat(Value->AsNumber());
+		case EJson::Boolean:
+			return Value->AsBool() ? TEXT("true") : TEXT("false");
+		case EJson::Null:
+			return TEXT("null");
+		case EJson::Array:
+			return TEXT("<array>");
+		case EJson::Object:
+			return TEXT("<object>");
+		default:
+			return FString();
+		}
+	}
+
+	static FString StripLeadingUClassPrefix(FString Value)
+	{
+		Value.TrimStartAndEndInline();
+		if (Value.Len() > 1 && Value[0] == TEXT('U') && FChar::IsUpper(Value[1]))
+		{
+			Value.RightChopInline(1, EAllowShrinking::No);
+		}
+		return Value;
+	}
+
+	static FString NormalizeComponentClassToken(FString Value)
+	{
+		Value = StripLeadingUClassPrefix(Value);
+
+		FString Compact;
+		Compact.Reserve(Value.Len());
+		for (const TCHAR Ch : Value)
+		{
+			if (FChar::IsAlnum(Ch))
+			{
+				Compact.AppendChar(FChar::ToLower(Ch));
+			}
+		}
+
+		const FString ComponentSuffix = TEXT("component");
+		if (Compact.EndsWith(ComponentSuffix) && Compact.Len() > ComponentSuffix.Len())
+		{
+			Compact.LeftChopInline(ComponentSuffix.Len(), EAllowShrinking::No);
+		}
+		return Compact;
+	}
+
+	static TArray<FString> ComponentClassSearchTokens(const UClass* Class)
+	{
+		TArray<FString> Tokens;
+		if (!Class)
+		{
+			return Tokens;
+		}
+
+		const auto AddToken = [&Tokens](const FString& Token)
+		{
+			if (!Token.IsEmpty())
+			{
+				Tokens.AddUnique(Token);
+			}
+		};
+
+		const FString ClassName = Class->GetName();
+		AddToken(ClassName);
+		AddToken(StripLeadingUClassPrefix(ClassName));
+		AddToken(Class->GetDisplayNameText().ToString());
+		return Tokens;
+	}
+
+	static bool ComponentClassHasExactToken(const UClass* Class, const FString& NormalizedQuery)
+	{
+		if (NormalizedQuery.IsEmpty())
+		{
+			return false;
+		}
+		for (const FString& Token : ComponentClassSearchTokens(Class))
+		{
+			if (NormalizeComponentClassToken(Token) == NormalizedQuery)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static int32 ComponentClassCandidateScore(const UClass* Class, const FString& NormalizedQuery)
+	{
+		if (!Class || NormalizedQuery.IsEmpty())
+		{
+			return 0;
+		}
+
+		int32 BestScore = 0;
+		for (const FString& Token : ComponentClassSearchTokens(Class))
+		{
+			const FString NormalizedToken = NormalizeComponentClassToken(Token);
+			if (NormalizedToken.IsEmpty())
+			{
+				continue;
+			}
+			if (NormalizedToken == NormalizedQuery)
+			{
+				BestScore = FMath::Max(BestScore, 100);
+			}
+			else if (NormalizedToken.StartsWith(NormalizedQuery))
+			{
+				BestScore = FMath::Max(BestScore, 75);
+			}
+			else if (NormalizedQuery.Len() >= 3 && NormalizedToken.Contains(NormalizedQuery))
+			{
+				BestScore = FMath::Max(BestScore, 50);
+			}
+		}
+		return BestScore;
+	}
+
+	static void AddComponentClassCandidate(
+		TArray<FAddComponentClassCandidate>& Candidates,
+		UClass* Class,
+		int32 Score,
+		const FString& MatchKind)
+	{
+		if (!Class || !Class->IsChildOf(UActorComponent::StaticClass()))
+		{
+			return;
+		}
+
+		for (FAddComponentClassCandidate& Candidate : Candidates)
+		{
+			if (Candidate.Class == Class)
+			{
+				if (Score > Candidate.Score)
+				{
+					Candidate.Score = Score;
+					Candidate.MatchKind = MatchKind;
+				}
+				return;
+			}
+		}
+
+		FAddComponentClassCandidate Candidate;
+		Candidate.Class = Class;
+		Candidate.ClassName = Class->GetName();
+		Candidate.DisplayName = Class->GetDisplayNameText().ToString();
+		Candidate.Path = Class->GetPathName();
+		Candidate.MatchKind = MatchKind;
+		Candidate.Score = Score;
+		Candidate.bIsSceneComponent = Class->IsChildOf(USceneComponent::StaticClass());
+		Candidate.bIsAbstract = Class->HasAnyClassFlags(CLASS_Abstract);
+		Candidates.Add(MoveTemp(Candidate));
+	}
+
+	static UClass* FindLoadedClassByObjectName(const FString& Name)
+	{
+		FString Trimmed = Name;
+		Trimmed.TrimStartAndEndInline();
+		if (Trimmed.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		if (UClass* Found = FindFirstObject<UClass>(*Trimmed, EFindFirstObjectOptions::NativeFirst))
+		{
+			return Found;
+		}
+		if (!Trimmed.StartsWith(TEXT("U")))
+		{
+			return FindFirstObject<UClass>(*(TEXT("U") + Trimmed), EFindFirstObjectOptions::NativeFirst);
+		}
+		return nullptr;
+	}
+
+	static void AddCommonComponentClassCandidates(TArray<FAddComponentClassCandidate>& Candidates)
+	{
+		static const TCHAR* CommonClassNames[] = {
+			TEXT("SceneComponent"),
+			TEXT("StaticMeshComponent"),
+			TEXT("SkeletalMeshComponent"),
+			TEXT("BoxComponent"),
+			TEXT("SphereComponent"),
+			TEXT("CapsuleComponent"),
+			TEXT("CameraComponent"),
+			TEXT("AudioComponent"),
+			TEXT("PointLightComponent"),
+			TEXT("SpotLightComponent"),
+			TEXT("ChildActorComponent"),
+			TEXT("WidgetComponent")
+		};
+
+		for (const TCHAR* ClassName : CommonClassNames)
+		{
+			AddComponentClassCandidate(Candidates, FindLoadedClassByObjectName(ClassName), 10, TEXT("common"));
+		}
+	}
+
+	static TArray<FAddComponentClassCandidate> CollectComponentClassCandidates(
+		const FString& Query,
+		bool& bTruncated)
+	{
+		TArray<FAddComponentClassCandidate> Candidates;
+		const FString NormalizedQuery = NormalizeComponentClassToken(Query);
+
+		if (NormalizedQuery.IsEmpty())
+		{
+			AddCommonComponentClassCandidates(Candidates);
+		}
+		else
+		{
+			for (TObjectIterator<UClass> It; It; ++It)
+			{
+				UClass* Class = *It;
+				if (!Class || !Class->IsChildOf(UActorComponent::StaticClass()))
+				{
+					continue;
+				}
+
+				const int32 Score = ComponentClassCandidateScore(Class, NormalizedQuery);
+				if (Score > 0)
+				{
+					AddComponentClassCandidate(Candidates, Class, Score, Score == 100 ? TEXT("exact_or_friendly") : TEXT("partial"));
+				}
+			}
+
+			if (Candidates.Num() == 0)
+			{
+				AddCommonComponentClassCandidates(Candidates);
+			}
+		}
+
+		Candidates.Sort([](const FAddComponentClassCandidate& A, const FAddComponentClassCandidate& B)
+		{
+			if (A.Score != B.Score)
+			{
+				return A.Score > B.Score;
+			}
+			return A.ClassName < B.ClassName;
+		});
+
+		bTruncated = Candidates.Num() > MaxAddComponentClassCandidates;
+		return Candidates;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> ComponentClassCandidatesToJsonValues(
+		const TArray<FAddComponentClassCandidate>& Candidates)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		const int32 Count = FMath::Min(Candidates.Num(), MaxAddComponentClassCandidates);
+		Values.Reserve(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const FAddComponentClassCandidate& Candidate = Candidates[Index];
+			TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+			Obj->SetStringField(TEXT("class"), Candidate.ClassName);
+			if (!Candidate.DisplayName.IsEmpty())
+			{
+				Obj->SetStringField(TEXT("display_name"), Candidate.DisplayName);
+			}
+			Obj->SetStringField(TEXT("path"), Candidate.Path);
+			Obj->SetStringField(TEXT("match_kind"), Candidate.MatchKind);
+			Obj->SetBoolField(TEXT("is_scene_component"), Candidate.bIsSceneComponent);
+			Obj->SetBoolField(TEXT("is_abstract"), Candidate.bIsAbstract);
+			Values.Add(MakeShared<FJsonValueObject>(Obj));
+		}
+		return Values;
+	}
+
+	static FAddComponentClassResolution ResolveAddComponentClass(const FString& RequestedClass)
+	{
+		FAddComponentClassResolution Resolution;
+
+		UClass* ExactClass = FindLoadedClassByObjectName(RequestedClass);
+		if (ExactClass && ExactClass->IsChildOf(UActorComponent::StaticClass()))
+		{
+			Resolution.Class = ExactClass;
+			Resolution.ResolvedFrom = TEXT("class_name");
+			return Resolution;
+		}
+
+		FString SuffixedName = StripLeadingUClassPrefix(RequestedClass);
+		if (!SuffixedName.EndsWith(TEXT("Component"), ESearchCase::IgnoreCase))
+		{
+			SuffixedName += TEXT("Component");
+			if (UClass* SuffixedClass = FindLoadedClassByObjectName(SuffixedName))
+			{
+				if (SuffixedClass->IsChildOf(UActorComponent::StaticClass()))
+				{
+					Resolution.Class = SuffixedClass;
+					Resolution.ResolvedFrom = TEXT("component_suffix");
+					return Resolution;
+				}
+			}
+		}
+
+		const FString NormalizedQuery = NormalizeComponentClassToken(RequestedClass);
+		TArray<UClass*> FriendlyMatches;
+		TArray<FAddComponentClassCandidate> FriendlyCandidates;
+		if (!NormalizedQuery.IsEmpty())
+		{
+			for (TObjectIterator<UClass> It; It; ++It)
+			{
+				UClass* Class = *It;
+				if (!Class || !Class->IsChildOf(UActorComponent::StaticClass()))
+				{
+					continue;
+				}
+				if (ComponentClassHasExactToken(Class, NormalizedQuery))
+				{
+					FriendlyMatches.AddUnique(Class);
+					AddComponentClassCandidate(FriendlyCandidates, Class, 100, TEXT("friendly_name"));
+				}
+			}
+		}
+
+		if (FriendlyMatches.Num() == 1)
+		{
+			Resolution.Class = FriendlyMatches[0];
+			Resolution.ResolvedFrom = TEXT("friendly_name");
+			return Resolution;
+		}
+		if (FriendlyMatches.Num() > 1)
+		{
+			Resolution.FailureCause = TEXT("ambiguous_component_class");
+			Resolution.Candidates = MoveTemp(FriendlyCandidates);
+			Resolution.bCandidatesTruncated = Resolution.Candidates.Num() > MaxAddComponentClassCandidates;
+			return Resolution;
+		}
+
+		if (ExactClass && !ExactClass->IsChildOf(UActorComponent::StaticClass()))
+		{
+			Resolution.FailureCause = TEXT("component_class_not_actor_component");
+			Resolution.MatchedNonComponentClass = ExactClass->GetName();
+		}
+		else
+		{
+			Resolution.FailureCause = TEXT("component_class_not_found");
+		}
+		Resolution.Candidates = CollectComponentClassCandidates(RequestedClass, Resolution.bCandidatesTruncated);
+		return Resolution;
+	}
+
+	static TSharedPtr<FJsonObject> MakeAddComponentReadArgs(const FString& AssetPath)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		if (!AssetPath.IsEmpty())
+		{
+			Args->SetStringField(TEXT("asset_path"), AssetPath);
+		}
+		return Args;
+	}
+
+	static TSharedPtr<FJsonObject> MakeAddComponentSchemaReadArgs()
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		Args->SetStringField(TEXT("namespace"), TEXT("blueprint"));
+		Args->SetStringField(TEXT("action"), TEXT("add_component"));
+		return Args;
+	}
+
+	static TArray<FString> AddComponentExistingComponentNames(const UBlueprint* BP)
+	{
+		TArray<FString> Names;
+		if (!BP)
+		{
+			return Names;
+		}
+
+		if (USimpleConstructionScript* SCS = BP->SimpleConstructionScript)
+		{
+			for (const USCS_Node* Node : SCS->GetAllNodes())
+			{
+				if (Node)
+				{
+					Names.AddUnique(Node->GetVariableName().ToString());
+				}
+			}
+		}
+
+		if (BP->ParentClass && BP->ParentClass->IsChildOf(AActor::StaticClass()))
+		{
+			if (AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false)))
+			{
+				TArray<UActorComponent*> NativeComps;
+				CDO->GetComponents(NativeComps);
+				for (const UActorComponent* Comp : NativeComps)
+				{
+					if (Comp)
+					{
+						Names.AddUnique(Comp->GetName());
+					}
+				}
+			}
+		}
+
+		Names.Sort();
+		return Names;
+	}
+
+	static UActorComponent* FindInheritedNativeComponentByName(const UBlueprint* BP, const FString& Name)
+	{
+		if (!BP || !BP->ParentClass || !BP->ParentClass->IsChildOf(AActor::StaticClass()))
+		{
+			return nullptr;
+		}
+
+		AActor* CDO = Cast<AActor>(BP->ParentClass->GetDefaultObject(false));
+		if (!CDO)
+		{
+			return nullptr;
+		}
+
+		TArray<UActorComponent*> NativeComps;
+		CDO->GetComponents(NativeComps);
+		for (UActorComponent* Comp : NativeComps)
+		{
+			if (!Comp)
+			{
+				continue;
+			}
+			if (Comp->GetName().Equals(Name, ESearchCase::IgnoreCase) || Comp->GetFName() == FName(*Name))
+			{
+				return Comp;
+			}
+		}
+		return nullptr;
+	}
+
+	static TSharedPtr<FJsonObject> MakeAddComponentClassErrorData(
+		const FString& FailureCause,
+		const FString& AssetPath,
+		const FString& ComponentClass,
+		const FString& ComponentClassJsonType,
+		const TArray<FAddComponentClassCandidate>& Candidates,
+		bool bCandidatesTruncated,
+		const TArray<FString>& RecoveryHints)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), FailureCause);
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("offending_param"), TEXT("component_class"));
+		ErrorData->SetStringField(TEXT("component_class"), ComponentClass);
+		ErrorData->SetStringField(TEXT("offending_component_class"), ComponentClass);
+		if (!ComponentClassJsonType.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("component_class_json_type"), ComponentClassJsonType);
+		}
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(AddComponentAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), AddComponentAcceptedAliases());
+		ErrorData->SetArrayField(TEXT("candidate_component_classes"), ComponentClassCandidatesToJsonValues(Candidates));
+		ErrorData->SetBoolField(TEXT("candidate_component_classes_truncated"), bCandidatesTruncated);
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("monolith.discover"));
+		ErrorData->SetObjectField(TEXT("read_args"), MakeAddComponentSchemaReadArgs());
+		ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(RecoveryHints));
+		return ErrorData;
+	}
+
+	static TSharedPtr<FJsonObject> MakeAddComponentComponentErrorData(
+		const UBlueprint* BP,
+		const FString& FailureCause,
+		const FString& AssetPath,
+		const FString& ComponentClass,
+		const FString& ResolvedClass,
+		const FString& ComponentName,
+		const FString& ParentName,
+		const TArray<FString>& RecoveryHints)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), FailureCause);
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("component_class"), ComponentClass);
+		if (!ResolvedClass.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("resolved_component_class"), ResolvedClass);
+		}
+		if (!ComponentName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("component_name"), ComponentName);
+			ErrorData->SetStringField(TEXT("offending_component_name"), ComponentName);
+		}
+		if (!ParentName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("parent"), ParentName);
+			ErrorData->SetStringField(TEXT("offending_parent"), ParentName);
+		}
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(AddComponentAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), AddComponentAcceptedAliases());
+		ErrorData->SetArrayField(TEXT("available_components"), StringsToJsonValues(AddComponentExistingComponentNames(BP)));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_components"));
+		ErrorData->SetObjectField(TEXT("read_args"), MakeAddComponentReadArgs(AssetPath));
+		ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(RecoveryHints));
+		return ErrorData;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // add_component
 // ---------------------------------------------------------------------------
@@ -123,25 +700,104 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 	}
 
 	FString ClassName;
-	Params->TryGetStringField(TEXT("component_class"), ClassName);
+	TSharedPtr<FJsonValue> ClassValue = Params.IsValid() ? Params->TryGetField(TEXT("component_class")) : nullptr;
+	const bool bHasClassValue = ClassValue.IsValid() && ClassValue->Type != EJson::Null;
+	const bool bClassIsString = bHasClassValue && ClassValue->TryGetString(ClassName);
+	ClassName.TrimStartAndEndInline();
+	if (!bHasClassValue)
+	{
+		bool bCandidatesTruncated = false;
+		const TArray<FAddComponentClassCandidate> Candidates = CollectComponentClassCandidates(FString(), bCandidatesTruncated);
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Provide component_class as a component class name such as StaticMeshComponent, Static Mesh Component, or CameraComponent."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentClassErrorData(
+			TEXT("missing_component_class"),
+			AssetPath,
+			FString(),
+			TEXT("missing"),
+			Candidates,
+			bCandidatesTruncated,
+			RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("component_class is required"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedAction(TEXT("monolith.discover"));
+	}
+	if (!bClassIsString)
+	{
+		bool bCandidatesTruncated = false;
+		const TArray<FAddComponentClassCandidate> Candidates = CollectComponentClassCandidates(FString(), bCandidatesTruncated);
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Pass component_class as a string, for example StaticMeshComponent or CameraComponent."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentClassErrorData(
+			TEXT("malformed_component_class"),
+			AssetPath,
+			JsonValueToDisplayString(ClassValue),
+			JsonTypeName(ClassValue->Type),
+			Candidates,
+			bCandidatesTruncated,
+			RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("component_class is required"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedAction(TEXT("monolith.discover"));
+	}
 	if (ClassName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("component_class is required"));
+		bool bCandidatesTruncated = false;
+		const TArray<FAddComponentClassCandidate> Candidates = CollectComponentClassCandidates(FString(), bCandidatesTruncated);
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Provide a non-empty component_class such as StaticMeshComponent, Static Mesh Component, or CameraComponent."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentClassErrorData(
+			TEXT("missing_component_class"),
+			AssetPath,
+			ClassName,
+			TEXT("string"),
+			Candidates,
+			bCandidatesTruncated,
+			RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("component_class is required"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedAction(TEXT("monolith.discover"));
 	}
 
-	// Try to resolve the class — accept bare name or U-prefixed name
-	UClass* CompClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+	FAddComponentClassResolution ClassResolution = ResolveAddComponentClass(ClassName);
+	UClass* CompClass = ClassResolution.Class;
 	if (!CompClass)
 	{
-		CompClass = FindFirstObject<UClass>(*(TEXT("U") + ClassName), EFindFirstObjectOptions::NativeFirst);
-	}
-	if (!CompClass)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Component class not found: %s"), *ClassName));
-	}
-	if (!CompClass->IsChildOf(UActorComponent::StaticClass()))
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Class '%s' is not a UActorComponent"), *ClassName));
+		TArray<FString> RecoveryHints;
+		if (ClassResolution.FailureCause == TEXT("ambiguous_component_class"))
+		{
+			RecoveryHints.Add(TEXT("Retry with an exact class value from error_data.candidate_component_classes[].class."));
+		}
+		else if (ClassResolution.FailureCause == TEXT("component_class_not_actor_component"))
+		{
+			RecoveryHints.Add(TEXT("Use a UActorComponent-derived class such as StaticMeshComponent, CameraComponent, or a project component class."));
+		}
+		else
+		{
+			RecoveryHints.Add(TEXT("Choose a component class from error_data.candidate_component_classes[].class, or use an exact loaded UActorComponent subclass name."));
+		}
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentClassErrorData(
+			ClassResolution.FailureCause,
+			AssetPath,
+			ClassName,
+			TEXT("string"),
+			ClassResolution.Candidates,
+			ClassResolution.bCandidatesTruncated,
+			RecoveryHints);
+		if (!ClassResolution.MatchedNonComponentClass.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("matched_non_component_class"), ClassResolution.MatchedNonComponentClass);
+		}
+		const FString Message = ClassResolution.FailureCause == TEXT("component_class_not_actor_component")
+			? FString::Printf(TEXT("Class '%s' is not a UActorComponent"), *ClassName)
+			: FString::Printf(TEXT("Component class not found: %s"), *ClassName);
+		return FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedAction(TEXT("monolith.discover"));
 	}
 
 	// Determine node name — use provided name or derive from class
@@ -150,7 +806,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 	if (Name.IsEmpty())
 	{
 		// Strip 'U' prefix and 'Component' suffix for a clean default name
-		Name = ClassName;
+		Name = ClassResolution.ResolvedFrom == TEXT("class_name") ? ClassName : CompClass->GetName();
 		if (Name.StartsWith(TEXT("U")))
 		{
 			Name = Name.Mid(1);
@@ -162,13 +818,64 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 	// guard idiom so repeated agent calls are idempotent-safe rather than accumulating.
 	if (FindSCSNodeByName(BP->SimpleConstructionScript, FName(*Name)))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("A component named '%s' already exists"), *Name));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Choose a unique component_name or call blueprint.get_components and reuse the existing component."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentComponentErrorData(
+			BP,
+			TEXT("duplicate_component_name"),
+			AssetPath,
+			ClassName,
+			CompClass->GetName(),
+			Name,
+			FString(),
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("duplicate_source"), TEXT("simple_construction_script"));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A component named '%s' already exists"), *Name), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedAction(TEXT("blueprint.get_components"));
+	}
+	if (UActorComponent* NativeComponent = FindInheritedNativeComponentByName(BP, Name))
+	{
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Choose a component_name that does not conflict with inherited native components, or use blueprint.get_component_details on the existing native component."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentComponentErrorData(
+			BP,
+			TEXT("duplicate_component_name"),
+			AssetPath,
+			ClassName,
+			CompClass->GetName(),
+			Name,
+			FString(),
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("duplicate_source"), TEXT("inherited_native_component"));
+		ErrorData->SetStringField(TEXT("existing_component_class"), NativeComponent->GetClass()->GetName());
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A component named '%s' already exists"), *Name), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0])
+			.WithRelatedActions({ TEXT("blueprint.get_components"), TEXT("blueprint.get_component_details") });
 	}
 
 	USCS_Node* NewNode = BP->SimpleConstructionScript->CreateNode(CompClass, FName(*Name));
 	if (!NewNode)
 	{
-		return FMonolithActionResult::Error(TEXT("Failed to create SCS node"));
+		bool bCandidatesTruncated = false;
+		TArray<FAddComponentClassCandidate> Candidates;
+		AddComponentClassCandidate(Candidates, CompClass, 100, TEXT("resolved_class"));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Retry with a concrete component class from error_data.candidate_component_classes, and verify the Blueprint supports SimpleConstructionScript components."));
+		TSharedPtr<FJsonObject> ErrorData = MakeAddComponentClassErrorData(
+			TEXT("create_component_node_failed"),
+			AssetPath,
+			ClassName,
+			TEXT("string"),
+			Candidates,
+			bCandidatesTruncated,
+			RecoveryHints);
+		ErrorData->SetStringField(TEXT("resolved_component_class"), CompClass->GetName());
+		return FMonolithActionResult::Error(TEXT("Failed to create SCS node"))
+			.WithErrorData(ErrorData)
+			.WithHint(RecoveryHints[0]);
 	}
 
 	// Attach socket if specified (must be set before adding to hierarchy)
@@ -189,7 +896,21 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleAddComponent(con
 		USCS_Node* ParentNode = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*ParentName));
 		if (!ParentNode)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Parent component not found: %s"), *ParentName));
+			TArray<FString> RecoveryHints;
+			RecoveryHints.Add(TEXT("Call blueprint.get_components and retry with parent set to an existing component variable name, or omit parent to add a root component."));
+			TSharedPtr<FJsonObject> ErrorData = MakeAddComponentComponentErrorData(
+				BP,
+				TEXT("parent_component_not_found"),
+				AssetPath,
+				ClassName,
+				CompClass->GetName(),
+				Name,
+				ParentName,
+				RecoveryHints);
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Parent component not found: %s"), *ParentName), FMonolithJsonUtils::ErrInvalidParams)
+				.WithErrorData(ErrorData)
+				.WithHint(RecoveryHints[0])
+				.WithRelatedAction(TEXT("blueprint.get_components"));
 		}
 		ParentNode->AddChildNode(NewNode);
 		ActualParentName = ParentName;

@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "state_tree",
+  "route_edit_domain": "state_tree",
+  "module_id": "asset_authoring.ai.state_tree",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.state_tree",
+    "edit": "asset_operation.edit.ai.state_tree",
+    "save": "asset_operation.save.ai.state_tree",
+    "readback_verify": "asset_operation.readback_verify.ai.state_tree"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-382"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-382",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "state_tree",
+      "blueprint_type": "",
+      "workflow": "ai_state_tree_asset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_state_tree",
+        "add_st_state",
+        "rename_st_state",
+        "compile_state_tree",
+        "save_asset",
+        "get_state_tree",
+        "validate_state_tree",
+        "inspect_asset"
+      ],
+      "description": "Create a StateTree asset, add and rename a root state, compile, save, and inspect the tree structure"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-382",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_state_tree",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          },
+          "contains": [
+            "StateTree_BenchPatrol",
+            "Created"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_st_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol",
+            "name": "BenchPatrol",
+            "type": "State",
+            "selection_behavior": "TrySelectChildrenInOrder"
+          },
+          "contains": [
+            "state_id",
+            "BenchPatrol"
+          ],
+          "capture": {
+            "patrol_state_id": "$.state_id"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "rename_st_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol",
+            "state_id": "${patrol_state_id}",
+            "new_name": "BenchPatrolReady"
+          },
+          "contains": [
+            "BenchPatrol",
+            "BenchPatrolReady"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "compile_state_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          },
+          "contains": [
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_state_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          },
+          "contains": [
+            "StateTree_BenchPatrol",
+            "BenchPatrolReady",
+            "subtrees"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "validate_state_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          },
+          "contains": [
+            "valid",
+            "true",
+            "compiles",
+            "true",
+            "subtree_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/StateTree_BenchPatrol"
+          },
+          "contains": [
+            "StateTree_BenchPatrol"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "state_tree",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_state_tree_asset_roundtrip",
+      "description": "Create a StateTree asset, add and rename a root state, compile, save, and inspect the tree structure",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_state_tree",
+          "add_st_state",
+          "rename_st_state",
+          "compile_state_tree",
+          "save_asset",
+          "get_state_tree",
+          "validate_state_tree",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

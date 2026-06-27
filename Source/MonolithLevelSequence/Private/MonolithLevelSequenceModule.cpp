@@ -28,7 +28,7 @@ void FMonolithLevelSequenceModule::StartupModule()
 
 	if (Settings->bIndexLevelSequences)
 	{
-		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
 		{
 			if (GEditor)
 			{
@@ -46,7 +46,7 @@ void FMonolithLevelSequenceModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 

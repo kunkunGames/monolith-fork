@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "modelgen",
+  "asset_type_slug": "modelgen",
+  "module_id": "asset_authoring.modelgen",
+  "task_count": 2,
+  "operation_counts": {
+    "creation_or_import": 2,
+    "edit": 2,
+    "save": 2,
+    "readback_verify": 2
+  },
+  "lifecycle_counts": {
+    "create_save": 2
+  },
+  "edit_domain_count": 2,
+  "task_ids": [
+    "BEB-303",
+    "BEB-380"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-303",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "modelgen",
+      "edit_domain": "generated_static_mesh",
+      "blueprint_type": "",
+      "workflow": "modelgen_static_mesh_provenance_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_generated_model",
+        "set_mesh_collision",
+        "save_asset",
+        "get_generated_model_provenance",
+        "get_mesh_collision",
+        "inspect_asset"
+      ],
+      "description": "Import a generated-model OBJ through ModelGen, save it as StaticMesh, and verify redacted generation provenance"
+    },
+    {
+      "id": "BEB-380",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "modelgen",
+      "edit_domain": "generated_model_job_lifecycle",
+      "blueprint_type": "",
+      "workflow": "modelgen_local_job_submit_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "submit_generated_model_job",
+        "get_generated_model_job",
+        "download_generated_model_result",
+        "import_generated_model",
+        "save_asset",
+        "get_generated_model_provenance",
+        "inspect_asset"
+      ],
+      "description": "Submit a local deterministic ModelGen job, capture its job id, read and resolve the job artifact, import it as StaticMesh, save, and verify provenance"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "generated_model_job_lifecycle",
+      "route_edit_domain": "generated_model_job_lifecycle",
+      "module_id": "asset_authoring.modelgen.generated_model_job_lifecycle",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.modelgen.generated_model_job_lifecycle",
+        "edit": "asset_operation.edit.modelgen.generated_model_job_lifecycle",
+        "save": "asset_operation.save.modelgen.generated_model_job_lifecycle",
+        "readback_verify": "asset_operation.readback_verify.modelgen.generated_model_job_lifecycle"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-380"
+      ],
+      "case_file": "testcases\\generated_model_job_lifecycle.json"
+    },
+    {
+      "edit_domain": "generated_static_mesh",
+      "route_edit_domain": "generated_static_mesh",
+      "module_id": "asset_authoring.modelgen.generated_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.modelgen.generated_static_mesh",
+        "edit": "asset_operation.edit.modelgen.generated_static_mesh",
+        "save": "asset_operation.save.modelgen.generated_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.modelgen.generated_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-303"
+      ],
+      "case_file": "testcases\\generated_static_mesh.json"
+    }
+  ]
+}

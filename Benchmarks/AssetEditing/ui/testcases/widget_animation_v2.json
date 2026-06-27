@@ -1,0 +1,239 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_animation_v2",
+  "route_edit_domain": "widget_animation_v2",
+  "module_id": "asset_authoring.ui.widget_animation_v2",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_animation_v2",
+    "edit": "asset_operation.edit.ui.widget_animation_v2",
+    "save": "asset_operation.save.ui.widget_animation_v2",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_animation_v2"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-342"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-342",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_animation_v2",
+      "blueprint_type": "",
+      "workflow": "ui_animation_v2_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "create_animation_v2",
+        "save_asset",
+        "list_animations",
+        "get_animation_details"
+      ],
+      "description": "Create a Widget Blueprint, add a TextBlock, author a multi-key UWidgetAnimation, save, and read animation tracks back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-342",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchAnimatedPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchAnimatedLabel",
+            "anchor_preset": "center",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "x": 360,
+              "y": 72
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchAnimatedLabel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel",
+            "widget_name": "BenchAnimatedLabel",
+            "text": "Animated Benchmark",
+            "font_size": 26,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_animation_v2",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel",
+            "animation_name": "IntroFade",
+            "duration_sec": 0.75,
+            "tracks": [
+              {
+                "widget_name": "BenchAnimatedLabel",
+                "property": "RenderOpacity",
+                "keys": [
+                  {
+                    "time": 0.0,
+                    "value": 0.0,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 0.25,
+                    "value": 0.45,
+                    "interp": "linear"
+                  },
+                  {
+                    "time": 0.75,
+                    "value": 1.0,
+                    "interp": "linear"
+                  }
+                ]
+              }
+            ],
+            "compile_once": true
+          },
+          "contains": [
+            "IntroFade"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "list_animations",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel"
+          },
+          "contains": [
+            "IntroFade"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_animation_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchAnimatedPanel",
+            "animation_name": "IntroFade"
+          },
+          "contains": [
+            "BenchAnimatedLabel",
+            "MovieSceneFloatTrack",
+            "keyframe_count",
+            "3",
+            "0.75"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_animation_v2",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_animation_v2_roundtrip",
+      "description": "Create a Widget Blueprint, add a TextBlock, author a multi-key UWidgetAnimation, save, and read animation tracks back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "create_animation_v2",
+          "save_asset",
+          "list_animations",
+          "get_animation_details"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

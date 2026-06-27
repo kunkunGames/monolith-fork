@@ -512,7 +512,7 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 | Headless action matrix | `BatchFiles\RunHeadlessEditor.bat` launched a `-NullRHI` editor with no Monolith command-line override; `monolith_status`, `monolith_discover`, `source.health`, `source.search_source`, `project.search`, `editor.get_build_errors`, unknown `source` action, and missing-param `source.search_source` appended 8 valid `action.jsonl` records. Success, lookup error, and schema rejection outcomes were all recorded. |
 | Proxy-to-action headless path | Python proxy calls to `monolith_status`, successful `source.search_source`, and missing-param `source.search_source` appended 3 proxy records and 3 action records against the same headless editor. |
 | Final integrated append | With headless editor daily logging enabled from config, proxy `monolith_status`, query `source health`, and editor actions appended records to `Plugins\Monolith\Logs\20260520\proxy.jsonl`, `query.jsonl`, and `action.jsonl`; appended records parsed and reported expected outcomes. |
-| Broader project build | At the time of the P0 run, the GoGameEditor UBT build failed on an unrelated `AGoPlayerController::CreateVirtualJoystick()` unresolved external in `GoGame`. That symbol is now defined (`Source/GoGame/Private/Framework/GoPlayerController.cpp`) and a later GoGameEditor build completed cleanly, so this blocker is resolved. |
+| Broader project build | At the time of the P0 run, the project-editor UBT build failed on an unrelated `AProjectPlayerController::CreateVirtualJoystick()` unresolved external in the game module. That symbol is now defined (`Source/<ProjectGameModule>/Private/Framework/ProjectPlayerController.cpp`) and a later project-editor build completed cleanly, so this blocker is resolved. |
 
 2026-05-20 format v2 follow-up:
 
@@ -534,7 +534,7 @@ Daily invocation logs are the durable, date-partitioned JSONL layer. They intent
 | Cross-runtime log lock | Python proxy, Node proxy, C++ proxy, and C++ query use the same exclusive `.lock` file create/delete protocol; a regression smoke wrote Python, Node, and C++ proxy records sequentially into the same `proxy.jsonl` without timeout. |
 | Query default-on/disable/output preservation | Direct query calls under isolated log roots verified unset `MONOLITH_TOOL_LOG_ENABLED` creates v3 `query.jsonl`, `MONOLITH_TOOL_LOG_ENABLED=0` creates no log, and stdout/stderr are identical between enabled and disabled modes. |
 | Proxy disable | C++ proxy, Python proxy, and Node proxy calls with `MONOLITH_TOOL_LOG_ENABLED=0` created no `proxy.jsonl` under the override log root. |
-| MonolithCore build | GoGameEditor UBT build completed after closing the editor process that held the previous DLL. |
+| MonolithCore build | Project-editor UBT build completed after closing the editor process that held the previous DLL. |
 | Headless action and child query | `BatchFiles\RunHeadlessEditor.bat` launched a `-NullRHI` editor; a live proxy `source_query(crg_graph_health)` produced correlated v3 `proxy.jsonl`, `action.jsonl`, and `query.jsonl` rows with shared `trace_id`, parent span linkage, action `child_process.exec_process_ms`, action/query `inferred_intent=verification`, and query `namespace_source=child_process`. |
 | Automation tests | `Monolith.Core.ToolInvocationLogger.DailyLogOptInRedaction`, `Monolith.Core.ToolInvocationLogger.PreDispatchFailureLogged`, and `Monolith.Core.ToolInvocationLogger.SourceChildQueryDualSurface` passed. |
 

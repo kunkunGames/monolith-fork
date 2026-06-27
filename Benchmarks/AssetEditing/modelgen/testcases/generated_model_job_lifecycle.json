@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "modelgen",
+  "asset_type_slug": "modelgen",
+  "edit_domain": "generated_model_job_lifecycle",
+  "route_edit_domain": "generated_model_job_lifecycle",
+  "module_id": "asset_authoring.modelgen.generated_model_job_lifecycle",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.modelgen.generated_model_job_lifecycle",
+    "edit": "asset_operation.edit.modelgen.generated_model_job_lifecycle",
+    "save": "asset_operation.save.modelgen.generated_model_job_lifecycle",
+    "readback_verify": "asset_operation.readback_verify.modelgen.generated_model_job_lifecycle"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-380"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-380",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "modelgen",
+      "edit_domain": "generated_model_job_lifecycle",
+      "blueprint_type": "",
+      "workflow": "modelgen_local_job_submit_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "submit_generated_model_job",
+        "get_generated_model_job",
+        "download_generated_model_result",
+        "import_generated_model",
+        "save_asset",
+        "get_generated_model_provenance",
+        "inspect_asset"
+      ],
+      "description": "Submit a local deterministic ModelGen job, capture its job id, read and resolve the job artifact, import it as StaticMesh, save, and verify provenance"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-380",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchGeneratedJob"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "modelgen_query",
+          "args": {
+            "action": "submit_generated_model_job",
+            "prompt": "small deterministic generated benchmark wedge mesh",
+            "provider": "local_deterministic",
+            "model": "monolith/local-obj-v1",
+            "asset_name": "SM_BenchGeneratedJob"
+          },
+          "contains": [
+            "job_id",
+            "completed",
+            "local_deterministic"
+          ],
+          "capture": {
+            "job_id": "$.job_id"
+          }
+        },
+        {
+          "tool": "modelgen_query",
+          "args": {
+            "action": "get_generated_model_job",
+            "job_id": "${job_id}"
+          },
+          "contains": [
+            "${job_id}",
+            "completed",
+            "SM_BenchGeneratedJob"
+          ]
+        },
+        {
+          "tool": "modelgen_query",
+          "args": {
+            "action": "download_generated_model_result",
+            "job_id": "${job_id}"
+          },
+          "contains": [
+            "${job_id}",
+            "file_path",
+            "obj"
+          ]
+        },
+        {
+          "tool": "modelgen_query",
+          "args": {
+            "action": "import_generated_model",
+            "job_id": "${job_id}",
+            "destination": "/Game/Benchmarks/AssetAuthoring",
+            "replace_existing": true,
+            "material_import": "skip",
+            "save": true
+          },
+          "contains": [
+            "SM_BenchGeneratedJob",
+            "vertex_count",
+            "triangle_count",
+            "provenance"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeneratedJob"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "modelgen_query",
+          "args": {
+            "action": "get_generated_model_provenance",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeneratedJob"
+          },
+          "contains": [
+            "found",
+            "true",
+            "local_deterministic",
+            "monolith/local-obj-v1",
+            "prompt_redacted"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeneratedJob"
+          },
+          "contains": [
+            "SM_BenchGeneratedJob",
+            "StaticMesh",
+            "Triangles"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "generated_model_job_lifecycle",
+      "blueprint_type": "",
+      "domain": "modelgen",
+      "workflow": "modelgen_local_job_submit_import_roundtrip",
+      "description": "Submit a local deterministic ModelGen job, capture its job id, read and resolve the job artifact, import it as StaticMesh, save, and verify provenance",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "submit_generated_model_job",
+          "get_generated_model_job",
+          "download_generated_model_result",
+          "import_generated_model",
+          "save_asset",
+          "get_generated_model_provenance",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

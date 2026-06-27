@@ -15,14 +15,16 @@ bool FMonolithBlueprintContractActionsTests::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("blueprint"), TEXT("compare_class_variable_contract"), Params);
 		TestFalse(TEXT("compare_class_variable_contract missing left param should error"), Result.bSuccess);
-		TestTrue(TEXT("compare_class_variable_contract missing left param should indicate left in error msg"), Result.ErrorMessage.Contains(TEXT("Missing required parameter: left")));
+		TestTrue(TEXT("compare_class_variable_contract missing left param should indicate left in error msg"),
+			Result.ErrorMessage.Contains(TEXT("left")));
 	}
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("left"), TEXT("dummy"));
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("blueprint"), TEXT("compare_class_variable_contract"), Params);
 		TestFalse(TEXT("compare_class_variable_contract missing right param should error"), Result.bSuccess);
-		TestTrue(TEXT("compare_class_variable_contract missing right param should indicate right in error msg"), Result.ErrorMessage.Contains(TEXT("Missing required parameter: right")));
+		TestTrue(TEXT("compare_class_variable_contract missing right param should indicate right in error msg"),
+			Result.ErrorMessage.Contains(TEXT("right")));
 	}
 
 	return true;

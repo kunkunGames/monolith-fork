@@ -50,6 +50,7 @@ bool FMonolithBlueprintSecurityPathTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> SeedDataAssetPayload = MakeShared<FJsonObject>();
 	SeedDataAssetPayload->SetStringField(TEXT("save_path"), TEXT("//Game/MalformedPath/DA_TestSeedAsset"));
 	SeedDataAssetPayload->SetStringField(TEXT("class_name"), TEXT("PrimaryDataAsset"));
+	SeedDataAssetPayload->SetObjectField(TEXT("tree"), MakeShared<FJsonObject>());
 
 	FMonolithActionResult SeedDataAssetResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("blueprint"), TEXT("seed_data_asset"), SeedDataAssetPayload);
 	TestFalse(TEXT("seed_data_asset should fail on malformed path"), SeedDataAssetResult.bSuccess);

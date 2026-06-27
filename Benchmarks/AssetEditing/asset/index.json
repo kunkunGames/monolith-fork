@@ -1,0 +1,340 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "asset",
+  "asset_type_slug": "asset",
+  "module_id": "asset_authoring.asset",
+  "task_count": 6,
+  "operation_counts": {
+    "creation_or_import": 6,
+    "edit": 6,
+    "save": 6,
+    "readback_verify": 6
+  },
+  "lifecycle_counts": {
+    "create_save": 6
+  },
+  "edit_domain_count": 6,
+  "task_ids": [
+    "BEB-279",
+    "BEB-280",
+    "BEB-281",
+    "BEB-282",
+    "BEB-289",
+    "BEB-446"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-279",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "texture",
+      "blueprint_type": "",
+      "workflow": "texture_import_rename_save",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "batch_rename_assets",
+        "save_asset",
+        "inspect_asset"
+      ],
+      "description": "Import and save a BMP Texture2D from bytes, rename it through AssetTools, and inspect the renamed asset"
+    },
+    {
+      "id": "BEB-280",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "texture_file_import",
+      "blueprint_type": "",
+      "workflow": "texture_file_import_metadata_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_file",
+        "set_cdo_property",
+        "save_asset",
+        "inspect_asset",
+        "get_cdo_properties"
+      ],
+      "description": "Import a Texture2D from a real source file, assert source metadata is returned, save it, and validate the asset"
+    },
+    {
+      "id": "BEB-281",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "hygiene",
+      "blueprint_type": "",
+      "workflow": "hygiene_find_rename_validate_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "validate_naming_conventions",
+        "find_assets",
+        "batch_rename_assets",
+        "save_asset",
+        "inspect_asset"
+      ],
+      "description": "Import a deliberately mis-prefixed Texture2D, detect it with naming validation, find it through fuzzy live AssetRegistry search, rename it to the naming contract, save it, and inspect the final asset"
+    },
+    {
+      "id": "BEB-282",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "texture_role_presets",
+      "blueprint_type": "",
+      "workflow": "texture_role_presets_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "find_assets",
+        "save_asset",
+        "get_texture_properties",
+        "inspect_asset"
+      ],
+      "description": "Import Texture2D assets with normal and ORM-mask role presets, save them, then read back compression, sRGB, LOD group, address mode, and AssetRegistry searchability"
+    },
+    {
+      "id": "BEB-289",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "font",
+      "blueprint_type": "",
+      "workflow": "font_family_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_font_family",
+        "set_cdo_property",
+        "save_asset",
+        "inspect_asset",
+        "get_cdo_properties"
+      ],
+      "description": "Resolve the project engine, import an engine TTF as UFont/UFontFace assets, save them, and inspect both outputs"
+    },
+    {
+      "id": "BEB-446",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "asset",
+      "edit_domain": "batch_delete",
+      "blueprint_type": "",
+      "workflow": "batch_inspect_delete_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "inspect_assets_batch",
+        "save_asset",
+        "inspect_asset"
+      ],
+      "description": "Create and save two Texture2D assets, inspect them as a batch, validate a dry-run delete, delete one asset, and verify the remaining/deleted rows"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "batch_delete",
+      "route_edit_domain": "batch_delete",
+      "module_id": "asset_authoring.asset.batch_delete",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.batch_delete",
+        "edit": "asset_operation.edit.asset.batch_delete",
+        "save": "asset_operation.save.asset.batch_delete",
+        "readback_verify": "asset_operation.readback_verify.asset.batch_delete"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-446"
+      ],
+      "case_file": "testcases\\batch_delete.json"
+    },
+    {
+      "edit_domain": "font",
+      "route_edit_domain": "font",
+      "module_id": "asset_authoring.asset.font",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.font",
+        "edit": "asset_operation.edit.asset.font",
+        "save": "asset_operation.save.asset.font",
+        "readback_verify": "asset_operation.readback_verify.asset.font"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-289"
+      ],
+      "case_file": "testcases\\font.json"
+    },
+    {
+      "edit_domain": "hygiene",
+      "route_edit_domain": "hygiene",
+      "module_id": "asset_authoring.asset.hygiene",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.hygiene",
+        "edit": "asset_operation.edit.asset.hygiene",
+        "save": "asset_operation.save.asset.hygiene",
+        "readback_verify": "asset_operation.readback_verify.asset.hygiene"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-281"
+      ],
+      "case_file": "testcases\\hygiene.json"
+    },
+    {
+      "edit_domain": "texture",
+      "route_edit_domain": "texture",
+      "module_id": "asset_authoring.asset.texture",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.texture",
+        "edit": "asset_operation.edit.asset.texture",
+        "save": "asset_operation.save.asset.texture",
+        "readback_verify": "asset_operation.readback_verify.asset.texture"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-279"
+      ],
+      "case_file": "testcases\\texture.json"
+    },
+    {
+      "edit_domain": "texture_file_import",
+      "route_edit_domain": "texture_file_import",
+      "module_id": "asset_authoring.asset.texture_file_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.texture_file_import",
+        "edit": "asset_operation.edit.asset.texture_file_import",
+        "save": "asset_operation.save.asset.texture_file_import",
+        "readback_verify": "asset_operation.readback_verify.asset.texture_file_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-280"
+      ],
+      "case_file": "testcases\\texture_file_import.json"
+    },
+    {
+      "edit_domain": "texture_role_presets",
+      "route_edit_domain": "texture_role_presets",
+      "module_id": "asset_authoring.asset.texture_role_presets",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.asset.texture_role_presets",
+        "edit": "asset_operation.edit.asset.texture_role_presets",
+        "save": "asset_operation.save.asset.texture_role_presets",
+        "readback_verify": "asset_operation.readback_verify.asset.texture_role_presets"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-282"
+      ],
+      "case_file": "testcases\\texture_role_presets.json"
+    }
+  ]
+}

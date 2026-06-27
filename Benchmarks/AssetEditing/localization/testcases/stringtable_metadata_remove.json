@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "localization",
+  "asset_type_slug": "localization",
+  "edit_domain": "stringtable_metadata_remove",
+  "route_edit_domain": "stringtable_metadata_remove",
+  "module_id": "asset_authoring.localization.stringtable_metadata_remove",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_metadata_remove",
+    "edit": "asset_operation.edit.localization.stringtable_metadata_remove",
+    "save": "asset_operation.save.localization.stringtable_metadata_remove",
+    "readback_verify": "asset_operation.readback_verify.localization.stringtable_metadata_remove"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-516"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-516",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_metadata_remove",
+      "blueprint_type": "",
+      "workflow": "localization_stringtable_metadata_remove_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "set_string_metadata",
+        "save_asset",
+        "get_string_table",
+        "validate_string_table",
+        "inspect_asset"
+      ],
+      "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-516",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "create_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove",
+            "namespace": "BenchMetadataRemove",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "ST_BenchMetadataRemove",
+            "BenchMetadataRemove"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove",
+            "key": "Menu_Play",
+            "source_string": "Play",
+            "metadata": {
+              "Context": "MainMenu"
+            },
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_Play",
+            "Play",
+            "Context"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_metadata",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove",
+            "key": "Menu_Play",
+            "metadata_key": "Screen",
+            "metadata_value": "Title",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_Play",
+            "Screen",
+            "Title"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_metadata",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove",
+            "key": "Menu_Play",
+            "metadata_key": "Screen",
+            "remove": true,
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_Play",
+            "Screen"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "get_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove",
+            "include_metadata": true
+          },
+          "contains": [
+            "Menu_Play",
+            "Play",
+            "Context",
+            "MainMenu"
+          ],
+          "not_contains": [
+            "Title"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "validate_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_string_table reports table contract failures as isError; retained and removed metadata are asserted by get_string_table"
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchMetadataRemove"
+          },
+          "contains": [
+            "ST_BenchMetadataRemove",
+            "StringTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "stringtable_metadata_remove",
+      "blueprint_type": "",
+      "domain": "localization",
+      "workflow": "localization_stringtable_metadata_remove_roundtrip",
+      "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/string-tables-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithConfig/Private/MonolithLocalizationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_string_table",
+          "set_string_entry",
+          "set_string_metadata",
+          "save_asset",
+          "get_string_table",
+          "validate_string_table",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

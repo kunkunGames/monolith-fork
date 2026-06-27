@@ -127,6 +127,7 @@ $SkillNamespaceMap = [ordered]@{
     'unreal-cloth'           = @('cloth')
     'unreal-collection'      = @('collection')
     'unreal-combograph'      = @('combograph')
+    'unreal-console'         = @('console')
     'unreal-config'          = @('config')
     'unreal-cpp'             = @('source', 'config')
     'unreal-dataflow'        = @('dataflow')
@@ -219,7 +220,12 @@ function ConvertTo-Catalog {
 
 function Get-LiveCatalog {
     param([string]$Namespace)
-    $argsJson = @{ namespace = $Namespace } | ConvertTo-Json -Compress
+    $argsJson = @{
+        namespace = $Namespace
+        mode      = 'actions'
+        detail    = $true
+        limit     = 0
+    } | ConvertTo-Json -Compress
     $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"monolith_discover","arguments":' + $argsJson + '}}'
     try {
         $resp = Invoke-RestMethod -Uri $McpUrl -Method Post -ContentType 'application/json' `

@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "gameplay_effect",
+  "route_edit_domain": "gameplay_effect",
+  "module_id": "asset_authoring.gas.gameplay_effect",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.gameplay_effect",
+    "edit": "asset_operation.edit.gas.gameplay_effect",
+    "save": "asset_operation.save.gas.gameplay_effect",
+    "readback_verify": "asset_operation.readback_verify.gas.gameplay_effect"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-329"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-329",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "gameplay_effect",
+      "blueprint_type": "",
+      "workflow": "gas_gameplay_effect_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_gameplay_effect",
+        "set_duration",
+        "save_asset",
+        "get_gameplay_effect",
+        "validate_effect"
+      ],
+      "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-329",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_gameplay_effect",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow",
+            "duration_policy": "has_duration"
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "set_duration",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow",
+            "duration_policy": "has_duration",
+            "duration_magnitude": 4.0
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_gameplay_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow"
+          },
+          "contains": [
+            "has_duration",
+            "4"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "validate_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSlow"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_effect reports invalid GameplayEffect state as isError; duration policy is asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "gameplay_effect",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_gameplay_effect_roundtrip",
+      "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_gameplay_effect",
+          "set_duration",
+          "save_asset",
+          "get_gameplay_effect",
+          "validate_effect"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

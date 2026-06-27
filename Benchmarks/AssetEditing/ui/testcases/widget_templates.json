@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "widget_templates",
+  "route_edit_domain": "widget_templates",
+  "module_id": "asset_authoring.ui.widget_templates",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.widget_templates",
+    "edit": "asset_operation.edit.ui.widget_templates",
+    "save": "asset_operation.save.ui.widget_templates",
+    "readback_verify": "asset_operation.readback_verify.ui.widget_templates"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-428"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-428",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "widget_templates",
+      "blueprint_type": "",
+      "workflow": "ui_template_widgets_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_menu",
+        "create_dialog",
+        "create_loading_screen",
+        "create_inventory_grid",
+        "create_save_slot_list",
+        "create_widget_blueprint",
+        "create_hud_element",
+        "save_asset",
+        "get_widget_tree",
+        "inspect_assets_batch"
+      ],
+      "description": "Create saved UMG template Widget Blueprints for menu, dialog, loading, inventory, save slots, and HUD element layouts, then read each generated tree back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-428",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateMenu",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateDialog",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateLoading",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateInventory",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateSaveSlots",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_menu",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateMenu",
+            "menu_type": "pause_menu",
+            "buttons": [
+              "Resume",
+              "Options",
+              "Quit"
+            ]
+          },
+          "contains": [
+            "WBP_BenchTemplateMenu",
+            "pause_menu",
+            "button_count",
+            "3",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_dialog",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateDialog",
+            "title": "Benchmark Dialog",
+            "body": "Template action coverage",
+            "confirm_text": "Apply",
+            "cancel_text": "Back"
+          },
+          "contains": [
+            "WBP_BenchTemplateDialog",
+            "Benchmark Dialog",
+            "Apply",
+            "Back",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_loading_screen",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateLoading",
+            "show_progress": true,
+            "show_tips": true,
+            "show_spinner": true
+          },
+          "contains": [
+            "WBP_BenchTemplateLoading",
+            "has_progress",
+            "true",
+            "has_tips",
+            "true",
+            "has_spinner",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_inventory_grid",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateInventory",
+            "columns": 3,
+            "rows": 2,
+            "slot_size": 48
+          },
+          "contains": [
+            "WBP_BenchTemplateInventory",
+            "columns",
+            "3",
+            "rows",
+            "2",
+            "total_slots",
+            "6"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_save_slot_list",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateSaveSlots",
+            "max_slots": 2
+          },
+          "contains": [
+            "WBP_BenchTemplateSaveSlots",
+            "max_slots",
+            "2",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchTemplateHud",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_hud_element",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud",
+            "element_type": "health_bar",
+            "widget_name_prefix": "BenchHealth",
+            "compile": false
+          },
+          "contains": [
+            "health_bar",
+            "BenchHealth",
+            "widgets_created",
+            "3"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_hud_element",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud",
+            "element_type": "interaction_prompt",
+            "widget_name_prefix": "BenchPrompt",
+            "compile": true
+          },
+          "contains": [
+            "interaction_prompt",
+            "BenchPrompt",
+            "widgets_created",
+            "3",
+            "compiled",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateMenu"
+          },
+          "contains": [
+            "TitleText",
+            "PAUSED",
+            "ButtonContainer",
+            "Btn_Resume"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateDialog"
+          },
+          "contains": [
+            "DialogTitle",
+            "Benchmark Dialog",
+            "Btn_Confirm",
+            "ConfirmLabel",
+            "Apply"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateLoading"
+          },
+          "contains": [
+            "BackgroundImage",
+            "LoadingProgress",
+            "TipText",
+            "SpinnerImage"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateInventory"
+          },
+          "contains": [
+            "InventoryScroll",
+            "InventoryGrid",
+            "Slot_0",
+            "SlotIcon_5"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateSaveSlots"
+          },
+          "contains": [
+            "SaveSlotContainer",
+            "SaveSlotScroll",
+            "SaveEntry_0",
+            "SlotNum_1"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud"
+          },
+          "contains": [
+            "BenchHealth_Container",
+            "BenchHealth_Bar",
+            "BenchPrompt_Container",
+            "BenchPrompt_KeyHint"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateMenu",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateDialog",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateLoading",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateInventory",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateSaveSlots",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchTemplateHud"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "WBP_BenchTemplateMenu",
+            "WBP_BenchTemplateDialog",
+            "WBP_BenchTemplateLoading",
+            "WBP_BenchTemplateInventory",
+            "WBP_BenchTemplateSaveSlots",
+            "WBP_BenchTemplateHud",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "widget_templates",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_template_widgets_roundtrip",
+      "description": "Create saved UMG template Widget Blueprints for menu, dialog, loading, inventory, save slots, and HUD element layouts, then read each generated tree back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_menu",
+          "create_dialog",
+          "create_loading_screen",
+          "create_inventory_grid",
+          "create_save_slot_list",
+          "create_widget_blueprint",
+          "create_hud_element",
+          "save_asset",
+          "get_widget_tree",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -102,9 +102,9 @@ Binaries\monolith_query.exe project repair_fts --target=all
 
 Default `--include-content=true` is the high-recall discovery mode. Use `--include-content=false` for bridge/source context, asset identity matching, or noisy name/type lookup. Do not duplicate `EngineSource.db` source symbols or `graph.db` nodes into `ProjectIndex.db`; use `source`/`bridge` actions for source relationships.
 
-## 14. MCP Connection Recovery in Go Checkout
+## 14. MCP Connection Recovery in Project Checkouts
 
-For Go checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions. If the MCP endpoint is unreachable or the transport fails, start the project headless editor wrapper and reconnect the existing Monolith proxy/client instead of bypassing Monolith:
+For project checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions. If the MCP endpoint is unreachable or the transport fails, start the project headless editor wrapper and reconnect the existing Monolith proxy/client instead of bypassing Monolith:
 
 ```powershell
 D:\P4\game\BatchFiles\RunHeadlessEditor.bat

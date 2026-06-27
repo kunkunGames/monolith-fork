@@ -110,14 +110,17 @@ public:
 		FString Text;                  // Line-numbered slice (ReadFileLines form). Empty when unresolved.
 		int32 StartLine = 1;           // Clamped start line actually used.
 		int32 EndLine = 0;             // Clamped/derived end line actually used.
-		FString ErrorClass;            // "" on success; e.g. "coverage_miss" when nothing resolved.
+		FString ErrorClass;            // "" on success; e.g. "coverage_miss", "path_not_found".
 	};
 
 	/**
 	 * Resolve a caller-supplied path against the engine source DB and read a bounded,
 	 * line-numbered slice. Resolution order mirrors HandleReadFile: absolute on-disk path,
 	 * then DB exact-path match, then DB suffix match. On a miss, bResolved=false and
-	 * ErrorClass="coverage_miss". DB must be open; pass the result of GetDB().
+	 * ErrorClass distinguishes index misses from direct filesystem misses:
+	 * "coverage_miss" for DB lookup misses, "path_not_found" for caller-supplied
+	 * absolute paths that do not exist, and "indexed_path_unreadable" for DB rows
+	 * whose backing file cannot be read. DB must be open; pass the result of GetDB().
 	 *
 	 * RequestedStartLine<=0 defaults to 1. RequestedEndLine<=0 defaults to a bounded window
 	 * (StartLine + DefaultWindow - 1). The returned Text and ShortPath never contain an

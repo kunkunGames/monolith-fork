@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_cue_layered_template",
+  "route_edit_domain": "sound_cue_layered_template",
+  "module_id": "asset_authoring.audio.sound_cue_layered_template",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_cue_layered_template",
+    "edit": "asset_operation.edit.audio.sound_cue_layered_template",
+    "save": "asset_operation.save.audio.sound_cue_layered_template",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_cue_layered_template"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-367"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-367",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_cue_layered_template",
+      "blueprint_type": "",
+      "workflow": "audio_layered_soundcue_template_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_layered_sound_cue",
+        "save_asset",
+        "get_sound_cue_graph",
+        "find_sound_waves_in_cue",
+        "validate_sound_cue"
+      ],
+      "description": "Create two synthetic SoundWave assets, build a layered mixer SoundCue with per-layer volumes, save it, and read the graph back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-367",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerB",
+              "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerA",
+            "frequency_hz": 330.0,
+            "duration_seconds": 0.16,
+            "sample_rate": 44100,
+            "amplitude": 0.22
+          },
+          "contains": [
+            "SW_BenchLayerA"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerB",
+            "frequency_hz": 660.0,
+            "duration_seconds": 0.16,
+            "sample_rate": 44100,
+            "amplitude": 0.12
+          },
+          "contains": [
+            "SW_BenchLayerB"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_layered_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered",
+            "sound_waves": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchLayerB"
+            ],
+            "volumes": [
+              0.72,
+              0.31
+            ]
+          },
+          "contains": [
+            "SCue_BenchLayered",
+            "wave_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_cue_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered"
+          },
+          "contains": [
+            "SoundNodeMixer",
+            "InputVolume",
+            "0.72",
+            "SW_BenchLayerA",
+            "SW_BenchLayerB"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_sound_waves_in_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered"
+          },
+          "contains": [
+            "SW_BenchLayerA",
+            "SW_BenchLayerB"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "validate_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchLayered"
+          },
+          "contains": [
+            "valid",
+            "true"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_cue_layered_template",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_layered_soundcue_template_roundtrip",
+      "description": "Create two synthetic SoundWave assets, build a layered mixer SoundCue with per-layer volumes, save it, and read the graph back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_layered_sound_cue",
+          "save_asset",
+          "get_sound_cue_graph",
+          "find_sound_waves_in_cue",
+          "validate_sound_cue"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

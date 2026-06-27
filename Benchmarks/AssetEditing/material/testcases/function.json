@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_function",
+  "route_edit_domain": "function",
+  "module_id": "asset_authoring.material.function",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.function",
+    "edit": "asset_operation.edit.material.function",
+    "save": "asset_operation.save.material.function",
+    "readback_verify": "asset_operation.readback_verify.material.function"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-295"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-295",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_function",
+      "blueprint_type": "",
+      "workflow": "material_function_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material_function",
+        "build_function_graph",
+        "save_material",
+        "get_function_info",
+        "export_function_graph"
+      ],
+      "description": "Create a Material Function, build function input/output expressions, save it, and inspect graph structure"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-295",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material_function",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale",
+            "description": "Benchmark scalar passthrough",
+            "expose_to_library": true,
+            "library_categories": [
+              "Benchmark"
+            ],
+            "type": "MaterialFunction"
+          },
+          "contains": [
+            "MF_BenchScalarScale",
+            "MaterialFunction",
+            "Benchmark scalar"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_function_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale",
+            "clear_existing": true,
+            "graph_spec": {
+              "inputs": [
+                {
+                  "id": "BenchInput",
+                  "name": "BenchInput",
+                  "type": "float",
+                  "description": "Benchmark scalar input"
+                }
+              ],
+              "outputs": [
+                {
+                  "id": "BenchOutput",
+                  "name": "BenchOutput",
+                  "description": "Benchmark scalar output"
+                }
+              ],
+              "connections": [
+                {
+                  "from": "BenchInput",
+                  "to": "BenchOutput"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "input_count",
+            "output_count"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_function_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale"
+          },
+          "contains": [
+            "BenchInput",
+            "BenchOutput",
+            "Benchmark scalar"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "export_function_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MF_BenchScalarScale"
+          },
+          "contains": [
+            "BenchInput",
+            "BenchOutput"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_function",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_function_roundtrip",
+      "description": "Create a Material Function, build function input/output expressions, save it, and inspect graph structure",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material_function",
+          "build_function_graph",
+          "save_material",
+          "get_function_info",
+          "export_function_graph"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

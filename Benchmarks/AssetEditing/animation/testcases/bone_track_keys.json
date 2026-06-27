@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "bone_track_keys",
+  "route_edit_domain": "bone_track_keys",
+  "module_id": "asset_authoring.animation.bone_track_keys",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.bone_track_keys",
+    "edit": "asset_operation.edit.animation.bone_track_keys",
+    "save": "asset_operation.save.animation.bone_track_keys",
+    "readback_verify": "asset_operation.readback_verify.animation.bone_track_keys"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-451"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-451",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "bone_track_keys",
+      "blueprint_type": "",
+      "workflow": "animation_bone_track_keys_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "get_skeleton_info",
+        "set_bone_track_keys",
+        "save_asset",
+        "list_bone_tracks",
+        "get_bone_track_keys",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-451",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchBoneTrackKeys",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_skeleton_info",
+            "asset_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "bone_count",
+            "bones"
+          ],
+          "capture": {
+            "track_bone": "$.bones[0].name"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_bone_track_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys",
+            "bone_name": "${track_bone}",
+            "positions_json": "[[0,0,0],[10,0,0]]",
+            "rotations_json": "[[0,0,0,1],[0,0,0,1]]",
+            "scales_json": "[[1,1,1],[1,1,1]]"
+          },
+          "contains": [
+            "${track_bone}",
+            "num_keys",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "list_bone_tracks",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys"
+          },
+          "contains": [
+            "${track_bone}",
+            "count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_bone_track_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys",
+            "bone_name": "${track_bone}",
+            "start_frame": 0,
+            "end_frame": 1
+          },
+          "contains": [
+            "${track_bone}",
+            "num_keys",
+            "2",
+            "positions",
+            "10",
+            "rotations",
+            "scales"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchBoneTrackKeys"
+          },
+          "contains": [
+            "A_BenchBoneTrackKeys",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "bone_track_keys",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_bone_track_keys_roundtrip",
+      "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/animation-sequences-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAnimation/Private/MonolithAnimationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "get_skeleton_info",
+          "set_bone_track_keys",
+          "save_asset",
+          "list_bone_tracks",
+          "get_bone_track_keys",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

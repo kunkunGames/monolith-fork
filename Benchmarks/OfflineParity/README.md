@@ -41,7 +41,7 @@ This benchmark only compares the two OFFLINE tools (`monolith_query.exe` vs
 `monolith_offline.py`). Editor-only surfaces such as the `blueprint` write
 namespace are never exe-vs-py comparable here — neither offline tool implements
 them — so a green score here does not imply those live surfaces are healthy.
-Live-capability coverage for editor surfaces lives in the BlueprintEditing,
+Live-capability coverage for editor surfaces lives in the AssetEditing,
 ProjectIndex, and AI capability benchmarks, not here.
 
 For CI thresholding, keep the hard-gate as the binary pass/fail check. Use the

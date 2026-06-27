@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "ik_retargeter_pose_settings",
+  "route_edit_domain": "ik_retargeter_pose_settings",
+  "module_id": "asset_authoring.animation.ik_retargeter_pose_settings",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.ik_retargeter_pose_settings",
+    "edit": "asset_operation.edit.animation.ik_retargeter_pose_settings",
+    "save": "asset_operation.save.animation.ik_retargeter_pose_settings",
+    "readback_verify": "asset_operation.readback_verify.animation.ik_retargeter_pose_settings"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-315"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-315",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "ik_retargeter_pose_settings",
+      "blueprint_type": "",
+      "workflow": "animation_ik_retargeter_pose_settings_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_ik_rig",
+        "create_ik_retargeter",
+        "set_retargeter_rigs",
+        "set_retarget_pose",
+        "set_retarget_root_settings",
+        "save_asset",
+        "get_retarget_pose",
+        "get_retargeter_info",
+        "inspect_asset"
+      ],
+      "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-315",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseSource",
+              "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseTarget",
+              "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_rig",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseSource",
+            "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"
+          },
+          "contains": [
+            "IKR_BenchPoseSource",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_rig",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseTarget",
+            "skeletal_mesh_path": "/Engine/EngineMeshes/SkeletalCube"
+          },
+          "contains": [
+            "IKR_BenchPoseTarget",
+            "SkeletalCube",
+            "bone_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_ik_retargeter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings"
+          },
+          "contains": [
+            "RTG_BenchPoseSettings",
+            "retarget_op_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_retargeter_rigs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings",
+            "source_ik_rig_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseSource",
+            "target_ik_rig_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseTarget",
+            "source_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+            "target_preview_mesh": "/Engine/EngineMeshes/SkeletalCube",
+            "auto_map": "exact"
+          },
+          "contains": [
+            "IKR_BenchPoseSource",
+            "IKR_BenchPoseTarget",
+            "default_ops_seeded",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_retarget_pose",
+            "retargeter_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings",
+            "side": "target",
+            "mode": "bone_deltas",
+            "root_translation_delta": {
+              "x": 12.5,
+              "y": -3.0,
+              "z": 7.25
+            }
+          },
+          "contains": [
+            "RTG_BenchPoseSettings",
+            "target",
+            "bone_deltas",
+            "root_translation_written",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_retarget_root_settings",
+            "retargeter_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings",
+            "scale_horizontal": 0.75,
+            "scale_vertical": 1.25,
+            "translation_alpha": 0.6,
+            "rotation_alpha": 0.8,
+            "translation_offset_global": {
+              "x": 1.0,
+              "y": 2.0,
+              "z": 3.0
+            }
+          },
+          "contains": [
+            "RTG_BenchPoseSettings",
+            "pelvis_op_index",
+            "scale_horizontal",
+            "0.75",
+            "translation_alpha",
+            "0.6"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseSource"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IKR_BenchPoseTarget"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_retarget_pose",
+            "retargeter_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings",
+            "side": "target"
+          },
+          "contains": [
+            "RTG_BenchPoseSettings",
+            "target",
+            "root_translation_delta",
+            "12.5",
+            "-3",
+            "7.25"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_retargeter_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings"
+          },
+          "contains": [
+            "IKR_BenchPoseSource",
+            "IKR_BenchPoseTarget",
+            "retarget_op_count",
+            "FIKRetargetPelvisMotionOp",
+            "ScaleHorizontal",
+            "0.75",
+            "TranslationAlpha",
+            "0.6"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/RTG_BenchPoseSettings"
+          },
+          "contains": [
+            "RTG_BenchPoseSettings"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "ik_retargeter_pose_settings",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_ik_retargeter_pose_settings_roundtrip",
+      "description": "Create IK Rig and IK Retargeter assets, edit the target retarget pose and pelvis-motion settings, save, and read the edited retargeter state back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_ik_rig",
+          "create_ik_retargeter",
+          "set_retargeter_rigs",
+          "set_retarget_pose",
+          "set_retarget_root_settings",
+          "save_asset",
+          "get_retarget_pose",
+          "get_retargeter_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

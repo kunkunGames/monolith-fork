@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "animation_core",
+  "route_edit_domain": "core",
+  "module_id": "asset_authoring.animation.core",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.core",
+    "edit": "asset_operation.edit.animation.core",
+    "save": "asset_operation.save.animation.core",
+    "readback_verify": "asset_operation.readback_verify.animation.core"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-309"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-309",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "animation_core",
+      "blueprint_type": "",
+      "workflow": "animation_core_assets_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "set_sequence_properties",
+        "save_asset",
+        "create_blend_space",
+        "create_anim_blueprint",
+        "get_sequence_info",
+        "get_blend_space_info",
+        "get_abp_info"
+      ],
+      "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-309",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchSkeletalCube",
+              "/Game/Benchmarks/AssetAuthoring/BS_BenchSkeletalCube",
+              "/Game/Benchmarks/AssetAuthoring/ABP_BenchSkeletalCube"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchSkeletalCube",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchSkeletalCube",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_sequence_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchSkeletalCube",
+            "rate_scale": 1.25,
+            "loop": true
+          },
+          "contains": [
+            "rate_scale",
+            "1.25",
+            "loop"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchSkeletalCube"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_blend_space",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSkeletalCube",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "axis_x_name": "Speed",
+            "axis_x_min": 0,
+            "axis_x_max": 600,
+            "axis_y_name": "Direction",
+            "axis_y_min": -180,
+            "axis_y_max": 180
+          },
+          "contains": [
+            "BS_BenchSkeletalCube",
+            "SkeletalCube_Skeleton",
+            "Speed",
+            "Direction"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSkeletalCube"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_anim_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchSkeletalCube",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "parent_class": "AnimInstance"
+          },
+          "contains": [
+            "ABP_BenchSkeletalCube",
+            "SkeletalCube_Skeleton",
+            "AnimInstance",
+            "generated_class"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchSkeletalCube"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchSkeletalCube"
+          },
+          "contains": [
+            "A_BenchSkeletalCube",
+            "SkeletalCube_Skeleton",
+            "rate_scale",
+            "1.25",
+            "is_looping",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_blend_space_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BS_BenchSkeletalCube"
+          },
+          "contains": [
+            "BS_BenchSkeletalCube",
+            "SkeletalCube_Skeleton",
+            "Speed",
+            "Direction"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_abp_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchSkeletalCube"
+          },
+          "contains": [
+            "ABP_BenchSkeletalCube",
+            "SkeletalCube_Skeleton",
+            "AnimGraph",
+            "EventGraph",
+            "AnimInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "animation_core",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_core_assets_roundtrip",
+      "description": "Create core skeletal animation assets from an engine skeleton, edit sequence/blendspace settings, save, and inspect sequence/blendspace/ABP metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "set_sequence_properties",
+          "save_asset",
+          "create_blend_space",
+          "create_anim_blueprint",
+          "get_sequence_info",
+          "get_blend_space_info",
+          "get_abp_info"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

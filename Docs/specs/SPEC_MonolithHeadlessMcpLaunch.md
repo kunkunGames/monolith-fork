@@ -46,7 +46,7 @@ The feature is for automation and agent workstations where the editor is not alr
 ### 4.1 Agent Starts With No Editor Running
 
 1. Agent launches `BatchFiles\RunHeadlessEditor.bat` when no suitable editor is already running.
-2. Batch resolves the editor from `GO.uproject`.
+2. Batch resolves the editor from the host `.uproject`.
 3. Batch starts the full editor with rendering disabled by `-NullRHI`, leaves P4 enabled, and exits.
 4. MCP client keeps using the existing Monolith stdio proxy configuration.
 5. Proxy retries until the editor-side Monolith MCP server is reachable.
@@ -100,7 +100,7 @@ Batch diagnostics go to stderr only. The batch starts the editor and exits; the 
 Baseline Windows command shape:
 
 ```powershell
-UnrealEditor.exe D:\P4\game\GO.uproject -Unattended -NullRHI -NoSplash -NoSound -Log -AbsLog=D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-<timestamp>.log
+UnrealEditor.exe D:\Path\To\Project\<Project>.uproject -Unattended -NullRHI -NoSplash -NoSound -Log -AbsLog=D:\Path\To\Project\Saved\HeadlessMcp\Logs\HeadlessEditor-<timestamp>.log
 ```
 
 Rules:
@@ -158,7 +158,7 @@ Example response:
   "mode": "headless_nullrhi",
   "is_commandlet": false,
   "unattended": true,
-  "project_path": "D:/P4/game/GO.uproject",
+  "project_path": "D:/Path/To/Project/<Project>.uproject",
   "server_port": 9316,
   "capabilities": {
     "source_index": "available",
@@ -306,8 +306,16 @@ Forbidden:
 Required local verification before implementation is marked complete:
 
 ```powershell
-$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File "D:\P4\game\BatchFiles\Script\ResolveUnrealEngine.ps1" -Project "D:\P4\game\GO.uproject" -Output Root
-& "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" GoGameEditor Win64 Development -Project="D:\P4\game\GO.uproject" -WaitMutex -NoHotReloadFromIDE
+$projectRoot = "D:\Path\To\Project"
+$uproject = Get-ChildItem -LiteralPath $projectRoot -Filter *.uproject | Select-Object -First 1
+$targetFile = Get-ChildItem -LiteralPath (Join-Path $projectRoot "Source") -Filter *Editor.Target.cs -Recurse | Select-Object -First 1
+$editorTarget = if ($targetFile) {
+  [System.IO.Path]::GetFileNameWithoutExtension([System.IO.Path]::GetFileNameWithoutExtension($targetFile.Name))
+} else {
+  "$([System.IO.Path]::GetFileNameWithoutExtension($uproject.Name))Editor"
+}
+$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File "$projectRoot\BatchFiles\Script\ResolveUnrealEngine.ps1" -Project $uproject.FullName -Output Root
+& "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" $editorTarget Win64 Development "-Project=$($uproject.FullName)" -WaitMutex -NoHotReloadFromIDE
 ```
 
 Plus a real headless MCP smoke run through `D:\P4\game\BatchFiles\RunHeadlessEditor.bat`.

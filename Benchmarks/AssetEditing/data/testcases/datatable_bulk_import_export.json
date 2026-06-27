@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "datatable_bulk_import_export",
+  "route_edit_domain": "datatable_bulk_import_export",
+  "module_id": "asset_authoring.data.datatable_bulk_import_export",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.datatable_bulk_import_export",
+    "edit": "asset_operation.edit.data.datatable_bulk_import_export",
+    "save": "asset_operation.save.data.datatable_bulk_import_export",
+    "readback_verify": "asset_operation.readback_verify.data.datatable_bulk_import_export"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-348"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-348",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "datatable_bulk_import_export",
+      "blueprint_type": "",
+      "workflow": "datatable_bulk_import_export_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_user_defined_struct",
+        "save_asset",
+        "create_data_table",
+        "set_data_table_rows",
+        "rename_data_table_row",
+        "duplicate_data_table_row",
+        "remove_data_table_row",
+        "export_data_table",
+        "import_data_table",
+        "inspect_asset",
+        "get_data_table_rows"
+      ],
+      "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-348",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/S_BenchBulkRow",
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_user_defined_struct",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/S_BenchBulkRow",
+            "fields": [
+              {
+                "name": "DisplayName",
+                "type": "text"
+              },
+              {
+                "name": "Power",
+                "type": "int",
+                "default_value": "0"
+              }
+            ]
+          },
+          "contains": [
+            "S_BenchBulkRow",
+            "DisplayName",
+            "Power"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/S_BenchBulkRow"
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_data_table",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "row_struct": "/Game/Benchmarks/AssetAuthoring/S_BenchBulkRow.S_BenchBulkRow"
+          },
+          "contains": [
+            "DT_BenchBulkRows"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "rows": [
+              {
+                "row_name": "Alpha",
+                "values": {
+                  "DisplayName": "Alpha Sword",
+                  "Power": 11
+                }
+              },
+              {
+                "row_name": "Beta",
+                "values": {
+                  "DisplayName": "Beta Axe",
+                  "Power": 17
+                }
+              }
+            ],
+            "strict": true,
+            "save": false
+          },
+          "contains": [
+            "Alpha",
+            "Beta",
+            "Power"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "rename_data_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "old_name": "Alpha",
+            "new_name": "AlphaRenamed",
+            "save": false
+          },
+          "contains": [
+            "AlphaRenamed"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "duplicate_data_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "source_row": "Beta",
+            "new_name": "BetaCopy",
+            "save": false
+          },
+          "contains": [
+            "BetaCopy"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "remove_data_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "row_name": "BetaCopy",
+            "confirm": true,
+            "save": false
+          },
+          "contains": [
+            "BetaCopy"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "export_data_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "format": "json",
+            "simple_text": true
+          },
+          "contains": [
+            "AlphaRenamed",
+            "Beta",
+            "total_rows"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "import_data_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows",
+            "format": "csv",
+            "mode": "replace",
+            "text": "Name,DisplayName,Power\nImportedAlpha,Imported Sword,21\nImportedBeta,Imported Shield,34\n",
+            "save": true
+          },
+          "contains": [
+            "rows_written",
+            "2",
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/S_BenchBulkRow"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows"
+          },
+          "contains": [
+            "DT_BenchBulkRows",
+            "DataTable"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows"
+          },
+          "contains": [
+            "ImportedAlpha",
+            "Imported Sword",
+            "21",
+            "ImportedBeta",
+            "34"
+          ],
+          "not_contains": [
+            "AlphaRenamed",
+            "BetaCopy"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchBulkRows"
+          },
+          "contains": [
+            "DT_BenchBulkRows",
+            "DataTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "datatable_bulk_import_export",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "datatable_bulk_import_export_roundtrip",
+      "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_user_defined_struct",
+          "save_asset",
+          "create_data_table",
+          "set_data_table_rows",
+          "rename_data_table_row",
+          "duplicate_data_table_row",
+          "remove_data_table_row",
+          "export_data_table",
+          "import_data_table",
+          "inspect_asset",
+          "get_data_table_rows"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

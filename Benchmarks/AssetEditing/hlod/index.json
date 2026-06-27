@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "hlod",
+  "asset_type_slug": "hlod",
+  "module_id": "asset_authoring.hlod",
+  "task_count": 2,
+  "operation_counts": {
+    "creation_or_import": 2,
+    "edit": 2,
+    "save": 2,
+    "readback_verify": 2
+  },
+  "lifecycle_counts": {
+    "create_save": 2
+  },
+  "edit_domain_count": 2,
+  "task_ids": [
+    "BEB-340",
+    "BEB-485"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-340",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "hlod",
+      "edit_domain": "hlod_layer",
+      "blueprint_type": "",
+      "workflow": "hlod_layer_config_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_hlod_layer",
+        "configure_hlod_layer",
+        "save_asset",
+        "get_hlod_layer",
+        "inspect_asset"
+      ],
+      "description": "Create a World Partition HLODLayer asset, reconfigure cell/loading settings, save, and inspect the reflected HLOD layer"
+    },
+    {
+      "id": "BEB-485",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "hlod",
+      "edit_domain": "mesh_setup_layer",
+      "blueprint_type": "",
+      "workflow": "hlod_mesh_setup_layer_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "setup_hlod",
+        "save_asset",
+        "get_hlod_layer",
+        "inspect_asset"
+      ],
+      "description": "Create an HLODLayer through the mesh setup action, save it, and read reflected layer metadata back through the HLOD action surface"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "hlod_layer",
+      "route_edit_domain": "layer",
+      "module_id": "asset_authoring.hlod.layer",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.hlod.layer",
+        "edit": "asset_operation.edit.hlod.layer",
+        "save": "asset_operation.save.hlod.layer",
+        "readback_verify": "asset_operation.readback_verify.hlod.layer"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-340"
+      ],
+      "case_file": "testcases\\layer.json"
+    },
+    {
+      "edit_domain": "mesh_setup_layer",
+      "route_edit_domain": "mesh_setup_layer",
+      "module_id": "asset_authoring.hlod.mesh_setup_layer",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.hlod.mesh_setup_layer",
+        "edit": "asset_operation.edit.hlod.mesh_setup_layer",
+        "save": "asset_operation.save.hlod.mesh_setup_layer",
+        "readback_verify": "asset_operation.readback_verify.hlod.mesh_setup_layer"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-485"
+      ],
+      "case_file": "testcases\\mesh_setup_layer.json"
+    }
+  ]
+}

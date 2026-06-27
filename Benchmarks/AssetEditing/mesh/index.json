@@ -1,0 +1,1104 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "module_id": "asset_authoring.mesh",
+  "task_count": 20,
+  "operation_counts": {
+    "creation_or_import": 20,
+    "edit": 20,
+    "save": 20,
+    "readback_verify": 20
+  },
+  "lifecycle_counts": {
+    "create_save": 20
+  },
+  "edit_domain_count": 20,
+  "task_ids": [
+    "BEB-300",
+    "BEB-301",
+    "BEB-302",
+    "BEB-387",
+    "BEB-388",
+    "BEB-396",
+    "BEB-405",
+    "BEB-415",
+    "BEB-440",
+    "BEB-441",
+    "BEB-452",
+    "BEB-453",
+    "BEB-454",
+    "BEB-462",
+    "BEB-474",
+    "BEB-486",
+    "BEB-487",
+    "BEB-488",
+    "BEB-498",
+    "BEB-504"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-300",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_import",
+      "blueprint_type": "",
+      "workflow": "static_mesh_import_collision_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_mesh",
+        "set_mesh_collision",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_collision",
+        "inspect_asset"
+      ],
+      "description": "Import a local OBJ as a StaticMesh asset, edit simple collision, save it, and inspect mesh/collision data"
+    },
+    {
+      "id": "BEB-301",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_export",
+      "blueprint_type": "",
+      "workflow": "mesh_static_mesh_fbx_export_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_mesh",
+        "save_asset",
+        "export_mesh",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Import a deterministic StaticMesh OBJ, save it, export it to FBX, and inspect the mesh asset metadata"
+    },
+    {
+      "id": "BEB-302",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_lod_quality",
+      "blueprint_type": "",
+      "workflow": "static_mesh_lod_screen_quality_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_mesh",
+        "set_lod_screen_sizes",
+        "save_asset",
+        "get_mesh_lods",
+        "analyze_mesh_quality",
+        "validate_game_ready",
+        "inspect_asset"
+      ],
+      "description": "Import a StaticMesh, edit its LOD screen-size metadata, save it, and run mesh quality/game-readiness read-backs"
+    },
+    {
+      "id": "BEB-387",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "geometry_handle_save",
+      "blueprint_type": "",
+      "workflow": "mesh_geometry_handle_save_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_subdivide",
+        "compute_uvs",
+        "save_handle",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript mesh handle, subdivide it, compute UVs, save it as StaticMesh, release the handle, and inspect the saved asset"
+    },
+    {
+      "id": "BEB-388",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "parametric_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_parametric_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_parametric_mesh",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a parametric chair StaticMesh, save it under the benchmark folder, and inspect the generated mesh"
+    },
+    {
+      "id": "BEB-396",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "geometry_direct_ops",
+      "blueprint_type": "",
+      "workflow": "mesh_geometry_direct_ops_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_plane_cut",
+        "geometry_recompute_normals",
+        "geometry_smooth",
+        "generate_collision",
+        "save_handle",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_collision",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript mesh handle, run plane-cut, normal recompute, smoothing, and collision generation, save it as StaticMesh, and inspect geometry/collision"
+    },
+    {
+      "id": "BEB-405",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "static_mesh_auto_lod",
+      "blueprint_type": "",
+      "workflow": "mesh_static_mesh_auto_lod_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_parametric_mesh",
+        "auto_generate_lods",
+        "save_asset",
+        "get_mesh_lods",
+        "compare_lod_chain",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Create a parametric StaticMesh, generate and persist a StaticMesh LOD chain, save it, and read the LOD chain back"
+    },
+    {
+      "id": "BEB-415",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "procedural_pipe_network",
+      "blueprint_type": "",
+      "workflow": "mesh_pipe_network_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_pipe_network",
+        "save_asset",
+        "get_mesh_info",
+        "analyze_mesh_quality",
+        "inspect_asset"
+      ],
+      "description": "Generate a procedural pipe-network StaticMesh, save it under the benchmark folder, and inspect the generated mesh asset"
+    },
+    {
+      "id": "BEB-440",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "proxy_mesh_from_scene_actors",
+      "blueprint_type": "",
+      "workflow": "mesh_proxy_mesh_from_scene_actors_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "spawn_actor",
+        "generate_proxy_mesh",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Spawn two temporary StaticMeshActors, generate and save a proxy StaticMesh asset from them, clean up the scene, and inspect the mesh"
+    },
+    {
+      "id": "BEB-441",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "merge_actors",
+      "blueprint_type": "",
+      "workflow": "mesh_merge_actors_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "spawn_actor",
+        "merge_actors",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Spawn temporary StaticMeshActors, run the public merge_actors workflow to create a StaticMesh asset, clean up the scene actors, and inspect the merged mesh"
+    },
+    {
+      "id": "BEB-452",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "handle_boolean_remesh_material_ids",
+      "blueprint_type": "",
+      "workflow": "mesh_handle_boolean_remesh_material_ids_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "mesh_boolean",
+        "geometry_material_ids",
+        "mesh_remesh",
+        "generate_lods",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "list_handles",
+        "inspect_asset"
+      ],
+      "description": "Create primitive mesh handles, union them, edit material IDs, remesh, generate a LOD handle, save as StaticMesh, release handles, and inspect the saved mesh"
+    },
+    {
+      "id": "BEB-453",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "procedural_structure_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_structure_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_structure",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "analyze_mesh_quality",
+        "inspect_asset"
+      ],
+      "description": "Generate a room StaticMesh with wall thickness, floor/ceiling, and a door opening, save it, and inspect the generated mesh bounds and quality"
+    },
+    {
+      "id": "BEB-454",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "procedural_terrain_patch",
+      "blueprint_type": "",
+      "workflow": "mesh_terrain_patch_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_terrain_patch",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "analyze_mesh_quality",
+        "inspect_asset"
+      ],
+      "description": "Generate a deterministic terrain-patch StaticMesh with seeded multi-octave displacement, save it, and read mesh quality and bounds back"
+    },
+    {
+      "id": "BEB-462",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "simplify_uv_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_simplify_uv_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "mesh_simplify",
+        "compute_uvs",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_uvs",
+        "get_vertex_data",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript sphere handle, simplify it, compute UVs, save it as a StaticMesh, and read UV and vertex data back"
+    },
+    {
+      "id": "BEB-474",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "plane_cut_mirror_repair",
+      "blueprint_type": "",
+      "workflow": "mesh_plane_cut_mirror_repair_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_plane_cut",
+        "mirror_mesh",
+        "fill_holes",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "list_handles",
+        "inspect_asset"
+      ],
+      "description": "Create a primitive mesh handle, plane-cut with hole filling, mirror and repair it, save as StaticMesh, release the handle, and inspect the saved mesh"
+    },
+    {
+      "id": "BEB-486",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "building_shell_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_building_shell_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_building_shell",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a multi-floor building shell StaticMesh with a stairwell cutout, save it, and inspect mesh geometry metadata"
+    },
+    {
+      "id": "BEB-487",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "maze_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_maze_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_maze",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a seeded maze StaticMesh, save it, and verify deterministic maze metadata and mesh bounds"
+    },
+    {
+      "id": "BEB-488",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "horror_prop_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_horror_prop_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_horror_prop",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a seeded barricade StaticMesh with authored board and gap parameters, save it, and inspect mesh geometry metadata"
+    },
+    {
+      "id": "BEB-498",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "fragment_static_mesh",
+      "blueprint_type": "",
+      "workflow": "mesh_fragment_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "create_fragments",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "list_handles",
+        "inspect_asset"
+      ],
+      "description": "Create a primitive GeometryScript handle, fragment it deterministically, save one fragment as a StaticMesh, release handles, and inspect the saved mesh"
+    },
+    {
+      "id": "BEB-504",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "fix_quality",
+      "blueprint_type": "",
+      "workflow": "mesh_fix_quality_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_parametric_mesh",
+        "fix_mesh_quality",
+        "save_asset",
+        "analyze_mesh_quality",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a parametric StaticMesh, run mesh quality repair operations through GeometryScript, save it, and read mesh quality and registry state back"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "building_shell_static_mesh",
+      "route_edit_domain": "building_shell_static_mesh",
+      "module_id": "asset_authoring.mesh.building_shell_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.building_shell_static_mesh",
+        "edit": "asset_operation.edit.mesh.building_shell_static_mesh",
+        "save": "asset_operation.save.mesh.building_shell_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.building_shell_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-486"
+      ],
+      "case_file": "testcases\\building_shell_static_mesh.json"
+    },
+    {
+      "edit_domain": "fix_quality",
+      "route_edit_domain": "fix_quality",
+      "module_id": "asset_authoring.mesh.fix_quality",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.fix_quality",
+        "edit": "asset_operation.edit.mesh.fix_quality",
+        "save": "asset_operation.save.mesh.fix_quality",
+        "readback_verify": "asset_operation.readback_verify.mesh.fix_quality"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-504"
+      ],
+      "case_file": "testcases\\fix_quality.json"
+    },
+    {
+      "edit_domain": "fragment_static_mesh",
+      "route_edit_domain": "fragment_static_mesh",
+      "module_id": "asset_authoring.mesh.fragment_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.fragment_static_mesh",
+        "edit": "asset_operation.edit.mesh.fragment_static_mesh",
+        "save": "asset_operation.save.mesh.fragment_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.fragment_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-498"
+      ],
+      "case_file": "testcases\\fragment_static_mesh.json"
+    },
+    {
+      "edit_domain": "geometry_direct_ops",
+      "route_edit_domain": "geometry_direct_ops",
+      "module_id": "asset_authoring.mesh.geometry_direct_ops",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.geometry_direct_ops",
+        "edit": "asset_operation.edit.mesh.geometry_direct_ops",
+        "save": "asset_operation.save.mesh.geometry_direct_ops",
+        "readback_verify": "asset_operation.readback_verify.mesh.geometry_direct_ops"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-396"
+      ],
+      "case_file": "testcases\\geometry_direct_ops.json"
+    },
+    {
+      "edit_domain": "geometry_handle_save",
+      "route_edit_domain": "geometry_handle_save",
+      "module_id": "asset_authoring.mesh.geometry_handle_save",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.geometry_handle_save",
+        "edit": "asset_operation.edit.mesh.geometry_handle_save",
+        "save": "asset_operation.save.mesh.geometry_handle_save",
+        "readback_verify": "asset_operation.readback_verify.mesh.geometry_handle_save"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-387"
+      ],
+      "case_file": "testcases\\geometry_handle_save.json"
+    },
+    {
+      "edit_domain": "handle_boolean_remesh_material_ids",
+      "route_edit_domain": "handle_boolean_remesh_material_ids",
+      "module_id": "asset_authoring.mesh.handle_boolean_remesh_material_ids",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.handle_boolean_remesh_material_ids",
+        "edit": "asset_operation.edit.mesh.handle_boolean_remesh_material_ids",
+        "save": "asset_operation.save.mesh.handle_boolean_remesh_material_ids",
+        "readback_verify": "asset_operation.readback_verify.mesh.handle_boolean_remesh_material_ids"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-452"
+      ],
+      "case_file": "testcases\\handle_boolean_remesh_material_ids.json"
+    },
+    {
+      "edit_domain": "horror_prop_static_mesh",
+      "route_edit_domain": "horror_prop_static_mesh",
+      "module_id": "asset_authoring.mesh.horror_prop_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.horror_prop_static_mesh",
+        "edit": "asset_operation.edit.mesh.horror_prop_static_mesh",
+        "save": "asset_operation.save.mesh.horror_prop_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.horror_prop_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-488"
+      ],
+      "case_file": "testcases\\horror_prop_static_mesh.json"
+    },
+    {
+      "edit_domain": "maze_static_mesh",
+      "route_edit_domain": "maze_static_mesh",
+      "module_id": "asset_authoring.mesh.maze_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.maze_static_mesh",
+        "edit": "asset_operation.edit.mesh.maze_static_mesh",
+        "save": "asset_operation.save.mesh.maze_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.maze_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-487"
+      ],
+      "case_file": "testcases\\maze_static_mesh.json"
+    },
+    {
+      "edit_domain": "merge_actors",
+      "route_edit_domain": "merge_actors",
+      "module_id": "asset_authoring.mesh.merge_actors",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.merge_actors",
+        "edit": "asset_operation.edit.mesh.merge_actors",
+        "save": "asset_operation.save.mesh.merge_actors",
+        "readback_verify": "asset_operation.readback_verify.mesh.merge_actors"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-441"
+      ],
+      "case_file": "testcases\\merge_actors.json"
+    },
+    {
+      "edit_domain": "parametric_static_mesh",
+      "route_edit_domain": "parametric_static_mesh",
+      "module_id": "asset_authoring.mesh.parametric_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.parametric_static_mesh",
+        "edit": "asset_operation.edit.mesh.parametric_static_mesh",
+        "save": "asset_operation.save.mesh.parametric_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.parametric_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-388"
+      ],
+      "case_file": "testcases\\parametric_static_mesh.json"
+    },
+    {
+      "edit_domain": "plane_cut_mirror_repair",
+      "route_edit_domain": "plane_cut_mirror_repair",
+      "module_id": "asset_authoring.mesh.plane_cut_mirror_repair",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.plane_cut_mirror_repair",
+        "edit": "asset_operation.edit.mesh.plane_cut_mirror_repair",
+        "save": "asset_operation.save.mesh.plane_cut_mirror_repair",
+        "readback_verify": "asset_operation.readback_verify.mesh.plane_cut_mirror_repair"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-474"
+      ],
+      "case_file": "testcases\\plane_cut_mirror_repair.json"
+    },
+    {
+      "edit_domain": "procedural_pipe_network",
+      "route_edit_domain": "procedural_pipe_network",
+      "module_id": "asset_authoring.mesh.procedural_pipe_network",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.procedural_pipe_network",
+        "edit": "asset_operation.edit.mesh.procedural_pipe_network",
+        "save": "asset_operation.save.mesh.procedural_pipe_network",
+        "readback_verify": "asset_operation.readback_verify.mesh.procedural_pipe_network"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-415"
+      ],
+      "case_file": "testcases\\procedural_pipe_network.json"
+    },
+    {
+      "edit_domain": "procedural_structure_static_mesh",
+      "route_edit_domain": "procedural_structure_static_mesh",
+      "module_id": "asset_authoring.mesh.procedural_structure_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.procedural_structure_static_mesh",
+        "edit": "asset_operation.edit.mesh.procedural_structure_static_mesh",
+        "save": "asset_operation.save.mesh.procedural_structure_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.procedural_structure_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-453"
+      ],
+      "case_file": "testcases\\procedural_structure_static_mesh.json"
+    },
+    {
+      "edit_domain": "procedural_terrain_patch",
+      "route_edit_domain": "procedural_terrain_patch",
+      "module_id": "asset_authoring.mesh.procedural_terrain_patch",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.procedural_terrain_patch",
+        "edit": "asset_operation.edit.mesh.procedural_terrain_patch",
+        "save": "asset_operation.save.mesh.procedural_terrain_patch",
+        "readback_verify": "asset_operation.readback_verify.mesh.procedural_terrain_patch"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-454"
+      ],
+      "case_file": "testcases\\procedural_terrain_patch.json"
+    },
+    {
+      "edit_domain": "proxy_mesh_from_scene_actors",
+      "route_edit_domain": "proxy_mesh_from_scene_actors",
+      "module_id": "asset_authoring.mesh.proxy_mesh_from_scene_actors",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.proxy_mesh_from_scene_actors",
+        "edit": "asset_operation.edit.mesh.proxy_mesh_from_scene_actors",
+        "save": "asset_operation.save.mesh.proxy_mesh_from_scene_actors",
+        "readback_verify": "asset_operation.readback_verify.mesh.proxy_mesh_from_scene_actors"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-440"
+      ],
+      "case_file": "testcases\\proxy_mesh_from_scene_actors.json"
+    },
+    {
+      "edit_domain": "simplify_uv_static_mesh",
+      "route_edit_domain": "simplify_uv_static_mesh",
+      "module_id": "asset_authoring.mesh.simplify_uv_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.simplify_uv_static_mesh",
+        "edit": "asset_operation.edit.mesh.simplify_uv_static_mesh",
+        "save": "asset_operation.save.mesh.simplify_uv_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.mesh.simplify_uv_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-462"
+      ],
+      "case_file": "testcases\\simplify_uv_static_mesh.json"
+    },
+    {
+      "edit_domain": "static_mesh_auto_lod",
+      "route_edit_domain": "static_mesh_auto_lod",
+      "module_id": "asset_authoring.mesh.static_mesh_auto_lod",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_auto_lod",
+        "edit": "asset_operation.edit.mesh.static_mesh_auto_lod",
+        "save": "asset_operation.save.mesh.static_mesh_auto_lod",
+        "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_auto_lod"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-405"
+      ],
+      "case_file": "testcases\\static_mesh_auto_lod.json"
+    },
+    {
+      "edit_domain": "static_mesh_export",
+      "route_edit_domain": "static_mesh_export",
+      "module_id": "asset_authoring.mesh.static_mesh_export",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_export",
+        "edit": "asset_operation.edit.mesh.static_mesh_export",
+        "save": "asset_operation.save.mesh.static_mesh_export",
+        "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_export"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-301"
+      ],
+      "case_file": "testcases\\static_mesh_export.json"
+    },
+    {
+      "edit_domain": "static_mesh_import",
+      "route_edit_domain": "static_mesh_import",
+      "module_id": "asset_authoring.mesh.static_mesh_import",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_import",
+        "edit": "asset_operation.edit.mesh.static_mesh_import",
+        "save": "asset_operation.save.mesh.static_mesh_import",
+        "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_import"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-300"
+      ],
+      "case_file": "testcases\\static_mesh_import.json"
+    },
+    {
+      "edit_domain": "static_mesh_lod_quality",
+      "route_edit_domain": "static_mesh_lod_quality",
+      "module_id": "asset_authoring.mesh.static_mesh_lod_quality",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.mesh.static_mesh_lod_quality",
+        "edit": "asset_operation.edit.mesh.static_mesh_lod_quality",
+        "save": "asset_operation.save.mesh.static_mesh_lod_quality",
+        "readback_verify": "asset_operation.readback_verify.mesh.static_mesh_lod_quality"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-302"
+      ],
+      "case_file": "testcases\\static_mesh_lod_quality.json"
+    }
+  ]
+}

@@ -81,11 +81,11 @@ public:
 	bool bEnableMcpSessionMode = false;
 
 	/** Enables long-running async jobs: registers monolith.get_job and cancel_job and lets
-	 *  reindex emit a job_id for polling. Default off until the async job registry is wired in. */
+	 *  reindex emit a registry-backed job_id for polling and cooperative cancellation. */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server|Sessions",
 		meta=(DisplayName="Enable Async Jobs",
-			  ToolTip="Reserved feature flag for long-running async jobs. Registers monolith.get_job and cancel_job and adds job_id polling to reindex. Default off."))
-	bool bEnableAsyncJobs = false;
+			  ToolTip="Enable registry-backed long-running async jobs. Registers monolith.get_job and cancel_job and adds job_id polling/cancellation to reindex."))
+	bool bEnableAsyncJobs = true;
 
 	/** Enables typed image/audio content blocks in tool results once typed media emission is
 	 *  implemented. Kept separate from bEnableStructuredToolResults so media stays dark by default. */
@@ -376,6 +376,9 @@ public:
 
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableConfig = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules")
+	bool bEnableConsole = true;
 
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableIndex = true;

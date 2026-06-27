@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "metasound_looping_ambient_preset",
+  "route_edit_domain": "metasound_looping_ambient_preset",
+  "module_id": "asset_authoring.audio.metasound_looping_ambient_preset",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.metasound_looping_ambient_preset",
+    "edit": "asset_operation.edit.audio.metasound_looping_ambient_preset",
+    "save": "asset_operation.save.audio.metasound_looping_ambient_preset",
+    "readback_verify": "asset_operation.readback_verify.audio.metasound_looping_ambient_preset"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-471"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-471",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "metasound_looping_ambient_preset",
+      "blueprint_type": "",
+      "workflow": "audio_metasound_looping_ambient_preset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "save_asset",
+        "create_looping_ambient_metasound",
+        "create_metasound_preset",
+        "get_metasound_graph",
+        "get_metasound_summary",
+        "find_audio_references",
+        "inspect_asset"
+      ],
+      "description": "Create a looping ambient MetaSound Source from a SoundWave, create a preset referencing it, save all assets, and read back graph and dependency metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-471",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchLoopingAmbient",
+              "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient",
+              "/Game/Benchmarks/AssetAuthoring/MSP_BenchLoopingAmbient"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchLoopingAmbient",
+            "frequency_hz": 220.0,
+            "duration_seconds": 0.35,
+            "sample_rate": 44100,
+            "amplitude": 0.25
+          },
+          "contains": [
+            "SW_BenchLoopingAmbient"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchLoopingAmbient"
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_looping_ambient_metasound",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient",
+            "sound_wave": "/Game/Benchmarks/AssetAuthoring/SW_BenchLoopingAmbient",
+            "lfo_frequency": 0.35,
+            "pitch_range": [
+              0.9,
+              1.1
+            ]
+          },
+          "contains": [
+            "MS_BenchLoopingAmbient",
+            "SW_BenchLoopingAmbient"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_metasound_preset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MSP_BenchLoopingAmbient",
+            "reference_metasound": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient"
+          },
+          "contains": [
+            "MSP_BenchLoopingAmbient",
+            "MS_BenchLoopingAmbient"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MSP_BenchLoopingAmbient"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient"
+          },
+          "contains": [
+            "Wave",
+            "Loop",
+            "LFO",
+            "Audio"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_summary",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient"
+          },
+          "contains": [
+            "MS_BenchLoopingAmbient",
+            "nodes"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_audio_references",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchLoopingAmbient"
+          },
+          "contains": [
+            "MS_BenchLoopingAmbient",
+            "referencers",
+            "MSP_BenchLoopingAmbient"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MSP_BenchLoopingAmbient"
+          },
+          "contains": [
+            "MSP_BenchLoopingAmbient"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "metasound_looping_ambient_preset",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_metasound_looping_ambient_preset_roundtrip",
+      "description": "Create a looping ambient MetaSound Source from a SoundWave, create a preset referencing it, save all assets, and read back graph and dependency metadata",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/metasounds-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundIntrospectionActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "save_asset",
+          "create_looping_ambient_metasound",
+          "create_metasound_preset",
+          "get_metasound_graph",
+          "get_metasound_summary",
+          "find_audio_references",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

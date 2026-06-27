@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "seed_data_asset",
+  "route_edit_domain": "seed_data_asset",
+  "module_id": "asset_authoring.data.seed_data_asset",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.seed_data_asset",
+    "edit": "asset_operation.edit.data.seed_data_asset",
+    "save": "asset_operation.save.data.seed_data_asset",
+    "readback_verify": "asset_operation.readback_verify.data.seed_data_asset"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-381"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-381",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "seed_data_asset",
+      "blueprint_type": "",
+      "workflow": "blueprint_seed_data_asset_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "seed_data_asset",
+        "save_asset",
+        "get_cdo_properties",
+        "inspect_asset"
+      ],
+      "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-381",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "seed_data_asset",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface",
+            "class_name": "PhysicalMaterial",
+            "tree": {
+              "Friction": 0.42,
+              "Restitution": 0.08
+            },
+            "strict": true,
+            "skip_save": true,
+            "read_back_values": true
+          },
+          "contains": [
+            "PM_BenchSeededSurface",
+            "PhysicalMaterial",
+            "field_writes",
+            "Friction",
+            "0.42",
+            "Restitution",
+            "0.08",
+            "success",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface",
+            "name_pattern": "Friction"
+          },
+          "contains": [
+            "Friction",
+            "0.42"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_cdo_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface",
+            "name_pattern": "Restitution"
+          },
+          "contains": [
+            "Restitution",
+            "0.08"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PM_BenchSeededSurface"
+          },
+          "contains": [
+            "PM_BenchSeededSurface",
+            "PhysicalMaterial"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "seed_data_asset",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "blueprint_seed_data_asset_roundtrip",
+      "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "seed_data_asset",
+          "save_asset",
+          "get_cdo_properties",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

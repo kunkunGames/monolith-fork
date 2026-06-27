@@ -8,6 +8,7 @@
 #include "GameFramework/Actor.h"
 #include "Components/ActorComponent.h"
 #include "Modules/ModuleManager.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 namespace MonolithWater
@@ -155,23 +156,31 @@ FMonolithActionResult FMonolithWaterActions::GetStatus(const TSharedPtr<FJsonObj
 
 FMonolithActionResult FMonolithWaterActions::ListBodies(const TSharedPtr<FJsonObject>& Params)
 {
-	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-	if (!World)
-	{
-		return FMonolithActionResult::Error(TEXT("Editor world not available"));
-	}
-
 	double LimitValue = 100.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	if (Params->HasField(TEXT("limit")))
 	{
-		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+		const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+		if (!LimitField.IsValid() || LimitField->Type != EJson::Number || !LimitField->TryGetNumber(LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	const int32 Limit = FMonolithWaterActions::ClampWaterLimit(LimitValue);
 
 	FString NameFilter;
-	if (Params->HasField(TEXT("actor_name_filter")) && !Params->TryGetStringField(TEXT("actor_name_filter"), NameFilter))
+	if (Params->HasField(TEXT("actor_name_filter")))
 	{
-		return FMonolithActionResult::Error(TEXT("actor_name_filter must be a string"));
+		const TSharedPtr<FJsonValue> FilterField = Params->TryGetField(TEXT("actor_name_filter"));
+		if (!FilterField.IsValid() || FilterField->Type != EJson::String || !FilterField->TryGetString(NameFilter))
+		{
+			return FMonolithActionResult::Error(TEXT("actor_name_filter must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+
+	UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	if (!World)
+	{
+		return FMonolithActionResult::Error(TEXT("Editor world not available"));
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;

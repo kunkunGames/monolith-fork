@@ -1,0 +1,2717 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.gas",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+  "task_count": 552,
+  "module_count": 17,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.gas",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: gas",
+      "task_count": 16,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.gas.ability_input_binding",
+        "asset_authoring.gas.ability_spec_builder",
+        "asset_authoring.gas.ability_tags_cost_triggers",
+        "asset_authoring.gas.asc_replication_mode",
+        "asset_authoring.gas.attribute_init_datatable",
+        "asset_authoring.gas.effect_modifier_crud",
+        "asset_authoring.gas.gameplay_ability",
+        "asset_authoring.gas.gameplay_ability_flags",
+        "asset_authoring.gas.gameplay_cue_effect_link",
+        "asset_authoring.gas.gameplay_cue_notify",
+        "asset_authoring.gas.gameplay_cue_unlink_lifecycle",
+        "asset_authoring.gas.gameplay_effect",
+        "asset_authoring.gas.gameplay_effect_spec_builder",
+        "asset_authoring.gas.gameplay_effect_template",
+        "asset_authoring.gas.target_actor",
+        "asset_authoring.gas.widget_attribute_binding"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.gas.ability_input_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_input_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_input_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_input_binding"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.ability_spec_builder",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_spec_builder"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_spec_builder",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_spec_builder"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.ability_tags_cost_triggers",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_tags_cost_triggers"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_tags_cost_triggers",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_tags_cost_triggers"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.asc_replication_mode",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "asc_replication_mode"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/asc_replication_mode",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "asc_replication_mode"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.attribute_init_datatable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "attribute_init_datatable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/attribute_init_datatable",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "attribute_init_datatable"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.effect_modifier_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "effect_modifier_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/effect_modifier_crud",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "effect_modifier_crud"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_ability",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_ability"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_ability",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_ability"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_ability_flags",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_ability_flags"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_ability_flags",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_ability_flags"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_cue_effect_link",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_effect_link"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_effect_link",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_effect_link"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_cue_notify",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_notify"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_notify",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_notify"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_cue_unlink_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_unlink_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_unlink_lifecycle",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_unlink_lifecycle"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_effect",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_effect_spec_builder",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect_spec_builder"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect_spec_builder",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect_spec_builder"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.gameplay_effect_template",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect_template"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect_template",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect_template"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.target_actor",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "target_actor"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/target_actor",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "target_actor"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.gas.widget_attribute_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "widget_attribute_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/widget_attribute_binding",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "widget_attribute_binding"
+        ]
+      },
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json",
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.gas": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: gas",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ]
+      },
+      "task_count": 16,
+      "task_ids": [
+        "BEB-329",
+        "BEB-330",
+        "BEB-331",
+        "BEB-332",
+        "BEB-333",
+        "BEB-335",
+        "BEB-338",
+        "BEB-350",
+        "BEB-429",
+        "BEB-430",
+        "BEB-457",
+        "BEB-458",
+        "BEB-469",
+        "BEB-475",
+        "BEB-482",
+        "BEB-507"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-329",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_effect_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "set_duration",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
+        },
+        {
+          "id": "BEB-330",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_ability",
+          "blueprint_type": "",
+          "workflow": "gas_ability_blueprint_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "set_duration",
+            "add_ge_component",
+            "save_asset",
+            "create_ability",
+            "set_ability_policy",
+            "set_ability_cooldown",
+            "add_commit_and_end_flow",
+            "compile_ability",
+            "get_ability_info",
+            "get_ability_graph_flow",
+            "validate_ability_blueprint"
+          ],
+          "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect"
+        },
+        {
+          "id": "BEB-331",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_input_binding",
+          "blueprint_type": "",
+          "workflow": "gas_input_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blueprint",
+            "add_asc_to_actor",
+            "create_ability",
+            "create_input_action",
+            "setup_ability_input_binding",
+            "bind_ability_to_input",
+            "save_asset",
+            "get_ability_input_bindings",
+            "get_components",
+            "get_ability_info",
+            "get_input_action"
+          ],
+          "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state"
+        },
+        {
+          "id": "BEB-332",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_notify",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_cue_notify_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_cue_notify",
+            "set_cdo_property",
+            "save_asset",
+            "get_cue_info",
+            "list_gameplay_cues"
+          ],
+          "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata"
+        },
+        {
+          "id": "BEB-333",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_effect_link",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_cue_effect_link_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "create_gameplay_cue_notify",
+            "link_cue_to_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "find_cue_triggers",
+            "get_cue_info"
+          ],
+          "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag onto the effect, save both assets, and reverse-lookup the trigger"
+        },
+        {
+          "id": "BEB-335",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "target_actor",
+          "blueprint_type": "",
+          "workflow": "gas_target_actor_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_target_actor",
+            "configure_target_actor",
+            "save_asset",
+            "get_parent_class",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class"
+        },
+        {
+          "id": "BEB-338",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect_template",
+          "blueprint_type": "",
+          "workflow": "gas_effect_template_duplicate_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_effect_from_template",
+            "set_effect_stacking",
+            "set_period",
+            "duplicate_gameplay_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects"
+        },
+        {
+          "id": "BEB-350",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect_spec_builder",
+          "blueprint_type": "",
+          "workflow": "gas_effect_spec_builder_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "build_effect_from_spec",
+            "duplicate_gameplay_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
+        },
+        {
+          "id": "BEB-429",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "attribute_init_datatable",
+          "blueprint_type": "",
+          "workflow": "gas_attribute_init_datatable_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_attribute_init_datatable",
+            "save_asset",
+            "get_data_table_rows",
+            "get_attribute_set",
+            "inspect_asset"
+          ],
+          "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
+        },
+        {
+          "id": "BEB-430",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "asc_replication_mode",
+          "blueprint_type": "",
+          "workflow": "gas_asc_replication_mode_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blueprint",
+            "add_asc_to_actor",
+            "set_asc_replication_mode",
+            "save_asset",
+            "get_component_details",
+            "validate_asc_setup",
+            "inspect_asset"
+          ],
+          "description": "Create an Actor Blueprint, add an ASC, set its replication mode, save, and read back component defaults plus validation metadata"
+        },
+        {
+          "id": "BEB-457",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_ability_flags",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_ability_flags_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ability",
+            "set_ability_flags",
+            "save_asset",
+            "get_ability_info",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbility Blueprint, edit persisted ability behavior flags on the CDO, save it, and read the flags back"
+        },
+        {
+          "id": "BEB-458",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "widget_attribute_binding",
+          "blueprint_type": "",
+          "workflow": "gas_widget_attribute_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "bind_widget_to_attribute",
+            "save_asset",
+            "list_attribute_bindings",
+            "get_widget_tree",
+            "inspect_asset"
+          ],
+          "description": "Create a Widget Blueprint ProgressBar, bind it to native GAS Health/MaxHealth attributes, save it, and read persisted binding metadata back"
+        },
+        {
+          "id": "BEB-469",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "effect_modifier_crud",
+          "blueprint_type": "",
+          "workflow": "gas_effect_modifier_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "add_modifier",
+            "set_modifier",
+            "remove_modifier",
+            "save_asset",
+            "list_modifiers",
+            "get_gameplay_effect",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
+        },
+        {
+          "id": "BEB-475",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_tags_cost_triggers",
+          "blueprint_type": "",
+          "workflow": "gas_ability_tags_cost_triggers_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "create_ability",
+            "set_ability_tags",
+            "set_ability_cost",
+            "set_ability_triggers",
+            "save_asset",
+            "get_ability_tags",
+            "get_ability_info",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbility and cost GameplayEffect, edit ability tag containers, cost, and gameplay-event triggers, save both assets, and read the ability metadata back"
+        },
+        {
+          "id": "BEB-482",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_unlink_lifecycle",
+          "blueprint_type": "",
+          "workflow": "gas_cue_unlink_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "add_gameplay_tags",
+            "create_gameplay_effect",
+            "create_gameplay_cue_notify",
+            "link_cue_to_effect",
+            "unlink_cue_from_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "find_cue_triggers",
+            "get_cue_info"
+          ],
+          "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
+        },
+        {
+          "id": "BEB-507",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_spec_builder",
+          "blueprint_type": "",
+          "workflow": "gas_ability_spec_builder_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "add_gameplay_tags",
+            "create_gameplay_effect",
+            "build_ability_from_spec",
+            "save_asset",
+            "get_ability_info",
+            "get_ability_tags",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayEffect cost asset, build a GameplayAbility from a declarative spec, save both assets, and verify policies, tags, cost, triggers, and flags"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "ability_input_binding": [
+            "BEB-331"
+          ],
+          "ability_spec_builder": [
+            "BEB-507"
+          ],
+          "ability_tags_cost_triggers": [
+            "BEB-475"
+          ],
+          "asc_replication_mode": [
+            "BEB-430"
+          ],
+          "attribute_init_datatable": [
+            "BEB-429"
+          ],
+          "effect_modifier_crud": [
+            "BEB-469"
+          ],
+          "gameplay_ability": [
+            "BEB-330"
+          ],
+          "gameplay_ability_flags": [
+            "BEB-457"
+          ],
+          "gameplay_cue_effect_link": [
+            "BEB-333"
+          ],
+          "gameplay_cue_notify": [
+            "BEB-332"
+          ],
+          "gameplay_cue_unlink_lifecycle": [
+            "BEB-482"
+          ],
+          "gameplay_effect": [
+            "BEB-329"
+          ],
+          "gameplay_effect_spec_builder": [
+            "BEB-350"
+          ],
+          "gameplay_effect_template": [
+            "BEB-338"
+          ],
+          "target_actor": [
+            "BEB-335"
+          ],
+          "widget_attribute_binding": [
+            "BEB-458"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ],
+          "edit": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ],
+          "readback_verify": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ],
+          "save": [
+            "BEB-329",
+            "BEB-330",
+            "BEB-331",
+            "BEB-332",
+            "BEB-333",
+            "BEB-335",
+            "BEB-338",
+            "BEB-350",
+            "BEB-429",
+            "BEB-430",
+            "BEB-457",
+            "BEB-458",
+            "BEB-469",
+            "BEB-475",
+            "BEB-482",
+            "BEB-507"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.gas.ability_input_binding",
+        "asset_authoring.gas.ability_spec_builder",
+        "asset_authoring.gas.ability_tags_cost_triggers",
+        "asset_authoring.gas.asc_replication_mode",
+        "asset_authoring.gas.attribute_init_datatable",
+        "asset_authoring.gas.effect_modifier_crud",
+        "asset_authoring.gas.gameplay_ability",
+        "asset_authoring.gas.gameplay_ability_flags",
+        "asset_authoring.gas.gameplay_cue_effect_link",
+        "asset_authoring.gas.gameplay_cue_notify",
+        "asset_authoring.gas.gameplay_cue_unlink_lifecycle",
+        "asset_authoring.gas.gameplay_effect",
+        "asset_authoring.gas.gameplay_effect_spec_builder",
+        "asset_authoring.gas.gameplay_effect_template",
+        "asset_authoring.gas.target_actor",
+        "asset_authoring.gas.widget_attribute_binding"
+      ],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.ability_input_binding": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.ability_input_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_input_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_input_binding",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_input_binding"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-331"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-331",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_input_binding",
+          "blueprint_type": "",
+          "workflow": "gas_input_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blueprint",
+            "add_asc_to_actor",
+            "create_ability",
+            "create_input_action",
+            "setup_ability_input_binding",
+            "bind_ability_to_input",
+            "save_asset",
+            "get_ability_input_bindings",
+            "get_components",
+            "get_ability_info",
+            "get_input_action"
+          ],
+          "description": "Create an ASC actor, GameplayAbility, and Enhanced Input action, bind them through GAS input metadata, save, and read back binding state"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-331"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-331"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-331"
+          ],
+          "edit": [
+            "BEB-331"
+          ],
+          "readback_verify": [
+            "BEB-331"
+          ],
+          "save": [
+            "BEB-331"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.ability_spec_builder": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.ability_spec_builder",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_spec_builder"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_spec_builder",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_spec_builder"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-507"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-507",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_spec_builder",
+          "blueprint_type": "",
+          "workflow": "gas_ability_spec_builder_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "add_gameplay_tags",
+            "create_gameplay_effect",
+            "build_ability_from_spec",
+            "save_asset",
+            "get_ability_info",
+            "get_ability_tags",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayEffect cost asset, build a GameplayAbility from a declarative spec, save both assets, and verify policies, tags, cost, triggers, and flags"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-507"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-507"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-507"
+          ],
+          "edit": [
+            "BEB-507"
+          ],
+          "readback_verify": [
+            "BEB-507"
+          ],
+          "save": [
+            "BEB-507"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.ability_tags_cost_triggers": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.ability_tags_cost_triggers",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "ability_tags_cost_triggers"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/ability_tags_cost_triggers",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "ability_tags_cost_triggers"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-475"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-475",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "ability_tags_cost_triggers",
+          "blueprint_type": "",
+          "workflow": "gas_ability_tags_cost_triggers_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "create_ability",
+            "set_ability_tags",
+            "set_ability_cost",
+            "set_ability_triggers",
+            "save_asset",
+            "get_ability_tags",
+            "get_ability_info",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbility and cost GameplayEffect, edit ability tag containers, cost, and gameplay-event triggers, save both assets, and read the ability metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-475"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-475"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-475"
+          ],
+          "edit": [
+            "BEB-475"
+          ],
+          "readback_verify": [
+            "BEB-475"
+          ],
+          "save": [
+            "BEB-475"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.asc_replication_mode": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.asc_replication_mode",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "asc_replication_mode"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/asc_replication_mode",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "asc_replication_mode"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-430"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-430",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "asc_replication_mode",
+          "blueprint_type": "",
+          "workflow": "gas_asc_replication_mode_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_blueprint",
+            "add_asc_to_actor",
+            "set_asc_replication_mode",
+            "save_asset",
+            "get_component_details",
+            "validate_asc_setup",
+            "inspect_asset"
+          ],
+          "description": "Create an Actor Blueprint, add an ASC, set its replication mode, save, and read back component defaults plus validation metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-430"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-430"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-430"
+          ],
+          "edit": [
+            "BEB-430"
+          ],
+          "readback_verify": [
+            "BEB-430"
+          ],
+          "save": [
+            "BEB-430"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.attribute_init_datatable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.attribute_init_datatable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "attribute_init_datatable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/attribute_init_datatable",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "attribute_init_datatable"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-429"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-429",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "attribute_init_datatable",
+          "blueprint_type": "",
+          "workflow": "gas_attribute_init_datatable_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_attribute_init_datatable",
+            "save_asset",
+            "get_data_table_rows",
+            "get_attribute_set",
+            "inspect_asset"
+          ],
+          "description": "Create and save a native AttributeSet init DataTable, then read back authored FAttributeMetaData rows"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-429"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-429"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-429"
+          ],
+          "edit": [
+            "BEB-429"
+          ],
+          "readback_verify": [
+            "BEB-429"
+          ],
+          "save": [
+            "BEB-429"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.effect_modifier_crud": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.effect_modifier_crud",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "effect_modifier_crud"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/effect_modifier_crud",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "effect_modifier_crud"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-469"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-469",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "effect_modifier_crud",
+          "blueprint_type": "",
+          "workflow": "gas_effect_modifier_crud_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "add_modifier",
+            "set_modifier",
+            "remove_modifier",
+            "save_asset",
+            "list_modifiers",
+            "get_gameplay_effect",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayEffect, add two attribute modifiers, update one, remove the other, save, and read back the final modifier list"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-469"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-469"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-469"
+          ],
+          "edit": [
+            "BEB-469"
+          ],
+          "readback_verify": [
+            "BEB-469"
+          ],
+          "save": [
+            "BEB-469"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_ability": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_ability",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_ability"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_ability",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_ability"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-330"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-330",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_ability",
+          "blueprint_type": "",
+          "workflow": "gas_ability_blueprint_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "set_duration",
+            "add_ge_component",
+            "save_asset",
+            "create_ability",
+            "set_ability_policy",
+            "set_ability_cooldown",
+            "add_commit_and_end_flow",
+            "compile_ability",
+            "get_ability_info",
+            "get_ability_graph_flow",
+            "validate_ability_blueprint"
+          ],
+          "description": "Create a GameplayAbility Blueprint, bind cooldown GE, edit policies/flags, scaffold commit flow, save, and inspect"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-330"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-330"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-330"
+          ],
+          "edit": [
+            "BEB-330"
+          ],
+          "readback_verify": [
+            "BEB-330"
+          ],
+          "save": [
+            "BEB-330"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_ability_flags": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_ability_flags",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_ability_flags"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_ability_flags",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_ability_flags"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-457"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-457",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_ability_flags",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_ability_flags_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_ability",
+            "set_ability_flags",
+            "save_asset",
+            "get_ability_info",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbility Blueprint, edit persisted ability behavior flags on the CDO, save it, and read the flags back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-457"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-457"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-457"
+          ],
+          "edit": [
+            "BEB-457"
+          ],
+          "readback_verify": [
+            "BEB-457"
+          ],
+          "save": [
+            "BEB-457"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_cue_effect_link": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_cue_effect_link",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_effect_link"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_effect_link",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_effect_link"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-333"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-333",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_effect_link",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_cue_effect_link_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "create_gameplay_cue_notify",
+            "link_cue_to_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "find_cue_triggers",
+            "get_cue_info"
+          ],
+          "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag onto the effect, save both assets, and reverse-lookup the trigger"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-333"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-333"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-333"
+          ],
+          "edit": [
+            "BEB-333"
+          ],
+          "readback_verify": [
+            "BEB-333"
+          ],
+          "save": [
+            "BEB-333"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_cue_notify": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_cue_notify",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_notify"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_notify",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_notify"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-332"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-332",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_notify",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_cue_notify_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_cue_notify",
+            "set_cdo_property",
+            "save_asset",
+            "get_cue_info",
+            "list_gameplay_cues"
+          ],
+          "description": "Create a looping GameplayCue Notify Blueprint, edit cue actor auto-destroy behavior, save it, and inspect cue metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-332"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-332"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-332"
+          ],
+          "edit": [
+            "BEB-332"
+          ],
+          "readback_verify": [
+            "BEB-332"
+          ],
+          "save": [
+            "BEB-332"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_cue_unlink_lifecycle": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_cue_unlink_lifecycle",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_cue_unlink_lifecycle"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_cue_unlink_lifecycle",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_cue_unlink_lifecycle"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-482"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-482",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_cue_unlink_lifecycle",
+          "blueprint_type": "",
+          "workflow": "gas_cue_unlink_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "add_gameplay_tags",
+            "create_gameplay_effect",
+            "create_gameplay_cue_notify",
+            "link_cue_to_effect",
+            "unlink_cue_from_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "find_cue_triggers",
+            "get_cue_info"
+          ],
+          "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-482"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-482"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-482"
+          ],
+          "edit": [
+            "BEB-482"
+          ],
+          "readback_verify": [
+            "BEB-482"
+          ],
+          "save": [
+            "BEB-482"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_effect": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_effect",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-329"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-329",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect",
+          "blueprint_type": "",
+          "workflow": "gas_gameplay_effect_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_gameplay_effect",
+            "set_duration",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Create a GameplayEffect, edit duration policy/magnitude through GAS persistence, validate, and read the effect back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-329"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-329"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-329"
+          ],
+          "edit": [
+            "BEB-329"
+          ],
+          "readback_verify": [
+            "BEB-329"
+          ],
+          "save": [
+            "BEB-329"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_effect_spec_builder": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_effect_spec_builder",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect_spec_builder"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect_spec_builder",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect_spec_builder"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-350"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-350",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect_spec_builder",
+          "blueprint_type": "",
+          "workflow": "gas_effect_spec_builder_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "build_effect_from_spec",
+            "duplicate_gameplay_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-350"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-350"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-350"
+          ],
+          "edit": [
+            "BEB-350"
+          ],
+          "readback_verify": [
+            "BEB-350"
+          ],
+          "save": [
+            "BEB-350"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.gameplay_effect_template": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.gameplay_effect_template",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "gameplay_effect_template"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/gameplay_effect_template",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "gameplay_effect_template"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-338"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-338",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "gameplay_effect_template",
+          "blueprint_type": "",
+          "workflow": "gas_effect_template_duplicate_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_effect_from_template",
+            "set_effect_stacking",
+            "set_period",
+            "duplicate_gameplay_effect",
+            "save_asset",
+            "get_gameplay_effect",
+            "validate_effect"
+          ],
+          "description": "Create a GameplayEffect from a template, edit stacking/period settings, duplicate it with overrides, save, and validate both effects"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-338"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-338"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-338"
+          ],
+          "edit": [
+            "BEB-338"
+          ],
+          "readback_verify": [
+            "BEB-338"
+          ],
+          "save": [
+            "BEB-338"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.target_actor": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.target_actor",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "target_actor"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/target_actor",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "target_actor"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-335"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-335",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "target_actor",
+          "blueprint_type": "",
+          "workflow": "gas_target_actor_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_target_actor",
+            "configure_target_actor",
+            "save_asset",
+            "get_parent_class",
+            "inspect_asset"
+          ],
+          "description": "Create a GameplayAbilityTargetActor Blueprint, edit radius/range server targeting flags, save, and inspect parent class"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-335"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-335"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-335"
+          ],
+          "edit": [
+            "BEB-335"
+          ],
+          "readback_verify": [
+            "BEB-335"
+          ],
+          "save": [
+            "BEB-335"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    },
+    "asset_authoring.gas.widget_attribute_binding": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.gas.widget_attribute_binding",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "gas",
+        "widget_attribute_binding"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: gas/widget_attribute_binding",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "gas"
+        ],
+        "edit_domain": [
+          "widget_attribute_binding"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-458"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-458",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "gas",
+          "edit_domain": "widget_attribute_binding",
+          "blueprint_type": "",
+          "workflow": "gas_widget_attribute_binding_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_widget_blueprint",
+            "add_widget",
+            "bind_widget_to_attribute",
+            "save_asset",
+            "list_attribute_bindings",
+            "get_widget_tree",
+            "inspect_asset"
+          ],
+          "description": "Create a Widget Blueprint ProgressBar, bind it to native GAS Health/MaxHealth attributes, save it, and read persisted binding metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-458"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-458"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-458"
+          ],
+          "edit": [
+            "BEB-458"
+          ],
+          "readback_verify": [
+            "BEB-458"
+          ],
+          "save": [
+            "BEB-458"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.gas",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.gas",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/gas.json"
+    }
+  }
+}

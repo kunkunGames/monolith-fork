@@ -13,7 +13,7 @@ namespace
 	void AddValidPathArray(TSharedRef<FJsonObject> Params)
 	{
 		TArray<TSharedPtr<FJsonValue>> Paths;
-		Paths.Add(MakeShared<FJsonValueString>(TEXT("GO.uproject")));
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("Project.uproject")));
 		Params->SetArrayField(TEXT("paths"), Paths);
 	}
 }
@@ -55,7 +55,7 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				TEXT("get_status"),
 				[](TSharedRef<FJsonObject> Params)
 				{
-					Params->SetStringField(TEXT("paths"), TEXT("GO.uproject"));
+					Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
 				},
 				TEXT("paths"),
 				TEXT("source_control.get_status rejects non-array paths")

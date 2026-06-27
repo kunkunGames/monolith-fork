@@ -1,0 +1,2290 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.animinstance",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+  "task_count": 552,
+  "module_count": 8,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.animinstance",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: AnimInstance",
+      "task_count": 31,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.animinstance.compilation",
+        "blueprint.animinstance.event",
+        "blueprint.animinstance.function",
+        "blueprint.animinstance.general",
+        "blueprint.animinstance.node",
+        "blueprint.animinstance.state",
+        "blueprint.animinstance.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.animinstance.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/event",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/function",
+      "task_count": 7,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/general",
+      "task_count": 12,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/node",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/state",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.animinstance.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/variable",
+      "task_count": 4,
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json",
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.animinstance": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: AnimInstance",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ]
+      },
+      "task_count": 31,
+      "task_ids": [
+        "BEB-004",
+        "BEB-012",
+        "BEB-018",
+        "BEB-031",
+        "BEB-032",
+        "BEB-033",
+        "BEB-049",
+        "BEB-050",
+        "BEB-063",
+        "BEB-064",
+        "BEB-077",
+        "BEB-078",
+        "BEB-160",
+        "BEB-196",
+        "BEB-197",
+        "BEB-198",
+        "BEB-199",
+        "BEB-200",
+        "BEB-201",
+        "BEB-202",
+        "BEB-203",
+        "BEB-204",
+        "BEB-205",
+        "BEB-239",
+        "BEB-244",
+        "BEB-251",
+        "BEB-252",
+        "BEB-253",
+        "BEB-254",
+        "BEB-255",
+        "BEB-549"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-004",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query 'ABP_TestAnim'"
+        },
+        {
+          "id": "BEB-012",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query 'AnimInstance Blueprint'"
+        },
+        {
+          "id": "BEB-018",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query '/Game/Benchmarks/ABP_TestAnim'"
+        },
+        {
+          "id": "BEB-031",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-032",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read AnimInstance fixture default graph data"
+        },
+        {
+          "id": "BEB-033",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-049",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for AnimInstance fixture ABP_TestAnim"
+        },
+        {
+          "id": "BEB-050",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for AnimInstance fixture ABP_TestAnim"
+        },
+        {
+          "id": "BEB-063",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-064",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-077",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-078",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for AnimInstance"
+        },
+        {
+          "id": "BEB-160",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "anim_threadsafe_graph",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_thread_safe",
+            "add_node",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Create an AnimBP thread-safe helper function, read Speed in its graph, compile clean, read back the function"
+        },
+        {
+          "id": "BEB-196",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAnimUpdate function graph to AnimInstance"
+        },
+        {
+          "id": "BEB-197",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_thread_safe",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_thread_safe",
+            "get_function_signature"
+          ],
+          "description": "Mark BenchAnimUpdate as thread-safe (idempotent after creation)"
+        },
+        {
+          "id": "BEB-198",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchBlendWeight variable to AnimInstance"
+        },
+        {
+          "id": "BEB-199",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set Speed fixture variable default to 0.0 (idempotent)"
+        },
+        {
+          "id": "BEB-200",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchAnimOnEvent custom event to AnimInstance EventGraph"
+        },
+        {
+          "id": "BEB-201",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add Speed VariableGet node to AnimInstance EventGraph"
+        },
+        {
+          "id": "BEB-202",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "event",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAnimDispatcher event dispatcher to AnimInstance"
+        },
+        {
+          "id": "BEB-203",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "animation",
+          "edit_domain": "compilation",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate AnimInstance blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-204",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "animation",
+          "edit_domain": "state",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout AnimInstance EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-205",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "animation",
+          "edit_domain": "compilation",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile AnimInstance blueprint"
+        },
+        {
+          "id": "BEB-239",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on AnimInstance EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-244",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire Speed (float) -> PrintString.Duration on AnimInstance EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-251",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchAnimAcceleration variable to AnimInstance"
+        },
+        {
+          "id": "BEB-252",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsInAir fixture variable default to false for AnimInstance"
+        },
+        {
+          "id": "BEB-253",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAnimEvaluateTransitions function graph to AnimInstance"
+        },
+        {
+          "id": "BEB-254",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_thread_safe",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_thread_safe",
+            "get_function_signature"
+          ],
+          "description": "Mark BenchAnimEvaluateTransitions as thread-safe on AnimInstance"
+        },
+        {
+          "id": "BEB-255",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add Speed VariableGet node to BenchAnimEvaluateTransitions graph"
+        },
+        {
+          "id": "BEB-549",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "AnimInstance add_function must reject duplicate update helper names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-549"
+          ],
+          "edit_execute": [
+            "BEB-196",
+            "BEB-197",
+            "BEB-198",
+            "BEB-199",
+            "BEB-200",
+            "BEB-201",
+            "BEB-202",
+            "BEB-203",
+            "BEB-204",
+            "BEB-205",
+            "BEB-239",
+            "BEB-244",
+            "BEB-251",
+            "BEB-252",
+            "BEB-253",
+            "BEB-254",
+            "BEB-255"
+          ],
+          "graph_read": [
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050"
+          ],
+          "type_discovery": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018"
+          ],
+          "variable_read": [
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078"
+          ],
+          "workflow_execute": [
+            "BEB-160"
+          ]
+        },
+        "by_edit_domain": {
+          "compilation": [
+            "BEB-203",
+            "BEB-205"
+          ],
+          "event": [
+            "BEB-202"
+          ],
+          "function": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-200",
+            "BEB-253",
+            "BEB-254",
+            "BEB-549"
+          ],
+          "general": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018",
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050",
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078"
+          ],
+          "node": [
+            "BEB-201",
+            "BEB-239",
+            "BEB-244",
+            "BEB-255"
+          ],
+          "state": [
+            "BEB-204"
+          ],
+          "variable": [
+            "BEB-198",
+            "BEB-199",
+            "BEB-251",
+            "BEB-252"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-198",
+            "BEB-199",
+            "BEB-200",
+            "BEB-201",
+            "BEB-202",
+            "BEB-239",
+            "BEB-244",
+            "BEB-251",
+            "BEB-252",
+            "BEB-253",
+            "BEB-254",
+            "BEB-255",
+            "BEB-549"
+          ],
+          "read_only": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018",
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050",
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078",
+            "BEB-203",
+            "BEB-204",
+            "BEB-205"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-198",
+            "BEB-199",
+            "BEB-200",
+            "BEB-201",
+            "BEB-202",
+            "BEB-239",
+            "BEB-244",
+            "BEB-251",
+            "BEB-252",
+            "BEB-253",
+            "BEB-254",
+            "BEB-255",
+            "BEB-549"
+          ],
+          "readback_verify": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018",
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050",
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078",
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-198",
+            "BEB-199",
+            "BEB-200",
+            "BEB-201",
+            "BEB-202",
+            "BEB-203",
+            "BEB-204",
+            "BEB-205",
+            "BEB-239",
+            "BEB-244",
+            "BEB-251",
+            "BEB-252",
+            "BEB-253",
+            "BEB-254",
+            "BEB-255",
+            "BEB-549"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.animinstance.compilation",
+        "blueprint.animinstance.event",
+        "blueprint.animinstance.function",
+        "blueprint.animinstance.general",
+        "blueprint.animinstance.node",
+        "blueprint.animinstance.state",
+        "blueprint.animinstance.variable"
+      ],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-203",
+        "BEB-205"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-203",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "animation",
+          "edit_domain": "compilation",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate AnimInstance blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-205",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "animation",
+          "edit_domain": "compilation",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile AnimInstance blueprint"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-203",
+            "BEB-205"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-203",
+            "BEB-205"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-203",
+            "BEB-205"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-202"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-202",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "event",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAnimDispatcher event dispatcher to AnimInstance"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-202"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-202"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-202"
+          ],
+          "readback_verify": [
+            "BEB-202"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 7,
+      "task_ids": [
+        "BEB-160",
+        "BEB-196",
+        "BEB-197",
+        "BEB-200",
+        "BEB-253",
+        "BEB-254",
+        "BEB-549"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-160",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "anim_threadsafe_graph",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_function",
+            "set_function_thread_safe",
+            "add_node",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Create an AnimBP thread-safe helper function, read Speed in its graph, compile clean, read back the function"
+        },
+        {
+          "id": "BEB-196",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAnimUpdate function graph to AnimInstance"
+        },
+        {
+          "id": "BEB-197",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_thread_safe",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_thread_safe",
+            "get_function_signature"
+          ],
+          "description": "Mark BenchAnimUpdate as thread-safe (idempotent after creation)"
+        },
+        {
+          "id": "BEB-200",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchAnimOnEvent custom event to AnimInstance EventGraph"
+        },
+        {
+          "id": "BEB-253",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAnimEvaluateTransitions function graph to AnimInstance"
+        },
+        {
+          "id": "BEB-254",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_function_thread_safe",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_function_thread_safe",
+            "get_function_signature"
+          ],
+          "description": "Mark BenchAnimEvaluateTransitions as thread-safe on AnimInstance"
+        },
+        {
+          "id": "BEB-549",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_function",
+          "domain": "animation",
+          "edit_domain": "function",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_function",
+            "remove_function"
+          ],
+          "description": "AnimInstance add_function must reject duplicate update helper names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-549"
+          ],
+          "edit_execute": [
+            "BEB-196",
+            "BEB-197",
+            "BEB-200",
+            "BEB-253",
+            "BEB-254"
+          ],
+          "workflow_execute": [
+            "BEB-160"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-200",
+            "BEB-253",
+            "BEB-254",
+            "BEB-549"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-200",
+            "BEB-253",
+            "BEB-254",
+            "BEB-549"
+          ],
+          "readback_verify": [
+            "BEB-160",
+            "BEB-196",
+            "BEB-197",
+            "BEB-200",
+            "BEB-253",
+            "BEB-254",
+            "BEB-549"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 12,
+      "task_ids": [
+        "BEB-004",
+        "BEB-012",
+        "BEB-018",
+        "BEB-031",
+        "BEB-032",
+        "BEB-033",
+        "BEB-049",
+        "BEB-050",
+        "BEB-063",
+        "BEB-064",
+        "BEB-077",
+        "BEB-078"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-004",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query 'ABP_TestAnim'"
+        },
+        {
+          "id": "BEB-012",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query 'AnimInstance Blueprint'"
+        },
+        {
+          "id": "BEB-018",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover AnimInstance fixture with project.search query '/Game/Benchmarks/ABP_TestAnim'"
+        },
+        {
+          "id": "BEB-031",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-032",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read AnimInstance fixture default graph data"
+        },
+        {
+          "id": "BEB-033",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-049",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for AnimInstance fixture ABP_TestAnim"
+        },
+        {
+          "id": "BEB-050",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for AnimInstance fixture ABP_TestAnim"
+        },
+        {
+          "id": "BEB-063",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-064",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-077",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for AnimInstance fixture"
+        },
+        {
+          "id": "BEB-078",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "animation",
+          "edit_domain": "",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for AnimInstance"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050"
+          ],
+          "type_discovery": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018"
+          ],
+          "variable_read": [
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018",
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050",
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-004",
+            "BEB-012",
+            "BEB-018",
+            "BEB-031",
+            "BEB-032",
+            "BEB-033",
+            "BEB-049",
+            "BEB-050",
+            "BEB-063",
+            "BEB-064",
+            "BEB-077",
+            "BEB-078"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-201",
+        "BEB-239",
+        "BEB-244",
+        "BEB-255"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-201",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add Speed VariableGet node to AnimInstance EventGraph"
+        },
+        {
+          "id": "BEB-239",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on AnimInstance EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-244",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire Speed (float) -> PrintString.Duration on AnimInstance EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-255",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "animation",
+          "edit_domain": "node",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add Speed VariableGet node to BenchAnimEvaluateTransitions graph"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-201",
+            "BEB-239",
+            "BEB-244",
+            "BEB-255"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-201",
+            "BEB-239",
+            "BEB-244",
+            "BEB-255"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-201",
+            "BEB-239",
+            "BEB-244",
+            "BEB-255"
+          ],
+          "readback_verify": [
+            "BEB-201",
+            "BEB-239",
+            "BEB-244",
+            "BEB-255"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-204"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-204",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "animation",
+          "edit_domain": "state",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout AnimInstance EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-204"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-204"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-204"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    },
+    "blueprint.animinstance.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.animinstance.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "AnimInstance",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: AnimInstance/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "AnimInstance"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 4,
+      "task_ids": [
+        "BEB-198",
+        "BEB-199",
+        "BEB-251",
+        "BEB-252"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-198",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchBlendWeight variable to AnimInstance"
+        },
+        {
+          "id": "BEB-199",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set Speed fixture variable default to 0.0 (idempotent)"
+        },
+        {
+          "id": "BEB-251",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchAnimAcceleration variable to AnimInstance"
+        },
+        {
+          "id": "BEB-252",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "animation",
+          "edit_domain": "variable",
+          "blueprint_type": "AnimInstance",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set bIsInAir fixture variable default to false for AnimInstance"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-198",
+            "BEB-199",
+            "BEB-251",
+            "BEB-252"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-198",
+            "BEB-199",
+            "BEB-251",
+            "BEB-252"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-198",
+            "BEB-199",
+            "BEB-251",
+            "BEB-252"
+          ],
+          "readback_verify": [
+            "BEB-198",
+            "BEB-199",
+            "BEB-251",
+            "BEB-252"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.animinstance",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.animinstance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/animinstance.json"
+    }
+  }
+}

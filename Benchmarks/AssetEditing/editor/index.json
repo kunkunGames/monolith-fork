@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "editor",
+  "asset_type_slug": "editor",
+  "module_id": "asset_authoring.editor",
+  "task_count": 4,
+  "operation_counts": {
+    "creation_or_import": 4,
+    "edit": 4,
+    "save": 3,
+    "readback_verify": 4
+  },
+  "lifecycle_counts": {
+    "create": 1,
+    "create_save": 3
+  },
+  "edit_domain_count": 4,
+  "task_ids": [
+    "BEB-418",
+    "BEB-427",
+    "BEB-439",
+    "BEB-497"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-418",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "empty_map_asset",
+      "blueprint_type": "",
+      "workflow": "editor_empty_map_roundtrip",
+      "operation_semantics": "create",
+      "lifecycle_phase": "create",
+      "asset_operations": [
+        "creation_or_import",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_empty_map",
+        "inspect_asset"
+      ],
+      "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
+    },
+    {
+      "id": "BEB-427",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "package_dirty_save",
+      "blueprint_type": "",
+      "workflow": "editor_package_dirty_save_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_empty_map",
+        "author_map_settings",
+        "list_dirty_packages",
+        "save_packages",
+        "get_saved_asset_state",
+        "export_asset_text",
+        "inspect_asset"
+      ],
+      "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
+    },
+    {
+      "id": "BEB-439",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "nav_harness_map",
+      "blueprint_type": "",
+      "workflow": "editor_nav_harness_map_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_nav_harness_map",
+        "save_packages",
+        "get_saved_asset_state",
+        "export_asset_text",
+        "inspect_asset"
+      ],
+      "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
+    },
+    {
+      "id": "BEB-497",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "editor",
+      "edit_domain": "map_actor_defaults",
+      "blueprint_type": "",
+      "workflow": "editor_map_actor_defaults_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_empty_map",
+        "author_map_settings",
+        "list_dirty_packages",
+        "get_saved_asset_state",
+        "export_asset_text",
+        "inspect_asset"
+      ],
+      "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "empty_map_asset",
+      "route_edit_domain": "empty_map_asset",
+      "module_id": "asset_authoring.editor.empty_map_asset",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.editor.empty_map_asset",
+        "edit": "asset_operation.edit.editor.empty_map_asset",
+        "readback_verify": "asset_operation.readback_verify.editor.empty_map_asset"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 0,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-418"
+      ],
+      "case_file": "testcases\\empty_map_asset.json"
+    },
+    {
+      "edit_domain": "map_actor_defaults",
+      "route_edit_domain": "map_actor_defaults",
+      "module_id": "asset_authoring.editor.map_actor_defaults",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.editor.map_actor_defaults",
+        "edit": "asset_operation.edit.editor.map_actor_defaults",
+        "save": "asset_operation.save.editor.map_actor_defaults",
+        "readback_verify": "asset_operation.readback_verify.editor.map_actor_defaults"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-497"
+      ],
+      "case_file": "testcases\\map_actor_defaults.json"
+    },
+    {
+      "edit_domain": "nav_harness_map",
+      "route_edit_domain": "nav_harness_map",
+      "module_id": "asset_authoring.editor.nav_harness_map",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.editor.nav_harness_map",
+        "edit": "asset_operation.edit.editor.nav_harness_map",
+        "save": "asset_operation.save.editor.nav_harness_map",
+        "readback_verify": "asset_operation.readback_verify.editor.nav_harness_map"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-439"
+      ],
+      "case_file": "testcases\\nav_harness_map.json"
+    },
+    {
+      "edit_domain": "package_dirty_save",
+      "route_edit_domain": "package_dirty_save",
+      "module_id": "asset_authoring.editor.package_dirty_save",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.editor.package_dirty_save",
+        "edit": "asset_operation.edit.editor.package_dirty_save",
+        "save": "asset_operation.save.editor.package_dirty_save",
+        "readback_verify": "asset_operation.readback_verify.editor.package_dirty_save"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-427"
+      ],
+      "case_file": "testcases\\package_dirty_save.json"
+    }
+  ]
+}

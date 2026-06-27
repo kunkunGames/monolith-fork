@@ -1,0 +1,499 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "worldgen",
+  "asset_type_slug": "worldgen",
+  "module_id": "asset_authoring.worldgen",
+  "task_count": 9,
+  "operation_counts": {
+    "creation_or_import": 9,
+    "edit": 9,
+    "save": 9,
+    "readback_verify": 9
+  },
+  "lifecycle_counts": {
+    "create_save": 9
+  },
+  "edit_domain_count": 9,
+  "task_ids": [
+    "BEB-345",
+    "BEB-459",
+    "BEB-460",
+    "BEB-461",
+    "BEB-476",
+    "BEB-477",
+    "BEB-478",
+    "BEB-479",
+    "BEB-480"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-345",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "blockout_volume_blueprint",
+      "blueprint_type": "",
+      "workflow": "worldgen_blockout_blueprint_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blockout_blueprint",
+        "compile_blueprint",
+        "save_asset",
+        "get_variables",
+        "inspect_asset"
+      ],
+      "description": "Create the reusable WorldGen blockout-volume Blueprint asset, save it, and verify its authoring variables"
+    },
+    {
+      "id": "BEB-459",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "street_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_street_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_street",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate street StaticMesh geometry with road, sidewalk, and curb parameters, save it, and inspect the generated mesh"
+    },
+    {
+      "id": "BEB-460",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "roof_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_roof_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "generate_roof",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a gable-roof StaticMesh from a footprint polygon, save it, and verify the generated mesh asset"
+    },
+    {
+      "id": "BEB-461",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "building_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_building_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_building_from_grid",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a room-grid building StaticMesh with authored room metadata, save it, and inspect the generated mesh"
+    },
+    {
+      "id": "BEB-476",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "balcony_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_balcony_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_balcony",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a balcony StaticMesh with authored railing parameters, save it, and inspect the generated mesh asset"
+    },
+    {
+      "id": "BEB-477",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "porch_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_porch_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_porch",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a covered porch StaticMesh with columns, roof, steps, and railings, save it, and inspect the generated mesh asset"
+    },
+    {
+      "id": "BEB-478",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "fire_escape_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_fire_escape_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_fire_escape",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a multi-floor fire escape StaticMesh with landings, stairs, railings, and ladder metadata, save it, and inspect the generated mesh asset"
+    },
+    {
+      "id": "BEB-479",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "ramp_connector_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_ramp_connector_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_ramp_connector",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate an accessible ramp connector StaticMesh with slope and landing parameters, save it, and inspect the generated mesh asset"
+    },
+    {
+      "id": "BEB-480",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "worldgen",
+      "edit_domain": "railing_path_static_mesh",
+      "blueprint_type": "",
+      "workflow": "worldgen_railing_path_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "create_railing",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Generate a closed-loop railing StaticMesh from authored path points and style parameters, save it, and inspect the generated mesh asset"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "balcony_static_mesh",
+      "route_edit_domain": "balcony_static_mesh",
+      "module_id": "asset_authoring.worldgen.balcony_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.balcony_static_mesh",
+        "edit": "asset_operation.edit.worldgen.balcony_static_mesh",
+        "save": "asset_operation.save.worldgen.balcony_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.balcony_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-476"
+      ],
+      "case_file": "testcases\\balcony_static_mesh.json"
+    },
+    {
+      "edit_domain": "blockout_volume_blueprint",
+      "route_edit_domain": "blockout_volume_blueprint",
+      "module_id": "asset_authoring.worldgen.blockout_volume_blueprint",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.blockout_volume_blueprint",
+        "edit": "asset_operation.edit.worldgen.blockout_volume_blueprint",
+        "save": "asset_operation.save.worldgen.blockout_volume_blueprint",
+        "readback_verify": "asset_operation.readback_verify.worldgen.blockout_volume_blueprint"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-345"
+      ],
+      "case_file": "testcases\\blockout_volume_blueprint.json"
+    },
+    {
+      "edit_domain": "building_static_mesh",
+      "route_edit_domain": "building_static_mesh",
+      "module_id": "asset_authoring.worldgen.building_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.building_static_mesh",
+        "edit": "asset_operation.edit.worldgen.building_static_mesh",
+        "save": "asset_operation.save.worldgen.building_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.building_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-461"
+      ],
+      "case_file": "testcases\\building_static_mesh.json"
+    },
+    {
+      "edit_domain": "fire_escape_static_mesh",
+      "route_edit_domain": "fire_escape_static_mesh",
+      "module_id": "asset_authoring.worldgen.fire_escape_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.fire_escape_static_mesh",
+        "edit": "asset_operation.edit.worldgen.fire_escape_static_mesh",
+        "save": "asset_operation.save.worldgen.fire_escape_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.fire_escape_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-478"
+      ],
+      "case_file": "testcases\\fire_escape_static_mesh.json"
+    },
+    {
+      "edit_domain": "porch_static_mesh",
+      "route_edit_domain": "porch_static_mesh",
+      "module_id": "asset_authoring.worldgen.porch_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.porch_static_mesh",
+        "edit": "asset_operation.edit.worldgen.porch_static_mesh",
+        "save": "asset_operation.save.worldgen.porch_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.porch_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-477"
+      ],
+      "case_file": "testcases\\porch_static_mesh.json"
+    },
+    {
+      "edit_domain": "railing_path_static_mesh",
+      "route_edit_domain": "railing_path_static_mesh",
+      "module_id": "asset_authoring.worldgen.railing_path_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.railing_path_static_mesh",
+        "edit": "asset_operation.edit.worldgen.railing_path_static_mesh",
+        "save": "asset_operation.save.worldgen.railing_path_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.railing_path_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-480"
+      ],
+      "case_file": "testcases\\railing_path_static_mesh.json"
+    },
+    {
+      "edit_domain": "ramp_connector_static_mesh",
+      "route_edit_domain": "ramp_connector_static_mesh",
+      "module_id": "asset_authoring.worldgen.ramp_connector_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.ramp_connector_static_mesh",
+        "edit": "asset_operation.edit.worldgen.ramp_connector_static_mesh",
+        "save": "asset_operation.save.worldgen.ramp_connector_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.ramp_connector_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-479"
+      ],
+      "case_file": "testcases\\ramp_connector_static_mesh.json"
+    },
+    {
+      "edit_domain": "roof_static_mesh",
+      "route_edit_domain": "roof_static_mesh",
+      "module_id": "asset_authoring.worldgen.roof_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.roof_static_mesh",
+        "edit": "asset_operation.edit.worldgen.roof_static_mesh",
+        "save": "asset_operation.save.worldgen.roof_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.roof_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-460"
+      ],
+      "case_file": "testcases\\roof_static_mesh.json"
+    },
+    {
+      "edit_domain": "street_static_mesh",
+      "route_edit_domain": "street_static_mesh",
+      "module_id": "asset_authoring.worldgen.street_static_mesh",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.worldgen.street_static_mesh",
+        "edit": "asset_operation.edit.worldgen.street_static_mesh",
+        "save": "asset_operation.save.worldgen.street_static_mesh",
+        "readback_verify": "asset_operation.readback_verify.worldgen.street_static_mesh"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-459"
+      ],
+      "case_file": "testcases\\street_static_mesh.json"
+    }
+  ]
+}

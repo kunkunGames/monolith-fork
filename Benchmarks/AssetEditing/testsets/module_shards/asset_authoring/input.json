@@ -1,0 +1,930 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.input",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+  "task_count": 552,
+  "module_count": 6,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: input",
+      "task_count": 5,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.input.axis2d_movement_mapping",
+        "asset_authoring.input.axis3d_mapping",
+        "asset_authoring.input.duplicate_key_conflict",
+        "asset_authoring.input.enhanced_input",
+        "asset_authoring.input.enhanced_input_mapping_removal"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.input.axis2d_movement_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "axis2d_movement_mapping"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/axis2d_movement_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "axis2d_movement_mapping"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.input.axis3d_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "axis3d_mapping"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/axis3d_mapping",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "axis3d_mapping"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.input.duplicate_key_conflict",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "duplicate_key_conflict"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/duplicate_key_conflict",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "duplicate_key_conflict"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.input.enhanced_input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "enhanced_input"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/enhanced_input",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "enhanced_input"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.input.enhanced_input_mapping_removal",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "enhanced_input_mapping_removal"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/enhanced_input_mapping_removal",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "enhanced_input_mapping_removal"
+        ]
+      },
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json",
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.input": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: input",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-293",
+        "BEB-472",
+        "BEB-481",
+        "BEB-496",
+        "BEB-517"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-293",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "enhanced_input",
+          "blueprint_type": "",
+          "workflow": "enhanced_input_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "remove_input_mapping",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an InputAction and InputMappingContext, map SpaceBar, validate mappings, and read the key binding back"
+        },
+        {
+          "id": "BEB-472",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "axis2d_movement_mapping",
+          "blueprint_type": "",
+          "workflow": "input_axis2d_movement_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
+        },
+        {
+          "id": "BEB-481",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "enhanced_input_mapping_removal",
+          "blueprint_type": "",
+          "workflow": "input_mapping_remove_readgone_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "remove_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an InputAction and InputMappingContext, add keyboard and gamepad bindings, remove one binding, save, and verify the removed key is gone while the remaining key persists"
+        },
+        {
+          "id": "BEB-496",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "axis3d_mapping",
+          "blueprint_type": "",
+          "workflow": "input_axis3d_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an Axis3D Enhanced Input action and mapping context, edit action properties, map three keyboard keys, save, and read the bindings back"
+        },
+        {
+          "id": "BEB-517",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "duplicate_key_conflict",
+          "blueprint_type": "",
+          "workflow": "input_duplicate_key_conflict_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_mapping_context",
+            "validate_input_mappings",
+            "inspect_asset"
+          ],
+          "description": "Create two Enhanced Input Actions mapped to the same key in one mapping context, save, read back both mappings, and require validation to report a duplicate-key conflict"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "axis2d_movement_mapping": [
+            "BEB-472"
+          ],
+          "axis3d_mapping": [
+            "BEB-496"
+          ],
+          "duplicate_key_conflict": [
+            "BEB-517"
+          ],
+          "enhanced_input": [
+            "BEB-293"
+          ],
+          "enhanced_input_mapping_removal": [
+            "BEB-481"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ],
+          "edit": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ],
+          "readback_verify": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ],
+          "save": [
+            "BEB-293",
+            "BEB-472",
+            "BEB-481",
+            "BEB-496",
+            "BEB-517"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.input.axis2d_movement_mapping",
+        "asset_authoring.input.axis3d_mapping",
+        "asset_authoring.input.duplicate_key_conflict",
+        "asset_authoring.input.enhanced_input",
+        "asset_authoring.input.enhanced_input_mapping_removal"
+      ],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    },
+    "asset_authoring.input.axis2d_movement_mapping": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input.axis2d_movement_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "axis2d_movement_mapping"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/axis2d_movement_mapping",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "axis2d_movement_mapping"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-472"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-472",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "axis2d_movement_mapping",
+          "blueprint_type": "",
+          "workflow": "input_axis2d_movement_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-472"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-472"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-472"
+          ],
+          "edit": [
+            "BEB-472"
+          ],
+          "readback_verify": [
+            "BEB-472"
+          ],
+          "save": [
+            "BEB-472"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    },
+    "asset_authoring.input.axis3d_mapping": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input.axis3d_mapping",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "axis3d_mapping"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/axis3d_mapping",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "axis3d_mapping"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-496"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-496",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "axis3d_mapping",
+          "blueprint_type": "",
+          "workflow": "input_axis3d_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an Axis3D Enhanced Input action and mapping context, edit action properties, map three keyboard keys, save, and read the bindings back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-496"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-496"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-496"
+          ],
+          "edit": [
+            "BEB-496"
+          ],
+          "readback_verify": [
+            "BEB-496"
+          ],
+          "save": [
+            "BEB-496"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    },
+    "asset_authoring.input.duplicate_key_conflict": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input.duplicate_key_conflict",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "duplicate_key_conflict"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/duplicate_key_conflict",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "duplicate_key_conflict"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-517"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-517",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "duplicate_key_conflict",
+          "blueprint_type": "",
+          "workflow": "input_duplicate_key_conflict_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_mapping_context",
+            "validate_input_mappings",
+            "inspect_asset"
+          ],
+          "description": "Create two Enhanced Input Actions mapped to the same key in one mapping context, save, read back both mappings, and require validation to report a duplicate-key conflict"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-517"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-517"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-517"
+          ],
+          "edit": [
+            "BEB-517"
+          ],
+          "readback_verify": [
+            "BEB-517"
+          ],
+          "save": [
+            "BEB-517"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    },
+    "asset_authoring.input.enhanced_input": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input.enhanced_input",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "enhanced_input"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/enhanced_input",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "enhanced_input"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-293"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-293",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "enhanced_input",
+          "blueprint_type": "",
+          "workflow": "enhanced_input_mapping_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "set_input_action_properties",
+            "create_input_mapping_context",
+            "remove_input_mapping",
+            "add_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an InputAction and InputMappingContext, map SpaceBar, validate mappings, and read the key binding back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-293"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-293"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-293"
+          ],
+          "edit": [
+            "BEB-293"
+          ],
+          "readback_verify": [
+            "BEB-293"
+          ],
+          "save": [
+            "BEB-293"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    },
+    "asset_authoring.input.enhanced_input_mapping_removal": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.input.enhanced_input_mapping_removal",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "input",
+        "enhanced_input_mapping_removal"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: input/enhanced_input_mapping_removal",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "input"
+        ],
+        "edit_domain": [
+          "enhanced_input_mapping_removal"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-481"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-481",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "input",
+          "edit_domain": "enhanced_input_mapping_removal",
+          "blueprint_type": "",
+          "workflow": "input_mapping_remove_readgone_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_input_action",
+            "create_input_mapping_context",
+            "add_input_mapping",
+            "remove_input_mapping",
+            "save_asset",
+            "get_input_action",
+            "get_input_mapping_context",
+            "validate_input_mappings"
+          ],
+          "description": "Create an InputAction and InputMappingContext, add keyboard and gamepad bindings, remove one binding, save, and verify the removed key is gone while the remaining key persists"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-481"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-481"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-481"
+          ],
+          "edit": [
+            "BEB-481"
+          ],
+          "readback_verify": [
+            "BEB-481"
+          ],
+          "save": [
+            "BEB-481"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.input",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.input",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/input.json"
+    }
+  }
+}

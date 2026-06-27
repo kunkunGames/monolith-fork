@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "merge_actors",
+  "route_edit_domain": "merge_actors",
+  "module_id": "asset_authoring.mesh.merge_actors",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.merge_actors",
+    "edit": "asset_operation.edit.mesh.merge_actors",
+    "save": "asset_operation.save.mesh.merge_actors",
+    "readback_verify": "asset_operation.readback_verify.mesh.merge_actors"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-441"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-441",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "merge_actors",
+      "blueprint_type": "",
+      "workflow": "mesh_merge_actors_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "spawn_actor",
+        "merge_actors",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Spawn temporary StaticMeshActors, run the public merge_actors workflow to create a StaticMesh asset, clean up the scene actors, and inspect the merged mesh"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-441",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchMergedActors"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchMergeA",
+              "AE_BenchMergeB"
+            ]
+          }
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
+            "location": [
+              -160,
+              120,
+              80
+            ],
+            "scale": [
+              1.0,
+              0.75,
+              1.0
+            ],
+            "name": "AE_BenchMergeA",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchMergeA",
+            "StaticMeshActor"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
+            "location": [
+              -20,
+              120,
+              100
+            ],
+            "scale": [
+              0.75,
+              1.0,
+              1.25
+            ],
+            "name": "AE_BenchMergeB",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchMergeB",
+            "StaticMeshActor"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "merge_actors",
+            "actor_names": [
+              "AE_BenchMergeA",
+              "AE_BenchMergeB"
+            ],
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMergedActors",
+            "confirm": true,
+            "source_policy": "keep_sources",
+            "merge_materials": false,
+            "texture_size": 256,
+            "screen_size": 256
+          },
+          "contains": [
+            "status",
+            "success",
+            "merged_mesh_path",
+            "SM_BenchMergedActors",
+            "source_actors",
+            "2",
+            "source_components",
+            "2"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchMergeA",
+              "AE_BenchMergeB"
+            ]
+          },
+          "contains": [
+            "deleted",
+            "2"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMergedActors"
+          },
+          "contains": [
+            "SM_BenchMergedActors",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchMergedActors"
+          },
+          "contains": [
+            "SM_BenchMergedActors",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "merge_actors",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_merge_actors_roundtrip",
+      "description": "Spawn temporary StaticMeshActors, run the public merge_actors workflow to create a StaticMesh asset, clean up the scene actors, and inspect the merged mesh",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "delete_actors",
+          "spawn_actor",
+          "merge_actors",
+          "get_mesh_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

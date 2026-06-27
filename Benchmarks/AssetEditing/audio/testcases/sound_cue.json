@@ -1,0 +1,248 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_cue",
+  "route_edit_domain": "sound_cue",
+  "module_id": "asset_authoring.audio.sound_cue",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_cue",
+    "edit": "asset_operation.edit.audio.sound_cue",
+    "save": "asset_operation.save.audio.sound_cue",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_cue"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-316"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-316",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_cue",
+      "blueprint_type": "",
+      "workflow": "audio_soundcue_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_sound_class",
+        "set_sound_class_properties",
+        "batch_assign_sound_class",
+        "save_asset",
+        "create_sound_cue",
+        "get_sound_class_properties",
+        "get_sound_wave_info",
+        "find_sound_waves_in_cue",
+        "validate_sound_cue"
+      ],
+      "description": "Create a test SoundWave, SoundClass, and SoundCue, assign class metadata, save, validate, and read references back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-316",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchTone",
+              "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX",
+              "/Game/Benchmarks/AssetAuthoring/SCue_BenchTone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchTone",
+            "frequency_hz": 440.0,
+            "duration_seconds": 0.25,
+            "sample_rate": 44100,
+            "amplitude": 0.4
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_class",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX",
+            "properties": {
+              "Volume": 0.75
+            }
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_sound_class_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX",
+            "properties": {
+              "Volume": 0.5,
+              "Pitch": 1.0
+            }
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "batch_assign_sound_class",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchTone"
+            ],
+            "sound_class": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchTone"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX"
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchTone",
+            "sound_waves": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchTone"
+            ]
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchTone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_class_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchSFX"
+          },
+          "contains": [
+            "Volume",
+            "0.5"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_wave_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchTone"
+          },
+          "contains": [
+            "SoundClass_BenchSFX"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_sound_waves_in_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchTone"
+          },
+          "contains": [
+            "SW_BenchTone"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "validate_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchTone"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_sound_cue reports invalid cue state as isError; graph and wave references are asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_cue",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_soundcue_roundtrip",
+      "description": "Create a test SoundWave, SoundClass, and SoundCue, assign class metadata, save, validate, and read references back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_sound_class",
+          "set_sound_class_properties",
+          "batch_assign_sound_class",
+          "save_asset",
+          "create_sound_cue",
+          "get_sound_class_properties",
+          "get_sound_wave_info",
+          "find_sound_waves_in_cue",
+          "validate_sound_cue"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

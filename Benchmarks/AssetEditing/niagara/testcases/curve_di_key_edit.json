@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "curve_di_key_edit",
+  "route_edit_domain": "curve_di_key_edit",
+  "module_id": "asset_authoring.niagara.curve_di_key_edit",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.curve_di_key_edit",
+    "edit": "asset_operation.edit.niagara.curve_di_key_edit",
+    "save": "asset_operation.save.niagara.curve_di_key_edit",
+    "readback_verify": "asset_operation.readback_verify.niagara.curve_di_key_edit"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-509"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-509",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "curve_di_key_edit",
+      "blueprint_type": "",
+      "workflow": "niagara_curve_di_key_edit_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_module_from_hlsl",
+        "create_system",
+        "create_emitter",
+        "request_compile",
+        "add_module",
+        "set_module_input_di",
+        "configure_curve_keys",
+        "save_system",
+        "get_module_inputs",
+        "list_system_data_interfaces",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-509",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+              "/Game/Benchmarks/AssetAuthoring/NM_BenchCurveKeyEdit"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_module_from_hlsl",
+            "name": "NM_BenchCurveKeyEdit",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NM_BenchCurveKeyEdit",
+            "description": "Benchmark module for curve-key edit action",
+            "hlsl": "OutValue = InValue;",
+            "inputs": [
+              {
+                "name": "InValue",
+                "type": "float"
+              },
+              {
+                "name": "BenchCurve",
+                "type": "NiagaraDataInterfaceCurve"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "OutValue",
+                "type": "float"
+              }
+            ]
+          },
+          "contains": [
+            "NM_BenchCurveKeyEdit",
+            "BenchCurve",
+            "OutValue"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit"
+          },
+          "contains": [
+            "NS_BenchCurveKeyEdit"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "name": "CurveKeyEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "CurveKeyEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "request_compile",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "force": true,
+            "synchronous": true
+          },
+          "contains": [
+            "NS_BenchCurveKeyEdit"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_module",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "emitter": "CurveKeyEmitter",
+            "usage": "particle_update",
+            "module_script": "/Game/Benchmarks/AssetAuthoring/NM_BenchCurveKeyEdit.NM_BenchCurveKeyEdit"
+          },
+          "contains": [
+            "node_guid"
+          ],
+          "capture": {
+            "module_node": "$.node_guid"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_module_input_di",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "emitter": "CurveKeyEmitter",
+            "module_node": "${module_node}",
+            "input": "BenchCurve",
+            "di_class": "NiagaraDataInterfaceCurve",
+            "config": {
+              "keys": [
+                {
+                  "time": 0.0,
+                  "value": 0.25
+                },
+                {
+                  "time": 1.0,
+                  "value": 0.75
+                }
+              ]
+            }
+          },
+          "contains": [
+            "NiagaraDataInterfaceCurve",
+            "BenchCurve"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "configure_curve_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "emitter": "CurveKeyEmitter",
+            "module_node": "${module_node}",
+            "input": "BenchCurve",
+            "keys": [
+              {
+                "time": 0.0,
+                "value": 2.0
+              },
+              {
+                "time": 1.0,
+                "value": 4.0
+              }
+            ],
+            "interp": "linear"
+          },
+          "contains": [
+            "success",
+            "true",
+            "NiagaraDataInterfaceCurve",
+            "key_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_module_inputs",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit",
+            "emitter": "CurveKeyEmitter",
+            "module_node": "${module_node}"
+          },
+          "contains": [
+            "BenchCurve",
+            "NiagaraDataInterfaceCurve",
+            "di_data",
+            "2",
+            "4"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_system_data_interfaces",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit"
+          },
+          "contains": [
+            "BenchCurve",
+            "NiagaraDataInterfaceCurve"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchCurveKeyEdit"
+          },
+          "contains": [
+            "NS_BenchCurveKeyEdit",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "curve_di_key_edit",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_curve_di_key_edit_roundtrip",
+      "description": "Create a Niagara module with a curve data-interface input, edit keys through configure_curve_keys, save the system, and read the DI keys back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/niagara-overview-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithNiagara/Private/MonolithNiagaraActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_module_from_hlsl",
+          "create_system",
+          "create_emitter",
+          "request_compile",
+          "add_module",
+          "set_module_input_di",
+          "configure_curve_keys",
+          "save_system",
+          "get_module_inputs",
+          "list_system_data_interfaces",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,356 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_expression_crud",
+  "route_edit_domain": "expression_crud",
+  "module_id": "asset_authoring.material.expression_crud",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.expression_crud",
+    "edit": "asset_operation.edit.material.expression_crud",
+    "save": "asset_operation.save.material.expression_crud",
+    "readback_verify": "asset_operation.readback_verify.material.expression_crud"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-389"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-389",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_expression_crud",
+      "blueprint_type": "",
+      "workflow": "material_expression_crud_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "duplicate_expression",
+        "rename_expression",
+        "set_expression_property",
+        "disconnect_expression",
+        "connect_expressions",
+        "delete_expression",
+        "save_material",
+        "get_all_expressions",
+        "get_expression_details",
+        "get_full_connection_graph",
+        "validate_material"
+      ],
+      "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-389",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchExpressionCrud"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BaseTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchCrudTint"
+                  },
+                  "pos": [
+                    -420,
+                    -120
+                  ]
+                },
+                {
+                  "id": "RoughnessValue",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BenchCrudRoughness",
+                    "DefaultValue": 0.72
+                  },
+                  "pos": [
+                    -420,
+                    120
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BaseTint",
+                  "from_pin": "RGB",
+                  "to_property": "BaseColor"
+                },
+                {
+                  "from": "RoughnessValue",
+                  "to_property": "Roughness"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "nodes_created",
+            "2",
+            "connections_made",
+            "2"
+          ],
+          "capture": {
+            "rough_expr": "$.id_to_name.RoughnessValue"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "duplicate_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_expr}",
+            "offset_x": 180,
+            "offset_y": 80
+          },
+          "contains": [
+            "source_name",
+            "${rough_expr}",
+            "new_name",
+            "Output connections are NOT duplicated"
+          ],
+          "capture": {
+            "rough_copy": "$.new_name"
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "rename_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_copy}",
+            "new_desc": "BenchCrudRoughnessFinal"
+          },
+          "contains": [
+            "${rough_copy}",
+            "BenchCrudRoughnessFinal"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "set_expression_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_copy}",
+            "property_name": "DefaultValue",
+            "value": 0.37
+          },
+          "contains": [
+            "${rough_copy}",
+            "DefaultValue",
+            "0.37"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "disconnect_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_expr}",
+            "disconnect_outputs": true,
+            "target_expression": "Roughness"
+          },
+          "contains": [
+            "Roughness",
+            "count",
+            "1"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "connect_expressions",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "from_expression": "${rough_copy}",
+            "to_property": "Roughness"
+          },
+          "contains": [
+            "connected",
+            "true",
+            "${rough_copy}",
+            "Roughness"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "delete_expression",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_expr}"
+          },
+          "contains": [
+            "deleted",
+            "${rough_expr}",
+            "MaterialExpressionScalarParameter"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_all_expressions",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud"
+          },
+          "contains": [
+            "${rough_copy}",
+            "BenchCrudTint",
+            "expression_count"
+          ],
+          "not_contains": [
+            "${rough_expr}"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_expression_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud",
+            "expression_name": "${rough_copy}"
+          },
+          "contains": [
+            "BenchCrudRoughnessFinal",
+            "DefaultValue",
+            "0.37"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud"
+          },
+          "contains": [
+            "${rough_copy}",
+            "Roughness"
+          ],
+          "not_contains": [
+            "${rough_expr}"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchExpressionCrud"
+          },
+          "contains": [
+            "valid"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_expression_crud",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_expression_crud_roundtrip",
+      "description": "Create a Material graph, capture expression names, duplicate/label/edit/reconnect/delete an expression, save it, and read graph topology back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "duplicate_expression",
+          "rename_expression",
+          "set_expression_property",
+          "disconnect_expression",
+          "connect_expressions",
+          "delete_expression",
+          "save_material",
+          "get_all_expressions",
+          "get_expression_details",
+          "get_full_connection_graph",
+          "validate_material"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

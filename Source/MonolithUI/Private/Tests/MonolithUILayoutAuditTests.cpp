@@ -4,6 +4,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Actions/MonolithUISpecActions.h"
+#include "MonolithUICommon.h"
 #include "MonolithToolRegistry.h"
 #include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
 
@@ -211,6 +212,7 @@ bool FMonolithUILayoutAuditMinDesiredWidthDoesNotBoundTextTest::RunTest(const FS
         WrapperSlot->SetSize(FVector2D::ZeroVector);
     }
 
+    MonolithUI::ReconcileWidgetVariableGuids(WidgetBlueprint);
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WidgetBlueprint);
     FKismetEditorUtilities::CompileBlueprint(WidgetBlueprint);
 

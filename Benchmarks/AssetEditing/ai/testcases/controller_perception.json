@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "ai_controller_perception",
+  "route_edit_domain": "controller_perception",
+  "module_id": "asset_authoring.ai.controller_perception",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.controller_perception",
+    "edit": "asset_operation.edit.ai.controller_perception",
+    "save": "asset_operation.save.ai.controller_perception",
+    "readback_verify": "asset_operation.readback_verify.ai.controller_perception"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-339"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-339",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "ai_controller_perception",
+      "blueprint_type": "",
+      "workflow": "ai_controller_perception_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "save_asset",
+        "add_bb_key",
+        "create_behavior_tree",
+        "create_ai_controller",
+        "set_ai_team",
+        "set_ai_controller_flags",
+        "add_perception_component",
+        "configure_sight_sense",
+        "get_ai_controller",
+        "get_perception_config",
+        "validate_ai_controller"
+      ],
+      "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-339",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchController",
+              "/Game/Benchmarks/AssetAuthoring/BT_BenchController",
+              "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchController"
+          },
+          "contains": [
+            "BB_BenchController"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchController"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchController",
+            "key_name": "TargetActor",
+            "key_type": "Object",
+            "base_class": "Actor"
+          },
+          "contains": [
+            "TargetActor"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_behavior_tree",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchController",
+            "blackboard_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchController"
+          },
+          "contains": [
+            "BT_BenchController"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_ai_controller",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight",
+            "bt_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchController",
+            "bb_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchController"
+          },
+          "contains": [
+            "AIC_BenchSight"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "set_ai_team",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight",
+            "team_id": 7
+          },
+          "contains": [
+            "7"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "set_ai_controller_flags",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight",
+            "wants_player_state": true,
+            "start_ai_on_possess": true,
+            "allow_strafe": true
+          },
+          "contains": [
+            "AIC_BenchSight"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_perception_component",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight",
+            "dominant_sense": "Sight"
+          },
+          "contains": [
+            "AIPerceptionComponent"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "configure_sight_sense",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight",
+            "radius": 1800.0,
+            "lose_radius": 2200.0,
+            "peripheral_angle": 70.0,
+            "affiliation": {
+              "enemies": true,
+              "neutrals": true,
+              "friendlies": false
+            },
+            "max_age": 3.0
+          },
+          "contains": [
+            "Sight",
+            "1800"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_ai_controller",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight"
+          },
+          "contains": [
+            "AIC_BenchSight",
+            "AIController",
+            "allow_strafe",
+            "true"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_perception_config",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight"
+          },
+          "contains": [
+            "Sight",
+            "1800",
+            "70"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "validate_ai_controller",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AIC_BenchSight"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_ai_controller reports invalid controller/perception state as isError; controller and perception config are asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "ai_controller_perception",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_controller_perception_roundtrip",
+      "description": "Create Blackboard/BehaviorTree/AIController assets, set controller team/flags, add sight perception, save, and inspect controller config",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blackboard",
+          "save_asset",
+          "add_bb_key",
+          "create_behavior_tree",
+          "create_ai_controller",
+          "set_ai_team",
+          "set_ai_controller_flags",
+          "add_perception_component",
+          "configure_sight_sense",
+          "get_ai_controller",
+          "get_perception_config",
+          "validate_ai_controller"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

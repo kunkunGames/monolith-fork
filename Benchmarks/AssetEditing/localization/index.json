@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "localization",
+  "asset_type_slug": "localization",
+  "module_id": "asset_authoring.localization",
+  "task_count": 5,
+  "operation_counts": {
+    "creation_or_import": 5,
+    "edit": 5,
+    "save": 5,
+    "readback_verify": 5
+  },
+  "lifecycle_counts": {
+    "create_save": 5
+  },
+  "edit_domain_count": 5,
+  "task_ids": [
+    "BEB-291",
+    "BEB-292",
+    "BEB-375",
+    "BEB-483",
+    "BEB-516"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-291",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable",
+      "blueprint_type": "",
+      "workflow": "stringtable_lifecycle",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "set_string_metadata",
+        "save_asset",
+        "get_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, write a localized entry and metadata, save it, and read the entry back"
+    },
+    {
+      "id": "BEB-292",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_csv",
+      "blueprint_type": "",
+      "workflow": "stringtable_csv_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "import_string_table_csv",
+        "set_string_metadata",
+        "save_asset",
+        "get_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, import translator-style CSV rows with metadata, save it, and validate the imported entries"
+    },
+    {
+      "id": "BEB-375",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_export_remove",
+      "blueprint_type": "",
+      "workflow": "localization_stringtable_export_remove_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "export_string_table_csv",
+        "remove_string_entry",
+        "get_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table"
+    },
+    {
+      "id": "BEB-483",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_blueprint_bulk",
+      "blueprint_type": "",
+      "workflow": "localization_blueprint_stringtable_bulk_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_table_entries",
+        "remove_string_table_entry",
+        "save_asset",
+        "read_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back"
+    },
+    {
+      "id": "BEB-516",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_metadata_remove",
+      "blueprint_type": "",
+      "workflow": "localization_stringtable_metadata_remove_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "set_string_metadata",
+        "save_asset",
+        "get_string_table",
+        "validate_string_table",
+        "inspect_asset"
+      ],
+      "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "stringtable",
+      "route_edit_domain": "stringtable",
+      "module_id": "asset_authoring.localization.stringtable",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.localization.stringtable",
+        "edit": "asset_operation.edit.localization.stringtable",
+        "save": "asset_operation.save.localization.stringtable",
+        "readback_verify": "asset_operation.readback_verify.localization.stringtable"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-291"
+      ],
+      "case_file": "testcases\\stringtable.json"
+    },
+    {
+      "edit_domain": "stringtable_blueprint_bulk",
+      "route_edit_domain": "stringtable_blueprint_bulk",
+      "module_id": "asset_authoring.localization.stringtable_blueprint_bulk",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_blueprint_bulk",
+        "edit": "asset_operation.edit.localization.stringtable_blueprint_bulk",
+        "save": "asset_operation.save.localization.stringtable_blueprint_bulk",
+        "readback_verify": "asset_operation.readback_verify.localization.stringtable_blueprint_bulk"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-483"
+      ],
+      "case_file": "testcases\\stringtable_blueprint_bulk.json"
+    },
+    {
+      "edit_domain": "stringtable_csv",
+      "route_edit_domain": "stringtable_csv",
+      "module_id": "asset_authoring.localization.stringtable_csv",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_csv",
+        "edit": "asset_operation.edit.localization.stringtable_csv",
+        "save": "asset_operation.save.localization.stringtable_csv",
+        "readback_verify": "asset_operation.readback_verify.localization.stringtable_csv"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-292"
+      ],
+      "case_file": "testcases\\stringtable_csv.json"
+    },
+    {
+      "edit_domain": "stringtable_export_remove",
+      "route_edit_domain": "stringtable_export_remove",
+      "module_id": "asset_authoring.localization.stringtable_export_remove",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_export_remove",
+        "edit": "asset_operation.edit.localization.stringtable_export_remove",
+        "save": "asset_operation.save.localization.stringtable_export_remove",
+        "readback_verify": "asset_operation.readback_verify.localization.stringtable_export_remove"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-375"
+      ],
+      "case_file": "testcases\\stringtable_export_remove.json"
+    },
+    {
+      "edit_domain": "stringtable_metadata_remove",
+      "route_edit_domain": "stringtable_metadata_remove",
+      "module_id": "asset_authoring.localization.stringtable_metadata_remove",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_metadata_remove",
+        "edit": "asset_operation.edit.localization.stringtable_metadata_remove",
+        "save": "asset_operation.save.localization.stringtable_metadata_remove",
+        "readback_verify": "asset_operation.readback_verify.localization.stringtable_metadata_remove"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-516"
+      ],
+      "case_file": "testcases\\stringtable_metadata_remove.json"
+    }
+  ]
+}

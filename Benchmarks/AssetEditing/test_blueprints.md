@@ -1,0 +1,273 @@
+# AssetEditing Benchmark - Test Blueprint Fixtures
+
+This document specifies the 7 fixture Blueprints that must exist under `/Game/Benchmarks/` for the 434-task AssetEditing benchmark to produce rich, representative scores. Without these fixtures, read and edit tasks fail preflight as fixture missing/contract failures instead of being confused with live MCP transport errors.
+
+The asset paths here match `tasks.jsonl` exactly — do not rename them.
+
+## Why Fixtures Matter
+
+- **Graph reads** score higher signal when the graph contains real nodes and pin connections.
+- **Variable reads** require at least one variable per Blueprint to distinguish "empty list" from "action not working". Fixture variable types are created from `FIXTURE_VAR_TYPES` in the runner, which matches the types in this doc exactly (`ActorTag` = FName/`name`, `DisplayText` = FText/`text`, `CharacterName` = FString/`string`, `ComponentID` = int32/`int`).
+- **Function reads** require setup-created function stubs from `FIXTURE_FUNCTIONS_BY_TYPE` for all 7 fixture types. `preflight` reports `fixture_contract_missing` if these stubs are absent.
+- **Edit execute tasks** (`edit_execute` category) call real mutations against these fixtures and **read the mutation back**; they are the highest-weighted category (0.27) and require the fixtures to compile cleanly (`error_count == 0`).
+- **Workflow tasks** (`workflow_execute`) are executed end-to-end (build→wire→compile-clean→read-back); a fixture that already compiles cleanly isolates agent errors from asset errors.
+
+---
+
+## 1. BPB_TestActor
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/BPB_TestActor` |
+| Parent class | `AActor` |
+| Domain | General gameplay actor |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `Health` | `float` | `100.0` |
+| `MaxHealth` | `float` | `100.0` |
+| `ActorTag` | `FName` | `"BenchActor"` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `TakeDamage_Bench` | `Amount: float` | `RemainingHealth: float` |
+| `Heal_Bench` | `Amount: float` | _(none)_ |
+
+**Creation steps (blueprint_query MCP calls):**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPB_TestActor parent_class=Actor
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=Health type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=MaxHealth type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestActor name=ActorTag type=name
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestActor function_name=TakeDamage_Bench
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestActor function_name=Heal_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestActor
+```
+
+---
+
+## 2. BPB_TestCharacter
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/BPB_TestCharacter` |
+| Parent class | `ACharacter` |
+| Domain | Player/AI character |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `MoveSpeed` | `float` | `600.0` |
+| `bIsSprinting` | `bool` | `false` |
+| `CharacterName` | `FString` | `"BenchChar"` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `StartSprint_Bench` | _(none)_ | _(none)_ |
+| `StopSprint_Bench` | _(none)_ | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPB_TestCharacter parent_class=Character
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=MoveSpeed type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=bIsSprinting type=bool
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BPB_TestCharacter name=CharacterName type=string
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestCharacter function_name=StartSprint_Bench
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPB_TestCharacter function_name=StopSprint_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPB_TestCharacter
+```
+
+---
+
+## 3. WBP_TestWidget
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/WBP_TestWidget` |
+| Parent class | `UUserWidget` |
+| Domain | UMG UI widget |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `DisplayText` | `FText` | `"Bench"` |
+| `bIsVisible` | `bool` | `true` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `UpdateDisplay_Bench` | `NewText: FText` | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/WBP_TestWidget parent_class=UserWidget
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget name=DisplayText type=text
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/WBP_TestWidget name=bIsVisible type=bool
+blueprint_query action=add_function asset_path=/Game/Benchmarks/WBP_TestWidget function_name=UpdateDisplay_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/WBP_TestWidget
+```
+
+---
+
+## 4. ABP_TestAnim
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/ABP_TestAnim` |
+| Parent class | `UAnimInstance` |
+| Domain | Animation state machine |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `Speed` | `float` | `0.0` |
+| `bIsInAir` | `bool` | `false` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `UpdateLocomotion_Bench` | `CurrentSpeed: float` | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/ABP_TestAnim parent_class=AnimInstance
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim name=Speed type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/ABP_TestAnim name=bIsInAir type=bool
+blueprint_query action=add_function asset_path=/Game/Benchmarks/ABP_TestAnim function_name=UpdateLocomotion_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/ABP_TestAnim
+```
+
+---
+
+## 5. GA_TestAbility
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/GA_TestAbility` |
+| Parent class | `UGameplayAbility` |
+| Domain | GAS ability |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `AbilityCooldown` | `float` | `1.0` |
+| `AbilityCost` | `float` | `10.0` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `OnAbilityActivated_Bench` | _(none)_ | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/GA_TestAbility parent_class=GameplayAbility
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility name=AbilityCooldown type=float
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/GA_TestAbility name=AbilityCost type=float
+blueprint_query action=add_function asset_path=/Game/Benchmarks/GA_TestAbility function_name=OnAbilityActivated_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/GA_TestAbility
+```
+
+---
+
+## 6. BC_TestComponent
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/BC_TestComponent` |
+| Parent class | `UActorComponent` |
+| Domain | Reusable actor component |
+
+**Variables to create:**
+
+| Name | Type | Default |
+|------|------|---------|
+| `ComponentID` | `int32` | `0` |
+| `bComponentActive` | `bool` | `true` |
+
+**Functions to create:**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `Initialize_Bench` | `ID: int32` | _(none)_ |
+| `Deactivate_Bench` | _(none)_ | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BC_TestComponent parent_class=ActorComponent
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent name=ComponentID type=int
+blueprint_query action=add_variable asset_path=/Game/Benchmarks/BC_TestComponent name=bComponentActive type=bool
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BC_TestComponent function_name=Initialize_Bench
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BC_TestComponent function_name=Deactivate_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BC_TestComponent
+```
+
+---
+
+## 7. BPI_TestInterface
+
+| Field | Value |
+|-------|-------|
+| Asset path | `/Game/Benchmarks/BPI_TestInterface` |
+| Parent class | `UInterface` |
+| Domain | Blueprint interface |
+
+**Variables to create:**
+
+_(Interfaces do not carry member variables; this fixture intentionally has none to validate empty-variable-list handling in `variable_read` tasks. Interface read tasks call both `get_functions` and `get_interface_functions`, and assert at least one declared interface stub (`GetDisplayName_Bench` / `OnInteract_Bench`) appears — so an empty `{}` cannot pass. `setup_fixtures` creates these two stubs.)_
+
+**Functions to create (interface stubs):**
+
+| Name | Inputs | Outputs |
+|------|--------|---------|
+| `GetDisplayName_Bench` | _(none)_ | `Name: FName` |
+| `OnInteract_Bench` | `Instigator: AActor*` | _(none)_ |
+
+**Creation steps:**
+
+```
+blueprint_query action=create_blueprint save_path=/Game/Benchmarks/BPI_TestInterface parent_class=Interface
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPI_TestInterface function_name=GetDisplayName_Bench
+blueprint_query action=add_function asset_path=/Game/Benchmarks/BPI_TestInterface function_name=OnInteract_Bench
+blueprint_query action=compile_blueprint asset_path=/Game/Benchmarks/BPI_TestInterface
+```
+
+---
+
+## Fixture Verification
+
+Use preflight before scoring. It distinguishes `transport_error` from fixture missing/contract
+failures, then `run` repeats readiness preflight by default:
+
+```powershell
+python Scripts\asset_editing_benchmark.py preflight `
+  --mcp-url http://localhost:9316/mcp
+
+python Scripts\asset_editing_benchmark.py setup_fixtures `
+  --mcp-url http://localhost:9316/mcp
+
+python Scripts\asset_editing_benchmark.py run `
+  --tasks Benchmarks\AssetEditing\tasks.jsonl `
+  --label fixture-verify `
+  --output-dir Saved\Monolith\Benchmarks\AssetEditing\fixture-verify
+```
+
+Expected: `preflight.ok=true`, `graph_read_rate` and `variable_read_rate` ≥ 0.9 (fixtures exist and server handles requests), `edit_execute_rate` ≥ 0.8 (fixture assets are writable and the server can process edit calls).

@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "input",
+  "asset_type_slug": "input",
+  "edit_domain": "axis2d_movement_mapping",
+  "route_edit_domain": "axis2d_movement_mapping",
+  "module_id": "asset_authoring.input.axis2d_movement_mapping",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.input.axis2d_movement_mapping",
+    "edit": "asset_operation.edit.input.axis2d_movement_mapping",
+    "save": "asset_operation.save.input.axis2d_movement_mapping",
+    "readback_verify": "asset_operation.readback_verify.input.axis2d_movement_mapping"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-472"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-472",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "input",
+      "edit_domain": "axis2d_movement_mapping",
+      "blueprint_type": "",
+      "workflow": "input_axis2d_movement_mapping_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_input_action",
+        "set_input_action_properties",
+        "create_input_mapping_context",
+        "add_input_mapping",
+        "save_asset",
+        "get_input_action",
+        "get_input_mapping_context",
+        "validate_input_mappings"
+      ],
+      "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-472",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+              "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "create_input_action",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "value_type": "Axis2D",
+            "description": "Bench 2D movement action",
+            "accumulation": "Cumulative",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "Axis2D",
+            "Cumulative"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "set_input_action_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "description": "Bench 2D movement action edited",
+            "consume_legacy_mappings": false,
+            "reserve_all_mappings": true,
+            "trigger_when_paused": false,
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "Bench 2D movement action edited",
+            "reserve_all_mappings",
+            "true",
+            "consume_legacy_mappings",
+            "false"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "create_input_mapping_context",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement",
+            "description": "Bench movement mapping context",
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "IMC_BenchMovement"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "key": "W",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "W"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "key": "A",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "A"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "key": "S",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "S"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "add_input_mapping",
+            "context_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement",
+            "action_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D",
+            "key": "D",
+            "save": true
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "D"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "get_input_action",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IA_BenchMove2D"
+          },
+          "contains": [
+            "Axis2D",
+            "Cumulative",
+            "reserve_all_mappings",
+            "true",
+            "Bench 2D movement action edited"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "get_input_mapping_context",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement"
+          },
+          "contains": [
+            "IA_BenchMove2D",
+            "W",
+            "A",
+            "S",
+            "D"
+          ]
+        },
+        {
+          "tool": "input_query",
+          "args": {
+            "action": "validate_input_mappings",
+            "context_paths": [
+              "/Game/Benchmarks/AssetAuthoring/IMC_BenchMovement"
+            ]
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_input_mappings reports mapping conflicts as isError; action value type and key bindings are asserted by direct read-back"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "axis2d_movement_mapping",
+      "blueprint_type": "",
+      "domain": "input",
+      "workflow": "input_axis2d_movement_mapping_roundtrip",
+      "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/enhanced-input-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASInputAssetActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_input_action",
+          "set_input_action_properties",
+          "create_input_mapping_context",
+          "add_input_mapping",
+          "save_asset",
+          "get_input_action",
+          "get_input_mapping_context",
+          "validate_input_mappings"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

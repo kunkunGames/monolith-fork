@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "anim_blueprint_motion_matching",
+  "route_edit_domain": "anim_blueprint_motion_matching",
+  "module_id": "asset_authoring.animation.anim_blueprint_motion_matching",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.anim_blueprint_motion_matching",
+    "edit": "asset_operation.edit.animation.anim_blueprint_motion_matching",
+    "save": "asset_operation.save.animation.anim_blueprint_motion_matching",
+    "readback_verify": "asset_operation.readback_verify.animation.anim_blueprint_motion_matching"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-413"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-413",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "anim_blueprint_motion_matching",
+      "blueprint_type": "",
+      "workflow": "animation_motion_matching_abp_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "create_pose_search_schema",
+        "create_pose_search_database",
+        "add_database_entry",
+        "create_anim_blueprint",
+        "build_motion_matching_node",
+        "save_asset",
+        "get_anim_graph_output_connection",
+        "get_nodes",
+        "get_pose_search_database",
+        "inspect_asset"
+      ],
+      "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-413",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchMotionMatching",
+              "/Game/Benchmarks/AssetAuthoring/PSS_BenchMotionMatching",
+              "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching",
+              "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchMotionMatching",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchMotionMatching",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_pose_search_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchMotionMatching",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "sample_rate": 30,
+            "add_default_channels": true
+          },
+          "contains": [
+            "PSS_BenchMotionMatching"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_pose_search_database",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching",
+            "schema_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchMotionMatching"
+          },
+          "contains": [
+            "PSD_BenchMotionMatching",
+            "PSS_BenchMotionMatching"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_database_entry",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching",
+            "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchMotionMatching",
+            "enabled": true,
+            "mirror_option": "UnmirroredOnly"
+          },
+          "contains": [
+            "A_BenchMotionMatching"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_anim_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "parent_class": "AnimInstance"
+          },
+          "contains": [
+            "ABP_BenchMotionMatching",
+            "SkeletalCube_Skeleton",
+            "AnimInstance",
+            "generated_class"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "build_motion_matching_node",
+            "abp_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching",
+            "database_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching"
+          },
+          "contains": [
+            "motion_matching_node",
+            "pose_history_node",
+            "PSD_BenchMotionMatching",
+            "output_pose_wired",
+            "true",
+            "compiled",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchMotionMatching"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSS_BenchMotionMatching"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_anim_graph_output_connection",
+            "abp_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching"
+          },
+          "contains": [
+            "output_connected",
+            "true",
+            "source_pin",
+            "Pose"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_nodes",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching",
+            "graph_name": "AnimGraph"
+          },
+          "contains": [
+            "MotionMatching",
+            "PoseSearchHistory"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_pose_search_database",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/PSD_BenchMotionMatching"
+          },
+          "contains": [
+            "PSS_BenchMotionMatching",
+            "A_BenchMotionMatching"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchMotionMatching"
+          },
+          "contains": [
+            "ABP_BenchMotionMatching",
+            "AnimBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "anim_blueprint_motion_matching",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_motion_matching_abp_roundtrip",
+      "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "create_pose_search_schema",
+          "create_pose_search_database",
+          "add_database_entry",
+          "create_anim_blueprint",
+          "build_motion_matching_node",
+          "save_asset",
+          "get_anim_graph_output_connection",
+          "get_nodes",
+          "get_pose_search_database",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

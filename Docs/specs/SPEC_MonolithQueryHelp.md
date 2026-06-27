@@ -5,7 +5,7 @@
 **Status:** Implemented first slice
 **Owner module:** `Tools/MonolithQuery`
 **Scope:** Add DB-free namespace/action help for `monolith_query.exe`, fix the CLI option parsing drift exposed by that work, and define a companion help baseline for Monolith proxy binaries/launchers.
-**Non-goals:** Live MCP `monolith_discover` changes, domain action output shape changes, DB schema changes, editor-only namespace help, replacing `monolith guide`, adding new offline query actions, or changing MCP proxy protocol behavior.
+**Non-goals:** Live MCP `monolith_discover` changes, domain action output shape changes, unrelated DB schema changes, editor-only namespace help, replacing `monolith guide`, or changing MCP proxy protocol behavior.
 
 ---
 
@@ -16,7 +16,7 @@ Agents use `Binaries\monolith_query.exe` when the MCP server or Unreal Editor is
 This first slice makes the offline tool self-service:
 
 - `monolith_query.exe --help` explains the offline surface.
-- `monolith_query.exe source --help`, `project --help`, `bridge --help`, and the RI namespaces print DB-free namespace help.
+- `monolith_query.exe source --help`, `project --help`, `bridge --help`, `console --help`, and the RI namespaces print DB-free namespace help.
 - `monolith_query.exe source impact_radius --help` and equivalent action requests print action syntax, defaults, examples, output keys, and DB behavior.
 - Space-separated options accepted by the advertised syntax behave the same as `--key=value`.
 
@@ -37,9 +37,9 @@ The source survey for this spec was based on `Tools/MonolithQuery/monolith_query
 | File shape | `monolith_query.cpp` is a single 9284-line standalone CLI with parser, dispatch, DB helpers, output logging, and action handlers. | Help metadata should be local and lightweight; avoid a separate parser stack. |
 | Top-level help | Usage text is hardcoded in `parse_args` and only prints through the `argc < 3` path. Current `monolith_query.exe --help` prints usage but exits nonzero. | Help is treated like an error and cannot be cleanly invoked by automation. |
 | Namespace help | `monolith_query.exe source --help` is parsed as namespace `source`, action `--help`; it opens `EngineSource.db`, then fails as an unknown source action. | Help depends on DB availability and fails for the exact syntax agents expect. |
-| Action dispatch | Current offline dispatch includes `source` 27 entries including `repair_crg_graph` alias, `project` 17 entries, `bridge` 1, `monolith` 1, and RI namespaces `cppreflect` 6, `network` 4, `decision` 5, `risk` 5. | Help must be generated or checked against dispatch tables to avoid drift. |
-| Namespace list | `offline_namespaces()` returns `source`, `project`, `monolith`, `cppreflect`, `network`, `decision`, `risk`, but omits `bridge` even though bridge dispatch exists. | Unknown namespace errors currently under-report the offline surface. |
-| Action errors | RI unknown action returns JSON with suggestions and exit 0; `source`, `project`, and `bridge` unknown actions throw plain fatal errors without suggestions. | Agent recovery is inconsistent and misses the already-available fuzzy helper pattern. |
+| Action dispatch | Current offline dispatch includes `source` entries including `repair_crg_graph` alias, `project`, `bridge`, `console`, `monolith`, and RI namespaces `cppreflect`, `network`, `decision`, `risk`. | Help must be generated or checked against dispatch tables to avoid drift. |
+| Namespace list | `offline_namespaces()` must return every executable offline namespace, including `bridge` and `console`. | Unknown namespace errors must report the full offline surface. |
+| Action errors | Unknown namespace/action handling should suggest nearby valid names before any DB open. | Agent recovery is inconsistent without the already-available fuzzy helper pattern. |
 | Option arity | `value_options` covers only part of the options read later by `opt`, `opt_int`, and `opt_bool`. | `--max-depth 1 --max-results 1` currently runs as defaults `max_depth=2`, `max_results=200`; inline `--max-depth=1 --max-results=1` works. |
 | Shipped executables | `Binaries\` contains `monolith_query.exe` and `monolith_proxy.exe`. | The spec should not imply a separate bridge executable exists. |
 | Proxy help | `Binaries\monolith_proxy.exe --help` currently starts the stdio proxy and logs startup to stderr instead of printing usage. Script proxies also document usage in comments but do not expose a first-class help path. | Operators and agents cannot safely inspect proxy configuration without accidentally entering the MCP stdio loop. |
@@ -84,11 +84,11 @@ The CLI must support these DB-free forms:
 
 Top-level help must include:
 
-- Offline namespaces: `source`, `project`, `bridge`, `monolith`, `cppreflect`, `network`, `decision`, `risk`.
+- Offline namespaces: `source`, `project`, `bridge`, `console`, `monolith`, `cppreflect`, `network`, `decision`, `risk`.
 - One-line summary per namespace.
 - Common DB rules:
   - default DBs resolve from the executable location;
-  - `source` and RI namespaces read `Saved\EngineSource.db`;
+  - `source`, `console`, and RI namespaces read `Saved\EngineSource.db`;
   - `project` reads `Saved\ProjectIndex.db`;
   - `bridge` reads both;
   - source CRG graph actions read or write `Saved\graph.db`;
@@ -172,10 +172,10 @@ Unknown namespace and unknown action handling must be DB-free when the failure c
 
 Required behavior:
 
-- Unknown namespace output includes the full offline namespace list including `bridge`.
+- Unknown namespace output includes the full offline namespace list including `bridge` and `console`.
 - Unknown action output includes sibling action suggestions.
 - The message includes the relevant help command, for example `monolith_query.exe source --help`.
-- `source`, `project`, and `bridge` get suggestion behavior comparable to the RI namespaces.
+- `source`, `project`, `bridge`, and `console` get suggestion behavior comparable to the RI namespaces.
 - Exit behavior should be consistent. Prefer nonzero for unknown namespace/action errors unless a compatibility audit finds a caller depending on the RI exit-0 shape.
 
 ### 4.6 Compatibility And Side Effects
@@ -253,6 +253,7 @@ P0 covers all namespaces currently executable by `monolith_query.exe`:
 | `source` | All 36 dispatch entries, including alias note for `repair_crg_graph -> rebuild_crg_graph` and the C++ authoring-ergonomics actions `get_include_path`, `get_signature`, `check_deprecations`, `verify_symbols`, `find_example_usage`, `lint_header`, and `generate_class_stub` (plain-text output, byte-parity-gated against `Scripts/monolith_offline.py`). |
 | `project` | All 17 dispatch entries. Do not include live-only `list_gameplay_tags` or `search_gameplay_tags` unless offline dispatch is added separately. |
 | `bridge` | `search_asset_symbols`. |
+| `console` | Snapshot-backed `search_objects`, `get_object`, and `health`; `refresh_snapshot` and `execute` are documented live-only guidance actions. |
 | `monolith` | `guide`, including section names. |
 | `cppreflect` | 6 RI actions. |
 | `network` | 4 RI actions. |
@@ -277,7 +278,7 @@ P0 also covers shipped/documented Monolith binary help:
 |----------|----------|--------|
 | P0 | Complete option arity parsing from descriptors. | Prevents silent defaulting in common agent commands such as `--max-results 10` and `--detail-level standard`. |
 | P0 | DB-free unknown action validation. | Avoids "DB not found" masking a simple typo or help request. |
-| P0 | Include `bridge` in offline namespace list and top-level help. | Current unknown namespace diagnostics hide an executable namespace. |
+| P0 | Include `bridge` and `console` in offline namespace list and top-level help. | Unknown namespace diagnostics must expose every executable namespace. |
 | P0 | Add source/project/bridge suggestions. | RI already has a suggestion pattern; applying it to the high-traffic namespaces improves recovery. |
 | P0 | Add safe proxy binary/launcher help and version. | `monolith_proxy.exe --help` currently starts proxy mode; explicit help should be inspection-only. |
 | P0 | Resolve `monolith_offline.py` fallback truthfulness. | Current code and docs disagree; agents should not be sent to a stale fallback for `bridge` or CRG/source-review actions. |
@@ -307,10 +308,10 @@ P0 also covers shipped/documented Monolith binary help:
 
 | Gate | Required evidence |
 |------|-------------------|
-| Top-level help success | `Binaries\monolith_query.exe --help` exits 0 and prints all offline namespaces including `bridge`. |
-| Namespace help success | `source --help`, `project --help`, `bridge --help`, `monolith --help`, `cppreflect --help`, `network --help`, `decision --help`, and `risk --help` all exit 0. |
-| Action help success | At minimum `source impact_radius --help`, `source review_context --help`, `project search --help`, `project pre_merge_check --help`, `bridge search_asset_symbols --help`, and `cppreflect get_uclass --help` exit 0. |
-| Help is DB-free | `source --help --db X:\definitely\missing`, `source impact_radius --help --db X:\definitely\missing`, and `bridge --help --source-db X:\missing --project-db X:\missing` still exit 0. |
+| Top-level help success | `Binaries\monolith_query.exe --help` exits 0 and prints all offline namespaces including `bridge` and `console`. |
+| Namespace help success | `source --help`, `project --help`, `bridge --help`, `console --help`, `monolith --help`, `cppreflect --help`, `network --help`, `decision --help`, and `risk --help` all exit 0. |
+| Action help success | At minimum `source impact_radius --help`, `source review_context --help`, `project search --help`, `project pre_merge_check --help`, `bridge search_asset_symbols --help`, `console search_objects --help`, and `cppreflect get_uclass --help` exit 0. |
+| Help is DB-free | `source --help --db X:\definitely\missing`, `source impact_radius --help --db X:\definitely\missing`, `console --help --db X:\missing`, and `bridge --help --source-db X:\missing --project-db X:\missing` still exit 0. |
 | Parser parity | `source impact_radius UObject --max-depth 1 --max-results 1` produces the same `input.max_depth=1` and `input.max_results=1` as the inline `--max-depth=1 --max-results=1` form. |
 | Boolean value parity | `source health --include-counts false` matches `source health --include-counts=false`; `project pre_merge_check X --include-unused false` matches inline false. |
 | Unknown namespace recovery | `monolith_query.exe sorce health` fails before DB open, suggests `source`, and prints `monolith_query.exe --help` or `source --help` guidance. |

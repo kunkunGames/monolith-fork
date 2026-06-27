@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "audio_routing",
+  "route_edit_domain": "routing",
+  "module_id": "asset_authoring.audio.routing",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.routing",
+    "edit": "asset_operation.edit.audio.routing",
+    "save": "asset_operation.save.audio.routing",
+    "readback_verify": "asset_operation.readback_verify.audio.routing"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-318"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-318",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "audio_routing",
+      "blueprint_type": "",
+      "workflow": "audio_routing_settings_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sound_class",
+        "create_sound_attenuation",
+        "set_attenuation_settings",
+        "create_sound_mix",
+        "create_sound_concurrency",
+        "set_concurrency_settings",
+        "create_sound_submix",
+        "save_asset",
+        "get_attenuation_settings",
+        "get_sound_mix_settings",
+        "get_concurrency_settings",
+        "get_submix_properties"
+      ],
+      "description": "Create attenuation, mix, concurrency, and submix assets, edit routing settings, save, and read each value back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-318",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SA_BenchSpatial",
+              "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchDialog",
+              "/Game/Benchmarks/AssetAuthoring/Mix_BenchDialog",
+              "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchDialog",
+              "/Game/Benchmarks/AssetAuthoring/Submix_BenchDialog"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_class",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchDialog",
+            "properties": {
+              "Volume": 0.9
+            }
+          },
+          "contains": [
+            "SoundClass_BenchDialog",
+            "Volume"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_attenuation",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SA_BenchSpatial",
+            "settings": {
+              "bAttenuate": true,
+              "FalloffDistance": 725.0
+            }
+          },
+          "contains": [
+            "SA_BenchSpatial",
+            "FalloffDistance"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_attenuation_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SA_BenchSpatial",
+            "settings": {
+              "bEnableOcclusion": true,
+              "OcclusionVolumeAttenuation": 0.42
+            }
+          },
+          "contains": [
+            "bEnableOcclusion",
+            "OcclusionVolumeAttenuation",
+            "0.419"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_mix",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchDialog"
+          },
+          "contains": [
+            "Mix_BenchDialog"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_concurrency",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchDialog",
+            "settings": {
+              "MaxCount": 3,
+              "VolumeScale": 0.6
+            }
+          },
+          "contains": [
+            "Concurrency_BenchDialog",
+            "MaxCount"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "set_concurrency_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchDialog",
+            "settings": {
+              "MaxCount": 4,
+              "VolumeScale": 0.55
+            }
+          },
+          "contains": [
+            "MaxCount",
+            "4"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_sound_submix",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Submix_BenchDialog"
+          },
+          "contains": [
+            "Submix_BenchDialog"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SA_BenchSpatial"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SoundClass_BenchDialog"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchDialog"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchDialog.Concurrency_BenchDialog"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Submix_BenchDialog"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_attenuation_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SA_BenchSpatial"
+          },
+          "contains": [
+            "bEnableOcclusion",
+            "OcclusionVolumeAttenuation",
+            "0.419"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_mix_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Mix_BenchDialog"
+          },
+          "contains": [
+            "Mix_BenchDialog",
+            "duration"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_concurrency_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Concurrency_BenchDialog"
+          },
+          "contains": [
+            "MaxCount",
+            "4"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_submix_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/Submix_BenchDialog"
+          },
+          "contains": [
+            "Submix_BenchDialog",
+            "output_volume_db"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "audio_routing",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_routing_settings_roundtrip",
+      "description": "Create attenuation, mix, concurrency, and submix assets, edit routing settings, save, and read each value back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sound_class",
+          "create_sound_attenuation",
+          "set_attenuation_settings",
+          "create_sound_mix",
+          "create_sound_concurrency",
+          "set_concurrency_settings",
+          "create_sound_submix",
+          "save_asset",
+          "get_attenuation_settings",
+          "get_sound_mix_settings",
+          "get_concurrency_settings",
+          "get_submix_properties"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

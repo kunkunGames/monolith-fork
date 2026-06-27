@@ -105,6 +105,11 @@ FMonolithActionResult FMonolithMeshQualityActions::GenerateProxyMesh(const TShar
 		return FMonolithActionResult::Error(TEXT("Required: save_path (asset path for saved proxy mesh)"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	double ScreenSizeD = 300.0;
 	if (Params->HasField(TEXT("screen_size")) && !Params->TryGetNumberField(TEXT("screen_size"), ScreenSizeD))
 	{
@@ -192,11 +197,6 @@ FMonolithActionResult FMonolithMeshQualityActions::GenerateProxyMesh(const TShar
 	// Create the output package
 	FString PackageName = SavePath;
 	FString AssetName = FPackageName::GetShortName(PackageName);
-
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(PackageName); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 
 	UPackage* Package = CreatePackage(*PackageName);
 	if (!Package)

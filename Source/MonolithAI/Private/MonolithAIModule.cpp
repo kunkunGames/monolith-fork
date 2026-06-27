@@ -20,6 +20,7 @@
 #include "MonolithIndexSubsystem.h"
 #include "MonolithAIBulkFillAdapter.h"
 #include "Editor.h"
+#include "Misc/CoreDelegates.h"
 
 DEFINE_LOG_CATEGORY(LogMonolithAI);
 
@@ -59,7 +60,7 @@ void FMonolithAIModule::StartupModule()
 	// Register the AI deep indexer into MonolithIndex (deferred until editor subsystems are ready)
 	if (Settings->bIndexAI)
 	{
-		PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+		PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
 		{
 			if (GEditor)
 			{
@@ -87,7 +88,7 @@ void FMonolithAIModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 

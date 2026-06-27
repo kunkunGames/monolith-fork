@@ -195,7 +195,7 @@ bool OpenMonolithSQLiteDatabase(
 	const FPlatformMemoryStats MemoryStats = FPlatformMemory::GetStats();
 	const uint64 TotalRAM_MB = MemoryStats.TotalPhysical / (1024ULL * 1024ULL);
 	const uint64 AvailableRAM_MB = MemoryStats.AvailablePhysical / (1024ULL * 1024ULL);
-	const FMonolithSQLitePragmaPreset Preset = SelectMonolithSQLitePragmaPreset(TotalRAM_MB, PLATFORM_64BITS != 0, AvailableRAM_MB);
+	const FMonolithSQLitePragmaPreset Preset = SelectMonolithSQLitePragmaPreset(TotalRAM_MB, true, AvailableRAM_MB);
 	ExecutePragma(Database, FString::Printf(TEXT("PRAGMA mmap_size=%lld;"), Preset.MmapSizeBytes), TEXT("mmap_size"));
 	ExecutePragma(Database, FString::Printf(TEXT("PRAGMA cache_size=%lld;"), Preset.CacheSizeKiB), TEXT("cache_size"));
 	if (Preset.bUseMemoryTempStore)

@@ -363,7 +363,7 @@ Rules:
 
 | Area | Required evidence |
 |------|-------------------|
-| Build | `GoGameEditor Win64 Development` UBT build succeeds. |
+| Build | `<Project>Editor Win64 Development` UBT build succeeds. |
 | Registry | `monolith.status` action count unchanged except additive `monolith.find` and explicitly documented actions. |
 | Discovery | `monolith.discover` old calls still work; new modes are bounded and profile-aware. |
 | Tools list | `{namespace}_query` tools still dispatch; descriptions no longer carry the whole action catalog. |

@@ -450,8 +450,60 @@ public:
             "Use bridge.build_attachment on matching asset/source_symbol items for prompt materialization.",
             "Use source.review_context or project.review_context on high-confidence matches before code review.",
         });
+        json next_actions_availability = json::array({
+            {
+                {"next_action_index", 0},
+                {"action", "bridge.build_attachment"},
+                {"status", "unavailable"},
+                {"available_offline", false},
+                {"requires_live_editor", true},
+                {"reason", "bridge.build_attachment is a live MCP bridge action and needs editor-backed bridge item materialization."},
+                {"recovery_path", json::array({
+                    "Run Scripts\\recover_mcp.ps1 -ProbeOnly or recover the editor-backed MCP endpoint.",
+                    "Use live MCP bridge search/materialization actions to obtain the required item id.",
+                    "Run bridge.build_attachment through the live MCP endpoint.",
+                })},
+                {"offline_alternatives", json::array({"source.review_context", "project.review_context"})},
+            },
+            {
+                {"next_action_index", 1},
+                {"action", "source.review_context|project.review_context"},
+                {"status", "available"},
+                {"available_offline", true},
+                {"requires_live_editor", false},
+                {"reason", "review_context actions are available through offline source/project query surfaces when the local indexes exist."},
+            },
+        });
         if (!warnings.empty())
+        {
             next_actions.push_back("Run bridge.get_index_status or bridge.start_indexing if an index is unavailable or stale.");
+            next_actions_availability.push_back({
+                {"next_action_index", 2},
+                {"action", "bridge.get_index_status"},
+                {"status", "unavailable"},
+                {"available_offline", false},
+                {"requires_live_editor", true},
+                {"reason", "bridge.get_index_status is only available from the live MCP bridge surface."},
+                {"recovery_path", json::array({
+                    "Recover the editor-backed MCP endpoint.",
+                    "Run live MCP bridge.get_index_status.",
+                })},
+                {"offline_alternatives", json::array({"source.health", "project.health"})},
+            });
+            next_actions_availability.push_back({
+                {"next_action_index", 2},
+                {"action", "bridge.start_indexing"},
+                {"status", "unavailable"},
+                {"available_offline", false},
+                {"requires_live_editor", true},
+                {"reason", "bridge.start_indexing starts editor-backed indexing and cannot run from the offline query executable."},
+                {"recovery_path", json::array({
+                    "Recover the editor-backed MCP endpoint.",
+                    "Run live MCP bridge.start_indexing.",
+                })},
+                {"offline_alternatives", json::array({"source.trigger_project_reindex guidance", "project.health"})},
+            });
+        }
 
         json root = {
             {"status", warnings.empty() ? "ok" : "warning"},
@@ -465,6 +517,7 @@ public:
             {"count", links.size()},
             {"truncated", truncated},
             {"next_actions", next_actions},
+            {"next_actions_availability", next_actions_availability},
         };
         print_json(root);
     }

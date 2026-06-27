@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "project",
+  "asset_type_slug": "project",
+  "edit_domain": "index_details_text",
+  "route_edit_domain": "index_details_text",
+  "module_id": "asset_authoring.project.index_details_text",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.project.index_details_text",
+    "edit": "asset_operation.edit.project.index_details_text",
+    "save": "asset_operation.save.project.index_details_text",
+    "readback_verify": "asset_operation.readback_verify.project.index_details_text"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-506"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-506",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "project",
+      "edit_domain": "index_details_text",
+      "blueprint_type": "",
+      "workflow": "project_index_details_text_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "refresh_assets",
+        "get_saved_asset_state",
+        "get_asset_details",
+        "search",
+        "find_by_type",
+        "export_asset_text"
+      ],
+      "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-506",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "settings": {
+              "srgb": true
+            },
+            "save": true
+          },
+          "contains": [
+            "T_BenchProjectIndexText",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "refresh_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText"
+            ],
+            "wait_for_asset_registry": true,
+            "wait_for_disk": true
+          },
+          "contains": [
+            "success",
+            "true",
+            "packages_scanned",
+            "1",
+            "waited_for_disk",
+            "true"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "get_saved_asset_state",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText"
+          },
+          "contains": [
+            "T_BenchProjectIndexText",
+            "Texture2D",
+            "exists_on_disk",
+            "true",
+            "file_size"
+          ]
+        },
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "get_asset_details",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText"
+          },
+          "contains": [
+            "success",
+            "true",
+            "asset_name",
+            "T_BenchProjectIndexText",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "search",
+            "query": "T_BenchProjectIndexText",
+            "asset_class": "Texture2D",
+            "path_filter": "/Game/Benchmarks/AssetAuthoring",
+            "include_content": false,
+            "limit": 10
+          },
+          "contains": [
+            "success",
+            "true",
+            "T_BenchProjectIndexText",
+            "Texture2D",
+            "search_only_not_write_schema"
+          ]
+        },
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "find_by_type",
+            "asset_type": "Texture2D",
+            "limit": 100
+          },
+          "contains": [
+            "success",
+            "true",
+            "assets",
+            "count",
+            "limit",
+            "100"
+          ]
+        },
+        {
+          "tool": "project_query",
+          "args": {
+            "action": "export_asset_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchProjectIndexText",
+            "grep_pattern": "Texture2D",
+            "max_bytes": 65536
+          },
+          "contains": [
+            "success",
+            "true",
+            "grep_pattern",
+            "Texture2D",
+            "match_count"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "index_details_text",
+      "blueprint_type": "",
+      "domain": "project",
+      "workflow": "project_index_details_text_roundtrip",
+      "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export",
+      "reference_context": [
+        "source: Plugins/Monolith/Source/MonolithIndex/Private/Actions/ProjectRefreshAssetsAction.cpp",
+        "source: Plugins/Monolith/Source/MonolithIndex/Private/Actions/ProjectSearchAction.cpp",
+        "source: Plugins/Monolith/Source/MonolithIndex/Private/Actions/ProjectExportAssetTextAction.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "refresh_assets",
+          "get_saved_asset_state",
+          "get_asset_details",
+          "search",
+          "find_by_type",
+          "export_asset_text"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "gameplay_effect_spec_builder",
+  "route_edit_domain": "gameplay_effect_spec_builder",
+  "module_id": "asset_authoring.gas.gameplay_effect_spec_builder",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.gameplay_effect_spec_builder",
+    "edit": "asset_operation.edit.gas.gameplay_effect_spec_builder",
+    "save": "asset_operation.save.gas.gameplay_effect_spec_builder",
+    "readback_verify": "asset_operation.readback_verify.gas.gameplay_effect_spec_builder"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-350"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-350",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "gameplay_effect_spec_builder",
+      "blueprint_type": "",
+      "workflow": "gas_effect_spec_builder_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "build_effect_from_spec",
+        "duplicate_gameplay_effect",
+        "save_asset",
+        "get_gameplay_effect",
+        "validate_effect"
+      ],
+      "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-350",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura",
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAuraClone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "build_effect_from_spec",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura",
+            "spec": {
+              "duration_policy": "has_duration",
+              "duration_magnitude": 3.0,
+              "period": 0.5,
+              "execute_on_application": true,
+              "stacking": {
+                "type": "AggregateByTarget",
+                "limit": 2
+              }
+            }
+          },
+          "contains": [
+            "GE_BenchSpecAura",
+            "has_duration"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "duplicate_gameplay_effect",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAuraClone",
+            "overrides": {
+              "duration_policy": "has_duration"
+            }
+          },
+          "contains": [
+            "GE_BenchSpecAuraClone"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAuraClone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_gameplay_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura"
+          },
+          "contains": [
+            "GE_BenchSpecAura",
+            "has_duration"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_gameplay_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAuraClone"
+          },
+          "contains": [
+            "GE_BenchSpecAuraClone",
+            "has_duration"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "validate_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchSpecAura"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_effect reports invalid GameplayEffect state as isError; spec-built source and clone are asserted separately"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "gameplay_effect_spec_builder",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_effect_spec_builder_roundtrip",
+      "description": "Build a GameplayEffect from a declarative spec, duplicate it with overrides, save, validate, and read both effects back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "build_effect_from_spec",
+          "duplicate_gameplay_effect",
+          "save_asset",
+          "get_gameplay_effect",
+          "validate_effect"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

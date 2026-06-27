@@ -128,6 +128,22 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(TEXT("'asset_path' parameter is required and cannot be empty"), -32602);
 	}
 
+	FString ObjectFilter;
+	if (Params->HasField(TEXT("object_filter")) &&
+		(!Params->HasTypedField<EJson::String>(TEXT("object_filter")) ||
+			!Params->TryGetStringField(TEXT("object_filter"), ObjectFilter)))
+	{
+		return FMonolithActionResult::Error(TEXT("'object_filter' must be a string"), -32602);
+	}
+
+	FString GrepPattern;
+	if (Params->HasField(TEXT("grep_pattern")) &&
+		(!Params->HasTypedField<EJson::String>(TEXT("grep_pattern")) ||
+			!Params->TryGetStringField(TEXT("grep_pattern"), GrepPattern)))
+	{
+		return FMonolithActionResult::Error(TEXT("'grep_pattern' must be a string"), -32602);
+	}
+
 	// Resolve max_bytes (optional). Hard-error if the caller asks past the ceiling.
 	int32 MaxBytes = DefaultMaxBytes;
 	if (Params->HasField(TEXT("max_bytes")))
@@ -159,11 +175,6 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 	// Optional: scope to a sub-object by name/class substring.
 	UObject* ExportRoot = Asset;
 	FString ResolvedObject;
-	FString ObjectFilter;
-	if (Params->HasField(TEXT("object_filter")) && !Params->TryGetStringField(TEXT("object_filter"), ObjectFilter))
-	{
-		return FMonolithActionResult::Error(TEXT("'object_filter' must be a string"), -32602);
-	}
 	if (!ObjectFilter.IsEmpty())
 	{
 		TArray<FString> Candidates;
@@ -193,11 +204,6 @@ FMonolithActionResult FProjectExportAssetTextAction::Execute(const TSharedPtr<FJ
 	const int32 FullBytes = FullText.Len();
 
 	// Optional grep narrowing.
-	FString GrepPattern;
-	if (Params->HasField(TEXT("grep_pattern")) && !Params->TryGetStringField(TEXT("grep_pattern"), GrepPattern))
-	{
-		return FMonolithActionResult::Error(TEXT("'grep_pattern' must be a string"), -32602);
-	}
 	FString PayloadText = FullText;
 	int32 MatchCount = 0;
 	const bool bGrepped = !GrepPattern.IsEmpty();

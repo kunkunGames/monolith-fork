@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_effect_type_scalability",
+  "route_edit_domain": "effect_type_scalability",
+  "module_id": "asset_authoring.niagara.effect_type_scalability",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.effect_type_scalability",
+    "edit": "asset_operation.edit.niagara.effect_type_scalability",
+    "save": "asset_operation.save.niagara.effect_type_scalability",
+    "readback_verify": "asset_operation.readback_verify.niagara.effect_type_scalability"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-394"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-394",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_effect_type_scalability",
+      "blueprint_type": "",
+      "workflow": "niagara_effect_type_scalability_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_effect_type",
+        "set_scalability_settings",
+        "save_system",
+        "get_scalability_settings",
+        "get_effect_type",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-394",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_effect_type",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability",
+            "cull_reaction": "DeactivateImmediate",
+            "update_frequency": "Medium",
+            "max_distance": 1400.0
+          },
+          "contains": [
+            "NE_BenchScalability",
+            "DeactivateImmediate",
+            "Medium"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_scalability_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability",
+            "settings": [
+              {
+                "quality_levels": [
+                  0,
+                  1,
+                  2
+                ],
+                "max_distance": 1600.0,
+                "max_instances": 48,
+                "max_system_instances": 12,
+                "max_system_proxies": 24
+              }
+            ]
+          },
+          "contains": [
+            "NE_BenchScalability",
+            "setting_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_scalability_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability"
+          },
+          "contains": [
+            "setting_count",
+            "1",
+            "max_distance",
+            "1600",
+            "max_instances",
+            "48",
+            "max_system_instances",
+            "12",
+            "max_system_proxies",
+            "24"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_effect_type",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability"
+          },
+          "contains": [
+            "NE_BenchScalability",
+            "CullReaction",
+            "DeactivateImmediate"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NE_BenchScalability"
+          },
+          "contains": [
+            "NE_BenchScalability",
+            "NiagaraEffectType"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_effect_type_scalability",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_effect_type_scalability_roundtrip",
+      "description": "Create a Niagara EffectType, replace its scalability settings array, save it, and read culling limits back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_effect_type",
+          "set_scalability_settings",
+          "save_system",
+          "get_scalability_settings",
+          "get_effect_type",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

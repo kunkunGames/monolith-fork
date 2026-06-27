@@ -92,6 +92,6 @@ The action result includes `texture_role`, `settings_applied`, and `validation`.
 | Gate | Requirement |
 |------|-------------|
 | Source stale scan | No old UI ingest action names, old UI ingest classes, or old specialized-asset inspection class names remain in source. |
-| Build | Run the primary `GoGameEditor` UBT command after closing any editor process that locks Monolith DLLs. |
+| Build | Run the primary `<Project>Editor` UBT command after closing any editor process that locks Monolith DLLs. |
 | Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 12 actions owned by `MonolithAsset`. |
 | Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, `allow_transposition` must flow into `ScoreCandidate`, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |

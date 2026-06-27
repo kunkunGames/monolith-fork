@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_renderer_property_binding",
+  "route_edit_domain": "renderer_property_binding",
+  "module_id": "asset_authoring.niagara.renderer_property_binding",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.renderer_property_binding",
+    "edit": "asset_operation.edit.niagara.renderer_property_binding",
+    "save": "asset_operation.save.niagara.renderer_property_binding",
+    "readback_verify": "asset_operation.readback_verify.niagara.renderer_property_binding"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-435"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-435",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_renderer_property_binding",
+      "blueprint_type": "",
+      "workflow": "niagara_renderer_property_binding_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "remove_renderer",
+        "add_renderer",
+        "set_renderer_property",
+        "set_renderer_binding",
+        "save_system",
+        "list_renderers",
+        "list_renderer_properties",
+        "get_renderer_bindings"
+      ],
+      "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-435",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties"
+          },
+          "contains": [
+            "NS_BenchRendererProperties"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "name": "BindingEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "BindingEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "allow_error": true,
+          "args": {
+            "action": "remove_renderer",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "renderer_index": 0
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_renderer",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "class": "Ribbon"
+          },
+          "contains": [
+            "renderer_index"
+          ],
+          "capture": {
+            "ribbon_renderer": "$.renderer_index"
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_renderer_property",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "renderer_index": "${ribbon_renderer}",
+            "property": "TessellationMode",
+            "value": "Custom"
+          },
+          "contains": [
+            "Property set"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "set_renderer_binding",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "renderer_index": "${ribbon_renderer}",
+            "binding_name": "RibbonWidthBinding",
+            "attribute": "Particles.RibbonWidth"
+          },
+          "contains": [
+            "Binding set"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_renderers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter"
+          },
+          "contains": [
+            "NiagaraRibbonRendererProperties",
+            "ribbon",
+            "count",
+            "1"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_renderer_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "renderer_index": "${ribbon_renderer}"
+          },
+          "contains": [
+            "NiagaraRibbonRendererProperties",
+            "TessellationMode",
+            "Custom"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_renderer_bindings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchRendererProperties",
+            "emitter": "BindingEmitter",
+            "renderer_index": "${ribbon_renderer}"
+          },
+          "contains": [
+            "RibbonWidthBinding",
+            "Particles.RibbonWidth"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_renderer_property_binding",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_renderer_property_binding_roundtrip",
+      "description": "Create a Niagara Ribbon renderer, edit a reflected renderer property and binding directly, save, and read them back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "remove_renderer",
+          "add_renderer",
+          "set_renderer_property",
+          "set_renderer_binding",
+          "save_system",
+          "list_renderers",
+          "list_renderer_properties",
+          "get_renderer_bindings"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

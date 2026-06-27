@@ -54,7 +54,7 @@ namespace MonolithUI::AnimationBuilderInternal
         Existing->Rename(
             nullptr,
             GetTransientPackage(),
-            REN_DoNotDirty | REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
+            REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
     }
 
     /**

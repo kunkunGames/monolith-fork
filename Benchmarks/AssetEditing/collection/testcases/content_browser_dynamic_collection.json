@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "collection",
+  "asset_type_slug": "collection",
+  "edit_domain": "content_browser_dynamic_collection",
+  "route_edit_domain": "content_browser_dynamic_collection",
+  "module_id": "asset_authoring.collection.content_browser_dynamic_collection",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.collection.content_browser_dynamic_collection",
+    "edit": "asset_operation.edit.collection.content_browser_dynamic_collection",
+    "readback_verify": "asset_operation.readback_verify.collection.content_browser_dynamic_collection"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 0,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create": 1
+  },
+  "task_ids": [
+    "BEB-346"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-346",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "collection",
+      "edit_domain": "content_browser_dynamic_collection",
+      "blueprint_type": "",
+      "workflow": "collection_dynamic_query_roundtrip",
+      "operation_semantics": "create",
+      "lifecycle_phase": "create",
+      "asset_operations": [
+        "creation_or_import",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_collection",
+        "create_collection",
+        "set_dynamic_query",
+        "set_collection_color",
+        "get_dynamic_query",
+        "get_collection"
+      ],
+      "description": "Create a dynamic Content Browser collection, edit its project asset query, color it, and read the query back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-346",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "collection_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_collection",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local",
+            "force": true
+          }
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "create_collection",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local",
+            "storage_mode": "dynamic"
+          },
+          "contains": [
+            "BenchAssetAuthoringDynamicCollection"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "set_dynamic_query",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local",
+            "query_text": "Path:/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "BenchAssetAuthoringDynamicCollection"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "set_collection_color",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local",
+            "color": {
+              "r": 0.8,
+              "g": 0.3,
+              "b": 0.15,
+              "a": 1.0
+            }
+          },
+          "contains": [
+            "BenchAssetAuthoringDynamicCollection"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "get_dynamic_query",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local"
+          },
+          "contains": [
+            "BenchAssetAuthoringDynamicCollection",
+            "Path:/Game/Benchmarks/AssetAuthoring"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "get_collection",
+            "name": "BenchAssetAuthoringDynamicCollection",
+            "share_type": "local"
+          },
+          "contains": [
+            "BenchAssetAuthoringDynamicCollection",
+            "dynamic",
+            "0.800000"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "content_browser_dynamic_collection",
+      "blueprint_type": "",
+      "domain": "collection",
+      "workflow": "collection_dynamic_query_roundtrip",
+      "description": "Create a dynamic Content Browser collection, edit its project asset query, color it, and read the query back",
+      "reference_context": [],
+      "operation_semantics": "create",
+      "lifecycle_phase": "create",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_collection",
+          "create_collection",
+          "set_dynamic_query",
+          "set_collection_color",
+          "get_dynamic_query",
+          "get_collection"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": false,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create",
+        "lifecycle_phase": "create"
+      }
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "settings_notification_templates",
+  "route_edit_domain": "settings_notification_templates",
+  "module_id": "asset_authoring.ui.settings_notification_templates",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.settings_notification_templates",
+    "edit": "asset_operation.edit.ui.settings_notification_templates",
+    "save": "asset_operation.save.ui.settings_notification_templates",
+    "readback_verify": "asset_operation.readback_verify.ui.settings_notification_templates"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-519"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-519",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "settings_notification_templates",
+      "blueprint_type": "",
+      "workflow": "ui_settings_notification_templates_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_settings_panel",
+        "create_notification_toast",
+        "save_asset",
+        "get_widget_tree",
+        "inspect_assets_batch"
+      ],
+      "description": "Create saved UMG settings-panel and notification-toast template Widget Blueprints, then read both widget trees back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-519",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchSettingsPanel",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchNotificationToast"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_settings_panel",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSettingsPanel",
+            "tabs": [
+              "graphics",
+              "audio",
+              "accessibility"
+            ]
+          },
+          "contains": [
+            "WBP_BenchSettingsPanel",
+            "tab_count",
+            "3",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_notification_toast",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchNotificationToast",
+            "position": "bottom_left"
+          },
+          "contains": [
+            "WBP_BenchNotificationToast",
+            "bottom_left",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSettingsPanel"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchNotificationToast"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchSettingsPanel"
+          },
+          "contains": [
+            "MainContainer",
+            "TabBar",
+            "TabSwitcher",
+            "TabBtn_graphics",
+            "GRAPHICS",
+            "Panel_accessibility",
+            "Apply",
+            "Revert",
+            "Back"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchNotificationToast"
+          },
+          "contains": [
+            "ToastBorder",
+            "ToastContent",
+            "ToastIcon",
+            "ToastMessage",
+            "Notification text"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchSettingsPanel",
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchNotificationToast"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "WBP_BenchSettingsPanel",
+            "WBP_BenchNotificationToast",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "settings_notification_templates",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_settings_notification_templates_roundtrip",
+      "description": "Create saved UMG settings-panel and notification-toast template Widget Blueprints, then read both widget trees back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/MonolithUITemplateActions.cpp",
+        "skill_ref: Plugins/Monolith/Skills/unreal-ui/SKILL.md"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_settings_panel",
+          "create_notification_toast",
+          "save_asset",
+          "get_widget_tree",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

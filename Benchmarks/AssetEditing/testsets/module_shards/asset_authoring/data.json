@@ -1,0 +1,1729 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.data",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+  "task_count": 552,
+  "module_count": 11,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.data",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: data",
+      "task_count": 10,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.data.asset",
+        "asset_authoring.data.asset_property_path",
+        "asset_authoring.data.curvetable",
+        "asset_authoring.data.curvetable_row_maintenance",
+        "asset_authoring.data.datatable",
+        "asset_authoring.data.datatable_bulk_import_export",
+        "asset_authoring.data.datatable_dry_run_strict_apply",
+        "asset_authoring.data.datatable_schema_csv_file",
+        "asset_authoring.data.datatable_schema_readback",
+        "asset_authoring.data.seed_data_asset"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.data.asset",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "asset"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/asset",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "data_asset"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.asset_property_path",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "asset_property_path"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/asset_property_path",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "data_asset_property_path"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.curvetable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "curvetable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/curvetable",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "curvetable"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.curvetable_row_maintenance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "curvetable_row_maintenance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/curvetable_row_maintenance",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "curvetable_row_maintenance"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.datatable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.datatable_bulk_import_export",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_bulk_import_export"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_bulk_import_export",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_bulk_import_export"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.datatable_dry_run_strict_apply",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_dry_run_strict_apply"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_dry_run_strict_apply",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_dry_run_strict_apply"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.datatable_schema_csv_file",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_schema_csv_file"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_schema_csv_file",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_schema_csv_file"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.datatable_schema_readback",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_schema_readback"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_schema_readback",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_schema_readback"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.data.seed_data_asset",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "seed_data_asset"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/seed_data_asset",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "seed_data_asset"
+        ]
+      },
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json",
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.data": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: data",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ]
+      },
+      "task_count": 10,
+      "task_ids": [
+        "BEB-290",
+        "BEB-304",
+        "BEB-305",
+        "BEB-306",
+        "BEB-348",
+        "BEB-371",
+        "BEB-381",
+        "BEB-473",
+        "BEB-505",
+        "BEB-514"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-290",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable",
+          "blueprint_type": "",
+          "workflow": "datatable_struct_row_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "create_user_defined_enum",
+            "create_data_table",
+            "add_data_table_row",
+            "update_data_table_row",
+            "save_asset",
+            "get_data_table_rows",
+            "describe_data_table_schema"
+          ],
+          "description": "Create a UserDefinedStruct-backed DataTable, add and update a row, save it, and read back row values"
+        },
+        {
+          "id": "BEB-304",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "curvetable",
+          "blueprint_type": "",
+          "workflow": "curvetable_key_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_curve_table_keys",
+            "save_asset",
+            "read_curve_table"
+          ],
+          "description": "Create a CurveTable UObject asset, write linear curve keys, save it, and read the curve row back"
+        },
+        {
+          "id": "BEB-305",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "data_asset",
+          "blueprint_type": "",
+          "workflow": "dataasset_reflection_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_cdo_property",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a raw UObject asset, edit top-level properties through reflection, save it, and read values back"
+        },
+        {
+          "id": "BEB-306",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "data_asset_property_path",
+          "blueprint_type": "",
+          "workflow": "dataasset_property_path_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_property_at_path",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a raw UObject asset, edit properties through the surgical path writer, save it, and read values back"
+        },
+        {
+          "id": "BEB-348",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_bulk_import_export",
+          "blueprint_type": "",
+          "workflow": "datatable_bulk_import_export_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "rename_data_table_row",
+            "duplicate_data_table_row",
+            "remove_data_table_row",
+            "export_data_table",
+            "import_data_table",
+            "inspect_asset",
+            "get_data_table_rows"
+          ],
+          "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set"
+        },
+        {
+          "id": "BEB-371",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "curvetable_row_maintenance",
+          "blueprint_type": "",
+          "workflow": "curvetable_row_maintenance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_curve_table_keys",
+            "add_curve_table_row",
+            "rename_curve_table_row",
+            "remove_curve_table_row",
+            "save_asset",
+            "read_curve_table",
+            "inspect_asset"
+          ],
+          "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back"
+        },
+        {
+          "id": "BEB-381",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "seed_data_asset",
+          "blueprint_type": "",
+          "workflow": "blueprint_seed_data_asset_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "seed_data_asset",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back"
+        },
+        {
+          "id": "BEB-473",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_schema_csv_file",
+          "blueprint_type": "",
+          "workflow": "data_datatable_schema_csv_file_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "export_data_table_csv",
+            "read_data_table",
+            "describe_data_table_schema",
+            "inspect_asset"
+          ],
+          "description": "Create a schema-aware DataTable, bulk-write rows, export a CSV file under the project directory, save, and read back schema plus row payloads"
+        },
+        {
+          "id": "BEB-505",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_schema_readback",
+          "blueprint_type": "",
+          "workflow": "data_datatable_schema_readback_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "describe_data_table_schema",
+            "read_data_table",
+            "inspect_asset"
+          ],
+          "description": "Create a UserDefinedStruct-backed DataTable, write a row, save it, and verify the row struct through both DataTable payload and schema-only readers"
+        },
+        {
+          "id": "BEB-514",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_dry_run_strict_apply",
+          "blueprint_type": "",
+          "workflow": "data_datatable_dry_run_strict_apply_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "create_data_table",
+            "set_data_table_rows",
+            "read_data_table",
+            "save_asset",
+            "describe_data_table_schema",
+            "inspect_asset"
+          ],
+          "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "curvetable": [
+            "BEB-304"
+          ],
+          "curvetable_row_maintenance": [
+            "BEB-371"
+          ],
+          "data_asset": [
+            "BEB-305"
+          ],
+          "data_asset_property_path": [
+            "BEB-306"
+          ],
+          "datatable": [
+            "BEB-290"
+          ],
+          "datatable_bulk_import_export": [
+            "BEB-348"
+          ],
+          "datatable_dry_run_strict_apply": [
+            "BEB-514"
+          ],
+          "datatable_schema_csv_file": [
+            "BEB-473"
+          ],
+          "datatable_schema_readback": [
+            "BEB-505"
+          ],
+          "seed_data_asset": [
+            "BEB-381"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ],
+          "edit": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ],
+          "readback_verify": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ],
+          "save": [
+            "BEB-290",
+            "BEB-304",
+            "BEB-305",
+            "BEB-306",
+            "BEB-348",
+            "BEB-371",
+            "BEB-381",
+            "BEB-473",
+            "BEB-505",
+            "BEB-514"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.data.asset",
+        "asset_authoring.data.asset_property_path",
+        "asset_authoring.data.curvetable",
+        "asset_authoring.data.curvetable_row_maintenance",
+        "asset_authoring.data.datatable",
+        "asset_authoring.data.datatable_bulk_import_export",
+        "asset_authoring.data.datatable_dry_run_strict_apply",
+        "asset_authoring.data.datatable_schema_csv_file",
+        "asset_authoring.data.datatable_schema_readback",
+        "asset_authoring.data.seed_data_asset"
+      ],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.asset": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.asset",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "asset"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/asset",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "data_asset"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-305"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-305",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "data_asset",
+          "blueprint_type": "",
+          "workflow": "dataasset_reflection_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_cdo_property",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a raw UObject asset, edit top-level properties through reflection, save it, and read values back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-305"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-305"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-305"
+          ],
+          "edit": [
+            "BEB-305"
+          ],
+          "readback_verify": [
+            "BEB-305"
+          ],
+          "save": [
+            "BEB-305"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.asset_property_path": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.asset_property_path",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "asset_property_path"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/asset_property_path",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "data_asset_property_path"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-306"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-306",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "data_asset_property_path",
+          "blueprint_type": "",
+          "workflow": "dataasset_property_path_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_property_at_path",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a raw UObject asset, edit properties through the surgical path writer, save it, and read values back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-306"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-306"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-306"
+          ],
+          "edit": [
+            "BEB-306"
+          ],
+          "readback_verify": [
+            "BEB-306"
+          ],
+          "save": [
+            "BEB-306"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.curvetable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.curvetable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "curvetable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/curvetable",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "curvetable"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-304"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-304",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "curvetable",
+          "blueprint_type": "",
+          "workflow": "curvetable_key_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_curve_table_keys",
+            "save_asset",
+            "read_curve_table"
+          ],
+          "description": "Create a CurveTable UObject asset, write linear curve keys, save it, and read the curve row back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-304"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-304"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-304"
+          ],
+          "edit": [
+            "BEB-304"
+          ],
+          "readback_verify": [
+            "BEB-304"
+          ],
+          "save": [
+            "BEB-304"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.curvetable_row_maintenance": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.curvetable_row_maintenance",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "curvetable_row_maintenance"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/curvetable_row_maintenance",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "curvetable_row_maintenance"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-371"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-371",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "curvetable_row_maintenance",
+          "blueprint_type": "",
+          "workflow": "curvetable_row_maintenance_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_data_asset",
+            "set_curve_table_keys",
+            "add_curve_table_row",
+            "rename_curve_table_row",
+            "remove_curve_table_row",
+            "save_asset",
+            "read_curve_table",
+            "inspect_asset"
+          ],
+          "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-371"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-371"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-371"
+          ],
+          "edit": [
+            "BEB-371"
+          ],
+          "readback_verify": [
+            "BEB-371"
+          ],
+          "save": [
+            "BEB-371"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.datatable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.datatable",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-290"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-290",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable",
+          "blueprint_type": "",
+          "workflow": "datatable_struct_row_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "create_user_defined_enum",
+            "create_data_table",
+            "add_data_table_row",
+            "update_data_table_row",
+            "save_asset",
+            "get_data_table_rows",
+            "describe_data_table_schema"
+          ],
+          "description": "Create a UserDefinedStruct-backed DataTable, add and update a row, save it, and read back row values"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-290"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-290"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-290"
+          ],
+          "edit": [
+            "BEB-290"
+          ],
+          "readback_verify": [
+            "BEB-290"
+          ],
+          "save": [
+            "BEB-290"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.datatable_bulk_import_export": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.datatable_bulk_import_export",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_bulk_import_export"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_bulk_import_export",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_bulk_import_export"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-348"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-348",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_bulk_import_export",
+          "blueprint_type": "",
+          "workflow": "datatable_bulk_import_export_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "rename_data_table_row",
+            "duplicate_data_table_row",
+            "remove_data_table_row",
+            "export_data_table",
+            "import_data_table",
+            "inspect_asset",
+            "get_data_table_rows"
+          ],
+          "description": "Bulk-edit DataTable rows, rename/duplicate/remove rows, export them, replace by CSV import, save, and read back the replacement row set"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-348"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-348"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-348"
+          ],
+          "edit": [
+            "BEB-348"
+          ],
+          "readback_verify": [
+            "BEB-348"
+          ],
+          "save": [
+            "BEB-348"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.datatable_dry_run_strict_apply": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.datatable_dry_run_strict_apply",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_dry_run_strict_apply"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_dry_run_strict_apply",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_dry_run_strict_apply"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-514"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-514",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_dry_run_strict_apply",
+          "blueprint_type": "",
+          "workflow": "data_datatable_dry_run_strict_apply_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "create_data_table",
+            "set_data_table_rows",
+            "read_data_table",
+            "save_asset",
+            "describe_data_table_schema",
+            "inspect_asset"
+          ],
+          "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-514"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-514"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-514"
+          ],
+          "edit": [
+            "BEB-514"
+          ],
+          "readback_verify": [
+            "BEB-514"
+          ],
+          "save": [
+            "BEB-514"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.datatable_schema_csv_file": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.datatable_schema_csv_file",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_schema_csv_file"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_schema_csv_file",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_schema_csv_file"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-473"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-473",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_schema_csv_file",
+          "blueprint_type": "",
+          "workflow": "data_datatable_schema_csv_file_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "export_data_table_csv",
+            "read_data_table",
+            "describe_data_table_schema",
+            "inspect_asset"
+          ],
+          "description": "Create a schema-aware DataTable, bulk-write rows, export a CSV file under the project directory, save, and read back schema plus row payloads"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-473"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-473"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-473"
+          ],
+          "edit": [
+            "BEB-473"
+          ],
+          "readback_verify": [
+            "BEB-473"
+          ],
+          "save": [
+            "BEB-473"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.datatable_schema_readback": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.datatable_schema_readback",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "datatable_schema_readback"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/datatable_schema_readback",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "datatable_schema_readback"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-505"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-505",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "datatable_schema_readback",
+          "blueprint_type": "",
+          "workflow": "data_datatable_schema_readback_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "create_user_defined_struct",
+            "save_asset",
+            "create_data_table",
+            "set_data_table_rows",
+            "describe_data_table_schema",
+            "read_data_table",
+            "inspect_asset"
+          ],
+          "description": "Create a UserDefinedStruct-backed DataTable, write a row, save it, and verify the row struct through both DataTable payload and schema-only readers"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-505"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-505"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-505"
+          ],
+          "edit": [
+            "BEB-505"
+          ],
+          "readback_verify": [
+            "BEB-505"
+          ],
+          "save": [
+            "BEB-505"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    },
+    "asset_authoring.data.seed_data_asset": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.data.seed_data_asset",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "data",
+        "seed_data_asset"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: data/seed_data_asset",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "data"
+        ],
+        "edit_domain": [
+          "seed_data_asset"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-381"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-381",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "data",
+          "edit_domain": "seed_data_asset",
+          "blueprint_type": "",
+          "workflow": "blueprint_seed_data_asset_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "seed_data_asset",
+            "save_asset",
+            "get_cdo_properties",
+            "inspect_asset"
+          ],
+          "description": "Create a PhysicalMaterial through the atomic seed_data_asset path, populate properties in the same call, save, and read values back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-381"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-381"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-381"
+          ],
+          "edit": [
+            "BEB-381"
+          ],
+          "readback_verify": [
+            "BEB-381"
+          ],
+          "save": [
+            "BEB-381"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.data",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.data",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/data.json"
+    }
+  }
+}

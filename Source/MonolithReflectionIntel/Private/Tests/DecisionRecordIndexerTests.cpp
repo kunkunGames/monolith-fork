@@ -158,15 +158,17 @@ bool FDecisionHeuristicAccuracyTest::RunTest(const FString& /*Parameters*/)
 	TestTrue(TEXT("At least 4 decision rows from fixture corpus"), Rows >= 4);
 
 	// Assert 03_non_decision contributed zero rows — direct query.
-	FSQLitePreparedStatement Stmt;
-	TestTrue(TEXT("Prepare LIKE query"),
-		Stmt.Create(Db, TEXT("SELECT COUNT(*) FROM decision_records WHERE source_path LIKE ?;")));
-	Stmt.SetBindingValueByIndex(1, FString(TEXT("%03_non_decision%")));
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		int32 NonDecCount = -1;
-		Stmt.GetColumnValueByIndex(0, NonDecCount);
-		TestEqual(TEXT("03_non_decision contributes zero rows"), NonDecCount, 0);
+		FSQLitePreparedStatement Stmt;
+		TestTrue(TEXT("Prepare LIKE query"),
+			Stmt.Create(Db, TEXT("SELECT COUNT(*) FROM decision_records WHERE source_path LIKE ?;")));
+		Stmt.SetBindingValueByIndex(1, FString(TEXT("%03_non_decision%")));
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			int32 NonDecCount = -1;
+			Stmt.GetColumnValueByIndex(0, NonDecCount);
+			TestEqual(TEXT("03_non_decision contributes zero rows"), NonDecCount, 0);
+		}
 	}
 
 	Db.Close();
@@ -262,15 +264,18 @@ bool FDecisionStalenessFlagTest::RunTest(const FString& /*Parameters*/)
 
 	// Query for rows older than 30 days.
 	const int64 CutoffUnix = FDateTime::UtcNow().ToUnixTimestamp() - (30LL * 24LL * 60LL * 60LL);
-	FSQLitePreparedStatement Stmt;
-	TestTrue(TEXT("Prepare staleness query"),
-		Stmt.Create(Db, TEXT("SELECT COUNT(*) FROM decision_records WHERE source_mtime > 0 AND source_mtime < ?;")));
-	Stmt.SetBindingValueByIndex(1, CutoffUnix);
 
 	int32 StaleCount = 0;
-	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
-		Stmt.GetColumnValueByIndex(0, StaleCount);
+		FSQLitePreparedStatement Stmt;
+		TestTrue(TEXT("Prepare staleness query"),
+			Stmt.Create(Db, TEXT("SELECT COUNT(*) FROM decision_records WHERE source_mtime > 0 AND source_mtime < ?;")));
+		Stmt.SetBindingValueByIndex(1, CutoffUnix);
+
+		if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Stmt.GetColumnValueByIndex(0, StaleCount);
+		}
 	}
 	TestTrue(TEXT("At least one stale row past 30-day cutoff"), StaleCount >= 1);
 

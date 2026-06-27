@@ -24,6 +24,26 @@ FString NonEmptyParamError(const FString& Key)
 {
 	return FString::Printf(TEXT("Parameter '%s' must be a non-empty string"), *Key);
 }
+
+bool IsJsonString(const TSharedPtr<FJsonValue>& Value)
+{
+	return Value.IsValid() && Value->Type == EJson::String;
+}
+
+bool IsJsonNumber(const TSharedPtr<FJsonValue>& Value)
+{
+	return Value.IsValid() && Value->Type == EJson::Number;
+}
+
+bool IsJsonBool(const TSharedPtr<FJsonValue>& Value)
+{
+	return Value.IsValid() && Value->Type == EJson::Boolean;
+}
+
+bool IsJsonArray(const TSharedPtr<FJsonValue>& Value)
+{
+	return Value.IsValid() && Value->Type == EJson::Array;
+}
 }
 
 bool GetRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const FString& Key, FString& OutValue, FString& OutError, bool bTrim)
@@ -40,7 +60,7 @@ bool GetRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const FString
 		OutError = MissingParamError(Key);
 		return false;
 	}
-	if (!Value->TryGetString(OutValue))
+	if (!IsJsonString(Value) || !Value->TryGetString(OutValue))
 	{
 		OutError = ParamTypeError(Key, TEXT("a string"));
 		return false;
@@ -69,7 +89,7 @@ bool GetOptionalStringParam(const TSharedPtr<FJsonObject>& Params, const FString
 	{
 		return true;
 	}
-	if (!Value->TryGetString(OutValue))
+	if (!IsJsonString(Value) || !Value->TryGetString(OutValue))
 	{
 		OutError = ParamTypeError(Key, TEXT("a string"));
 		return false;
@@ -96,7 +116,7 @@ bool GetOptionalClampedIntParam(const TSharedPtr<FJsonObject>& Params, const FSt
 		return true;
 	}
 	double Raw = 0.0;
-	if (!Value->TryGetNumber(Raw))
+	if (!IsJsonNumber(Value) || !Value->TryGetNumber(Raw))
 	{
 		OutError = ParamTypeError(Key, TEXT("an integer"));
 		return false;
@@ -126,7 +146,7 @@ bool GetOptionalClampedDoubleParam(const TSharedPtr<FJsonObject>& Params, const 
 		return true;
 	}
 	double Raw = 0.0;
-	if (!Value->TryGetNumber(Raw))
+	if (!IsJsonNumber(Value) || !Value->TryGetNumber(Raw))
 	{
 		OutError = ParamTypeError(Key, TEXT("a number"));
 		return false;
@@ -147,7 +167,7 @@ bool GetOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const FString& 
 	{
 		return true;
 	}
-	if (!Value->TryGetBool(OutValue))
+	if (!IsJsonBool(Value) || !Value->TryGetBool(OutValue))
 	{
 		OutError = ParamTypeError(Key, TEXT("a boolean"));
 		return false;
@@ -168,7 +188,7 @@ bool GetOptionalStringArrayParam(const TSharedPtr<FJsonObject>& Params, const FS
 		return true;
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-	if (!Value->TryGetArray(Values) || !Values)
+	if (!IsJsonArray(Value) || !Value->TryGetArray(Values) || !Values)
 	{
 		OutError = ParamTypeError(Key, TEXT("an array of strings"));
 		return false;
@@ -178,7 +198,7 @@ bool GetOptionalStringArrayParam(const TSharedPtr<FJsonObject>& Params, const FS
 	for (int32 Index = 0; Index < Values->Num(); ++Index)
 	{
 		FString Item;
-		if (!(*Values)[Index].IsValid() || !(*Values)[Index]->TryGetString(Item))
+		if (!IsJsonString((*Values)[Index]) || !(*Values)[Index]->TryGetString(Item))
 		{
 			OutError = FString::Printf(TEXT("Parameter '%s[%d]' must be a string"), *Key, Index);
 			return false;
@@ -195,6 +215,24 @@ bool TryParseStrictInt(const FString& Text, int32& OutValue, FString& OutError, 
 	{
 		OutError = FString::Printf(TEXT("Invalid integer for %s: value is empty"), *Context);
 		return false;
+	}
+	int32 DigitStart = 0;
+	if (Trimmed[0] == TEXT('+') || Trimmed[0] == TEXT('-'))
+	{
+		DigitStart = 1;
+	}
+	if (DigitStart >= Trimmed.Len())
+	{
+		OutError = FString::Printf(TEXT("Invalid integer for %s: '%s'"), *Context, *Trimmed);
+		return false;
+	}
+	for (int32 Index = DigitStart; Index < Trimmed.Len(); ++Index)
+	{
+		if (!FChar::IsDigit(Trimmed[Index]))
+		{
+			OutError = FString::Printf(TEXT("Invalid integer for %s: '%s'"), *Context, *Trimmed);
+			return false;
+		}
 	}
 	if (!LexTryParseString(OutValue, *Trimmed))
 	{

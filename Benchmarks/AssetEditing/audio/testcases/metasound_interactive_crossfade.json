@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "metasound_interactive_crossfade",
+  "route_edit_domain": "metasound_interactive_crossfade",
+  "module_id": "asset_authoring.audio.metasound_interactive_crossfade",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.metasound_interactive_crossfade",
+    "edit": "asset_operation.edit.audio.metasound_interactive_crossfade",
+    "save": "asset_operation.save.audio.metasound_interactive_crossfade",
+    "readback_verify": "asset_operation.readback_verify.audio.metasound_interactive_crossfade"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-492"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-492",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "metasound_interactive_crossfade",
+      "blueprint_type": "",
+      "workflow": "audio_metasound_interactive_crossfade_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_interactive_metasound",
+        "save_asset",
+        "get_sound_wave_info",
+        "get_metasound_summary",
+        "get_metasound_user_parameters",
+        "validate_metasound",
+        "inspect_asset"
+      ],
+      "description": "Create two deterministic SoundWaves, build a parameter-driven interactive MetaSound crossfade graph, save all assets, and read graph and validation state back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-492",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeB",
+              "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeA",
+            "frequency_hz": 220.0,
+            "duration_seconds": 0.25,
+            "sample_rate": 44100,
+            "amplitude": 0.45
+          },
+          "contains": [
+            "SW_BenchCrossfadeA",
+            "220"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeB",
+            "frequency_hz": 440.0,
+            "duration_seconds": 0.25,
+            "sample_rate": 44100,
+            "amplitude": 0.45
+          },
+          "contains": [
+            "SW_BenchCrossfadeB",
+            "440"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_interactive_metasound",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade",
+            "sound_waves": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeA",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeB"
+            ],
+            "parameter_name": "BlendAmount",
+            "blend_type": "Crossfade"
+          },
+          "contains": [
+            "MS_BenchInteractiveCrossfade",
+            "BlendAmount",
+            "Crossfade",
+            "wave_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeA"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeB"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_wave_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeA"
+          },
+          "contains": [
+            "SW_BenchCrossfadeA",
+            "sample_rate",
+            "44100"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_wave_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchCrossfadeB"
+          },
+          "contains": [
+            "SW_BenchCrossfadeB",
+            "sample_rate",
+            "44100"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_summary",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+          },
+          "contains": [
+            "MS_BenchInteractiveCrossfade",
+            "nodes",
+            "Wave Player",
+            "Multiply",
+            "Subtract",
+            "Add"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_metasound_user_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+          },
+          "contains": [
+            "MS_BenchInteractiveCrossfade",
+            "BlendAmount",
+            "Float"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "validate_metasound",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+          },
+          "contains": [
+            "MS_BenchInteractiveCrossfade",
+            "valid",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MS_BenchInteractiveCrossfade"
+          },
+          "contains": [
+            "MS_BenchInteractiveCrossfade"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "metasound_interactive_crossfade",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_metasound_interactive_crossfade_roundtrip",
+      "description": "Create two deterministic SoundWaves, build a parameter-driven interactive MetaSound crossfade graph, save all assets, and read graph and validation state back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/metasounds-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioAssetActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithAudio/Private/MonolithAudioMetaSoundIntrospectionActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_interactive_metasound",
+          "save_asset",
+          "get_sound_wave_info",
+          "get_metasound_summary",
+          "get_metasound_user_parameters",
+          "validate_metasound",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

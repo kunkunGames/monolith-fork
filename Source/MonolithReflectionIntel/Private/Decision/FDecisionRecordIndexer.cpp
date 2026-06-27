@@ -83,18 +83,57 @@ namespace
 		return Out;
 	}
 
+	bool ContainsRationaleMarker(const FString& Lower)
+	{
+		return Lower.Contains(TEXT("because")) ||
+			Lower.Contains(TEXT("rationale")) ||
+			Lower.Contains(TEXT("evidence")) ||
+			Lower.Contains(TEXT("decision:"));
+	}
+
+	bool IsNegatedRationaleMarkerLine(const FString& Lower)
+	{
+		static const TCHAR* NegativeFragments[] = {
+			TEXT("no rationale"),
+			TEXT("no evidence"),
+			TEXT("no `decision:`"),
+			TEXT("no decision:"),
+			TEXT("not contain"),
+			TEXT("need not contain"),
+			TEXT("without rationale"),
+			TEXT("without evidence"),
+			TEXT("not a decision"),
+			TEXT("none of this"),
+			TEXT("there are no")
+		};
+
+		for (const TCHAR* Fragment : NegativeFragments)
+		{
+			if (Lower.Contains(Fragment))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/** Look ahead from HeaderLineIdx for rationale markers within WindowLines. */
 	bool FindRationaleWithin(const TArray<FString>& Lines, int32 HeaderLineIdx,
-		int32 WindowLines, FString& OutRationale)
+		int32 WindowLines, FString& OutRationale, bool bStopAtNextHeader = true)
 	{
 		const int32 End = FMath::Min(Lines.Num(), HeaderLineIdx + 1 + WindowLines);
 		for (int32 i = HeaderLineIdx + 1; i < End; ++i)
 		{
+			FString IgnoredHeaderText;
+			int32 IgnoredLevel = 0;
+			if (bStopAtNextHeader && IsMarkdownHeader(Lines[i], IgnoredHeaderText, IgnoredLevel))
+			{
+				break;
+			}
+
 			const FString Lower = Lines[i].ToLower();
-			if (Lower.Contains(TEXT("because")) ||
-				Lower.Contains(TEXT("rationale")) ||
-				Lower.Contains(TEXT("evidence")) ||
-				Lower.Contains(TEXT("decision:")))
+			if (ContainsRationaleMarker(Lower) && !IsNegatedRationaleMarkerLine(Lower))
 			{
 				OutRationale = Lines[i].TrimStartAndEnd();
 				return true;
@@ -356,7 +395,7 @@ bool FDecisionRecordIndexer::ExtractRecordsFromFile(const FString& AbsPath,
 		Row.DecisionId = MakeDecisionId(RelPath, TEXT("frontmatter"));
 
 		// Look for inline rationale anywhere in the first 30 lines.
-		FindRationaleWithin(Lines, 0, 30, Row.Rationale);
+		FindRationaleWithin(Lines, 0, 30, Row.Rationale, /*bStopAtNextHeader=*/false);
 
 		// Frontmatter `supersedes:` accepts a single id or a comma-separated list.
 		if (Frontmatter.Contains(TEXT("supersedes")))

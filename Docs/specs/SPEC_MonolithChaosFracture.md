@@ -56,4 +56,4 @@
 |------|----------|
 | Registration | `FMonolithChaosFractureModule::StartupModule` registers the three `chaos_fracture` actions. |
 | Routing cleanup | `MonolithMesh` no longer registers `mesh.get_chaos_fracture_status`, `mesh.list_geometry_collection_assets`, or `mesh.list_geometry_collection_components`. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

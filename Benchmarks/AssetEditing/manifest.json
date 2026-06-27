@@ -1,0 +1,588 @@
+{
+  "benchmark": "AssetEditing",
+  "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
+  "primary_score": "asset_editing_score",
+  "expected_namespace": "blueprint-plus-asset-authoring",
+  "generated_at": "2026-06-27T10:36:21.029590+00:00",
+  "task_count": 552,
+  "category_counts": {
+    "asset_authoring": 242,
+    "duplicate_reject": 11,
+    "edit_execute": 113,
+    "edit_schema": 47,
+    "error_path": 20,
+    "graph_read": 35,
+    "negative_compile": 1,
+    "read_schema": 23,
+    "type_discovery": 21,
+    "variable_read": 28,
+    "workflow_execute": 11
+  },
+  "edit_schema_domains": {
+    "node": 9,
+    "function": 8,
+    "variable": 7,
+    "class": 9,
+    "component": 6,
+    "compilation": 3,
+    "state": 2,
+    "event": 3
+  },
+  "blueprint_types_tested": [
+    "Actor",
+    "Character",
+    "Widget",
+    "AnimInstance",
+    "GameplayAbility",
+    "ActorComponent",
+    "Interface"
+  ],
+  "workflows_tested": [
+    "build_function",
+    "implement_interface",
+    "component_assembly",
+    "widget_style_refresh",
+    "widget_comment_layout",
+    "anim_threadsafe_graph",
+    "gas_activate_override",
+    "actorcomponent_toggle_contract",
+    "interface_signature_contract",
+    "actor_component_property_assembly",
+    "duplicate_function_graph"
+  ],
+  "score_formula": "0.27*edit_execute_rate + 0.1*asset_authoring_rate + 0.07*edit_schema_rate + 0.11*graph_read_rate + 0.11*variable_read_rate + 0.09*error_path_rate + 0.09*workflow_execute_rate + 0.06*duplicate_reject_rate + 0.05*negative_compile_rate + 0.02*read_schema_rate + 0.03*type_discovery_rate",
+  "weights": {
+    "edit_execute": 0.27,
+    "asset_authoring": 0.1,
+    "edit_schema": 0.07,
+    "graph_read": 0.11,
+    "variable_read": 0.11,
+    "error_path": 0.09,
+    "workflow_execute": 0.09,
+    "duplicate_reject": 0.06,
+    "negative_compile": 0.05,
+    "read_schema": 0.02,
+    "type_discovery": 0.03
+  },
+  "base_edit_execute_tasks_per_type": 10,
+  "additional_edit_execute_tasks": 43,
+  "additional_edit_execute_specs": 28,
+  "asset_authoring_tasks": 242,
+  "edit_execute_tasks_per_type": {
+    "Actor": 20,
+    "ActorComponent": 16,
+    "AnimInstance": 17,
+    "Character": 12,
+    "GameplayAbility": 17,
+    "Interface": 15,
+    "Widget": 16
+  },
+  "fixture_paths": {
+    "Actor": "/Game/Benchmarks/BPB_TestActor",
+    "Character": "/Game/Benchmarks/BPB_TestCharacter",
+    "Widget": "/Game/Benchmarks/WBP_TestWidget",
+    "AnimInstance": "/Game/Benchmarks/ABP_TestAnim",
+    "GameplayAbility": "/Game/Benchmarks/GA_TestAbility",
+    "ActorComponent": "/Game/Benchmarks/BC_TestComponent",
+    "Interface": "/Game/Benchmarks/BPI_TestInterface"
+  },
+  "preflight_command": "python Scripts/asset_editing_benchmark.py preflight --mcp-url http://localhost:9316/mcp",
+  "setup_fixtures_command": "python Scripts/asset_editing_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
+  "score_dimensions": [
+    "edit_execute_rate",
+    "asset_authoring_rate",
+    "edit_schema_rate",
+    "graph_read_rate",
+    "variable_read_rate",
+    "error_path_rate",
+    "workflow_execute_rate",
+    "duplicate_reject_rate",
+    "negative_compile_rate",
+    "read_schema_rate",
+    "type_discovery_rate"
+  ],
+  "catalog_version_verified": "v0.20.3-blueprint-139-actions-plus-asset-authoring",
+  "task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "testset_index": "Benchmarks/AssetEditing/testsets/index.json",
+  "testset_modules": "Benchmarks/AssetEditing/testsets/modules.json",
+  "testset_module_storage": "split_shards",
+  "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
+  "testset_module_shard_count": 38,
+  "testset_module_count": 1659,
+  "testset_routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "asset_type_index": "Benchmarks/AssetEditing/asset_types.json",
+  "asset_type_count": 23,
+  "asset_types": [
+    {
+      "asset_type": "ai",
+      "asset_type_slug": "ai",
+      "module_id": "asset_authoring.ai",
+      "task_count": 14,
+      "edit_domain_count": 14,
+      "operation_counts": {
+        "creation_or_import": 14,
+        "edit": 14,
+        "save": 14,
+        "readback_verify": 14
+      },
+      "lifecycle_counts": {
+        "create_save": 14
+      },
+      "directory": "Benchmarks/AssetEditing/ai",
+      "index_file": "Benchmarks/AssetEditing/ai/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/ai/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/ai/README.md"
+    },
+    {
+      "asset_type": "animation",
+      "asset_type_slug": "animation",
+      "module_id": "asset_authoring.animation",
+      "task_count": 28,
+      "edit_domain_count": 28,
+      "operation_counts": {
+        "creation_or_import": 28,
+        "edit": 28,
+        "save": 28,
+        "readback_verify": 28
+      },
+      "lifecycle_counts": {
+        "create_save": 28
+      },
+      "directory": "Benchmarks/AssetEditing/animation",
+      "index_file": "Benchmarks/AssetEditing/animation/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/animation/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/animation/README.md"
+    },
+    {
+      "asset_type": "asset",
+      "asset_type_slug": "asset",
+      "module_id": "asset_authoring.asset",
+      "task_count": 6,
+      "edit_domain_count": 6,
+      "operation_counts": {
+        "creation_or_import": 6,
+        "edit": 6,
+        "save": 6,
+        "readback_verify": 6
+      },
+      "lifecycle_counts": {
+        "create_save": 6
+      },
+      "directory": "Benchmarks/AssetEditing/asset",
+      "index_file": "Benchmarks/AssetEditing/asset/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/asset/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/asset/README.md"
+    },
+    {
+      "asset_type": "audio",
+      "asset_type_slug": "audio",
+      "module_id": "asset_authoring.audio",
+      "task_count": 28,
+      "edit_domain_count": 28,
+      "operation_counts": {
+        "creation_or_import": 28,
+        "edit": 28,
+        "save": 28,
+        "readback_verify": 28
+      },
+      "lifecycle_counts": {
+        "create_save": 28
+      },
+      "directory": "Benchmarks/AssetEditing/audio",
+      "index_file": "Benchmarks/AssetEditing/audio/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/audio/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/audio/README.md"
+    },
+    {
+      "asset_type": "blueprint",
+      "asset_type_slug": "blueprint",
+      "module_id": "asset_authoring.blueprint",
+      "task_count": 4,
+      "edit_domain_count": 4,
+      "operation_counts": {
+        "creation_or_import": 4,
+        "edit": 4,
+        "save": 4,
+        "readback_verify": 4
+      },
+      "lifecycle_counts": {
+        "create_save": 4
+      },
+      "directory": "Benchmarks/AssetEditing/blueprint",
+      "index_file": "Benchmarks/AssetEditing/blueprint/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/blueprint/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/blueprint/README.md"
+    },
+    {
+      "asset_type": "collection",
+      "asset_type_slug": "collection",
+      "module_id": "asset_authoring.collection",
+      "task_count": 4,
+      "edit_domain_count": 4,
+      "operation_counts": {
+        "creation_or_import": 4,
+        "edit": 4,
+        "save": 3,
+        "readback_verify": 4
+      },
+      "lifecycle_counts": {
+        "create": 1,
+        "create_save": 3
+      },
+      "directory": "Benchmarks/AssetEditing/collection",
+      "index_file": "Benchmarks/AssetEditing/collection/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/collection/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/collection/README.md"
+    },
+    {
+      "asset_type": "data",
+      "asset_type_slug": "data",
+      "module_id": "asset_authoring.data",
+      "task_count": 10,
+      "edit_domain_count": 10,
+      "operation_counts": {
+        "creation_or_import": 10,
+        "edit": 10,
+        "save": 10,
+        "readback_verify": 10
+      },
+      "lifecycle_counts": {
+        "create_save": 10
+      },
+      "directory": "Benchmarks/AssetEditing/data",
+      "index_file": "Benchmarks/AssetEditing/data/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/data/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/data/README.md"
+    },
+    {
+      "asset_type": "editor",
+      "asset_type_slug": "editor",
+      "module_id": "asset_authoring.editor",
+      "task_count": 4,
+      "edit_domain_count": 4,
+      "operation_counts": {
+        "creation_or_import": 4,
+        "edit": 4,
+        "save": 3,
+        "readback_verify": 4
+      },
+      "lifecycle_counts": {
+        "create": 1,
+        "create_save": 3
+      },
+      "directory": "Benchmarks/AssetEditing/editor",
+      "index_file": "Benchmarks/AssetEditing/editor/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/editor/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/editor/README.md"
+    },
+    {
+      "asset_type": "gas",
+      "asset_type_slug": "gas",
+      "module_id": "asset_authoring.gas",
+      "task_count": 16,
+      "edit_domain_count": 16,
+      "operation_counts": {
+        "creation_or_import": 16,
+        "edit": 16,
+        "save": 16,
+        "readback_verify": 16
+      },
+      "lifecycle_counts": {
+        "create_save": 16
+      },
+      "directory": "Benchmarks/AssetEditing/gas",
+      "index_file": "Benchmarks/AssetEditing/gas/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/gas/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/gas/README.md"
+    },
+    {
+      "asset_type": "hlod",
+      "asset_type_slug": "hlod",
+      "module_id": "asset_authoring.hlod",
+      "task_count": 2,
+      "edit_domain_count": 2,
+      "operation_counts": {
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
+        "readback_verify": 2
+      },
+      "lifecycle_counts": {
+        "create_save": 2
+      },
+      "directory": "Benchmarks/AssetEditing/hlod",
+      "index_file": "Benchmarks/AssetEditing/hlod/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/hlod/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/hlod/README.md"
+    },
+    {
+      "asset_type": "imagegen",
+      "asset_type_slug": "imagegen",
+      "module_id": "asset_authoring.imagegen",
+      "task_count": 5,
+      "edit_domain_count": 5,
+      "operation_counts": {
+        "creation_or_import": 5,
+        "edit": 5,
+        "save": 5,
+        "readback_verify": 5
+      },
+      "lifecycle_counts": {
+        "create_save": 5
+      },
+      "directory": "Benchmarks/AssetEditing/imagegen",
+      "index_file": "Benchmarks/AssetEditing/imagegen/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/imagegen/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/imagegen/README.md"
+    },
+    {
+      "asset_type": "input",
+      "asset_type_slug": "input",
+      "module_id": "asset_authoring.input",
+      "task_count": 5,
+      "edit_domain_count": 5,
+      "operation_counts": {
+        "creation_or_import": 5,
+        "edit": 5,
+        "save": 5,
+        "readback_verify": 5
+      },
+      "lifecycle_counts": {
+        "create_save": 5
+      },
+      "directory": "Benchmarks/AssetEditing/input",
+      "index_file": "Benchmarks/AssetEditing/input/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/input/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/input/README.md"
+    },
+    {
+      "asset_type": "interchange",
+      "asset_type_slug": "interchange",
+      "module_id": "asset_authoring.interchange",
+      "task_count": 8,
+      "edit_domain_count": 8,
+      "operation_counts": {
+        "creation_or_import": 8,
+        "edit": 8,
+        "save": 8,
+        "readback_verify": 8
+      },
+      "lifecycle_counts": {
+        "create_save": 8
+      },
+      "directory": "Benchmarks/AssetEditing/interchange",
+      "index_file": "Benchmarks/AssetEditing/interchange/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/interchange/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/interchange/README.md"
+    },
+    {
+      "asset_type": "level_instance",
+      "asset_type_slug": "level_instance",
+      "module_id": "asset_authoring.level_instance",
+      "task_count": 2,
+      "edit_domain_count": 2,
+      "operation_counts": {
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
+        "readback_verify": 2
+      },
+      "lifecycle_counts": {
+        "create_save": 2
+      },
+      "directory": "Benchmarks/AssetEditing/level_instance",
+      "index_file": "Benchmarks/AssetEditing/level_instance/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/level_instance/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/level_instance/README.md"
+    },
+    {
+      "asset_type": "localization",
+      "asset_type_slug": "localization",
+      "module_id": "asset_authoring.localization",
+      "task_count": 5,
+      "edit_domain_count": 5,
+      "operation_counts": {
+        "creation_or_import": 5,
+        "edit": 5,
+        "save": 5,
+        "readback_verify": 5
+      },
+      "lifecycle_counts": {
+        "create_save": 5
+      },
+      "directory": "Benchmarks/AssetEditing/localization",
+      "index_file": "Benchmarks/AssetEditing/localization/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/localization/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/localization/README.md"
+    },
+    {
+      "asset_type": "logicdriver",
+      "asset_type_slug": "logicdriver",
+      "module_id": "asset_authoring.logicdriver",
+      "task_count": 1,
+      "edit_domain_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "lifecycle_counts": {
+        "create_save": 1
+      },
+      "directory": "Benchmarks/AssetEditing/logicdriver",
+      "index_file": "Benchmarks/AssetEditing/logicdriver/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/logicdriver/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/logicdriver/README.md"
+    },
+    {
+      "asset_type": "material",
+      "asset_type_slug": "material",
+      "module_id": "asset_authoring.material",
+      "task_count": 20,
+      "edit_domain_count": 20,
+      "operation_counts": {
+        "creation_or_import": 20,
+        "edit": 20,
+        "save": 20,
+        "readback_verify": 20
+      },
+      "lifecycle_counts": {
+        "create_save": 20
+      },
+      "directory": "Benchmarks/AssetEditing/material",
+      "index_file": "Benchmarks/AssetEditing/material/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/material/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/material/README.md"
+    },
+    {
+      "asset_type": "mesh",
+      "asset_type_slug": "mesh",
+      "module_id": "asset_authoring.mesh",
+      "task_count": 20,
+      "edit_domain_count": 20,
+      "operation_counts": {
+        "creation_or_import": 20,
+        "edit": 20,
+        "save": 20,
+        "readback_verify": 20
+      },
+      "lifecycle_counts": {
+        "create_save": 20
+      },
+      "directory": "Benchmarks/AssetEditing/mesh",
+      "index_file": "Benchmarks/AssetEditing/mesh/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/mesh/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/mesh/README.md"
+    },
+    {
+      "asset_type": "modelgen",
+      "asset_type_slug": "modelgen",
+      "module_id": "asset_authoring.modelgen",
+      "task_count": 2,
+      "edit_domain_count": 2,
+      "operation_counts": {
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
+        "readback_verify": 2
+      },
+      "lifecycle_counts": {
+        "create_save": 2
+      },
+      "directory": "Benchmarks/AssetEditing/modelgen",
+      "index_file": "Benchmarks/AssetEditing/modelgen/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/modelgen/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/modelgen/README.md"
+    },
+    {
+      "asset_type": "niagara",
+      "asset_type_slug": "niagara",
+      "module_id": "asset_authoring.niagara",
+      "task_count": 28,
+      "edit_domain_count": 28,
+      "operation_counts": {
+        "creation_or_import": 28,
+        "edit": 28,
+        "save": 28,
+        "readback_verify": 28
+      },
+      "lifecycle_counts": {
+        "create_save": 28
+      },
+      "directory": "Benchmarks/AssetEditing/niagara",
+      "index_file": "Benchmarks/AssetEditing/niagara/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/niagara/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/niagara/README.md"
+    },
+    {
+      "asset_type": "project",
+      "asset_type_slug": "project",
+      "module_id": "asset_authoring.project",
+      "task_count": 2,
+      "edit_domain_count": 2,
+      "operation_counts": {
+        "creation_or_import": 2,
+        "edit": 2,
+        "save": 2,
+        "readback_verify": 2
+      },
+      "lifecycle_counts": {
+        "create_save": 2
+      },
+      "directory": "Benchmarks/AssetEditing/project",
+      "index_file": "Benchmarks/AssetEditing/project/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/project/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/project/README.md"
+    },
+    {
+      "asset_type": "ui",
+      "asset_type_slug": "ui",
+      "module_id": "asset_authoring.ui",
+      "task_count": 19,
+      "edit_domain_count": 19,
+      "operation_counts": {
+        "creation_or_import": 19,
+        "edit": 19,
+        "save": 19,
+        "readback_verify": 19
+      },
+      "lifecycle_counts": {
+        "create_save": 19
+      },
+      "directory": "Benchmarks/AssetEditing/ui",
+      "index_file": "Benchmarks/AssetEditing/ui/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/ui/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/ui/README.md"
+    },
+    {
+      "asset_type": "worldgen",
+      "asset_type_slug": "worldgen",
+      "module_id": "asset_authoring.worldgen",
+      "task_count": 9,
+      "edit_domain_count": 9,
+      "operation_counts": {
+        "creation_or_import": 9,
+        "edit": 9,
+        "save": 9,
+        "readback_verify": 9
+      },
+      "lifecycle_counts": {
+        "create_save": 9
+      },
+      "directory": "Benchmarks/AssetEditing/worldgen",
+      "index_file": "Benchmarks/AssetEditing/worldgen/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/worldgen/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/worldgen/README.md"
+    }
+  ]
+}

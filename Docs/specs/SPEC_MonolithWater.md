@@ -54,4 +54,4 @@
 |------|----------|
 | Registration | `FMonolithWaterModule::StartupModule` registers `water.get_status` and `water.list_bodies`. |
 | Route cleanup | `MonolithMesh` no longer registers `mesh.get_water_status` or `mesh.list_water_bodies`. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "collection",
+  "asset_type_slug": "collection",
+  "edit_domain": "content_browser_collection_remove",
+  "route_edit_domain": "content_browser_collection_remove",
+  "module_id": "asset_authoring.collection.content_browser_collection_remove",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.collection.content_browser_collection_remove",
+    "edit": "asset_operation.edit.collection.content_browser_collection_remove",
+    "save": "asset_operation.save.collection.content_browser_collection_remove",
+    "readback_verify": "asset_operation.readback_verify.collection.content_browser_collection_remove"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-370"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-370",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "collection",
+      "edit_domain": "content_browser_collection_remove",
+      "blueprint_type": "",
+      "workflow": "collection_remove_membership_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_collection",
+        "delete_assets",
+        "import_texture_from_bytes",
+        "create_collection",
+        "add_assets",
+        "remove_assets",
+        "contains_asset",
+        "list_assets"
+      ],
+      "description": "Create a static Content Browser collection, add two Texture2D assets, remove one, and verify remaining membership"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-370",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "collection_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_collection",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveA",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveB"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveA",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "save": true
+          },
+          "contains": [
+            "T_BenchCollectionRemoveA"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "import_texture_from_bytes",
+            "destination": "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveB",
+            "bytes_b64": "Qk1GAAAAAAAAADYAAAAoAAAAAgAAAAIAAAABABgAAAAAABAAAAATCwAAEwsAAAAAAAAAAAAAAAD/AAD/AAAAAP8AAP8AAA==",
+            "format_hint": "bmp",
+            "texture_role": "ui_icon",
+            "save": true
+          },
+          "contains": [
+            "T_BenchCollectionRemoveB"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "create_collection",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "storage_mode": "static"
+          },
+          "contains": [
+            "BenchAssetAuthoringRemoveCollection"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "add_assets",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveA",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveB"
+            ]
+          },
+          "contains": [
+            "added",
+            "2"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "remove_assets",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveB"
+            ]
+          },
+          "contains": [
+            "removed",
+            "1"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "contains_asset",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveA"
+          },
+          "contains": [
+            "true"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "contains_asset",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchCollectionRemoveB"
+          },
+          "contains": [
+            "false"
+          ]
+        },
+        {
+          "tool": "collection_query",
+          "args": {
+            "action": "list_assets",
+            "name": "BenchAssetAuthoringRemoveCollection",
+            "share_type": "local"
+          },
+          "contains": [
+            "T_BenchCollectionRemoveA"
+          ],
+          "not_contains": [
+            "T_BenchCollectionRemoveB"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "content_browser_collection_remove",
+      "blueprint_type": "",
+      "domain": "collection",
+      "workflow": "collection_remove_membership_roundtrip",
+      "description": "Create a static Content Browser collection, add two Texture2D assets, remove one, and verify remaining membership",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_collection",
+          "delete_assets",
+          "import_texture_from_bytes",
+          "create_collection",
+          "add_assets",
+          "remove_assets",
+          "contains_asset",
+          "list_assets"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

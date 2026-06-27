@@ -5,7 +5,7 @@ description: Use to discover and route Monolith MCP itself, and to manage and re
 
 # monolith-mcp (discovery + server management)
 
-Monolith exposes Unreal Engine editor capability to agents as ~1,600 actions across ~40 namespaces. The action/namespace catalog is **runtime-discovered** — never hand-maintain a full per-action list; query it.
+Monolith exposes Unreal Engine editor capability to agents as ~1,900 actions across ~60 namespaces. The action/namespace catalog is **runtime-discovered** — never hand-maintain a full per-action list; query it.
 
 ## When to use / Use a different skill for
 
@@ -55,7 +55,7 @@ Each namespace has a dedicated skill in this folder. Invoke a namespace with `{n
 
 | Domain | Namespaces → skills |
 |--------|---------------------|
-| Code / project | `source`→unreal-cpp, `project`→unreal-project-search, `bridge`→unreal-bridge, `editor`→unreal-build / unreal-debugging / unreal-performance |
+| Code / project | `source`→unreal-cpp, `project`→unreal-project-search, `bridge`→unreal-bridge, `console`→unreal-console, `editor`→unreal-build / unreal-debugging / unreal-performance |
 | Gameplay | `ai`→unreal-ai, `gas`→unreal-gas, `blueprint`→unreal-blueprints, `logicdriver`→unreal-logicdriver, `combograph`→unreal-combograph, `input`→unreal-input, `world_conditions`→unreal-world-conditions, `gamefeatures`→unreal-gamefeatures |
 | Spatial / level | `scene`→unreal-scene, `leveldesign`→unreal-leveldesign, `worldgen`→unreal-worldgen, `mesh`→unreal-mesh, `level_instance`→unreal-level-instance, `hlod`→unreal-hlod, `pcg`→unreal-pcg, `water`→unreal-water |
 | Content | `material`/`asset`→unreal-materials, `niagara`→unreal-niagara, `animation`→unreal-animation, `metahuman`→unreal-metahuman, `audio`→unreal-audio, `ui`→unreal-ui, `slate`→unreal-slate, `paper2d`→unreal-paper2d, `chaos_fracture`→unreal-chaos-fracture, `cloth`→unreal-cloth, `dataflow`→unreal-dataflow, `chooser`→unreal-chooser, `interchange`→unreal-interchange, `modelgen`→unreal-modelgen, `imagegen`→unreal-imagegen, `ndisplay`→unreal-ndisplay |
@@ -137,9 +137,9 @@ Beyond the core tools, the `monolith` namespace carries server-management action
 
 > Action-name note (live-catalog snapshot {{2026-06-13}}): the domain-loading actions (`describe_domain`, `list_domains`, `load_domain`, `get_loaded_domains`) and the tool-call-record actions (`list_tool_call_records`, `get_tool_call_record`, `analyze_tool_call_records`) previously listed here are **not present** in the current `monolith` registry. Domain/category scoping now goes through `discover` (`category`), `get_effective_discovery`, and the tool-profile actions; invocation-record analysis lives in the on-disk JSONL logs read by the offline analyzer (see [Invocation diagnostics](#invocation-diagnostics)), not a `monolith` action. Re-confirm against `monolith_discover({ namespace: "monolith" })` before relying on any name here.
 
-## Go checkout MCP recovery
+## Project checkout MCP recovery
 
-For Go checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions.
+For project work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions.
 
 If the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
 
@@ -147,7 +147,7 @@ If the endpoint is unreachable or the MCP transport fails, treat it as an editor
 .\BatchFiles\RunHeadlessEditor.bat
 ```
 
-Keep the MCP client configuration on the existing Monolith proxy command; do not point MCP config at this wrapper. The wrapper resolves `UnrealEditor.exe` from `GO.uproject`, launches the full editor with rendering disabled by default (`-NullRHI`) plus unattended args, and leaves source control enabled. Script contract: `Docs\specs\SPEC_MonolithHeadlessMcpLaunch.md`.
+Keep the MCP client configuration on the existing Monolith proxy command; do not point MCP config at this wrapper. The wrapper should resolve `UnrealEditor.exe` from the host `.uproject`, launch the full editor with rendering disabled by default (`-NullRHI`) plus unattended args, and leave source control enabled. Script contract: `Docs\specs\SPEC_MonolithHeadlessMcpLaunch.md`.
 
 After launching the wrapper, wait for `localhost:9316` to listen, reconnect the existing Monolith proxy/client to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect, inspect `Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` plus the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Plugins\Monolith\Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
@@ -164,7 +164,7 @@ When the checkout includes Monolith invocation logs, treat them as local diagnos
 
 - Proxy calls append JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\proxy.jsonl`.
 - Offline query calls append JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\query.jsonl`.
-- Editor action dispatch appends JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\action.jsonl` when `UMonolithSettings::bEnableDailyLog=true`; the Go checkout opts in through `Config\DefaultMonolith.ini`.
+- Editor action dispatch appends JSONL records under `Plugins\Monolith\Logs\<yyyyMMdd>\action.jsonl` when `UMonolithSettings::bEnableDailyLog=true`; a host project can opt in through `Config\DefaultMonolith.ini`.
 - Proxy/query logging is enabled by default. Unset or `MONOLITH_TOOL_LOG_ENABLED=1` enables it; `MONOLITH_TOOL_LOG_ENABLED=0` disables it before launching the proxy/query process.
 - For proxy/query smoke tests or temporary diagnostics, set `MONOLITH_TOOL_LOG_DIR` before launching the process to isolate logs outside `Plugins\Monolith\Logs`.
 - Use the logs to aggregate repeated missing-action, schema-confusing, retry, large-result, editor-unavailable, and escape-hatch patterns before changing namespace placement or action contracts.

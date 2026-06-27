@@ -1671,20 +1671,708 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 		Result += TEXT("\"*");
 	}
 
-	// Q3 (PRD AssetSearchSemanticSearch): de-spaced streak fusion — see the asset-side
-	// EscapeFTS for rationale. OR the AND-prefix expression with the concatenated
-	// identifier so "get health component" also matches GetHealthComponent. Superset;
-	// bounded to avoid a pathological MATCH expression.
-	if (Tokens.Num() >= 2 && Tokens.Num() <= 6)
+	return Result;
+}
+
+static FString EscapeConsoleFTS(const FString& Query)
+{
+	FString Cleaned;
+	Cleaned.Reserve(Query.Len());
+	for (TCHAR Ch : Query)
 	{
-		FString Concat;
-		for (const FString& Token : Tokens) { Concat += Token; }
-		if (Concat.Len() <= 64)
+		if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
 		{
-			Result = FString::Printf(TEXT("(%s) OR \"%s\"*"), *Result, *Concat);
+			Cleaned += Ch;
+		}
+		else
+		{
+			Cleaned += TEXT(' ');
 		}
 	}
+
+	TArray<FString> Tokens;
+	Cleaned.ParseIntoArray(Tokens, TEXT(" "), true);
+	if (Tokens.Num() == 0)
+	{
+		return TEXT("\"\"");
+	}
+
+	FString Result;
+	for (int32 i = 0; i < Tokens.Num(); ++i)
+	{
+		if (i > 0)
+		{
+			Result += TEXT(" ");
+		}
+		Result += TEXT("\"");
+		Result += Tokens[i];
+		Result += TEXT("\"*");
+	}
 	return Result;
+}
+
+static FString EscapeConsoleLike(const FString& Query)
+{
+	FString Escaped;
+	Escaped.Reserve(Query.Len() + 4);
+	for (TCHAR Ch : Query)
+	{
+		if (Ch == TEXT('\\') || Ch == TEXT('%') || Ch == TEXT('_'))
+		{
+			Escaped += TEXT('\\');
+		}
+		Escaped += Ch;
+	}
+	return Escaped;
+}
+
+static bool EnsureConsoleObjectSchemaLocked(FSQLiteDatabase& DB)
+{
+	if (!ExecuteMulti(DB, MonolithSourceSchema::DDL_ConsoleTables))
+	{
+		return false;
+	}
+	if (!ExecuteMulti(DB, MonolithSourceSchema::DDL_ConsoleFTS))
+	{
+		return false;
+	}
+	if (!ExecuteMulti(DB, MonolithSourceSchema::DDL_ConsoleTriggers))
+	{
+		return false;
+	}
+
+	FSQLitePreparedStatement SchemaStmt;
+	if (SchemaStmt.Create(DB, TEXT("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?);")))
+	{
+		SchemaStmt.SetBindingValueByIndex(1, FString(TEXT("schema_version")));
+		SchemaStmt.SetBindingValueByIndex(2, FString::FromInt(MonolithSourceSchema::SchemaVersion));
+		SchemaStmt.Step();
+	}
+
+	FSQLitePreparedStatement ConsoleStmt;
+	if (ConsoleStmt.Create(DB, TEXT("INSERT OR REPLACE INTO console_snapshot_meta (key, value) VALUES (?, ?);")))
+	{
+		ConsoleStmt.SetBindingValueByIndex(1, FString(TEXT("console_schema_version")));
+		ConsoleStmt.SetBindingValueByIndex(2, FString(TEXT("1")));
+		ConsoleStmt.Step();
+	}
+	return true;
+}
+
+static void BindNullableString(FSQLitePreparedStatement& Stmt, int32 Index, const FString& Value)
+{
+	Stmt.SetBindingValueByIndex(Index, Value);
+}
+
+static TSharedPtr<FJsonObject> ConsoleObjectFromStatement(FSQLitePreparedStatement& Stmt)
+{
+	FString Name;
+	FString ObjectType;
+	FString Help;
+	int64 Flags = 0;
+	int64 IsEnabled = 0;
+	int64 IsDeprecated = 0;
+	FString Value;
+	FString DefaultValue;
+	FString VariableType;
+	FString SetBy;
+	int64 ReadOnly = 0;
+	int64 Cheat = 0;
+	FString Source;
+	FString CapturedAt;
+
+	Stmt.GetColumnValueByIndex(0, Name);
+	Stmt.GetColumnValueByIndex(1, ObjectType);
+	Stmt.GetColumnValueByIndex(2, Help);
+	Stmt.GetColumnValueByIndex(3, Flags);
+	Stmt.GetColumnValueByIndex(4, IsEnabled);
+	Stmt.GetColumnValueByIndex(5, IsDeprecated);
+	Stmt.GetColumnValueByIndex(6, Value);
+	Stmt.GetColumnValueByIndex(7, DefaultValue);
+	Stmt.GetColumnValueByIndex(8, VariableType);
+	Stmt.GetColumnValueByIndex(9, SetBy);
+	Stmt.GetColumnValueByIndex(10, ReadOnly);
+	Stmt.GetColumnValueByIndex(11, Cheat);
+	Stmt.GetColumnValueByIndex(12, Source);
+	Stmt.GetColumnValueByIndex(13, CapturedAt);
+
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("name"), Name);
+	Obj->SetStringField(TEXT("object_type"), ObjectType);
+	Obj->SetStringField(TEXT("help"), Help);
+	Obj->SetNumberField(TEXT("flags"), static_cast<double>(Flags));
+	Obj->SetBoolField(TEXT("is_enabled"), IsEnabled != 0);
+	Obj->SetBoolField(TEXT("is_deprecated"), IsDeprecated != 0);
+	if (!Value.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("value"), Value);
+	}
+	if (!DefaultValue.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("default_value"), DefaultValue);
+	}
+	if (!VariableType.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("variable_type"), VariableType);
+	}
+	if (!SetBy.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("set_by"), SetBy);
+	}
+	Obj->SetBoolField(TEXT("read_only"), ReadOnly != 0);
+	Obj->SetBoolField(TEXT("cheat"), Cheat != 0);
+	if (!Source.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("source"), Source);
+	}
+	Obj->SetStringField(TEXT("captured_at"), CapturedAt);
+	return Obj;
+}
+
+static FString CompactConsoleText(const FString& Value, int32 MaxChars = 160)
+{
+	const FString Clean = Value.Replace(TEXT("\r"), TEXT(" ")).Replace(TEXT("\n"), TEXT(" ")).TrimStartAndEnd();
+	if (Clean.Len() <= MaxChars)
+	{
+		return Clean;
+	}
+	return Clean.Left(FMath::Max(0, MaxChars - 3)) + TEXT("...");
+}
+
+static TSharedPtr<FJsonObject> CompactConsoleObjectFromStatement(FSQLitePreparedStatement& Stmt)
+{
+	FString Name;
+	FString ObjectType;
+	FString Help;
+	int64 Flags = 0;
+	int64 IsEnabled = 0;
+	int64 IsDeprecated = 0;
+	FString VariableType;
+	int64 ReadOnly = 0;
+	int64 Cheat = 0;
+	FString Source;
+	FString CapturedAt;
+
+	Stmt.GetColumnValueByIndex(0, Name);
+	Stmt.GetColumnValueByIndex(1, ObjectType);
+	Stmt.GetColumnValueByIndex(2, Help);
+	Stmt.GetColumnValueByIndex(3, Flags);
+	Stmt.GetColumnValueByIndex(4, IsEnabled);
+	Stmt.GetColumnValueByIndex(5, IsDeprecated);
+	Stmt.GetColumnValueByIndex(8, VariableType);
+	Stmt.GetColumnValueByIndex(10, ReadOnly);
+	Stmt.GetColumnValueByIndex(11, Cheat);
+	Stmt.GetColumnValueByIndex(12, Source);
+	Stmt.GetColumnValueByIndex(13, CapturedAt);
+
+	TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+	Obj->SetStringField(TEXT("name"), Name);
+	Obj->SetStringField(TEXT("object_type"), ObjectType);
+	const FString HelpPreview = CompactConsoleText(Help);
+	if (!HelpPreview.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("help_preview"), HelpPreview);
+	}
+	Obj->SetNumberField(TEXT("flags"), static_cast<double>(Flags));
+	Obj->SetBoolField(TEXT("is_enabled"), IsEnabled != 0);
+	Obj->SetBoolField(TEXT("is_deprecated"), IsDeprecated != 0);
+	if (!VariableType.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("variable_type"), VariableType);
+	}
+	Obj->SetBoolField(TEXT("read_only"), ReadOnly != 0);
+	Obj->SetBoolField(TEXT("cheat"), Cheat != 0);
+	if (!Source.IsEmpty())
+	{
+		Obj->SetStringField(TEXT("source"), Source);
+	}
+	Obj->SetStringField(TEXT("captured_at"), CapturedAt);
+	return Obj;
+}
+
+static TSharedPtr<FJsonObject> MissingConsoleSchemaResult()
+{
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("status"), TEXT("missing_schema"));
+	Root->SetStringField(TEXT("summary"), TEXT("console_objects table is not present in EngineSource.db; run console.refresh_snapshot in a live editor."));
+	Root->SetBoolField(TEXT("ok"), false);
+	AddNextActions(Root, { TEXT("console.refresh_snapshot"), TEXT("console.health") });
+	return Root;
+}
+
+bool FMonolithSourceDatabase::EnsureConsoleObjectSchema()
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid())
+	{
+		return false;
+	}
+	return EnsureConsoleObjectSchemaLocked(*Database);
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::ReplaceConsoleObjectSnapshot(
+	const TArray<FMonolithConsoleObjectRow>& Rows,
+	const FString& SourceLabel)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetBoolField(TEXT("ok"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("console.refresh_snapshot") });
+		return Root;
+	}
+
+	if (!EnsureConsoleObjectSchemaLocked(*Database))
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to prepare console object schema: %s"), *Database->GetLastError()));
+		Root->SetBoolField(TEXT("ok"), false);
+		return Root;
+	}
+
+	const FString CapturedAt = FDateTime::UtcNow().ToIso8601();
+	bool bOk = Database->Execute(TEXT("BEGIN;"));
+	if (bOk)
+	{
+		bOk = Database->Execute(TEXT("DELETE FROM console_objects;"));
+	}
+
+	FSQLitePreparedStatement InsertStmt;
+	if (bOk && !InsertStmt.Create(*Database, TEXT(
+		"INSERT OR REPLACE INTO console_objects "
+		"(name, object_type, help, flags, is_enabled, is_deprecated, value, default_value, variable_type, set_by, read_only, cheat, source, captured_at) "
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")))
+	{
+		bOk = false;
+	}
+
+	int32 Inserted = 0;
+	if (bOk)
+	{
+		for (const FMonolithConsoleObjectRow& Row : Rows)
+		{
+			InsertStmt.Reset();
+			InsertStmt.SetBindingValueByIndex(1, Row.Name);
+			InsertStmt.SetBindingValueByIndex(2, Row.ObjectType);
+			BindNullableString(InsertStmt, 3, Row.Help);
+			InsertStmt.SetBindingValueByIndex(4, static_cast<int64>(Row.Flags));
+			InsertStmt.SetBindingValueByIndex(5, static_cast<int64>(Row.bIsEnabled ? 1 : 0));
+			InsertStmt.SetBindingValueByIndex(6, static_cast<int64>(Row.bIsDeprecated ? 1 : 0));
+			BindNullableString(InsertStmt, 7, Row.Value);
+			BindNullableString(InsertStmt, 8, Row.DefaultValue);
+			BindNullableString(InsertStmt, 9, Row.VariableType);
+			BindNullableString(InsertStmt, 10, Row.SetBy);
+			InsertStmt.SetBindingValueByIndex(11, static_cast<int64>(Row.bReadOnly ? 1 : 0));
+			InsertStmt.SetBindingValueByIndex(12, static_cast<int64>(Row.bCheat ? 1 : 0));
+			BindNullableString(InsertStmt, 13, SourceLabel.IsEmpty() ? Row.Source : SourceLabel);
+			InsertStmt.SetBindingValueByIndex(14, CapturedAt);
+			if (InsertStmt.Step() != ESQLitePreparedStatementStepResult::Done)
+			{
+				bOk = false;
+				break;
+			}
+			++Inserted;
+		}
+	}
+
+	if (bOk)
+	{
+		bOk = Database->Execute(TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');"));
+	}
+
+	if (bOk)
+	{
+		FSQLitePreparedStatement MetaStmt;
+		if (MetaStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO console_snapshot_meta (key, value) VALUES (?, ?);")))
+		{
+			MetaStmt.SetBindingValueByIndex(1, FString(TEXT("captured_at")));
+			MetaStmt.SetBindingValueByIndex(2, CapturedAt);
+			MetaStmt.Step();
+		}
+		FSQLitePreparedStatement CountStmt;
+		if (CountStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO console_snapshot_meta (key, value) VALUES (?, ?);")))
+		{
+			CountStmt.SetBindingValueByIndex(1, FString(TEXT("object_count")));
+			CountStmt.SetBindingValueByIndex(2, FString::FromInt(Inserted));
+			CountStmt.Step();
+		}
+		FSQLitePreparedStatement SourceStmt;
+		if (SourceStmt.Create(*Database, TEXT("INSERT OR REPLACE INTO console_snapshot_meta (key, value) VALUES (?, ?);")))
+		{
+			SourceStmt.SetBindingValueByIndex(1, FString(TEXT("source")));
+			SourceStmt.SetBindingValueByIndex(2, SourceLabel);
+			SourceStmt.Step();
+		}
+	}
+
+	if (bOk)
+	{
+		Database->Execute(TEXT("COMMIT;"));
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetBoolField(TEXT("ok"), true);
+		Root->SetNumberField(TEXT("count"), Inserted);
+		Root->SetStringField(TEXT("captured_at"), CapturedAt);
+		Root->SetStringField(TEXT("source"), SourceLabel);
+		Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Console object snapshot refreshed with %d object(s)."), Inserted));
+		AddNextActions(Root, { TEXT("console.search_objects"), TEXT("console.health") });
+		return Root;
+	}
+
+	Database->Execute(TEXT("ROLLBACK;"));
+	Root->SetStringField(TEXT("status"), TEXT("error"));
+	Root->SetBoolField(TEXT("ok"), false);
+	Root->SetNumberField(TEXT("inserted_before_failure"), Inserted);
+	Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to refresh console object snapshot: %s"), *Database->GetLastError()));
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::SearchConsoleObjects(
+	const FString& Query,
+	const FString& ObjectType,
+	int32 Limit,
+	bool bDetail,
+	int32 Offset)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid())
+	{
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetBoolField(TEXT("ok"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("console.health") });
+		return Root;
+	}
+	if (!TableExistsLocked(*Database, TEXT("console_objects")))
+	{
+		return MissingConsoleSchemaResult();
+	}
+	const bool bHasFts = TableExistsLocked(*Database, TEXT("console_objects_fts"));
+
+	constexpr int32 MaxConsoleSearchWindow = 100000;
+	const int32 SafeLimit = FMath::Clamp(Limit, 1, 5000);
+	const int32 SafeOffset = FMath::Clamp(Offset, 0, MaxConsoleSearchWindow);
+	const int32 QueryWindow = FMath::Min(MaxConsoleSearchWindow + 1, SafeOffset + SafeLimit + 1);
+	const FString FilterType = ObjectType.Equals(TEXT("all"), ESearchCase::IgnoreCase) ? TEXT("") : ObjectType.ToLower();
+	const bool bUseFts = !Query.TrimStartAndEnd().IsEmpty();
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	bool bUsedFts = false;
+	bool bUsedLikeFallback = false;
+	auto AppendRowsFromStatement = [&Rows, bDetail](FSQLitePreparedStatement& ActiveStmt)
+	{
+		while (ActiveStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+		{
+			Rows.Add(MakeShared<FJsonValueObject>(bDetail
+				? ConsoleObjectFromStatement(ActiveStmt)
+				: CompactConsoleObjectFromStatement(ActiveStmt)));
+		}
+	};
+
+	if (bUseFts && bHasFts)
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, TEXT(
+			"SELECT c.name,c.object_type,COALESCE(c.help,''),c.flags,c.is_enabled,c.is_deprecated,"
+			"       COALESCE(c.value,''),COALESCE(c.default_value,''),COALESCE(c.variable_type,''),COALESCE(c.set_by,''),"
+			"       c.read_only,c.cheat,COALESCE(c.source,''),c.captured_at "
+			"FROM console_objects_fts "
+			"JOIN console_objects c ON c.rowid = console_objects_fts.rowid "
+			"WHERE console_objects_fts MATCH ? AND (? = '' OR c.object_type = ?) "
+			"ORDER BY CASE "
+			"  WHEN lower(c.name) = lower(?) THEN 0 "
+			"  WHEN c.name LIKE ? ESCAPE '\\' THEN 1 "
+			"  ELSE 2 END, bm25(console_objects_fts), c.name "
+			"LIMIT ?;")))
+		{
+			TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+			Root->SetStringField(TEXT("status"), TEXT("error"));
+			Root->SetBoolField(TEXT("ok"), false);
+			Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to prepare console FTS query: %s"), *Database->GetLastError()));
+			return Root;
+		}
+		const FString PrefixPattern = FString::Printf(TEXT("%s%%"), *EscapeConsoleLike(Query));
+		Stmt.SetBindingValueByIndex(1, EscapeConsoleFTS(Query));
+		Stmt.SetBindingValueByIndex(2, FilterType);
+		Stmt.SetBindingValueByIndex(3, FilterType);
+		Stmt.SetBindingValueByIndex(4, Query);
+		Stmt.SetBindingValueByIndex(5, PrefixPattern);
+		Stmt.SetBindingValueByIndex(6, static_cast<int64>(QueryWindow));
+		AppendRowsFromStatement(Stmt);
+		bUsedFts = true;
+	}
+
+	if (!bUseFts)
+	{
+		FSQLitePreparedStatement Stmt;
+		if (!Stmt.Create(*Database, TEXT(
+			"SELECT name,object_type,COALESCE(help,''),flags,is_enabled,is_deprecated,"
+			"       COALESCE(value,''),COALESCE(default_value,''),COALESCE(variable_type,''),COALESCE(set_by,''),"
+			"       read_only,cheat,COALESCE(source,''),captured_at "
+			"FROM console_objects "
+			"WHERE (? = '' OR object_type = ?) "
+			"ORDER BY name LIMIT ?;")))
+		{
+			TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+			Root->SetStringField(TEXT("status"), TEXT("error"));
+			Root->SetBoolField(TEXT("ok"), false);
+			Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to prepare console list query: %s"), *Database->GetLastError()));
+			return Root;
+		}
+		Stmt.SetBindingValueByIndex(1, FilterType);
+		Stmt.SetBindingValueByIndex(2, FilterType);
+		Stmt.SetBindingValueByIndex(3, static_cast<int64>(QueryWindow));
+		AppendRowsFromStatement(Stmt);
+	}
+	else if (Rows.Num() == 0)
+	{
+		FSQLitePreparedStatement LikeStmt;
+		if (!LikeStmt.Create(*Database, TEXT(
+			"SELECT name,object_type,COALESCE(help,''),flags,is_enabled,is_deprecated,"
+			"       COALESCE(value,''),COALESCE(default_value,''),COALESCE(variable_type,''),COALESCE(set_by,''),"
+			"       read_only,cheat,COALESCE(source,''),captured_at "
+			"FROM console_objects "
+			"WHERE (name LIKE ? ESCAPE '\\' OR COALESCE(help,'') LIKE ? ESCAPE '\\' "
+			"       OR COALESCE(value,'') LIKE ? ESCAPE '\\' OR COALESCE(default_value,'') LIKE ? ESCAPE '\\' "
+			"       OR COALESCE(variable_type,'') LIKE ? ESCAPE '\\' OR COALESCE(set_by,'') LIKE ? ESCAPE '\\') "
+			"AND (? = '' OR object_type = ?) "
+			"ORDER BY CASE "
+			"  WHEN lower(name) = lower(?) THEN 0 "
+			"  WHEN name LIKE ? ESCAPE '\\' THEN 1 "
+			"  ELSE 2 END, name "
+			"LIMIT ?;")))
+		{
+			TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+			Root->SetStringField(TEXT("status"), TEXT("error"));
+			Root->SetBoolField(TEXT("ok"), false);
+			Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to prepare console LIKE fallback query: %s"), *Database->GetLastError()));
+			return Root;
+		}
+		const FString ContainsPattern = FString::Printf(TEXT("%%%s%%"), *EscapeConsoleLike(Query));
+		const FString PrefixPattern = FString::Printf(TEXT("%s%%"), *EscapeConsoleLike(Query));
+		LikeStmt.SetBindingValueByIndex(1, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(2, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(3, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(4, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(5, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(6, ContainsPattern);
+		LikeStmt.SetBindingValueByIndex(7, FilterType);
+		LikeStmt.SetBindingValueByIndex(8, FilterType);
+		LikeStmt.SetBindingValueByIndex(9, Query);
+		LikeStmt.SetBindingValueByIndex(10, PrefixPattern);
+		LikeStmt.SetBindingValueByIndex(11, static_cast<int64>(QueryWindow));
+		AppendRowsFromStatement(LikeStmt);
+		bUsedLikeFallback = true;
+	}
+
+	const bool bTruncated = Rows.Num() > SafeOffset + SafeLimit;
+	TArray<TSharedPtr<FJsonValue>> PagedRows;
+	const int32 PageStart = FMath::Min(SafeOffset, Rows.Num());
+	const int32 PageEnd = FMath::Min(PageStart + SafeLimit, Rows.Num());
+	PagedRows.Reserve(FMath::Max(0, PageEnd - PageStart));
+	for (int32 Index = PageStart; Index < PageEnd; ++Index)
+	{
+		PagedRows.Add(Rows[Index]);
+	}
+	Rows = MoveTemp(PagedRows);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("status"), TEXT("ok"));
+	Root->SetBoolField(TEXT("ok"), true);
+	Root->SetStringField(TEXT("query"), Query);
+	Root->SetStringField(TEXT("object_type"), FilterType.IsEmpty() ? TEXT("all") : FilterType);
+	Root->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Root->SetNumberField(TEXT("limit"), SafeLimit);
+	Root->SetNumberField(TEXT("offset"), SafeOffset);
+	Root->SetStringField(TEXT("projection"), bDetail ? TEXT("full") : TEXT("compact"));
+	Root->SetBoolField(TEXT("detail"), bDetail);
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("limit"), SafeLimit);
+	Limits->SetNumberField(TEXT("offset"), SafeOffset);
+	Limits->SetNumberField(TEXT("returned"), Rows.Num());
+	Limits->SetNumberField(TEXT("max_limit"), 5000);
+	Limits->SetNumberField(TEXT("max_window"), MaxConsoleSearchWindow);
+	Limits->SetStringField(TEXT("projection"), bDetail ? TEXT("full") : TEXT("compact"));
+	Limits->SetBoolField(TEXT("detail"), bDetail);
+	Limits->SetBoolField(TEXT("truncated"), bTruncated);
+	Root->SetObjectField(TEXT("limits"), Limits);
+	Root->SetArrayField(TEXT("objects"), Rows);
+	Root->SetArrayField(TEXT("results"), Rows);
+	Root->SetBoolField(TEXT("truncated"), bTruncated);
+	if (bTruncated)
+	{
+		Root->SetStringField(TEXT("next_cursor"), FString::FromInt(SafeOffset + SafeLimit));
+	}
+	Root->SetBoolField(TEXT("used_fts"), bUsedFts);
+	Root->SetBoolField(TEXT("used_like_fallback"), bUsedLikeFallback);
+	AddNextActions(Root, { TEXT("console.get_object"), TEXT("console.refresh_snapshot") });
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::GetConsoleObject(const FString& Name)
+{
+	FScopeLock Lock(&DbLock);
+	if (!Database || !Database->IsValid())
+	{
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetBoolField(TEXT("ok"), false);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("console.health") });
+		return Root;
+	}
+	if (!TableExistsLocked(*Database, TEXT("console_objects")))
+	{
+		return MissingConsoleSchemaResult();
+	}
+
+	FSQLitePreparedStatement Stmt;
+	if (!Stmt.Create(*Database, TEXT(
+		"SELECT name,object_type,COALESCE(help,''),flags,is_enabled,is_deprecated,"
+		"       COALESCE(value,''),COALESCE(default_value,''),COALESCE(variable_type,''),COALESCE(set_by,''),"
+		"       read_only,cheat,COALESCE(source,''),captured_at "
+		"FROM console_objects "
+		"WHERE name = ? COLLATE NOCASE "
+		"ORDER BY CASE WHEN name = ? THEN 0 ELSE 1 END, name "
+		"LIMIT 1;")))
+	{
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetBoolField(TEXT("ok"), false);
+		Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Failed to prepare console get query: %s"), *Database->GetLastError()));
+		return Root;
+	}
+	Stmt.SetBindingValueByIndex(1, Name);
+	Stmt.SetBindingValueByIndex(2, Name);
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("name"), Name);
+	if (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+	{
+		Root->SetStringField(TEXT("status"), TEXT("ok"));
+		Root->SetBoolField(TEXT("ok"), true);
+		Root->SetObjectField(TEXT("object"), ConsoleObjectFromStatement(Stmt));
+		AddNextActions(Root, { TEXT("console.search_objects"), TEXT("console.refresh_snapshot") });
+		return Root;
+	}
+
+	Root->SetStringField(TEXT("status"), TEXT("not_found"));
+	Root->SetBoolField(TEXT("ok"), false);
+	Root->SetStringField(TEXT("summary"), FString::Printf(TEXT("Console object not found in snapshot: %s"), *Name));
+	AddNextActions(Root, { TEXT("console.search_objects"), TEXT("console.refresh_snapshot") });
+	return Root;
+}
+
+TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeConsoleHealth(bool bIncludeCounts)
+{
+	FScopeLock Lock(&DbLock);
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	bool bOk = true;
+
+	auto Check = [&](const FString& Name, bool bPass, const FString& Detail)
+	{
+		TSharedPtr<FJsonObject> C = MakeShared<FJsonObject>();
+		C->SetStringField(TEXT("check"), Name);
+		C->SetStringField(TEXT("result"), bPass ? TEXT("ok") : TEXT("warning"));
+		C->SetStringField(TEXT("detail"), Detail);
+		Checks.Add(MakeShared<FJsonValueObject>(C));
+		if (!bPass)
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(Detail));
+		}
+	};
+	auto CountOf = [&](const TCHAR* Sql) -> int64
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, Sql)) return -1;
+		int64 N = 0;
+		if (S.Step() == ESQLitePreparedStatementStepResult::Row) S.GetColumnValueByIndex(0, N);
+		return N;
+	};
+
+	Root->SetBoolField(TEXT("include_counts"), bIncludeCounts);
+	if (!Database || !Database->IsValid())
+	{
+		Root->SetStringField(TEXT("status"), TEXT("error"));
+		Root->SetBoolField(TEXT("ok"), false);
+		Root->SetStringField(TEXT("summary"), TEXT("EngineSource DB is not open"));
+		Root->SetArrayField(TEXT("checks"), Checks);
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+		AddNextActions(Root, { TEXT("source.trigger_reindex"), TEXT("console.refresh_snapshot") });
+		return Root;
+	}
+
+	for (const TCHAR* Table : { TEXT("console_objects"), TEXT("console_snapshot_meta"), TEXT("console_objects_fts") })
+	{
+		const bool bHas = TableExistsLocked(*Database, Table);
+		Check(FString::Printf(TEXT("table:%s"), Table), bHas,
+			bHas ? FString::Printf(TEXT("table %s present"), Table)
+				: FString::Printf(TEXT("missing table %s"), Table));
+	}
+
+	auto Exists = [&](const TCHAR* Type, const TCHAR* Name) -> bool
+	{
+		FSQLitePreparedStatement S;
+		if (!S.Create(*Database, TEXT("SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?;")))
+		{
+			return false;
+		}
+		S.SetBindingValueByIndex(1, FString(Type));
+		S.SetBindingValueByIndex(2, FString(Name));
+		return S.Step() == ESQLitePreparedStatementStepResult::Row;
+	};
+
+	for (const TCHAR* Trigger : { TEXT("console_objects_ai"), TEXT("console_objects_ad"), TEXT("console_objects_au") })
+	{
+		const bool bHas = Exists(TEXT("trigger"), Trigger);
+		Check(FString::Printf(TEXT("trigger:%s"), Trigger), bHas,
+			bHas ? FString::Printf(TEXT("trigger %s present"), Trigger)
+				: FString::Printf(TEXT("missing trigger %s"), Trigger));
+	}
+
+	if (bIncludeCounts && TableExistsLocked(*Database, TEXT("console_objects")) && TableExistsLocked(*Database, TEXT("console_objects_fts")))
+	{
+		const int64 ObjectCount = CountOf(TEXT("SELECT COUNT(*) FROM console_objects;"));
+		const int64 FtsCount = CountOf(TEXT("SELECT COUNT(*) FROM console_objects_fts;"));
+		Check(TEXT("fts:console_row_parity"), ObjectCount == FtsCount,
+			FString::Printf(TEXT("console_objects=%lld console_objects_fts=%lld"), ObjectCount, FtsCount));
+		Root->SetNumberField(TEXT("object_count"), static_cast<double>(ObjectCount));
+		Root->SetNumberField(TEXT("fts_count"), static_cast<double>(FtsCount));
+	}
+
+	if (TableExistsLocked(*Database, TEXT("console_snapshot_meta")))
+	{
+		FSQLitePreparedStatement MetaStmt;
+		if (MetaStmt.Create(*Database, TEXT("SELECT key, value FROM console_snapshot_meta ORDER BY key;")))
+		{
+			TSharedPtr<FJsonObject> Meta = MakeShared<FJsonObject>();
+			while (MetaStmt.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				FString Key;
+				FString Value;
+				MetaStmt.GetColumnValueByIndex(0, Key);
+				MetaStmt.GetColumnValueByIndex(1, Value);
+				Meta->SetStringField(Key, Value);
+			}
+			Root->SetObjectField(TEXT("snapshot"), Meta);
+		}
+	}
+
+	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("warning"));
+	Root->SetBoolField(TEXT("ok"), bOk);
+	Root->SetStringField(TEXT("summary"), bOk
+		? TEXT("Console object snapshot schema is healthy.")
+		: TEXT("Console object snapshot schema is missing or stale; run console.refresh_snapshot in a live editor."));
+	Root->SetArrayField(TEXT("checks"), Checks);
+	Root->SetArrayField(TEXT("warnings"), Warnings);
+	AddNextActions(Root, { TEXT("console.refresh_snapshot"), TEXT("console.search_objects") });
+	return Root;
 }
 
 // ============================================================
@@ -2659,9 +3347,24 @@ bool FMonolithSourceDatabase::CreateTablesIfNeeded()
 		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_FTS failed — %s"), *Database->GetLastError());
 		return false;
 	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTables))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_ConsoleTables failed — %s"), *Database->GetLastError());
+		return false;
+	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleFTS))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_ConsoleFTS failed — %s"), *Database->GetLastError());
+		return false;
+	}
 	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_Triggers failed — %s"), *Database->GetLastError());
+		return false;
+	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTriggers))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("CreateTablesIfNeeded: DDL_ConsoleTriggers failed — %s"), *Database->GetLastError());
 		return false;
 	}
 
@@ -2733,9 +3436,24 @@ bool FMonolithSourceDatabase::ResetDatabase()
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_FTS failed — %s"), *Database->GetLastError());
 		return false;
 	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTables))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleTables failed — %s"), *Database->GetLastError());
+		return false;
+	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleFTS))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleFTS failed — %s"), *Database->GetLastError());
+		return false;
+	}
 	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_Triggers))
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_Triggers failed — %s"), *Database->GetLastError());
+		return false;
+	}
+	if (!ExecuteMulti(*Database, MonolithSourceSchema::DDL_ConsoleTriggers))
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("ResetDatabase: DDL_ConsoleTriggers failed — %s"), *Database->GetLastError());
 		return false;
 	}
 
@@ -3567,13 +4285,14 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			S.GetColumnValueByIndex(0, SchemaVer);
 		}
 	}
-	if (SchemaVer != TEXT("1"))
+	const FString ExpectedSchemaVersion = FString::FromInt(MonolithSourceSchema::SchemaVersion);
+	if (SchemaVer != ExpectedSchemaVersion)
 	{
 		bNeedsReindex = true;
 	}
-	Check(TEXT("meta:schema_version"), SchemaVer == TEXT("1"),
+	Check(TEXT("meta:schema_version"), SchemaVer == ExpectedSchemaVersion,
 		SchemaVer.IsEmpty() ? TEXT("meta.schema_version missing")
-			: FString::Printf(TEXT("schema_version=%s (expected 1)"), *SchemaVer));
+			: FString::Printf(TEXT("schema_version=%s (expected %s)"), *SchemaVer, *ExpectedSchemaVersion));
 
 	int64 OrphanRefs = -1;
 	int64 SymCnt = -1;

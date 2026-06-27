@@ -15,7 +15,7 @@
  */
 namespace MonolithSourceSchema
 {
-	static const int32 SchemaVersion = 2;
+	static const int32 SchemaVersion = 3;
 
 	// ----------------------------------------------------------------
 	// Core tables + indexes
@@ -128,6 +128,60 @@ namespace MonolithSourceSchema
 		TEXT(");");
 
 	// ----------------------------------------------------------------
+	// Live console-object snapshot tables.
+	// These are populated from IConsoleManager on the game thread by the
+	// console namespace. They intentionally live in EngineSource.db so live MCP
+	// and offline monolith_query.exe share one searchable console surface.
+	// ----------------------------------------------------------------
+	static const TCHAR* DDL_ConsoleTables =
+		TEXT("CREATE TABLE IF NOT EXISTS console_objects (")
+		TEXT("    name          TEXT PRIMARY KEY,")
+		TEXT("    object_type   TEXT NOT NULL,")
+		TEXT("    help          TEXT,")
+		TEXT("    flags         INTEGER NOT NULL DEFAULT 0,")
+		TEXT("    is_enabled    INTEGER NOT NULL DEFAULT 0,")
+		TEXT("    is_deprecated INTEGER NOT NULL DEFAULT 0,")
+		TEXT("    value         TEXT,")
+		TEXT("    default_value TEXT,")
+		TEXT("    variable_type TEXT,")
+		TEXT("    set_by        TEXT,")
+		TEXT("    read_only     INTEGER NOT NULL DEFAULT 0,")
+		TEXT("    cheat         INTEGER NOT NULL DEFAULT 0,")
+		TEXT("    source        TEXT,")
+		TEXT("    captured_at   TEXT NOT NULL")
+		TEXT(");")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_console_objects_type ON console_objects(object_type);")
+		TEXT("CREATE INDEX IF NOT EXISTS idx_console_objects_flags ON console_objects(flags);")
+		TEXT("CREATE TABLE IF NOT EXISTS console_snapshot_meta (")
+		TEXT("    key   TEXT PRIMARY KEY,")
+		TEXT("    value TEXT")
+		TEXT(");");
+
+	static const TCHAR* DDL_ConsoleFTS =
+		TEXT("CREATE VIRTUAL TABLE IF NOT EXISTS console_objects_fts USING fts5(")
+		TEXT("    name, object_type, help, value, default_value, variable_type, set_by,")
+		TEXT("    content=console_objects, content_rowid=rowid")
+		TEXT(");");
+
+	static const TCHAR* DDL_ConsoleTriggers =
+		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_ai AFTER INSERT ON console_objects BEGIN")
+		TEXT("    INSERT INTO console_objects_fts(rowid, name, object_type, help, value, default_value, variable_type, set_by)")
+		TEXT("    VALUES (new.rowid, new.name, new.object_type, new.help, new.value, new.default_value, new.variable_type, new.set_by);")
+		TEXT("END;")
+
+		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_ad AFTER DELETE ON console_objects BEGIN")
+		TEXT("    INSERT INTO console_objects_fts(console_objects_fts, rowid, name, object_type, help, value, default_value, variable_type, set_by)")
+		TEXT("    VALUES ('delete', old.rowid, old.name, old.object_type, old.help, old.value, old.default_value, old.variable_type, old.set_by);")
+		TEXT("END;")
+
+		TEXT("CREATE TRIGGER IF NOT EXISTS console_objects_au AFTER UPDATE ON console_objects BEGIN")
+		TEXT("    INSERT INTO console_objects_fts(console_objects_fts, rowid, name, object_type, help, value, default_value, variable_type, set_by)")
+		TEXT("    VALUES ('delete', old.rowid, old.name, old.object_type, old.help, old.value, old.default_value, old.variable_type, old.set_by);")
+		TEXT("    INSERT INTO console_objects_fts(rowid, name, object_type, help, value, default_value, variable_type, set_by)")
+		TEXT("    VALUES (new.rowid, new.name, new.object_type, new.help, new.value, new.default_value, new.variable_type, new.set_by);")
+		TEXT("END;");
+
+	// ----------------------------------------------------------------
 	// Triggers to keep symbols_fts in sync with symbols
 	// ----------------------------------------------------------------
 	static const TCHAR* DDL_Triggers =
@@ -145,6 +199,12 @@ namespace MonolithSourceSchema
 	// DROP statements for ResetDatabase()
 	// ----------------------------------------------------------------
 	static const TCHAR* DDL_Drop =
+		TEXT("DROP TRIGGER IF EXISTS console_objects_au;")
+		TEXT("DROP TRIGGER IF EXISTS console_objects_ad;")
+		TEXT("DROP TRIGGER IF EXISTS console_objects_ai;")
+		TEXT("DROP TABLE IF EXISTS console_objects_fts;")
+		TEXT("DROP TABLE IF EXISTS console_snapshot_meta;")
+		TEXT("DROP TABLE IF EXISTS console_objects;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ad;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ai;")
 		TEXT("DROP TABLE IF EXISTS symbols_fts;")

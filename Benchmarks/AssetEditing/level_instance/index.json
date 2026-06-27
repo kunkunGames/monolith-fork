@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "level_instance",
+  "asset_type_slug": "level_instance",
+  "module_id": "asset_authoring.level_instance",
+  "task_count": 2,
+  "operation_counts": {
+    "creation_or_import": 2,
+    "edit": 2,
+    "save": 2,
+    "readback_verify": 2
+  },
+  "lifecycle_counts": {
+    "create_save": 2
+  },
+  "edit_domain_count": 2,
+  "task_ids": [
+    "BEB-419",
+    "BEB-489"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-419",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "level_instance",
+      "edit_domain": "blueprint_prefab",
+      "blueprint_type": "",
+      "workflow": "level_instance_blueprint_prefab_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "spawn_actor",
+        "create_blueprint_prefab",
+        "delete_actors",
+        "save_asset",
+        "get_components",
+        "inspect_asset"
+      ],
+      "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
+    },
+    {
+      "id": "BEB-489",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "level_instance",
+      "edit_domain": "prefab_placement",
+      "blueprint_type": "",
+      "workflow": "level_instance_blueprint_prefab_placement_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_actors",
+        "delete_assets",
+        "spawn_actor",
+        "create_blueprint_prefab",
+        "save_asset",
+        "place_blueprint_actor",
+        "get_actor_info",
+        "get_components",
+        "inspect_asset"
+      ],
+      "description": "Create a dialog-free Blueprint prefab from temporary actors, place an instance in the editor world, read back the placed actor, clean up the scene actor, save, and inspect the prefab asset"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "blueprint_prefab",
+      "route_edit_domain": "blueprint_prefab",
+      "module_id": "asset_authoring.level_instance.blueprint_prefab",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.level_instance.blueprint_prefab",
+        "edit": "asset_operation.edit.level_instance.blueprint_prefab",
+        "save": "asset_operation.save.level_instance.blueprint_prefab",
+        "readback_verify": "asset_operation.readback_verify.level_instance.blueprint_prefab"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-419"
+      ],
+      "case_file": "testcases\\blueprint_prefab.json"
+    },
+    {
+      "edit_domain": "prefab_placement",
+      "route_edit_domain": "prefab_placement",
+      "module_id": "asset_authoring.level_instance.prefab_placement",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.level_instance.prefab_placement",
+        "edit": "asset_operation.edit.level_instance.prefab_placement",
+        "save": "asset_operation.save.level_instance.prefab_placement",
+        "readback_verify": "asset_operation.readback_verify.level_instance.prefab_placement"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-489"
+      ],
+      "case_file": "testcases\\prefab_placement.json"
+    }
+  ]
+}

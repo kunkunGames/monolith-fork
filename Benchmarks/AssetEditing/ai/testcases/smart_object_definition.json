@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "smart_object_definition",
+  "route_edit_domain": "smart_object_definition",
+  "module_id": "asset_authoring.ai.smart_object_definition",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.smart_object_definition",
+    "edit": "asset_operation.edit.ai.smart_object_definition",
+    "save": "asset_operation.save.ai.smart_object_definition",
+    "readback_verify": "asset_operation.readback_verify.ai.smart_object_definition"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-383"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-383",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "smart_object_definition",
+      "blueprint_type": "",
+      "workflow": "ai_smart_object_definition_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_smart_object_definition",
+        "add_so_slot",
+        "configure_so_slot",
+        "save_asset",
+        "get_smart_object_definition",
+        "validate_smart_object_definition",
+        "inspect_asset"
+      ],
+      "description": "Create a SmartObjectDefinition, add and configure a slot, save, and read slot metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-383",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_smart_object_definition",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+          },
+          "contains": [
+            "SO_BenchRestPoint",
+            "Smart Object Definition created"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_so_slot",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint",
+            "offset": {
+              "x": 0.0,
+              "y": 0.0,
+              "z": 60.0
+            },
+            "rotation": {
+              "pitch": 0.0,
+              "yaw": 90.0,
+              "roll": 0.0
+            },
+            "enabled": true
+          },
+          "contains": [
+            "slot_index",
+            "0",
+            "total_slots",
+            "1"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "configure_so_slot",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint",
+            "slot_index": 0,
+            "slot_name": "BenchRestSlot",
+            "offset": {
+              "x": 24.0,
+              "y": 0.0,
+              "z": 72.0
+            },
+            "rotation": {
+              "pitch": 0.0,
+              "yaw": 135.0,
+              "roll": 0.0
+            },
+            "enabled": true
+          },
+          "contains": [
+            "Slot configured",
+            "BenchRestSlot",
+            "verified_value",
+            "match",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_smart_object_definition",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+          },
+          "contains": [
+            "SO_BenchRestPoint",
+            "slot_count",
+            "1",
+            "BenchRestSlot",
+            "enabled",
+            "true",
+            "24",
+            "72",
+            "135"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "validate_smart_object_definition",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+          },
+          "contains": [
+            "slot_count",
+            "1",
+            "issue_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SO_BenchRestPoint"
+          },
+          "contains": [
+            "SO_BenchRestPoint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "smart_object_definition",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_smart_object_definition_roundtrip",
+      "description": "Create a SmartObjectDefinition, add and configure a slot, save, and read slot metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_smart_object_definition",
+          "add_so_slot",
+          "configure_so_slot",
+          "save_asset",
+          "get_smart_object_definition",
+          "validate_smart_object_definition",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

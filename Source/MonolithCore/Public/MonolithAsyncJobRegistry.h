@@ -32,7 +32,13 @@ public:
 	static FMonolithAsyncJobRegistry& Get();
 
 	/** Mints a new job id, seeds a Pending row, and returns the job id. */
-	FString SubmitJob(const FString& Namespace, const FString& Action);
+	FString SubmitJob(
+		const FString& Namespace,
+		const FString& Action,
+		bool bCancellable = true,
+		bool bSupportsProgress = true,
+		const FString& PollAction = TEXT("monolith.get_job"),
+		const FString& CancelAction = TEXT("monolith.cancel_job"));
 
 	/** Marks the job Running and updates its progress fields. */
 	void UpdateProgress(const FString& JobId, double Percent, const FString& Stage, const FString& Message);
@@ -43,8 +49,11 @@ public:
 	/** Marks the job Failed and records the error string. */
 	void FailJob(const FString& JobId, const FString& Error);
 
-	/** Sets the cooperative cancel flag; does not interrupt running work. */
+	/** Sets the cooperative cancel-request flag; does not interrupt running work or mark the job terminal. */
 	void RequestCancel(const FString& JobId);
+
+	/** Producer acknowledgement that requested cancellation was observed at a safe boundary. */
+	void CancelJob(const FString& JobId, const FString& Message);
 
 	/** Returns true if cancellation has been requested for the job. */
 	bool IsCancelRequested(const FString& JobId) const;
@@ -72,6 +81,10 @@ private:
 		TSharedPtr<FJsonObject> Result;
 		FString Error;
 		bool bCancelRequested = false;
+		bool bCancellable = true;
+		bool bSupportsProgress = true;
+		FString PollAction;
+		FString CancelAction;
 		FDateTime CreatedUtc;
 		FDateTime UpdatedUtc;
 	};

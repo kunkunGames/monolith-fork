@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "notify_point_crud",
+  "route_edit_domain": "notify_point_crud",
+  "module_id": "asset_authoring.animation.notify_point_crud",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.notify_point_crud",
+    "edit": "asset_operation.edit.animation.notify_point_crud",
+    "save": "asset_operation.save.animation.notify_point_crud",
+    "readback_verify": "asset_operation.readback_verify.animation.notify_point_crud"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-431"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-431",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "notify_point_crud",
+      "blueprint_type": "",
+      "workflow": "animation_notify_point_crud_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "add_notify",
+        "remove_notify",
+        "save_asset",
+        "get_sequence_notifies",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-431",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchNotifyCrud",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_notify",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud",
+            "notify_class": "AnimNotify_PlaySound",
+            "time": 0.0,
+            "track_name": "BenchNotify"
+          },
+          "contains": [
+            "AnimNotify_PlaySound",
+            "BenchNotify"
+          ],
+          "capture": {
+            "removed_notify": "$.index"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_notify",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud",
+            "notify_class": "AnimNotify_ResetDynamics",
+            "time": 0.0,
+            "track_name": "BenchNotify"
+          },
+          "contains": [
+            "AnimNotify_ResetDynamics",
+            "BenchNotify"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "remove_notify",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud",
+            "notify_index": "${removed_notify}"
+          },
+          "contains": [
+            "removed_index",
+            "${removed_notify}",
+            "remaining_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_notifies",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud"
+          },
+          "contains": [
+            "count",
+            "1",
+            "AnimNotify_ResetDynamics",
+            "BenchNotify"
+          ],
+          "not_contains": [
+            "AnimNotify_PlaySound"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchNotifyCrud"
+          },
+          "contains": [
+            "A_BenchNotifyCrud",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "notify_point_crud",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_notify_point_crud_roundtrip",
+      "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "add_notify",
+          "remove_notify",
+          "save_asset",
+          "get_sequence_notifies",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -98,7 +98,7 @@ The action does not write screenshots to arbitrary local paths in this slice.
 | Gate | Required evidence |
 |------|-------------------|
 | Static docs/code sync | This spec, `SPEC_CORE.md`, and `API_REFERENCE.md` describe the same action surface. |
-| UE 5.7 compile | Full UBT plugin build against the `GO.uproject`-resolved engine root. |
+| UE 5.7 compile | Full UBT plugin build against the host `.uproject`-resolved engine root. |
 | Disabled default | With default settings, only `get_inspector_status` is registered in the `slate` namespace. |
 | Bounded output | Snapshot/wait/list actions clamp user-supplied limits and do not return raw memory addresses or local paths. |
 | Capture source | `capture_widget` uses Slate screenshot APIs and reports `viewport_fallback_used=false`. |

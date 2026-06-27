@@ -89,6 +89,23 @@ struct FMonolithSourceFile
 	int32 LineCount = 0;
 };
 
+struct FMonolithConsoleObjectRow
+{
+	FString Name;
+	FString ObjectType;
+	FString Help;
+	int32 Flags = 0;
+	bool bIsEnabled = false;
+	bool bIsDeprecated = false;
+	FString Value;
+	FString DefaultValue;
+	FString VariableType;
+	FString SetBy;
+	bool bReadOnly = false;
+	bool bCheat = false;
+	FString Source;
+};
+
 /** A single symbol_deprecations row (item 3). Structured so a message containing
  *  '|' cannot corrupt the version/kind fields (parity-safe vs the offline mirrors,
  *  which read columns directly). */
@@ -190,6 +207,13 @@ public:
 
 	// --- FTS helper ---
 	static FString EscapeFTS(const FString& Query);
+
+	// --- Console object snapshot queries ---
+	bool EnsureConsoleObjectSchema();
+	TSharedPtr<FJsonObject> ReplaceConsoleObjectSnapshot(const TArray<FMonolithConsoleObjectRow>& Rows, const FString& SourceLabel);
+	TSharedPtr<FJsonObject> SearchConsoleObjects(const FString& Query, const FString& ObjectType, int32 Limit, bool bDetail = false, int32 Offset = 0);
+	TSharedPtr<FJsonObject> GetConsoleObject(const FString& Name);
+	TSharedPtr<FJsonObject> ComputeConsoleHealth(bool bIncludeCounts);
 
 	// --- CRG-inspired health / repair (additive; see MonolithSourceReview) ---
 	/** Read-only schema/trigger/FTS/orphan/meta diagnostics. Never mutates. */

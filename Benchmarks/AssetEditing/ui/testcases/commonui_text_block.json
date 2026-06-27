@@ -1,0 +1,260 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_text_block",
+  "route_edit_domain": "commonui_text_block",
+  "module_id": "asset_authoring.ui.commonui_text_block",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_text_block",
+    "edit": "asset_operation.edit.ui.commonui_text_block",
+    "save": "asset_operation.save.ui.commonui_text_block",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_text_block"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-308"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-308",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_text_block",
+      "blueprint_type": "",
+      "workflow": "commonui_text_block_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_activatable_widget",
+        "add_widget",
+        "set_text",
+        "convert_textblock_to_common",
+        "configure_common_text",
+        "compile_widget",
+        "save_asset",
+        "get_widget_tree",
+        "audit_commonui_widget",
+        "inspect_asset"
+      ],
+      "description": "Create a CommonActivatableWidget, convert/configure CommonTextBlock text, compile/save, and audit CommonUI wiring"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-308",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_activatable_widget",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchCommonPanel",
+            "CommonActivatableWidget"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchCommonLabel",
+            "anchor_preset": "center",
+            "position": {
+              "x": 0,
+              "y": 0
+            },
+            "size": {
+              "x": 420,
+              "y": 64
+            },
+            "compile": false
+          },
+          "contains": [
+            "BenchCommonLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel",
+            "widget_name": "BenchCommonLabel",
+            "text": "CommonUI Bench",
+            "font_size": 22,
+            "compile": false
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "convert_textblock_to_common",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel",
+            "widget_name": "BenchCommonLabel"
+          },
+          "contains": [
+            "BenchCommonLabel",
+            "CommonTextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_common_text",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel",
+            "widget_name": "BenchCommonLabel",
+            "wrap_text_width": 420,
+            "line_height_percentage": 1.1,
+            "mobile_font_size_multiplier": 1.2,
+            "text_case": "ToUpper"
+          },
+          "contains": [
+            "BenchCommonLabel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+          },
+          "contains": [
+            "BenchCommonLabel",
+            "CommonTextBlock",
+            "CommonUI Bench"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "audit_commonui_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+          },
+          "contains": [
+            "WBP_BenchCommonPanel",
+            "issue_count"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonPanel"
+          },
+          "contains": [
+            "WBP_BenchCommonPanel",
+            "WidgetBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_text_block",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "commonui_text_block_roundtrip",
+      "description": "Create a CommonActivatableWidget, convert/configure CommonTextBlock text, compile/save, and audit CommonUI wiring",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_activatable_widget",
+          "add_widget",
+          "set_text",
+          "convert_textblock_to_common",
+          "configure_common_text",
+          "compile_widget",
+          "save_asset",
+          "get_widget_tree",
+          "audit_commonui_widget",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

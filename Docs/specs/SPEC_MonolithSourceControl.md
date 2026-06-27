@@ -86,5 +86,5 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 |------|----------|
 | Registration | `FMonolithSourceControlModule::StartupModule` registers the `source_control` namespace. |
 | Parameter guard | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests are rejected by the registry. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Optional-off build | Full plugin UBT build must also pass with `MONOLITH_RELEASE_BUILD=1`, even though SourceControl itself has no optional compile guard. |

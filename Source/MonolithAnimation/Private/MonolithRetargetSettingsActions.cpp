@@ -772,8 +772,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetChainSe
 				"Seed default ops on the retargeter first."));
 		}
 
-		// Mutate IN PLACE through the base op-settings pointer — never declare a derived value
-		// (value-copy emits the vtable -> unexported FIKRetargetIKChainsOpSettings::PostLoad -> LNK2001).
+		// Mutate in place through the base op-settings pointer; the op already owns this settings object.
 		FIKRetargetOpSettingsBase* IKBaseSettings = IKOp->GetSettings();
 		FIKRetargetIKChainsOpSettings* IKSettings = static_cast<FIKRetargetIKChainsOpSettings*>(IKBaseSettings);
 		for (FRetargetIKChainSettings& Chain : IKSettings->ChainsToRetarget)
@@ -812,7 +811,6 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetChainSe
 
 		if (bIKChainFound)
 		{
-			IKOp->SetSettings(IKBaseSettings);
 			bAnyApplied = true;
 		}
 	}
@@ -912,8 +910,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 	const FScopedTransaction Transaction(FText::FromString(TEXT("Set Retarget Root Settings")));
 	Controller->GetAsset()->Modify();
 
-	// Mutate IN PLACE through the base op-settings pointer — never declare a derived value
-	// (value-copy emits the vtable -> unexported FIKRetargetPelvisMotionOpSettings::PostLoad -> LNK2001).
+	// Mutate in place through the base op-settings pointer; the op already owns this settings object.
 	FIKRetargetOpSettingsBase* PelvisBaseSettings = PelvisOp->GetSettings();
 	FIKRetargetPelvisMotionOpSettings* Settings = static_cast<FIKRetargetPelvisMotionOpSettings*>(PelvisBaseSettings);
 
@@ -928,8 +925,6 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleSetRetargetRootSet
 	if (bHasTranslationOffset) { Settings->TranslationOffsetGlobal = TranslationOffset; }
 	if (!SourcePelvis.IsEmpty()) { PelvisController->SetSourcePelvisBone(FName(*SourcePelvis)); }
 	if (!TargetPelvis.IsEmpty()) { PelvisController->SetTargetPelvisBone(FName(*TargetPelvis)); }
-
-	PelvisOp->SetSettings(PelvisBaseSettings);
 
 	Controller->GetAsset()->MarkPackageDirty();
 

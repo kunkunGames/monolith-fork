@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_perception_binding",
+  "route_edit_domain": "sound_perception_binding",
+  "module_id": "asset_authoring.audio.sound_perception_binding",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_perception_binding",
+    "edit": "asset_operation.edit.audio.sound_perception_binding",
+    "save": "asset_operation.save.audio.sound_perception_binding",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_perception_binding"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-397"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-397",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_perception_binding",
+      "blueprint_type": "",
+      "workflow": "audio_sound_perception_binding_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "bind_sound_to_perception",
+        "save_asset",
+        "get_sound_perception_binding",
+        "list_perception_bound_sounds",
+        "inspect_asset"
+      ],
+      "description": "Create a SoundWave, bind Monolith perception user data, save it, and read back exact hearing/noise settings"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-397",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone",
+            "frequency_hz": 392.0,
+            "duration_seconds": 0.14,
+            "sample_rate": 44100,
+            "amplitude": 0.22
+          },
+          "contains": [
+            "SW_BenchPerceptionTone"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "bind_sound_to_perception",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone",
+            "loudness": 0.65,
+            "max_range": 1850.0,
+            "tag": "BenchPerceptionTone",
+            "sense_class": "Hearing",
+            "enabled": true,
+            "fire_on_fade_in": false,
+            "require_owning_actor": true
+          },
+          "contains": [
+            "SW_BenchPerceptionTone",
+            "binding",
+            "BenchPerceptionTone",
+            "0.65",
+            "1850",
+            "Hearing"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_perception_binding",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone"
+          },
+          "contains": [
+            "has_binding",
+            "true",
+            "BenchPerceptionTone",
+            "loudness",
+            "0.65",
+            "max_range",
+            "1850",
+            "Hearing",
+            "fire_on_fade_in",
+            "false"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "list_perception_bound_sounds",
+            "limit": 200
+          },
+          "contains": [
+            "SW_BenchPerceptionTone",
+            "BenchPerceptionTone"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchPerceptionTone"
+          },
+          "contains": [
+            "SW_BenchPerceptionTone",
+            "SoundWave"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_perception_binding",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_sound_perception_binding_roundtrip",
+      "description": "Create a SoundWave, bind Monolith perception user data, save it, and read back exact hearing/noise settings",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "bind_sound_to_perception",
+          "save_asset",
+          "get_sound_perception_binding",
+          "list_perception_bound_sounds",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

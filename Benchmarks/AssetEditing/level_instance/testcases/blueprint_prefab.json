@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "level_instance",
+  "asset_type_slug": "level_instance",
+  "edit_domain": "blueprint_prefab",
+  "route_edit_domain": "blueprint_prefab",
+  "module_id": "asset_authoring.level_instance.blueprint_prefab",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.level_instance.blueprint_prefab",
+    "edit": "asset_operation.edit.level_instance.blueprint_prefab",
+    "save": "asset_operation.save.level_instance.blueprint_prefab",
+    "readback_verify": "asset_operation.readback_verify.level_instance.blueprint_prefab"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-419"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-419",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "level_instance",
+      "edit_domain": "blueprint_prefab",
+      "blueprint_type": "",
+      "workflow": "level_instance_blueprint_prefab_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "spawn_actor",
+        "create_blueprint_prefab",
+        "delete_actors",
+        "save_asset",
+        "get_components",
+        "inspect_asset"
+      ],
+      "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-419",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabSet"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              0,
+              0,
+              80
+            ],
+            "name": "AE_BenchPrefabActorA",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchPrefabActorA",
+            "Actor"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              120,
+              0,
+              80
+            ],
+            "name": "AE_BenchPrefabActorB",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchPrefabActorB",
+            "Actor"
+          ]
+        },
+        {
+          "tool": "level_instance_query",
+          "args": {
+            "action": "create_blueprint_prefab",
+            "actor_names": [
+              "AE_BenchPrefabActorA",
+              "AE_BenchPrefabActorB"
+            ],
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabSet",
+            "center_pivot": true,
+            "keep_source_actors": true
+          },
+          "contains": [
+            "BP_BenchPrefabSet",
+            "source_actor_count",
+            "2",
+            "component_count"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchPrefabActorA",
+              "AE_BenchPrefabActorB"
+            ]
+          },
+          "contains": [
+            "deleted"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabSet"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "get_components",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabSet"
+          },
+          "contains": [
+            "BP_BenchPrefabSet",
+            "DefaultSceneRoot"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchPrefabSet"
+          },
+          "contains": [
+            "BP_BenchPrefabSet",
+            "Blueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blueprint_prefab",
+      "blueprint_type": "",
+      "domain": "level_instance",
+      "workflow": "level_instance_blueprint_prefab_roundtrip",
+      "description": "Spawn temporary editor actors, harvest them into a dialog-free Actor Blueprint prefab, clean up the scene, save it, and inspect prefab components",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "spawn_actor",
+          "create_blueprint_prefab",
+          "delete_actors",
+          "save_asset",
+          "get_components",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

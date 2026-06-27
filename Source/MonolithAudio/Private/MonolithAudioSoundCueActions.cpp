@@ -100,6 +100,228 @@ UClass* FMonolithAudioSoundCueActions::ResolveNodeType(const FString& TypeName)
 // Helpers
 // ============================================================================
 
+namespace
+{
+	FMonolithActionResult AudioInvalidParams(const FString& Message)
+	{
+		return FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams);
+	}
+}
+
+bool FMonolithAudioSoundCueActions::ValidateCuePropertyTypesBeforeCreate(const TSharedPtr<FJsonObject>& Props, FString& OutError)
+{
+	if (!Props.IsValid())
+	{
+		OutError = TEXT("properties must be an object");
+		return false;
+	}
+
+	double NumValue = 0.0;
+	bool BoolValue = false;
+	if (Props->HasField(TEXT("VolumeMultiplier")) && !Props->TryGetNumberField(TEXT("VolumeMultiplier"), NumValue))
+	{
+		OutError = TEXT("Malformed parameter: VolumeMultiplier must be a number");
+		return false;
+	}
+	if (Props->HasField(TEXT("PitchMultiplier")) && !Props->TryGetNumberField(TEXT("PitchMultiplier"), NumValue))
+	{
+		OutError = TEXT("Malformed parameter: PitchMultiplier must be a number");
+		return false;
+	}
+	if (Props->HasField(TEXT("bOverrideAttenuation")) && !Props->TryGetBoolField(TEXT("bOverrideAttenuation"), BoolValue))
+	{
+		OutError = TEXT("Malformed parameter: bOverrideAttenuation must be a boolean");
+		return false;
+	}
+	if (Props->HasField(TEXT("bPrimeOnLoad")) && !Props->TryGetBoolField(TEXT("bPrimeOnLoad"), BoolValue))
+	{
+		OutError = TEXT("Malformed parameter: bPrimeOnLoad must be a boolean");
+		return false;
+	}
+	if (Props->HasField(TEXT("bExcludeFromRandomNodeBranchCulling")) && !Props->TryGetBoolField(TEXT("bExcludeFromRandomNodeBranchCulling"), BoolValue))
+	{
+		OutError = TEXT("Malformed parameter: bExcludeFromRandomNodeBranchCulling must be a boolean");
+		return false;
+	}
+
+	return true;
+}
+
+bool FMonolithAudioSoundCueActions::ValidateSoundCueSpecBeforeCreate(const TSharedPtr<FJsonObject>& Spec, FString& OutError)
+{
+	if (!Spec.IsValid())
+	{
+		OutError = TEXT("spec object is required");
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* CueProps = nullptr;
+	if (Spec->HasField(TEXT("properties")))
+	{
+		if (!Spec->TryGetObjectField(TEXT("properties"), CueProps) || !CueProps || !CueProps->IsValid())
+		{
+			OutError = TEXT("properties must be an object");
+			return false;
+		}
+		if (!ValidateCuePropertyTypesBeforeCreate(*CueProps, OutError))
+		{
+			return false;
+		}
+	}
+
+	TMap<FString, UClass*> NodeClassesById;
+	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
+	if (Spec->HasField(TEXT("nodes")))
+	{
+		if (!Spec->TryGetArrayField(TEXT("nodes"), NodesArray) || !NodesArray)
+		{
+			OutError = TEXT("nodes must be an array");
+			return false;
+		}
+		if (NodesArray->Num() > 500)
+		{
+			OutError = FString::Printf(TEXT("nodes array contains %d entries, which exceeds the maximum allowed (500)"), NodesArray->Num());
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& NodeVal : *NodesArray)
+		{
+			const TSharedPtr<FJsonObject>* NodeObjPtr = nullptr;
+			if (!NodeVal.IsValid() || !NodeVal->TryGetObject(NodeObjPtr) || !NodeObjPtr || !NodeObjPtr->IsValid())
+			{
+				OutError = TEXT("Each node in spec must be an object");
+				return false;
+			}
+
+			const TSharedPtr<FJsonObject>& NodeObj = *NodeObjPtr;
+			FString Id;
+			FString TypeName;
+			if (!NodeObj->TryGetStringField(TEXT("id"), Id) || !NodeObj->TryGetStringField(TEXT("type"), TypeName) || Id.IsEmpty() || TypeName.IsEmpty())
+			{
+				OutError = TEXT("Each node in spec must have valid 'id' and 'type' string fields");
+				return false;
+			}
+			if (NodeClassesById.Contains(Id))
+			{
+				OutError = FString::Printf(TEXT("Duplicate node id '%s' in spec"), *Id);
+				return false;
+			}
+
+			UClass* NodeClass = ResolveNodeType(TypeName);
+			if (!NodeClass)
+			{
+				OutError = FString::Printf(TEXT("Unknown node type '%s' for node '%s'"), *TypeName, *Id);
+				return false;
+			}
+			NodeClassesById.Add(Id, NodeClass);
+
+			const TSharedPtr<FJsonObject>* NodeProps = nullptr;
+			if (NodeObj->HasField(TEXT("properties"))
+				&& (!NodeObj->TryGetObjectField(TEXT("properties"), NodeProps) || !NodeProps || !NodeProps->IsValid()))
+			{
+				OutError = FString::Printf(TEXT("Node '%s' properties must be an object"), *Id);
+				return false;
+			}
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* ConnsArray = nullptr;
+	if (Spec->HasField(TEXT("connections")))
+	{
+		if (!Spec->TryGetArrayField(TEXT("connections"), ConnsArray) || !ConnsArray)
+		{
+			OutError = TEXT("connections must be an array");
+			return false;
+		}
+		if (ConnsArray->Num() > 1000)
+		{
+			OutError = FString::Printf(TEXT("connections array contains %d entries, which exceeds the maximum allowed (1000)"), ConnsArray->Num());
+			return false;
+		}
+
+		TMap<FString, int32> AutoChildCounts;
+		for (const TSharedPtr<FJsonValue>& ConnVal : *ConnsArray)
+		{
+			const TSharedPtr<FJsonObject>* ConnObjPtr = nullptr;
+			if (!ConnVal.IsValid() || !ConnVal->TryGetObject(ConnObjPtr) || !ConnObjPtr || !ConnObjPtr->IsValid())
+			{
+				OutError = TEXT("Each connection in spec must be an object");
+				return false;
+			}
+
+			const TSharedPtr<FJsonObject>& ConnObj = *ConnObjPtr;
+			FString FromId;
+			FString ToId;
+			if (!ConnObj->TryGetStringField(TEXT("from"), FromId) || !ConnObj->TryGetStringField(TEXT("to"), ToId) || FromId.IsEmpty() || ToId.IsEmpty())
+			{
+				OutError = TEXT("Each connection in spec must have valid 'from' and 'to' string fields");
+				return false;
+			}
+			if (!NodeClassesById.Contains(FromId))
+			{
+				OutError = FString::Printf(TEXT("Connection 'from' node '%s' not found"), *FromId);
+				return false;
+			}
+
+			UClass** ToClassPtr = NodeClassesById.Find(ToId);
+			if (!ToClassPtr || !*ToClassPtr)
+			{
+				OutError = FString::Printf(TEXT("Connection 'to' node '%s' not found"), *ToId);
+				return false;
+			}
+
+			int32 ChildIndex = AutoChildCounts.FindRef(ToId);
+			if (ConnObj->HasField(TEXT("child_index")))
+			{
+				double ChildIndexValue = 0.0;
+				if (!ConnObj->TryGetNumberField(TEXT("child_index"), ChildIndexValue))
+				{
+					OutError = TEXT("child_index must be a number");
+					return false;
+				}
+				ChildIndex = static_cast<int32>(ChildIndexValue);
+			}
+			else
+			{
+				AutoChildCounts.FindOrAdd(ToId)++;
+			}
+
+			if (ChildIndex < 0)
+			{
+				OutError = TEXT("child_index must be >= 0");
+				return false;
+			}
+
+			const USoundNode* DefaultNode = Cast<USoundNode>((*ToClassPtr)->GetDefaultObject());
+			const int32 MaxChildren = DefaultNode ? DefaultNode->GetMaxChildNodes() : -1;
+			if (MaxChildren >= 0 && ChildIndex >= MaxChildren)
+			{
+				OutError = FString::Printf(
+					TEXT("child index %d exceeds max children (%d) for node %s"),
+					ChildIndex, MaxChildren, *ToId);
+				return false;
+			}
+		}
+	}
+
+	if (Spec->HasField(TEXT("first_node")))
+	{
+		FString FirstNodeId;
+		if (!Spec->TryGetStringField(TEXT("first_node"), FirstNodeId) || FirstNodeId.IsEmpty())
+		{
+			OutError = TEXT("first_node must be a non-empty string");
+			return false;
+		}
+		if (!NodeClassesById.Contains(FirstNodeId))
+		{
+			OutError = FString::Printf(TEXT("first_node '%s' not found in node map"), *FirstNodeId);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 USoundCue* FMonolithAudioSoundCueActions::LoadSoundCue(const FString& AssetPath, FString& OutError)
 {
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(AssetPath); !ValidationError.IsEmpty())
@@ -625,6 +847,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a new USoundCue asset. Optionally provide sound_waves[] to auto-create WavePlayers (+ Random node if multiple)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateSoundCue),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path (e.g. /Game/Audio/SC_MyCue)"))
 			.Optional(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths to auto-populate"))
 			.Build());
@@ -706,6 +929,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Build a complete Sound Cue from a JSON spec: nodes, connections, first_node, properties. The crown jewel."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::BuildSoundCueFromSpec),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("spec"), TEXT("object"), TEXT("JSON spec: {nodes: [{id, type, properties?}], connections: [{from, to, child_index?}], first_node, properties?}"))
 			.Build());
@@ -714,6 +938,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with N WavePlayers feeding a Random node, with optional weights"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateRandomSoundCue),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("weights"), TEXT("array"), TEXT("Array of float weights (same length as sound_waves)"))
@@ -723,6 +948,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with N WavePlayers feeding a Mixer node, with optional per-input volumes"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateLayeredSoundCue),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("volumes"), TEXT("array"), TEXT("Array of float volumes per input (same length as sound_waves)"))
@@ -732,6 +958,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a looping ambient Sound Cue: Looping -> Delay -> Random -> WavePlayers"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateLoopingAmbientCue),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("sound_waves"), TEXT("array"), TEXT("Array of SoundWave asset paths"))
 			.Optional(TEXT("delay_min"), TEXT("number"), TEXT("Minimum delay between loops (default 0.1)"))
@@ -742,6 +969,7 @@ void FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry& Regis
 		TEXT("Create a Sound Cue with a DistanceCrossFade node and N distance bands"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue),
 		FParamSchemaBuilder()
+			.DisableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Asset path for the new Sound Cue"))
 			.Required(TEXT("bands"), TEXT("array"), TEXT("Array of {sound_wave, fade_in_distance_start, fade_in_distance_end, fade_out_distance_start, fade_out_distance_end, volume}"))
 			.Build());

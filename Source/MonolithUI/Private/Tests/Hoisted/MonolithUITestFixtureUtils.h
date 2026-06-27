@@ -61,11 +61,11 @@ namespace MonolithUI::TestUtils
             {
                 Orphans.Add(W);
             }
-        }, /*bIncludeNestedObjects=*/ false);
+        }, EGetObjectsFlags::None);
 
         for (UWidget* W : Orphans)
         {
-            W->Rename(nullptr, GetTransientPackage(), REN_DoNotDirty | REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
+            W->Rename(nullptr, GetTransientPackage(), REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
         }
 
         Tree->RootWidget = nullptr;
@@ -167,6 +167,16 @@ namespace MonolithUI::TestUtils
         SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
         const FString PackageFilename = FPackageName::LongPackageNameToFilename(
             AssetPath, FPackageName::GetAssetPackageExtension());
+        IFileManager& FileManager = IFileManager::Get();
+        if (FileManager.FileExists(*PackageFilename) && FileManager.IsReadOnly(*PackageFilename))
+        {
+            FPlatformFileManager::Get().GetPlatformFile().SetReadOnly(*PackageFilename, false);
+            if (FileManager.IsReadOnly(*PackageFilename))
+            {
+                OutError = FString::Printf(TEXT("Package file is read-only: '%s'"), *PackageFilename);
+                return false;
+            }
+        }
         if (!UPackage::SavePackage(Package, WBP, *PackageFilename, SaveArgs))
         {
             OutError = FString::Printf(TEXT("SavePackage failed for '%s'"), *PackageFilename);

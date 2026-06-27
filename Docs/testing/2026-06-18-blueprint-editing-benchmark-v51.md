@@ -26,7 +26,7 @@ and anti-gaming value, run it against the live editor, and reflect the results i
 3. **Implementation** — scoring-engine hardening + practical-coverage expansion + reweight in
    `Scripts/blueprint_editing_benchmark.py`; the `ResolveInterfaceClass` handler fix in
    `Source/MonolithBlueprint`. 305 tasks, 10 categories.
-4. **Build + live validation** — `GoGameEditor` rebuilt (UBT); the interface resolver and the
+4. **Build + live validation** — the project editor target rebuilt (UBT); the interface resolver and the
    `negative_compile` break mechanism validated with direct MCP calls; full scored run.
 
 ## 3. Results

@@ -56,6 +56,217 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 
 namespace
 {
+	TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Out;
+	}
+
+	TArray<FString> DuplicateGraphAcceptedParameters()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("asset_path"));
+		Values.Add(TEXT("graph_name"));
+		Values.Add(TEXT("new_name"));
+		return Values;
+	}
+
+	TArray<FString> DuplicateGraphSupportedGraphKinds()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("function"));
+		Values.Add(TEXT("macro"));
+		return Values;
+	}
+
+	template <typename GraphArrayType>
+	TArray<FString> GraphNames(const GraphArrayType& Graphs)
+	{
+		TArray<FString> Names;
+		Names.Reserve(Graphs.Num());
+		for (const auto& GraphRef : Graphs)
+		{
+			const UEdGraph* Graph = GraphRef;
+			if (Graph)
+			{
+				Names.Add(Graph->GetName());
+			}
+		}
+		Names.Sort();
+		return Names;
+	}
+
+	TArray<FString> FunctionGraphNames(const UBlueprint* BP)
+	{
+		return BP ? GraphNames(BP->FunctionGraphs) : TArray<FString>();
+	}
+
+	TArray<FString> MacroGraphNames(const UBlueprint* BP)
+	{
+		return BP ? GraphNames(BP->MacroGraphs) : TArray<FString>();
+	}
+
+	FString BlueprintGraphKind(const UBlueprint* BP, const UEdGraph* Graph, FString* OutInterfaceName = nullptr)
+	{
+		if (OutInterfaceName)
+		{
+			OutInterfaceName->Reset();
+		}
+		if (!BP || !Graph)
+		{
+			return TEXT("unknown");
+		}
+
+		UEdGraph* MutableGraph = const_cast<UEdGraph*>(Graph);
+		if (BP->UbergraphPages.Contains(MutableGraph)) return TEXT("event_graph");
+		if (BP->FunctionGraphs.Contains(MutableGraph)) return TEXT("function");
+		if (BP->MacroGraphs.Contains(MutableGraph)) return TEXT("macro");
+		if (BP->DelegateSignatureGraphs.Contains(MutableGraph)) return TEXT("delegate_signature");
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (Iface.Graphs.Contains(MutableGraph))
+			{
+				if (OutInterfaceName && Iface.Interface)
+				{
+					*OutInterfaceName = Iface.Interface->GetName();
+				}
+				return TEXT("interface");
+			}
+		}
+		return TEXT("unknown");
+	}
+
+	void AddGraphCatalogEntry(const UBlueprint* BP, const UEdGraph* Graph, TArray<TSharedPtr<FJsonValue>>& OutGraphs)
+	{
+		if (!BP || !Graph)
+		{
+			return;
+		}
+
+		FString InterfaceName;
+		const FString Kind = BlueprintGraphKind(BP, Graph, &InterfaceName);
+		TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
+		GraphObj->SetStringField(TEXT("name"), Graph->GetName());
+		GraphObj->SetStringField(TEXT("graph_kind"), Kind);
+		GraphObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+		if (!InterfaceName.IsEmpty())
+		{
+			GraphObj->SetStringField(TEXT("interface"), InterfaceName);
+		}
+		OutGraphs.Add(MakeShared<FJsonValueObject>(GraphObj));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BlueprintGraphCatalogJsonValues(const UBlueprint* BP)
+	{
+		TArray<TSharedPtr<FJsonValue>> Graphs;
+		if (!BP)
+		{
+			return Graphs;
+		}
+
+		TArray<UEdGraph*> AllGraphs;
+		const_cast<UBlueprint*>(BP)->GetAllGraphs(AllGraphs);
+		Graphs.Reserve(AllGraphs.Num());
+		for (const UEdGraph* Graph : AllGraphs)
+		{
+			AddGraphCatalogEntry(BP, Graph, Graphs);
+		}
+		return Graphs;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> DuplicableGraphCatalogJsonValues(const UBlueprint* BP)
+	{
+		TArray<TSharedPtr<FJsonValue>> Graphs;
+		if (!BP)
+		{
+			return Graphs;
+		}
+
+		Graphs.Reserve(BP->FunctionGraphs.Num() + BP->MacroGraphs.Num());
+		for (const auto& GraphRef : BP->FunctionGraphs)
+		{
+			const UEdGraph* Graph = GraphRef;
+			AddGraphCatalogEntry(BP, Graph, Graphs);
+		}
+		for (const auto& GraphRef : BP->MacroGraphs)
+		{
+			const UEdGraph* Graph = GraphRef;
+			AddGraphCatalogEntry(BP, Graph, Graphs);
+		}
+		return Graphs;
+	}
+
+	TSharedPtr<FJsonObject> DuplicateGraphReadArgs(const FString& AssetPath)
+	{
+		TSharedPtr<FJsonObject> Args = MakeShared<FJsonObject>();
+		if (!AssetPath.IsEmpty())
+		{
+			Args->SetStringField(TEXT("asset_path"), AssetPath);
+		}
+		return Args;
+	}
+
+	TSharedPtr<FJsonObject> MakeDuplicateGraphErrorData(
+		const UBlueprint* BP,
+		const FString& FailureCause,
+		const FString& AssetPath,
+		const FString& GraphName,
+		const FString& NewName)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), FailureCause);
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		if (!GraphName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("offending_graph"), GraphName);
+			ErrorData->SetStringField(TEXT("requested_graph_name"), GraphName);
+		}
+		if (!NewName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
+		}
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(DuplicateGraphAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("supported_graph_kinds"), StringsToJsonValues(DuplicateGraphSupportedGraphKinds()));
+		ErrorData->SetArrayField(TEXT("candidate_graphs"), DuplicableGraphCatalogJsonValues(BP));
+		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
+		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_macros"), StringsToJsonValues(MacroGraphNames(BP)));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.list_graphs"));
+		ErrorData->SetObjectField(TEXT("read_args"), DuplicateGraphReadArgs(AssetPath));
+		return ErrorData;
+	}
+
+	void SetRecoveryHints(TSharedPtr<FJsonObject> ErrorData, const TArray<FString>& Hints)
+	{
+		if (ErrorData.IsValid())
+		{
+			ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(Hints));
+		}
+	}
+
+	FString DuplicateGraphKindFailureCause(const FString& GraphKind)
+	{
+		if (GraphKind == TEXT("event_graph"))
+		{
+			return TEXT("event_graph_not_duplicable");
+		}
+		if (GraphKind == TEXT("delegate_signature"))
+		{
+			return TEXT("delegate_signature_not_duplicable");
+		}
+		if (GraphKind == TEXT("interface"))
+		{
+			return TEXT("interface_graph_not_duplicable");
+		}
+		return TEXT("graph_kind_not_duplicable");
+	}
+
 	/**
 	 * Extended version of SerializeNode that adds extra type-specific fields:
 	 * variable_name for Get/Set nodes, cast_class for DynamicCast, etc.
@@ -351,20 +562,47 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 	Params->TryGetStringField(TEXT("graph_name"), GraphName);
 	if (GraphName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: graph_name"));
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("missing_graph_name"), AssetPath, GraphName, FString());
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Call blueprint.list_graphs and retry with graph_name set to a function or macro graph."));
+		RecoveryHints.Add(TEXT("duplicate_graph does not default to the event graph; graph_name is required."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: graph_name"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Call blueprint.list_graphs, then retry with graph_name set to one of error_data.candidate_graphs[].name."))
+			.WithRelatedAction(TEXT("blueprint.list_graphs"));
 	}
 
 	FString NewName;
 	Params->TryGetStringField(TEXT("new_name"), NewName);
 	if (NewName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"));
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("missing_new_name"), AssetPath, GraphName, NewName);
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Provide new_name with a graph name that is not present in error_data.available_graphs."));
+		RecoveryHints.Add(TEXT("Keep graph_name unchanged; new_name names the duplicated graph."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Provide new_name with a non-conflicting graph name."))
+			.WithRelatedAction(TEXT("blueprint.list_graphs"));
 	}
 
 	UEdGraph* SourceGraph = MonolithBlueprintInternal::FindGraphByName(BP, GraphName);
 	if (!SourceGraph)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Graph not found: %s"), *GraphName));
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("graph_not_found"), AssetPath, GraphName, NewName);
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Retry with graph_name set to one of error_data.candidate_graphs[].name."));
+		RecoveryHints.Add(TEXT("Use error_data.available_graphs[].graph_kind to distinguish function, macro, event, delegate, and interface graphs."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Graph not found: %s"), *GraphName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Retry with graph_name set to one of error_data.candidate_graphs[].name; event graphs are listed for diagnosis but cannot be duplicated."))
+			.WithRelatedAction(TEXT("blueprint.list_graphs"));
 	}
 
 	// Only allow duplication of function and macro graphs
@@ -373,21 +611,79 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 
 	if (!bIsFunction && !bIsMacro)
 	{
+		FString InterfaceName;
+		const FString GraphKind = BlueprintGraphKind(BP, SourceGraph, &InterfaceName);
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, DuplicateGraphKindFailureCause(GraphKind), AssetPath, GraphName, NewName);
+		ErrorData->SetStringField(TEXT("graph_kind"), GraphKind);
+		ErrorData->SetStringField(TEXT("source_graph"), SourceGraph->GetName());
+		if (!InterfaceName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("interface"), InterfaceName);
+		}
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("Use duplicate_graph only for function and macro graphs; choose one of error_data.candidate_graphs."));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Function and macro graphs are duplicable; event graphs, delegate signatures, and interface graphs are not."));
+		RecoveryHints.Add(TEXT("Use blueprint.list_graphs to inspect graph_kind before retrying."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
 		return FMonolithActionResult::Error(
-			TEXT("Only function and macro graphs can be duplicated. Event graphs and delegate signature graphs are not supported."));
+			TEXT("Only function and macro graphs can be duplicated. Event graphs and delegate signature graphs are not supported."))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Use error_data.graph_kind to choose the correct recovery; duplicate_graph accepts only function and macro graphs."))
+			.WithRelatedAction(TEXT("blueprint.list_graphs"));
 	}
 
 	// Check if a graph with the new name already exists
-	if (MonolithBlueprintInternal::FindGraphByName(BP, NewName))
+	if (UEdGraph* ExistingGraph = MonolithBlueprintInternal::FindGraphByName(BP, NewName))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("A graph named '%s' already exists in this Blueprint"), *NewName));
+		const FString SourceGraphKind = bIsFunction ? TEXT("function") : TEXT("macro");
+		FString ConflictingInterface;
+		const FString ConflictingGraphKind = BlueprintGraphKind(BP, ExistingGraph, &ConflictingInterface);
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("name_conflict"), AssetPath, GraphName, NewName);
+		ErrorData->SetStringField(TEXT("source_graph"), SourceGraph->GetName());
+		ErrorData->SetStringField(TEXT("source_graph_kind"), SourceGraphKind);
+		ErrorData->SetStringField(TEXT("candidate_name"), NewName);
+		ErrorData->SetStringField(TEXT("conflicting_graph"), ExistingGraph->GetName());
+		ErrorData->SetStringField(TEXT("conflicting_graph_kind"), ConflictingGraphKind);
+		if (!ConflictingInterface.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("conflicting_interface"), ConflictingInterface);
+		}
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("Choose a new_name that does not already appear in error_data.available_graphs[].name."));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Pick a unique new_name; error_data.available_graphs includes every current graph name and kind."));
+		RecoveryHints.Add(TEXT("If you intended to edit the existing graph, skip duplicate_graph and use that graph name directly."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("A graph named '%s' already exists in this Blueprint"), *NewName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Choose a non-conflicting new_name; error_data.available_graphs lists current names and graph kinds."))
+			.WithRelatedAction(TEXT("blueprint.list_graphs"));
 	}
 
 	// Check the schema supports duplication
 	const UEdGraphSchema* Schema = SourceGraph->GetSchema();
 	if (!Schema || !Schema->CanDuplicateGraph(SourceGraph))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Schema does not allow duplication of graph '%s'"), *GraphName));
+		const FString SourceGraphKind = bIsFunction ? TEXT("function") : TEXT("macro");
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("copy_limitation"), AssetPath, GraphName, NewName);
+		ErrorData->SetStringField(TEXT("copy_limitation_cause"), Schema ? TEXT("schema_refused_duplication") : TEXT("missing_graph_schema"));
+		ErrorData->SetStringField(TEXT("source_graph"), SourceGraph->GetName());
+		ErrorData->SetStringField(TEXT("source_graph_kind"), SourceGraphKind);
+		if (Schema)
+		{
+			ErrorData->SetStringField(TEXT("schema_class"), Schema->GetClass()->GetName());
+		}
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("The graph name and kind are valid, but the graph schema refused native duplication."));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Inspect the source graph with blueprint.export_graph or blueprint.get_graph_summary."));
+		RecoveryHints.Add(TEXT("Retry with another function or macro graph if schema_class cannot duplicate this graph."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Schema does not allow duplication of graph '%s'"), *GraphName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("The graph schema refused native duplication; error_data.copy_limitation_cause and schema_class explain why this is not a name or lookup failure."))
+			.WithRelatedActions({ TEXT("blueprint.list_graphs"), TEXT("blueprint.export_graph"), TEXT("blueprint.get_graph_summary") });
 	}
 
 	BP->Modify();
@@ -396,7 +692,22 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleDuplicateGraph
 	UEdGraph* DuplicatedGraph = Schema->DuplicateGraph(SourceGraph);
 	if (!DuplicatedGraph)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to duplicate graph '%s'"), *GraphName));
+		const FString SourceGraphKind = bIsFunction ? TEXT("function") : TEXT("macro");
+		TSharedPtr<FJsonObject> ErrorData = MakeDuplicateGraphErrorData(
+			BP, TEXT("copy_limitation"), AssetPath, GraphName, NewName);
+		ErrorData->SetStringField(TEXT("copy_limitation_cause"), TEXT("engine_duplicate_graph_returned_null"));
+		ErrorData->SetStringField(TEXT("source_graph"), SourceGraph->GetName());
+		ErrorData->SetStringField(TEXT("source_graph_kind"), SourceGraphKind);
+		ErrorData->SetStringField(TEXT("schema_class"), Schema->GetClass()->GetName());
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("The graph schema accepted duplication, but the engine DuplicateGraph call returned no graph."));
+		TArray<FString> RecoveryHints;
+		RecoveryHints.Add(TEXT("Inspect the source graph with blueprint.export_graph or blueprint.get_graph_summary before retrying."));
+		RecoveryHints.Add(TEXT("Treat this as an engine/schema copy limitation, not a graph lookup or name-conflict error."));
+		SetRecoveryHints(ErrorData, RecoveryHints);
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to duplicate graph '%s'"), *GraphName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Native graph duplication returned null; error_data.copy_limitation_cause distinguishes this from graph_not_found or name_conflict."))
+			.WithRelatedActions({ TEXT("blueprint.export_graph"), TEXT("blueprint.get_graph_summary") });
 	}
 
 	DuplicatedGraph->Modify();

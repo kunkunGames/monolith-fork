@@ -1,6 +1,6 @@
 ---
 name: unreal-config
-description: Use to read and edit Unreal project/engine config (.ini) settings, sections, and console variables via Monolith MCP - resolve effective values across the INI hierarchy, diff overrides vs defaults, find/get cvars, inspect plugin descriptors. This skill owns generic config read/edit; for a perf-motivated cvar/INI change with profiling intent use unreal-performance, for Enhanced Input mappings (DefaultInput) use unreal-input, to check out a .ini in P4/Git first use unreal-source-control. Triggers on config, ini, cvar, console variable, project settings, DefaultEngine, DefaultGame, DefaultInput, setting, set config, get config, config section, edit ini, change setting, scalability settings, engine config value, GameUserSettings, config override, platform ini, r. cvar, command line cvar.
+description: Use to read and edit Unreal project/engine config (.ini) settings, sections, and focused console variables via Monolith MCP - resolve effective values across the INI hierarchy, diff overrides vs defaults, find/get cvars, inspect plugin descriptors. This skill owns generic config read/edit; for the full IConsoleObject registry, console commands, snapshot search, hints/help text, or command execution use unreal-console; for a perf-motivated cvar/INI change with profiling intent use unreal-performance, for Enhanced Input mappings (DefaultInput) use unreal-input, to check out a .ini in P4/Git first use unreal-source-control. Triggers on config, ini, cvar, console variable, project settings, DefaultEngine, DefaultGame, DefaultInput, setting, set config, get config, config section, edit ini, change setting, scalability settings, engine config value, GameUserSettings, config override, platform ini, r. cvar, command line cvar.
 ---
 
 # unreal-config
@@ -16,11 +16,12 @@ monolith_discover({ namespace: "config", action: "<action>", mode: "schema" })  
 
 ## When to use
 
-Use this skill for generic config read/edit — reading/searching `.ini` values, resolving effective values across the INI hierarchy, diffing overrides vs defaults, and finding/getting console variables.
+Use this skill for generic config read/edit — reading/searching `.ini` values, resolving effective values across the INI hierarchy, diffing overrides vs defaults, and focused `IConsoleVariable` lookup.
 
 Use a different skill for:
 
 - **unreal-performance** — when the cvar/INI change is performance-tuning with profiling intent (scalability, shader stats, draw-call/INI tuning).
+- **unreal-console** — when you need the full `IConsoleManager` object registry, console command entries, help/hint text, snapshot-backed search, or guarded command execution.
 - **unreal-input** — when editing `DefaultInput` is really Enhanced Input mappings (Input Actions, Input Mapping Contexts, key bindings).
 - **unreal-source-control** — when the `.ini` edit must be checked out or marked for add in P4/Git first.
 
@@ -40,8 +41,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_config_files` | List all config files with their hierarchy level | `category?` |
 | `list_plugins` | List discovered plugins with enabled state and descriptor metadata. Read-only. | `name_contains?` `enabled_only=false` `limit=200` |
 | `get_plugin` | Get descriptor metadata for one discovered plugin. Read-only. | `name*` |
-| `get_cvar` | Get one console variable value and flags. Read-only. | `name*` |
-| `find_cvars` | Find console variables by prefix or substring. Read-only. | `query?` `mode=prefix` (prefix/contains) `limit=100` |
+| `get_cvar` | Get one console variable value and flags. Read-only. Use `console.get_object` for command entries or non-variable console objects. | `name*` |
+| `find_cvars` | Find console variables by prefix or substring. Read-only. Use `console.search_objects` for full help-text/command/object search. | `query?` `mode=prefix` (prefix/contains) `limit=100` |
 
 ### Write (1)
 

@@ -1,0 +1,2288 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.gameplayability",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+  "task_count": 552,
+  "module_count": 8,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.gameplayability",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: GameplayAbility",
+      "task_count": 31,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.gameplayability.compilation",
+        "blueprint.gameplayability.event",
+        "blueprint.gameplayability.function",
+        "blueprint.gameplayability.general",
+        "blueprint.gameplayability.node",
+        "blueprint.gameplayability.state",
+        "blueprint.gameplayability.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.gameplayability.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/compilation",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/event",
+      "task_count": 3,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/function",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/general",
+      "task_count": 12,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/node",
+      "task_count": 3,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/state",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.gameplayability.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/variable",
+      "task_count": 5,
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json",
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.gameplayability": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: GameplayAbility",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ]
+      },
+      "task_count": 31,
+      "task_ids": [
+        "BEB-005",
+        "BEB-013",
+        "BEB-019",
+        "BEB-034",
+        "BEB-035",
+        "BEB-036",
+        "BEB-051",
+        "BEB-052",
+        "BEB-065",
+        "BEB-066",
+        "BEB-079",
+        "BEB-080",
+        "BEB-161",
+        "BEB-206",
+        "BEB-207",
+        "BEB-208",
+        "BEB-209",
+        "BEB-210",
+        "BEB-211",
+        "BEB-212",
+        "BEB-213",
+        "BEB-214",
+        "BEB-215",
+        "BEB-240",
+        "BEB-245",
+        "BEB-256",
+        "BEB-257",
+        "BEB-258",
+        "BEB-259",
+        "BEB-260",
+        "BEB-550"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-005",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query 'GA_TestAbility'"
+        },
+        {
+          "id": "BEB-013",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query 'GameplayAbility Blueprint'"
+        },
+        {
+          "id": "BEB-019",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query '/Game/Benchmarks/GA_TestAbility'"
+        },
+        {
+          "id": "BEB-034",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-035",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read GameplayAbility fixture default graph data"
+        },
+        {
+          "id": "BEB-036",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-051",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for GameplayAbility fixture GA_TestAbility"
+        },
+        {
+          "id": "BEB-052",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for GameplayAbility fixture GA_TestAbility"
+        },
+        {
+          "id": "BEB-065",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-066",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-079",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-080",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for GameplayAbility"
+        },
+        {
+          "id": "BEB-161",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "gas_activate_override",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "override_parent_function",
+            "add_node",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Override GameplayAbility activation, add a PrintString node to the override graph, compile clean, read back the override"
+        },
+        {
+          "id": "BEB-206",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "override_parent_function",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "override_parent_function"
+          ],
+          "description": "Override K2_ActivateAbility (ActivateAbility BlueprintNativeEvent) on GameplayAbility"
+        },
+        {
+          "id": "BEB-207",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAbilityCheck function graph to GameplayAbility"
+        },
+        {
+          "id": "BEB-208",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchAbilityOnActivated custom event to GameplayAbility EventGraph"
+        },
+        {
+          "id": "BEB-209",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchAbilityLevel variable to GameplayAbility"
+        },
+        {
+          "id": "BEB-210",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCooldown fixture variable default to 3.0 (idempotent)"
+        },
+        {
+          "id": "BEB-211",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCost fixture variable default to 20.0 (idempotent)"
+        },
+        {
+          "id": "BEB-212",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAbilityOnEnd event dispatcher to GameplayAbility"
+        },
+        {
+          "id": "BEB-213",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "ability",
+          "edit_domain": "compilation",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate GameplayAbility blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-214",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "ability",
+          "edit_domain": "state",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout GameplayAbility EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-215",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "ability",
+          "edit_domain": "compilation",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile GameplayAbility blueprint"
+        },
+        {
+          "id": "BEB-240",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on GameplayAbility EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-245",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire AbilityCooldown (float) -> PrintString.Duration on GameplayAbility EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-256",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add name BenchAbilityInputTag variable to GameplayAbility"
+        },
+        {
+          "id": "BEB-257",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCost fixture variable default to 15.0 for GameplayAbility"
+        },
+        {
+          "id": "BEB-258",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAbilityCommitCheck function graph to GameplayAbility"
+        },
+        {
+          "id": "BEB-259",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAbilityOnCommitted event dispatcher to GameplayAbility"
+        },
+        {
+          "id": "BEB-260",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString node to GameplayAbility EventGraph for activation logging"
+        },
+        {
+          "id": "BEB-550",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_dispatcher",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_dispatcher",
+            "remove_event_dispatcher"
+          ],
+          "description": "GameplayAbility add_event_dispatcher must reject duplicate commit signals"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-550"
+          ],
+          "edit_execute": [
+            "BEB-206",
+            "BEB-207",
+            "BEB-208",
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-212",
+            "BEB-213",
+            "BEB-214",
+            "BEB-215",
+            "BEB-240",
+            "BEB-245",
+            "BEB-256",
+            "BEB-257",
+            "BEB-258",
+            "BEB-259",
+            "BEB-260"
+          ],
+          "graph_read": [
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052"
+          ],
+          "type_discovery": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019"
+          ],
+          "variable_read": [
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080"
+          ],
+          "workflow_execute": [
+            "BEB-161"
+          ]
+        },
+        "by_edit_domain": {
+          "compilation": [
+            "BEB-213",
+            "BEB-215"
+          ],
+          "event": [
+            "BEB-212",
+            "BEB-259",
+            "BEB-550"
+          ],
+          "function": [
+            "BEB-161",
+            "BEB-206",
+            "BEB-207",
+            "BEB-208",
+            "BEB-258"
+          ],
+          "general": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019",
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052",
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080"
+          ],
+          "node": [
+            "BEB-240",
+            "BEB-245",
+            "BEB-260"
+          ],
+          "state": [
+            "BEB-214"
+          ],
+          "variable": [
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-256",
+            "BEB-257"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-161",
+            "BEB-207",
+            "BEB-208",
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-212",
+            "BEB-240",
+            "BEB-245",
+            "BEB-256",
+            "BEB-257",
+            "BEB-258",
+            "BEB-259",
+            "BEB-260",
+            "BEB-550"
+          ],
+          "read_only": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019",
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052",
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080",
+            "BEB-206",
+            "BEB-213",
+            "BEB-214",
+            "BEB-215"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-161",
+            "BEB-207",
+            "BEB-208",
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-212",
+            "BEB-240",
+            "BEB-245",
+            "BEB-256",
+            "BEB-257",
+            "BEB-258",
+            "BEB-259",
+            "BEB-260",
+            "BEB-550"
+          ],
+          "readback_verify": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019",
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052",
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080",
+            "BEB-161",
+            "BEB-206",
+            "BEB-207",
+            "BEB-208",
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-212",
+            "BEB-213",
+            "BEB-214",
+            "BEB-215",
+            "BEB-240",
+            "BEB-245",
+            "BEB-256",
+            "BEB-257",
+            "BEB-258",
+            "BEB-259",
+            "BEB-260",
+            "BEB-550"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.gameplayability.compilation",
+        "blueprint.gameplayability.event",
+        "blueprint.gameplayability.function",
+        "blueprint.gameplayability.general",
+        "blueprint.gameplayability.node",
+        "blueprint.gameplayability.state",
+        "blueprint.gameplayability.variable"
+      ],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-213",
+        "BEB-215"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-213",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "validate_blueprint",
+          "domain": "ability",
+          "edit_domain": "compilation",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "validate_blueprint"
+          ],
+          "description": "Validate GameplayAbility blueprint (idempotent)"
+        },
+        {
+          "id": "BEB-215",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "ability",
+          "edit_domain": "compilation",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile GameplayAbility blueprint"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-213",
+            "BEB-215"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-213",
+            "BEB-215"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-213",
+            "BEB-215"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 3,
+      "task_ids": [
+        "BEB-212",
+        "BEB-259",
+        "BEB-550"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-212",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAbilityOnEnd event dispatcher to GameplayAbility"
+        },
+        {
+          "id": "BEB-259",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchAbilityOnCommitted event dispatcher to GameplayAbility"
+        },
+        {
+          "id": "BEB-550",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_dispatcher",
+          "domain": "ability",
+          "edit_domain": "event",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_dispatcher",
+            "remove_event_dispatcher"
+          ],
+          "description": "GameplayAbility add_event_dispatcher must reject duplicate commit signals"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-550"
+          ],
+          "edit_execute": [
+            "BEB-212",
+            "BEB-259"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-212",
+            "BEB-259",
+            "BEB-550"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-212",
+            "BEB-259",
+            "BEB-550"
+          ],
+          "readback_verify": [
+            "BEB-212",
+            "BEB-259",
+            "BEB-550"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-161",
+        "BEB-206",
+        "BEB-207",
+        "BEB-208",
+        "BEB-258"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-161",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "gas_activate_override",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "override_parent_function",
+            "add_node",
+            "compile_blueprint",
+            "get_functions"
+          ],
+          "description": "Override GameplayAbility activation, add a PrintString node to the override graph, compile clean, read back the override"
+        },
+        {
+          "id": "BEB-206",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "override_parent_function",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "override_parent_function"
+          ],
+          "description": "Override K2_ActivateAbility (ActivateAbility BlueprintNativeEvent) on GameplayAbility"
+        },
+        {
+          "id": "BEB-207",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAbilityCheck function graph to GameplayAbility"
+        },
+        {
+          "id": "BEB-208",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchAbilityOnActivated custom event to GameplayAbility EventGraph"
+        },
+        {
+          "id": "BEB-258",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "function",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchAbilityCommitCheck function graph to GameplayAbility"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-206",
+            "BEB-207",
+            "BEB-208",
+            "BEB-258"
+          ],
+          "workflow_execute": [
+            "BEB-161"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-161",
+            "BEB-207",
+            "BEB-208",
+            "BEB-258"
+          ],
+          "read_only": [
+            "BEB-206"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-161",
+            "BEB-207",
+            "BEB-208",
+            "BEB-258"
+          ],
+          "readback_verify": [
+            "BEB-161",
+            "BEB-206",
+            "BEB-207",
+            "BEB-208",
+            "BEB-258"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 12,
+      "task_ids": [
+        "BEB-005",
+        "BEB-013",
+        "BEB-019",
+        "BEB-034",
+        "BEB-035",
+        "BEB-036",
+        "BEB-051",
+        "BEB-052",
+        "BEB-065",
+        "BEB-066",
+        "BEB-079",
+        "BEB-080"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-005",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query 'GA_TestAbility'"
+        },
+        {
+          "id": "BEB-013",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query 'GameplayAbility Blueprint'"
+        },
+        {
+          "id": "BEB-019",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover GameplayAbility fixture with project.search query '/Game/Benchmarks/GA_TestAbility'"
+        },
+        {
+          "id": "BEB-034",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-035",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read GameplayAbility fixture default graph data"
+        },
+        {
+          "id": "BEB-036",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-051",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for GameplayAbility fixture GA_TestAbility"
+        },
+        {
+          "id": "BEB-052",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for GameplayAbility fixture GA_TestAbility"
+        },
+        {
+          "id": "BEB-065",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-066",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-079",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for GameplayAbility fixture"
+        },
+        {
+          "id": "BEB-080",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "ability",
+          "edit_domain": "",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for GameplayAbility"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052"
+          ],
+          "type_discovery": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019"
+          ],
+          "variable_read": [
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019",
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052",
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-005",
+            "BEB-013",
+            "BEB-019",
+            "BEB-034",
+            "BEB-035",
+            "BEB-036",
+            "BEB-051",
+            "BEB-052",
+            "BEB-065",
+            "BEB-066",
+            "BEB-079",
+            "BEB-080"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 3,
+      "task_ids": [
+        "BEB-240",
+        "BEB-245",
+        "BEB-260"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-240",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on GameplayAbility EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-245",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire AbilityCooldown (float) -> PrintString.Duration on GameplayAbility EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-260",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "ability",
+          "edit_domain": "node",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add PrintString node to GameplayAbility EventGraph for activation logging"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-240",
+            "BEB-245",
+            "BEB-260"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-240",
+            "BEB-245",
+            "BEB-260"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-240",
+            "BEB-245",
+            "BEB-260"
+          ],
+          "readback_verify": [
+            "BEB-240",
+            "BEB-245",
+            "BEB-260"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-214"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-214",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "ability",
+          "edit_domain": "state",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout GameplayAbility EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-214"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-214"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-214"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    },
+    "blueprint.gameplayability.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.gameplayability.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "GameplayAbility",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: GameplayAbility/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "GameplayAbility"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 5,
+      "task_ids": [
+        "BEB-209",
+        "BEB-210",
+        "BEB-211",
+        "BEB-256",
+        "BEB-257"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-209",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add int BenchAbilityLevel variable to GameplayAbility"
+        },
+        {
+          "id": "BEB-210",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCooldown fixture variable default to 3.0 (idempotent)"
+        },
+        {
+          "id": "BEB-211",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCost fixture variable default to 20.0 (idempotent)"
+        },
+        {
+          "id": "BEB-256",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add name BenchAbilityInputTag variable to GameplayAbility"
+        },
+        {
+          "id": "BEB-257",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "ability",
+          "edit_domain": "variable",
+          "blueprint_type": "GameplayAbility",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set AbilityCost fixture variable default to 15.0 for GameplayAbility"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-256",
+            "BEB-257"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-256",
+            "BEB-257"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-256",
+            "BEB-257"
+          ],
+          "readback_verify": [
+            "BEB-209",
+            "BEB-210",
+            "BEB-211",
+            "BEB-256",
+            "BEB-257"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.gameplayability",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.gameplayability",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/gameplayability.json"
+    }
+  }
+}

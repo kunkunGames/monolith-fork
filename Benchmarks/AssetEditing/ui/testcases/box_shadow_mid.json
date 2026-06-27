@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "box_shadow_mid",
+  "route_edit_domain": "box_shadow_mid",
+  "module_id": "asset_authoring.ui.box_shadow_mid",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.box_shadow_mid",
+    "edit": "asset_operation.edit.ui.box_shadow_mid",
+    "save": "asset_operation.save.ui.box_shadow_mid",
+    "readback_verify": "asset_operation.readback_verify.ui.box_shadow_mid"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-512"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-512",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "box_shadow_mid",
+      "blueprint_type": "",
+      "workflow": "ui_box_shadow_mid_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "save_material",
+        "create_widget_blueprint",
+        "add_widget",
+        "set_text",
+        "apply_box_shadow",
+        "save_asset",
+        "get_widget_tree",
+        "get_instance_parameters",
+        "inspect_asset"
+      ],
+      "description": "Create a Widget Blueprint and UI-domain shadow parent material, apply a saved box-shadow MaterialInstance to a target widget, save, and read back the inserted shadow widget and MIC parameters"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-512",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+              "/Game/Benchmarks/AssetAuthoring/M_BenchBoxShadowParent",
+              "/Game/Benchmarks/AssetAuthoring/MI_BenchBoxShadow"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBoxShadowParent",
+            "shading_model": "Unlit",
+            "blend_mode": "Translucent",
+            "material_domain": "UI"
+          },
+          "contains": [
+            "M_BenchBoxShadowParent",
+            "Translucent"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBoxShadowParent",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "ShadowColor",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "ShadowColor"
+                  },
+                  "pos": [
+                    -480,
+                    -120
+                  ]
+                },
+                {
+                  "id": "BlurRadius",
+                  "class": "ScalarParameter",
+                  "props": {
+                    "ParameterName": "BlurRadius"
+                  },
+                  "pos": [
+                    -480,
+                    80
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "ShadowColor",
+                  "from_pin": "RGB",
+                  "to_property": "EmissiveColor"
+                },
+                {
+                  "from": "BlurRadius",
+                  "to_property": "Opacity"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "M_BenchBoxShadowParent",
+            "ShadowColor",
+            "BlurRadius"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBoxShadowParent"
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_widget_blueprint",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+            "root_widget": "CanvasPanel"
+          },
+          "contains": [
+            "WBP_BenchBoxShadow",
+            "CanvasPanel"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+            "widget_class": "Border",
+            "widget_name": "BenchCard",
+            "anchor_preset": "center",
+            "position": [
+              0,
+              0
+            ],
+            "size": [
+              240,
+              96
+            ],
+            "compile": false
+          },
+          "contains": [
+            "BenchCard",
+            "Border"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "add_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+            "widget_class": "TextBlock",
+            "widget_name": "BenchCardLabel",
+            "parent_name": "BenchCard",
+            "padding": [
+              16,
+              12,
+              16,
+              12
+            ],
+            "compile": false
+          },
+          "contains": [
+            "BenchCardLabel",
+            "TextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "set_text",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+            "widget_name": "BenchCardLabel",
+            "text": "Box Shadow Bench",
+            "font_size": 22,
+            "compile": false
+          },
+          "contains": [
+            "BenchCardLabel",
+            "Box Shadow Bench"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "apply_box_shadow",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow",
+            "widget_name": "BenchCard",
+            "shadow_material_path": "/Game/Benchmarks/AssetAuthoring/M_BenchBoxShadowParent",
+            "shadow": {
+              "x": 8.0,
+              "y": 10.0,
+              "blur": 18.0,
+              "spread": 4.0,
+              "color": "#000000AA",
+              "inset": false
+            },
+            "shadow_mid_destination": "/Game/Benchmarks/AssetAuthoring/MI_BenchBoxShadow",
+            "compile": true
+          },
+          "contains": [
+            "layers_applied",
+            "1",
+            "BenchCard_Shadow0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchBoxShadow"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow"
+          },
+          "contains": [
+            "WBP_BenchBoxShadow",
+            "BenchCard",
+            "BenchCard_Shadow0",
+            "Image",
+            "BenchCardLabel",
+            "Box Shadow Bench"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_instance_parameters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchBoxShadow"
+          },
+          "contains": [
+            "MI_BenchBoxShadow",
+            "M_BenchBoxShadowParent",
+            "ShadowColor",
+            "BlurRadius",
+            "18"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchBoxShadow"
+          },
+          "contains": [
+            "WBP_BenchBoxShadow",
+            "WidgetBlueprint"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/MI_BenchBoxShadow"
+          },
+          "contains": [
+            "MI_BenchBoxShadow",
+            "MaterialInstance"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "box_shadow_mid",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_box_shadow_mid_roundtrip",
+      "description": "Create a Widget Blueprint and UI-domain shadow parent material, apply a saved box-shadow MaterialInstance to a target widget, save, and read back the inserted shadow widget and MIC parameters",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/umg-ui-designer-for-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/Actions/Hoisted/ShadowActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithUI/Private/Tests/Hoisted/ApplyBoxShadowTests.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "save_material",
+          "create_widget_blueprint",
+          "add_widget",
+          "set_text",
+          "apply_box_shadow",
+          "save_asset",
+          "get_widget_tree",
+          "get_instance_parameters",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

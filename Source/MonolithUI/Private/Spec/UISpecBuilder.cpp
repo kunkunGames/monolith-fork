@@ -533,6 +533,38 @@ namespace MonolithUI::SpecBuilderInternal
         }
     }
 
+    static int32 ResetWidgetTreeForRebuild(UWidgetBlueprint* WBP)
+    {
+        if (!WBP || !WBP->WidgetTree)
+        {
+            return 0;
+        }
+
+        TArray<UWidget*> SourceWidgets;
+        WBP->ForEachSourceWidget([&SourceWidgets](UWidget* Widget)
+        {
+            if (Widget)
+            {
+                SourceWidgets.Add(Widget);
+            }
+        });
+
+        if (UPanelWidget* RootPanel = Cast<UPanelWidget>(WBP->WidgetTree->RootWidget))
+        {
+            RootPanel->ClearChildren();
+        }
+
+        for (UWidget* Widget : SourceWidgets)
+        {
+            Widget->Rename(nullptr, GetTransientPackage(),
+                REN_DoNotDirty | REN_DontCreateRedirectors | REN_AllowPackageLinkerMismatch);
+        }
+
+        WBP->WidgetTree->RootWidget = nullptr;
+        WBP->WidgetVariableNameToGuidMap.Empty();
+        return SourceWidgets.Num();
+    }
+
     /**
      * Helper — split a `/Game/Path/AssetName` into PackagePath ("/Game/Path")
      * and AssetName ("AssetName"). Returns false on garbage input (no slash,
@@ -961,40 +993,15 @@ FUISpecBuilderResult FUISpecBuilder::Build(const FUISpecBuilderInputs& Inputs)
         }
     }
 
-    // Existing WBP + overwrite path: clear the tree + animations so we
-    // start from a clean slate. (Phase J will gain a "merge" mode; v1
-    // is the regen rule from §1.8.)
-    if (bPreExisting && Inputs.bOverwrite && !Inputs.bDryRun)
+    // Clear the factory/default source widgets before rebuild as well as the
+    // overwrite case. The UMG compiler validates every source widget under the
+    // WidgetTree outer, not only WidgetTree::RootWidget/GetAllWidgets().
+    if (WBP->WidgetTree)
     {
-        if (WBP->WidgetTree)
+        const int32 RemovedSourceWidgets = ResetWidgetTreeForRebuild(WBP);
+        if (bPreExisting && Inputs.bOverwrite)
         {
-            // Count what we're nuking so the diff/response reflects it.
-            TArray<UWidget*> Existing;
-            WBP->WidgetTree->GetAllWidgets(Existing);
-            Context.NodesRemoved = Existing.Num();
-
-            // Reset the tree by reparenting children into the transient
-            // package — same recipe MonolithUITestFixtureUtils uses, which
-            // is the recipe that survives WBP recompile cleanly.
-            if (UPanelWidget* RootPanel = Cast<UPanelWidget>(WBP->WidgetTree->RootWidget))
-            {
-                RootPanel->ClearChildren();
-            }
-            TArray<UWidget*> Orphans;
-            ForEachObjectWithOuter(WBP->WidgetTree, [&Orphans](UObject* Obj)
-            {
-                if (UWidget* W = Cast<UWidget>(Obj))
-                {
-                    Orphans.Add(W);
-                }
-            }, /*bIncludeNestedObjects=*/false);
-            for (UWidget* W : Orphans)
-            {
-                W->Rename(nullptr, GetTransientPackage(),
-                    REN_DoNotDirty | REN_DontCreateRedirectors | REN_ForceNoResetLoaders);
-            }
-            WBP->WidgetTree->RootWidget = nullptr;
-            WBP->WidgetVariableNameToGuidMap.Empty();
+            Context.NodesRemoved = RemovedSourceWidgets;
         }
     }
 

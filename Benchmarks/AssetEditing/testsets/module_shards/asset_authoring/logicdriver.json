@@ -1,0 +1,278 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.logicdriver",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json",
+  "task_count": 552,
+  "module_count": 2,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.logicdriver",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "logicdriver"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: logicdriver",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "logicdriver"
+        ]
+      },
+      "module_shard_id": "asset_authoring.logicdriver",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.logicdriver.state_machine_graph"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.logicdriver.state_machine_graph",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "logicdriver",
+        "state_machine_graph"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: logicdriver/state_machine_graph",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "logicdriver"
+        ],
+        "edit_domain": [
+          "state_machine_graph"
+        ]
+      },
+      "module_shard_id": "asset_authoring.logicdriver",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json",
+      "parent_module_id": "asset_authoring.logicdriver",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.logicdriver": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.logicdriver",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "logicdriver"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: logicdriver",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "logicdriver"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-515"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-515",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "logicdriver",
+          "edit_domain": "state_machine_graph",
+          "blueprint_type": "",
+          "workflow": "logicdriver_state_machine_graph_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_state_machine",
+            "create_state_machine",
+            "add_state",
+            "set_initial_state",
+            "set_end_state",
+            "add_transition",
+            "auto_arrange_graph",
+            "compile_state_machine",
+            "save_asset",
+            "get_sm_structure",
+            "get_sm_statistics",
+            "validate_state_machine",
+            "inspect_asset"
+          ],
+          "description": "Create a Logic Driver State Machine Blueprint, add gameplay states and transitions, set initial/end states, compile, save, and read back graph topology/statistics"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "state_machine_graph": [
+            "BEB-515"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-515"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-515"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-515"
+          ],
+          "edit": [
+            "BEB-515"
+          ],
+          "readback_verify": [
+            "BEB-515"
+          ],
+          "save": [
+            "BEB-515"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.logicdriver.state_machine_graph"
+      ],
+      "module_shard_id": "asset_authoring.logicdriver",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json"
+    },
+    "asset_authoring.logicdriver.state_machine_graph": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.logicdriver.state_machine_graph",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "logicdriver",
+        "state_machine_graph"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: logicdriver/state_machine_graph",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "logicdriver"
+        ],
+        "edit_domain": [
+          "state_machine_graph"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-515"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-515",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "logicdriver",
+          "edit_domain": "state_machine_graph",
+          "blueprint_type": "",
+          "workflow": "logicdriver_state_machine_graph_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_state_machine",
+            "create_state_machine",
+            "add_state",
+            "set_initial_state",
+            "set_end_state",
+            "add_transition",
+            "auto_arrange_graph",
+            "compile_state_machine",
+            "save_asset",
+            "get_sm_structure",
+            "get_sm_statistics",
+            "validate_state_machine",
+            "inspect_asset"
+          ],
+          "description": "Create a Logic Driver State Machine Blueprint, add gameplay states and transitions, set initial/end states, compile, save, and read back graph topology/statistics"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-515"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-515"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-515"
+          ],
+          "edit": [
+            "BEB-515"
+          ],
+          "readback_verify": [
+            "BEB-515"
+          ],
+          "save": [
+            "BEB-515"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.logicdriver",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.logicdriver",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/logicdriver.json"
+    }
+  }
+}

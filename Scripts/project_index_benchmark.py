@@ -314,7 +314,7 @@ _ADDED_HEALTH_VARIANTS_20260617 = [
 
 _LOG_DERIVED_ASSET_SEARCH_QUERIES_20260617 = [
     "ActionGuidance",
-    "BlueprintEditing",
+    "AssetEditing",
     "OfflineParity",
     "SourceIndex",
     "ProjectIndex",

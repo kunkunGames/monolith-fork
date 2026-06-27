@@ -334,6 +334,83 @@ bool FMonolithActionExecutionPolicyMetadataCoverageReportTest::RunTest(const FSt
 				TestEqual(TEXT("One action requires no params"), static_cast<int32>((*PreconditionsStatus)->GetNumberField(TEXT("none_required"))), 1);
 				TestEqual(TEXT("Two actions have declared or derived preconditions"), static_cast<int32>((*PreconditionsStatus)->GetNumberField(TEXT("declared_or_derived"))), 2);
 			}
+
+			const TSharedPtr<FJsonObject>* PolicyFieldPresence = nullptr;
+			TestTrue(TEXT("Policy field presence coverage object exists"), (*Totals)->TryGetObjectField(TEXT("policy_field_presence"), PolicyFieldPresence));
+			if (PolicyFieldPresence && PolicyFieldPresence->IsValid())
+			{
+				TestEqual(TEXT("available_offline present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("available_offline:present"))), 3);
+				TestEqual(TEXT("requires_live_editor present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("requires_live_editor:present"))), 3);
+				TestEqual(TEXT("mutates_assets present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("mutates_assets:present"))), 3);
+				TestEqual(TEXT("writes_logs present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("writes_logs:present"))), 3);
+				TestEqual(TEXT("long_running present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("long_running:present"))), 3);
+				TestEqual(TEXT("supports_progress present on every row"), static_cast<int32>((*PolicyFieldPresence)->GetNumberField(TEXT("supports_progress:present"))), 3);
+			}
+		}
+	}
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("policytest"));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithActionExecutionPolicyMetadataCoverageGateTest,
+	"Monolith.Core.ActionExecutionPolicy.MetadataCoverageGate",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithActionExecutionPolicyMetadataCoverageGateTest::RunTest(const FString& Parameters)
+{
+	RegisterPolicySliceTestNamespace();
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
+	Params->SetStringField(TEXT("gate_scope"), TEXT("filtered"));
+	Params->SetNumberField(TEXT("min_contract_ratio"), 0.8);
+	Params->SetNumberField(TEXT("sample_limit"), 5.0);
+	FMonolithActionResult Result = FMonolithCoreTools::HandleGetActionMetadataCoverage(Params);
+	TestTrue(TEXT("Coverage gate report succeeds"), Result.bSuccess);
+	TestTrue(TEXT("Coverage gate result valid"), Result.Result.IsValid());
+
+	if (Result.Result.IsValid())
+	{
+		TestEqual(TEXT("Coverage status warns when filtered gate fails"), Result.Result->GetStringField(TEXT("status")), TEXT("warning"));
+
+		const TSharedPtr<FJsonObject>* Gate = nullptr;
+		TestTrue(TEXT("Coverage gate object exists"), Result.Result->TryGetObjectField(TEXT("gate"), Gate));
+		if (Gate && Gate->IsValid())
+		{
+			bool bGatePassed = true;
+			TestTrue(TEXT("Coverage gate passed field exists"), (*Gate)->TryGetBoolField(TEXT("passed"), bGatePassed));
+			TestFalse(TEXT("Coverage gate fails below threshold"), bGatePassed);
+			TestEqual(TEXT("Coverage gate evaluates one filtered bucket"), static_cast<int32>((*Gate)->GetNumberField(TEXT("check_count"))), 1);
+
+			const TArray<TSharedPtr<FJsonValue>>* Checks = nullptr;
+			TestTrue(TEXT("Coverage gate checks exist"), (*Gate)->TryGetArrayField(TEXT("checks"), Checks));
+			if (Checks && Checks->Num() == 1)
+			{
+				const TSharedPtr<FJsonObject>* Check = nullptr;
+				TestTrue(TEXT("Coverage gate check is object"), (*Checks)[0]->TryGetObject(Check));
+				if (Check && Check->IsValid())
+				{
+					TestEqual(TEXT("Gate output ratio reflects one declared action"), (*Check)->GetNumberField(TEXT("output_contract_ratio")), 1.0 / 3.0);
+					TestEqual(TEXT("Gate next-actions ratio reflects one declared action"), (*Check)->GetNumberField(TEXT("next_actions_ratio")), 1.0 / 3.0);
+
+					const TArray<TSharedPtr<FJsonValue>>* Failures = nullptr;
+					TestTrue(TEXT("Coverage gate failures exist"), (*Check)->TryGetArrayField(TEXT("failures"), Failures));
+					bool bSawOutputThresholdFailure = false;
+					bool bSawNextThresholdFailure = false;
+					if (Failures)
+					{
+						for (const TSharedPtr<FJsonValue>& Failure : *Failures)
+						{
+							const FString FailureText = Failure.IsValid() ? Failure->AsString() : FString();
+							bSawOutputThresholdFailure |= FailureText == TEXT("output_contract_ratio_below_threshold");
+							bSawNextThresholdFailure |= FailureText == TEXT("next_actions_ratio_below_threshold");
+						}
+					}
+					TestTrue(TEXT("Gate reports output threshold failure"), bSawOutputThresholdFailure);
+					TestTrue(TEXT("Gate reports next-actions threshold failure"), bSawNextThresholdFailure);
+				}
+			}
 		}
 	}
 

@@ -25,6 +25,7 @@
 #include <ctime>
 #include <chrono>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <iomanip>
 #include <mutex>
@@ -135,7 +136,7 @@ static std::string did_you_mean_suffix(const std::string& needle,
 // server exposes ~29; the rest are LIVE-ONLY (require a running editor).
 static const std::vector<std::string>& offline_namespaces() {
     static const std::vector<std::string> ns = {
-        "source", "project", "bridge", "monolith", "cppreflect", "network", "decision", "risk"
+        "source", "console", "project", "bridge", "monolith", "cppreflect", "network", "decision", "risk"
     };
     return ns;
 }
@@ -156,6 +157,34 @@ static std::string escape_fts(const std::string& query) {
     }
 
     // Tokenize and wrap
+    std::istringstream iss(cleaned);
+    std::string token;
+    std::vector<std::string> tokens;
+    while (iss >> token)
+        tokens.push_back(token);
+
+    if (tokens.empty())
+        return "\"\"";
+
+    std::string result;
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (i > 0) result += " ";
+        result += "\"" + tokens[i] + "\"*";
+    }
+    return result;
+}
+
+static std::string escape_console_fts(const std::string& query) {
+    std::string cleaned;
+    cleaned.reserve(query.size());
+    for (char c : query) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+            cleaned += c;
+        } else {
+            cleaned += ' ';
+        }
+    }
+
     std::istringstream iss(cleaned);
     std::string token;
     std::vector<std::string> tokens;
@@ -956,6 +985,13 @@ struct Args {
         if (v.empty()) return true;
         return parse_bool_literal(v, def);
     }
+
+    double opt_double(const std::string& key, double def) const {
+        auto it = options.find(key);
+        if (it == options.end() || it->second.empty()) return def;
+        try { return std::stod(it->second); }
+        catch (...) { return def; }
+    }
 };
 
 static Args parse_args(int argc, char* argv[]) {
@@ -1011,6 +1047,91 @@ static Args parse_args(int argc, char* argv[]) {
     return args;
 }
 
+struct GlobalCliOptions {
+    bool no_log = false;
+    bool readonly = false;
+
+    bool suppress_query_log() const {
+        return no_log || readonly;
+    }
+};
+
+struct CliInvocation {
+    GlobalCliOptions globals;
+    std::vector<std::string> args;
+    std::vector<char*> argv;
+
+    int argc() const {
+        return static_cast<int>(argv.size());
+    }
+
+    char** argv_data() {
+        return argv.data();
+    }
+
+    void rebuild_argv() {
+        argv.clear();
+        argv.reserve(args.size());
+        for (auto& value : args) {
+            argv.push_back(const_cast<char*>(value.c_str()));
+        }
+    }
+};
+
+static bool try_consume_global_bool_option(
+    int argc,
+    char* argv[],
+    int& index,
+    const std::string& option_key,
+    bool& target) {
+    std::string token = argv[index] ? argv[index] : "";
+    if (token.rfind("--", 0) != 0) return false;
+
+    std::string key = token.substr(2);
+    std::string value;
+    bool had_inline_value = false;
+    auto eq = key.find('=');
+    if (eq != std::string::npos) {
+        value = key.substr(eq + 1);
+        key = key.substr(0, eq);
+        had_inline_value = true;
+    }
+
+    key = normalize_option_key(key);
+    if (key != option_key) return false;
+
+    if (!had_inline_value && index + 1 < argc) {
+        std::string next = argv[index + 1] ? argv[index + 1] : "";
+        if (is_bool_literal(next)) {
+            value = next;
+            ++index;
+        }
+    }
+
+    target = value.empty() ? true : parse_bool_literal(value, true);
+    return true;
+}
+
+static CliInvocation normalize_global_cli_options(int argc, char* argv[]) {
+    CliInvocation invocation;
+    if (argc > 0) {
+        invocation.args.push_back(argv[0] ? argv[0] : "");
+    }
+
+    for (int i = 1; i < argc; ++i) {
+        if (try_consume_global_bool_option(argc, argv, i, "no_log", invocation.globals.no_log)) {
+            continue;
+        }
+        if (try_consume_global_bool_option(argc, argv, i, "readonly", invocation.globals.readonly)) {
+            continue;
+        }
+        invocation.args.push_back(argv[i] ? argv[i] : "");
+    }
+
+    invocation.rebuild_argv();
+    return invocation;
+}
+
 // Review-context changed-path and line-range helpers.
 #include "monolith_query_review_ranges.h"
 
@@ -1042,6 +1163,33 @@ static std::string read_file_lines(const std::string& file_path, int start, int 
     return out.str();
 }
 
+static bool read_file_lines_checked(const std::string& file_path, int start, int end, std::string& out_text) {
+    std::ifstream f(file_path);
+    if (!f.is_open()) return false;
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(f, line))
+        lines.push_back(line);
+
+    start = std::max(1, start);
+    end = std::min(static_cast<int>(lines.size()), end);
+
+    std::ostringstream out;
+    for (int i = start - 1; i < end; ++i) {
+        std::string& l = lines[i];
+        while (!l.empty() && (l.back() == '\r' || l.back() == '\n' || l.back() == ' '))
+            l.pop_back();
+
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%5d", i + 1);
+        out << buf << " | " << l;
+        if (i < end - 1) out << "\n";
+    }
+    out_text = out.str();
+    return true;
+}
+
 static bool looks_like_source_file_path(const std::string& value) {
     std::string trimmed = trim_copy(value);
     if (trimmed.empty()) return false;
@@ -1063,6 +1211,7 @@ static bool looks_like_source_file_path(const std::string& value) {
 class SourceActions {
     Database db;
     std::string source_db_path;
+    static constexpr const char* kSourceSchemaVersion = "3";
 
 public:
     void open(const std::string& path, bool query_only = true) {
@@ -1560,8 +1709,14 @@ public:
 
         std::string resolved;
 
+        bool requested_absolute_path = fs::path(file_path).is_absolute();
+
         if (fs::exists(file_path)) {
             resolved = file_path;
+        } else if (requested_absolute_path) {
+            die("Absolute file path does not exist or is not readable: '" + file_path +
+                "'. Check the path spelling or use source.search_source/read_source to locate an indexed file. "
+                "Reindexing will not fix a missing absolute path. [error_class=path_not_found]");
         } else {
             // Normalize slashes to backslash for DB lookup
             std::string normalized = file_path;
@@ -1575,9 +1730,6 @@ public:
                 resolved = rows[0].get("path");
         }
 
-        // Coverage-miss hint (SPEC_MonolithToolCallReliabilityBacklog §5.2):
-        // absolute on-disk paths resolve above, so a relative path that exists on
-        // disk but misses here is an index coverage gap, not a bad path.
         if (resolved.empty()) die("No file found matching '" + file_path + "' in EngineSource.db. "
             "Absolute on-disk paths are read directly; a relative path that exists on disk but is missing here "
             "is likely an index coverage gap. Pass an absolute path, or refresh via 'source.trigger_project_reindex' "
@@ -1586,8 +1738,14 @@ public:
         if (end <= 0 && line_count > 0) end = start + line_count - 1;
         if (end <= 0) end = start + 199;
 
+        std::string text;
+        if (!read_file_lines_checked(resolved, start, end, text)) {
+            die("EngineSource.db contains a file matching '" + file_path +
+                "', but the backing file could not be read. Refresh the index with source.trigger_project_reindex "
+                "(live editor) and retry. [error_class=indexed_path_unreadable]");
+        }
         std::cout << "--- " << short_path(resolved) << " (lines " << start << "-" << end << ") ---\n";
-        std::cout << read_file_lines(resolved, start, end) << std::endl;
+        std::cout << text << std::endl;
     }
 
     Rows symbols_by_name(const std::string& symbol, int limit = 5) {
@@ -1836,8 +1994,8 @@ LIMIT ?
         }
 
         std::string schema_ver = scalar_str(db, "SELECT value FROM meta WHERE key = 'schema_version';");
-        if (schema_ver != "1") needs_reindex = true;
-        check("meta:schema_version", schema_ver == "1", schema_ver.empty() ? "meta.schema_version missing" : "schema_version=" + schema_ver + " (expected 1)");
+        if (schema_ver != kSourceSchemaVersion) needs_reindex = true;
+        check("meta:schema_version", schema_ver == kSourceSchemaVersion, schema_ver.empty() ? "meta.schema_version missing" : "schema_version=" + schema_ver + " (expected " + std::string(kSourceSchemaVersion) + ")");
 
         int64_t sym_cnt = -1;
         int64_t source_fts_cnt = -1;
@@ -4380,6 +4538,13 @@ public:
 
 class ProjectActions {
     Database db;
+    static constexpr int kProjectSearchMatchValuePreviewChars = 240;
+
+    static std::pair<std::string, bool> compact_match_value(const std::string& value, bool detail) {
+        if (detail || value.size() <= kProjectSearchMatchValuePreviewChars)
+            return {value, false};
+        return {value.substr(0, kProjectSearchMatchValuePreviewChars), true};
+    }
 
 public:
     void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
@@ -4388,17 +4553,55 @@ public:
     void search(const Args& args) {
         if (args.positional.empty()) die("search requires a query argument");
         std::string q = args.positional[0];
+        constexpr int max_window = 100000;
         int limit = clamp_int(args.opt_int("limit", 50), 1, 1000);
+        int offset = args.opt_int("offset", 0);
+        auto parse_cursor_offset = [&](const std::string& value, int& out) -> bool {
+            if (value.empty()) return false;
+            if (!std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+                return false;
+            try {
+                long long parsed = std::stoll(value);
+                if (parsed < 0 || parsed > max_window) return false;
+                out = static_cast<int>(parsed);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        };
+        std::string cursor = args.opt("cursor");
+        if (!cursor.empty() && !parse_cursor_offset(cursor, offset))
+            die("project search --cursor must be a non-negative numeric offset cursor");
+        if (offset < 0 || offset > max_window)
+            die("project search --offset must be within 0..100000");
+        const int query_limit = limit + 1;
+        const long long required_window = static_cast<long long>(offset) + static_cast<long long>(query_limit);
+        if (required_window > max_window)
+            die("project search --offset + --limit exceeds the max window");
+        const int candidate_limit = static_cast<int>(
+            std::min<long long>(max_window, std::max<long long>(required_window, required_window * 3)));
         bool include_content = args.opt_bool("include_content", true);
+        bool detail = args.opt_bool("detail", false);
+        std::string projection = lower_copy(args.opt("projection", detail ? "full" : "compact"));
+        if (projection == "full") {
+            detail = true;
+        } else if (projection == "compact") {
+            detail = false;
+        } else {
+            die("project search --projection must be compact or full");
+        }
+        projection = detail ? "full" : "compact";
 
         json results = json::array();
 
         auto add_matches = [&](const std::string& fts_table, const std::string& sql, const std::string& match_source) {
             if (!object_exists(db, "table", fts_table)) return;
             auto rows = query(db,
-                sql + " LIMIT " + std::to_string(limit) + ";",
+                sql + " LIMIT " + std::to_string(candidate_limit) + ";",
                 {q});
             for (auto& r : rows) {
+                const std::string full_match_value = r.get("match_value");
+                auto [projected_match_value, match_value_truncated] = compact_match_value(full_match_value, detail);
                 results.push_back({
                     {"asset_path", r.get("package_path")},
                     {"asset_name", r.get("asset_name")},
@@ -4409,7 +4612,9 @@ public:
                     {"match_table", r.get("match_table")},
                     {"match_field", r.get("match_field")},
                     {"match_object_path", r.get("match_object_path")},
-                    {"match_value", r.get("match_value")},
+                    {"match_value", projected_match_value},
+                    {"match_value_length", full_match_value.size()},
+                    {"match_value_truncated", match_value_truncated},
                     {"rank", r.get_double("rank")},
                 });
             }
@@ -4480,13 +4685,59 @@ public:
                 "supplemental_value");
         }
 
-        // Sort by rank, truncate
+        // Sort by rank, dedupe by asset, then page the fused candidate list.
+        // Offset is applied after all enabled FTS tables have contributed so
+        // cursor pages preserve the same global ordering as the first page.
         std::sort(results.begin(), results.end(),
-                  [](const json& a, const json& b) { return a["rank"].get<double>() < b["rank"].get<double>(); });
-        if ((int)results.size() > limit)
-            results = json(std::vector<json>(results.begin(), results.begin() + limit));
+                  [](const json& a, const json& b) {
+                      const double ar = a["rank"].get<double>();
+                      const double br = b["rank"].get<double>();
+                      if (ar != br) return ar < br;
+                      return a.value("asset_path", "") < b.value("asset_path", "");
+                  });
+        json deduped_results = json::array();
+        std::set<std::string> seen_asset_paths;
+        for (const auto& result : results) {
+            const std::string asset_path = result.value("asset_path", "");
+            if (asset_path.empty() || seen_asset_paths.insert(asset_path).second)
+                deduped_results.push_back(result);
+        }
+        results = deduped_results;
+        const size_t total_candidates = results.size();
+        const size_t start = std::min(static_cast<size_t>(offset), total_candidates);
+        const size_t end = std::min(start + static_cast<size_t>(limit), total_candidates);
+        bool truncated = total_candidates > start + static_cast<size_t>(limit);
+        json paged_results = json::array();
+        for (size_t i = start; i < end; ++i)
+            paged_results.push_back(results[i]);
+        results = paged_results;
 
-        json out = {{"success", true}, {"count", results.size()}, {"results", results}};
+        json out = {
+            {"success", true},
+            {"count", results.size()},
+            {"returned_count", results.size()},
+            {"limit", limit},
+            {"offset", offset},
+            {"include_content", include_content},
+            {"detail", detail},
+            {"projection", projection},
+            {"truncated", truncated},
+            {"limits", {
+                {"limit", limit},
+                {"offset", offset},
+                {"returned", results.size()},
+                {"max_limit", 1000},
+                {"max_window", max_window},
+                {"match_value_preview_chars", kProjectSearchMatchValuePreviewChars},
+                {"include_content", include_content},
+                {"detail", detail},
+                {"projection", projection},
+                {"truncated", truncated},
+            }},
+            {"results", results},
+        };
+        if (truncated)
+            out["next_cursor"] = std::to_string(offset + limit);
         std::cout << out.dump(2) << std::endl;
     }
 
@@ -4816,10 +5067,53 @@ public:
         check("fts:datatable_rows_row_parity", dtcnt == fdtcnt, "datatable_rows=" + std::to_string(dtcnt) + " fts_datatable_rows=" + std::to_string(fdtcnt) + (dtcnt == fdtcnt ? "" : " (mismatch -> project.repair_fts)"));
         check("fts:actors_row_parity", actorcnt == factorcnt, "actors=" + std::to_string(actorcnt) + " fts_actors=" + std::to_string(factorcnt) + (actorcnt == factorcnt ? "" : " (mismatch -> project.repair_fts)"));
         check("fts:asset_search_values_row_parity", svcnt == fsvcnt, "asset_search_values=" + std::to_string(svcnt) + " fts_asset_search_values=" + std::to_string(fsvcnt) + (svcnt == fsvcnt ? "" : " (mismatch -> project.repair_fts)"));
+        int64_t blueprint_like_cnt = count_rows(db, "SELECT COUNT(*) FROM assets WHERE asset_class LIKE '%Blueprint%';");
+        int64_t blueprint_with_nodes_cnt = count_rows(db,
+            "SELECT COUNT(DISTINCT a.id) FROM assets a "
+            "JOIN nodes n ON n.asset_id = a.id "
+            "WHERE a.asset_class LIKE '%Blueprint%';");
+        int64_t blueprint_without_nodes_cnt = count_rows(db,
+            "SELECT COUNT(*) FROM ("
+            "SELECT a.id FROM assets a "
+            "LEFT JOIN nodes n ON n.asset_id = a.id "
+            "WHERE a.asset_class LIKE '%Blueprint%' "
+            "GROUP BY a.id "
+            "HAVING COUNT(n.id) = 0);");
+        json empty_blueprint_samples = json::array();
+        for (auto& r : query(db,
+            "SELECT a.package_path, a.asset_class FROM assets a "
+            "LEFT JOIN nodes n ON n.asset_id = a.id "
+            "WHERE a.asset_class LIKE '%Blueprint%' "
+            "GROUP BY a.id, a.package_path, a.asset_class "
+            "HAVING COUNT(n.id) = 0 "
+            "ORDER BY a.package_path LIMIT 10;")) {
+            empty_blueprint_samples.push_back({
+                {"asset_path", r.get("package_path")},
+                {"asset_class", r.get("asset_class")},
+            });
+        }
+        root["semantic_readiness"] = {
+            {"blueprint_like_assets", blueprint_like_cnt},
+            {"blueprint_like_assets_with_nodes", blueprint_with_nodes_cnt},
+            {"blueprint_like_assets_without_nodes", blueprint_without_nodes_cnt},
+            {"empty_blueprint_samples", empty_blueprint_samples},
+        };
+        bool blueprint_detail_coverage = blueprint_like_cnt == 0 || blueprint_with_nodes_cnt > 0;
+        check("semantic:blueprint_detail_coverage", blueprint_detail_coverage,
+            blueprint_detail_coverage
+                ? "blueprint_like_assets=" + std::to_string(blueprint_like_cnt) + " with_indexed_nodes=" + std::to_string(blueprint_with_nodes_cnt)
+                : std::to_string(blueprint_like_cnt) + " Blueprint-like asset(s) have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run a full project reindex, then project.health)");
+        bool no_empty_blueprint_samples = blueprint_like_cnt == 0 || blueprint_without_nodes_cnt == 0;
+        check("semantic:empty_blueprint_detail_samples", no_empty_blueprint_samples,
+            no_empty_blueprint_samples
+                ? "no Blueprint-like assets missing indexed graph nodes"
+                : std::to_string(blueprint_without_nodes_cnt) + " of " + std::to_string(blueprint_like_cnt) + " Blueprint-like asset(s) have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run monolith.reindex, then project.health)");
         root["schema"] = {{"schema_version", schema_ver}, {"journal_mode", scalar_str(db, "PRAGMA journal_mode;")}};
         if (include_counts) root["row_counts"] = {
             {"assets", acnt},
             {"nodes", ncnt},
+            {"blueprint_like_assets", blueprint_like_cnt},
+            {"blueprint_like_assets_with_nodes", blueprint_with_nodes_cnt},
             {"variables", vcnt},
             {"parameters", pcnt},
             {"datatable_rows", dtcnt},
@@ -4832,7 +5126,10 @@ public:
         append_crg_health_checks(db, "project", acnt, dep_cnt, root);
         root["status"] = root["warnings"].empty() ? "ok" : "warning";
         root["summary"] = root["warnings"].empty() ? "ProjectIndex schema, triggers, FTS parity, CRG cache and integrity OK" : std::to_string(root["warnings"].size()) + " health warning(s)";
-        add_next(root, {"project.repair_crg_cache", "project.repair_fts", "project.get_stats"});
+        if (blueprint_without_nodes_cnt > 0)
+            add_next(root, {"monolith.reindex", "project.health", "project.get_stats"});
+        else
+            add_next(root, {"project.repair_crg_cache", "project.repair_fts", "project.get_stats"});
         return root;
     }
 
@@ -5528,6 +5825,576 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
             after = args.positional[0];
         }
         print_json(crg_diff_snapshots_json(db, "project", before, after, args.opt_int("limit", 100)));
+    }
+};
+
+// ============================================================
+// Console namespace actions (read-only EngineSource.db snapshot)
+// ============================================================
+
+class ConsoleActions {
+    Database db;
+
+    struct ConsoleSchema {
+        bool has_objects = false;
+        bool has_fts = false;
+        bool has_meta = false;
+        std::vector<std::string> columns;
+        std::set<std::string> column_set;
+        std::string name_col;
+        std::string type_col;
+        std::string help_col;
+    };
+
+    static std::string quote_ident(std::string value) {
+        for (size_t pos = 0; (pos = value.find('"', pos)) != std::string::npos; pos += 2)
+            value.replace(pos, 1, "\"\"");
+        return "\"" + value + "\"";
+    }
+
+    static std::string escape_like(std::string value) {
+        for (size_t pos = 0; pos < value.size(); ++pos) {
+            char ch = value[pos];
+            if (ch == '\\' || ch == '%' || ch == '_') {
+                value.insert(value.begin() + static_cast<std::ptrdiff_t>(pos), '\\');
+                ++pos;
+            }
+        }
+        return value;
+    }
+
+    std::vector<std::string> table_columns(const std::string& table) {
+        std::vector<std::string> out;
+        for (const auto& row : query(db, "PRAGMA table_info(" + quote_ident(table) + ");")) {
+            std::string name = row.get("name");
+            if (!name.empty()) out.push_back(name);
+        }
+        return out;
+    }
+
+    static bool has_col(const ConsoleSchema& schema, const std::string& name) {
+        return schema.column_set.count(name) > 0;
+    }
+
+    static std::string first_col(const ConsoleSchema& schema, std::initializer_list<const char*> names) {
+        for (const char* name : names) {
+            if (has_col(schema, name)) return name;
+        }
+        return "";
+    }
+
+    ConsoleSchema inspect_schema() {
+        ConsoleSchema schema;
+        schema.has_objects = object_exists(db, "table", "console_objects");
+        schema.has_fts = object_exists(db, "table", "console_objects_fts");
+        schema.has_meta = object_exists(db, "table", "console_snapshot_meta");
+        if (schema.has_objects) {
+            schema.columns = table_columns("console_objects");
+            schema.column_set.insert(schema.columns.begin(), schema.columns.end());
+            schema.name_col = first_col(schema, {"name", "object_name", "console_name"});
+            schema.type_col = first_col(schema, {"type", "object_type", "kind"});
+            schema.help_col = first_col(schema, {"help", "description", "docstring"});
+        }
+        return schema;
+    }
+
+    static json scalar_to_json(const std::string& key, const std::string& value) {
+        if (value.empty()) return "";
+        std::string lower = lower_copy(key);
+        const bool boolish =
+            lower == "read_only" || lower == "cheat" || lower == "is_variable" ||
+            lower == "is_command" || lower == "is_registered" || lower == "registered" ||
+            lower == "hidden" || lower == "is_hidden" ||
+            lower == "is_enabled" || lower == "is_deprecated";
+        if (boolish && (value == "0" || value == "1"))
+            return value == "1";
+
+        const bool intish =
+            lower == "id" || lower == "rowid" || lower == "flags" ||
+            lower == "object_flags" || lower == "snapshot_epoch" ||
+            lower == "last_touched" || lower == "last_touched_unix" ||
+            lower == "registered_at" || lower == "priority";
+        if (intish) {
+            try {
+                size_t parsed = 0;
+                long long parsed_value = std::stoll(value, &parsed);
+                if (parsed == value.size()) return parsed_value;
+            } catch (...) {
+            }
+        }
+        return value;
+    }
+
+    json row_to_object(const Row& row, const ConsoleSchema& schema) {
+        json object = json::object();
+        for (const auto& col : schema.columns) {
+            object[col] = scalar_to_json(col, row.get(col));
+        }
+        if (!schema.name_col.empty() && !object.contains("name"))
+            object["name"] = row.get(schema.name_col);
+        if (!schema.type_col.empty() && !object.contains("type"))
+            object["type"] = row.get(schema.type_col);
+        if (!schema.help_col.empty() && !object.contains("help"))
+            object["help"] = row.get(schema.help_col);
+        return object;
+    }
+
+    static std::string compact_text(std::string value, size_t max_chars = 160) {
+        for (char& ch : value) {
+            if (ch == '\r' || ch == '\n') ch = ' ';
+        }
+        value = trim_copy(value);
+        if (value.size() <= max_chars) return value;
+        if (max_chars <= 3) return value.substr(0, max_chars);
+        return value.substr(0, max_chars - 3) + "...";
+    }
+
+    json compact_row_to_object(const Row& row, const ConsoleSchema& schema) {
+        json object = json::object();
+        if (!schema.name_col.empty()) object["name"] = row.get(schema.name_col);
+        if (!schema.type_col.empty()) object["object_type"] = row.get(schema.type_col);
+        if (!schema.help_col.empty()) {
+            std::string preview = compact_text(row.get(schema.help_col));
+            if (!preview.empty()) object["help_preview"] = preview;
+        }
+        for (const char* col : {"flags", "is_enabled", "is_deprecated", "variable_type", "read_only", "cheat", "source", "captured_at"}) {
+            if (has_col(schema, col)) {
+                std::string value = row.get(col);
+                if (!value.empty()) object[col] = scalar_to_json(col, value);
+            }
+        }
+        return object;
+    }
+
+    json row_to_object(const Row& row, const ConsoleSchema& schema, bool detail) {
+        return detail ? row_to_object(row, schema) : compact_row_to_object(row, schema);
+    }
+
+    static void add_unique_column(std::vector<std::string>& columns, const ConsoleSchema& schema, const std::string& col) {
+        if (col.empty() || !has_col(schema, col)) return;
+        if (std::find(columns.begin(), columns.end(), col) == columns.end())
+            columns.push_back(col);
+    }
+
+    json missing_schema_json(const std::string& action, const std::string& detail) {
+        return {
+            {"success", false},
+            {"status", "schema_missing"},
+            {"action", action},
+            {"summary", detail},
+            {"required_tables", json::array({"console_objects", "console_objects_fts"})},
+            {"optional_tables", json::array({"console_snapshot_meta"})},
+            {"warnings", json::array({detail})},
+            {"next_actions", json::array({
+                "Use live MCP console.refresh_snapshot with a running Unreal Editor to populate EngineSource.db",
+                "console.health",
+                "source.health"
+            })},
+            {"truncated", false},
+        };
+    }
+
+    json live_only_json(const std::string& action, const std::string& summary) {
+        return {
+            {"success", false},
+            {"status", "live_only"},
+            {"offline_supported", false},
+            {"action", action},
+            {"summary", summary},
+            {"next_actions", json::array({"console.health", "console.search_objects", "Use live MCP " + action + " with a running Unreal Editor"})},
+            {"truncated", false},
+        };
+    }
+
+    json meta_rows_json() {
+        json rows = json::array();
+        for (const auto& row : query(db, "SELECT * FROM console_snapshot_meta LIMIT 20;")) {
+            json item = json::object();
+            for (const auto& pair : row.cols) {
+                item[pair.first] = scalar_to_json(pair.first, pair.second);
+            }
+            rows.push_back(item);
+        }
+        return rows;
+    }
+
+public:
+    void open(const std::string& path) {
+        db.open(path, true);
+    }
+
+    void search_objects(const Args& args) {
+        std::string q = args.opt("query");
+        if (q.empty() && !args.positional.empty()) q = args.positional[0];
+
+        ConsoleSchema schema = inspect_schema();
+        if (!schema.has_objects) {
+            print_json(missing_schema_json("console.search_objects", "missing table console_objects in EngineSource.db; refresh the live console snapshot first"));
+            return;
+        }
+        if (schema.name_col.empty()) {
+            print_json(missing_schema_json("console.search_objects", "console_objects is present but has no name/object_name/console_name column"));
+            return;
+        }
+
+        constexpr int max_window = 100000;
+        int limit = clamp_int(args.opt_int("limit", 100), 1, 5000);
+        int offset = args.opt_int("offset", 0);
+        auto parse_cursor_offset = [&](const std::string& value, int& out) -> bool {
+            if (value.empty()) return false;
+            if (!std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+                return false;
+            try {
+                long long parsed = std::stoll(value);
+                if (parsed < 0 || parsed > max_window) return false;
+                out = static_cast<int>(parsed);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        };
+        std::string cursor = args.opt("cursor");
+        if (!cursor.empty() && !parse_cursor_offset(cursor, offset))
+            die("console search_objects --cursor must be a non-negative numeric offset cursor");
+        if (offset < 0 || offset > max_window)
+            die("console search_objects --offset must be within 0..100000");
+        const long long required_window = static_cast<long long>(offset) + static_cast<long long>(limit) + 1;
+        if (required_window > max_window + 1LL)
+            die("console search_objects --offset + --limit exceeds the max window");
+        int query_limit = static_cast<int>(required_window);
+        auto detail_it = args.options.find("detail");
+        if (detail_it != args.options.end() && !detail_it->second.empty() && !is_bool_literal(detail_it->second))
+            die("console search_objects --detail must be true or false");
+        bool detail = args.opt_bool("detail", false);
+        std::string projection = lower_copy(args.opt("projection", detail ? "full" : "compact"));
+        if (projection == "full") {
+            detail = true;
+        } else if (projection == "compact") {
+            detail = false;
+        } else {
+            die("console search_objects --projection must be compact or full");
+        }
+        projection = detail ? "full" : "compact";
+        std::string mode = lower_copy(args.opt("mode", "auto"));
+        std::string type_filter = args.opt("type");
+        if (type_filter.empty()) type_filter = args.opt("object_type");
+        if (type_filter.empty()) type_filter = args.opt("kind");
+
+        json warnings = json::array();
+        Rows rows;
+        bool used_fts = false;
+        bool used_like_fallback = false;
+        std::string effective_mode = mode;
+        if (!type_filter.empty() && schema.type_col.empty()) {
+            warnings.push_back("type filter ignored because console_objects has no type/object_type/kind column");
+        }
+
+        if (!q.empty() && (mode == "auto" || mode == "fts") && schema.has_fts) {
+            std::string sql =
+                "SELECT o.*, bm25(console_objects_fts) AS _rank, "
+                "snippet(console_objects_fts, -1, '>>>', '<<<', '...', 32) AS _snippet "
+                "FROM console_objects_fts f JOIN console_objects o ON o.rowid = f.rowid "
+                "WHERE console_objects_fts MATCH ?";
+            std::vector<std::string> params = {escape_console_fts(q)};
+            if (!type_filter.empty() && !schema.type_col.empty()) {
+                sql += " AND o." + quote_ident(schema.type_col) + " = ?";
+                params.push_back(type_filter);
+            }
+            sql += " ORDER BY CASE WHEN lower(o." + quote_ident(schema.name_col) + ") = lower(?) THEN 0 "
+                   "WHEN o." + quote_ident(schema.name_col) + " LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, "
+                   "bm25(console_objects_fts), o." + quote_ident(schema.name_col) + " COLLATE NOCASE LIMIT " + std::to_string(query_limit);
+            params.push_back(q);
+            params.push_back(escape_like(q) + "%");
+            std::string error;
+            if (query_rows_ok(db, sql, params, rows, error)) {
+                used_fts = true;
+                effective_mode = "fts";
+            } else {
+                warnings.push_back("console_objects_fts query failed; falling back to LIKE search: " + error);
+            }
+        } else if (!q.empty() && (mode == "auto" || mode == "fts") && !schema.has_fts) {
+            warnings.push_back("missing FTS table console_objects_fts; falling back to LIKE search");
+        }
+
+        if (q.empty()) {
+            std::string sql = "SELECT * FROM console_objects";
+            std::vector<std::string> params;
+            if (!type_filter.empty() && !schema.type_col.empty()) {
+                sql += " WHERE " + quote_ident(schema.type_col) + " = ?";
+                params.push_back(type_filter);
+            }
+            sql += " ORDER BY " + quote_ident(schema.name_col) + " COLLATE NOCASE LIMIT " + std::to_string(query_limit);
+            rows = query(db, sql, params);
+            effective_mode = "list";
+        } else if (!used_fts || (mode == "auto" && rows.empty())) {
+            std::vector<std::string> search_cols;
+            add_unique_column(search_cols, schema, schema.name_col);
+            add_unique_column(search_cols, schema, schema.type_col);
+            add_unique_column(search_cols, schema, schema.help_col);
+            add_unique_column(search_cols, schema, "value");
+            add_unique_column(search_cols, schema, "default_value");
+            add_unique_column(search_cols, schema, "source");
+            if (search_cols.empty()) {
+                print_json(missing_schema_json("console.search_objects", "console_objects has no searchable text columns"));
+                return;
+            }
+
+            bool prefix = mode == "prefix" || mode == "starts_with";
+            std::string pattern = prefix ? escape_like(q) + "%" : "%" + escape_like(q) + "%";
+            std::string sql = "SELECT * FROM console_objects WHERE (";
+            std::vector<std::string> params;
+            for (size_t i = 0; i < search_cols.size(); ++i) {
+                if (i > 0) sql += " OR ";
+                sql += quote_ident(search_cols[i]) + " LIKE ? ESCAPE '\\'";
+                params.push_back(pattern);
+            }
+            sql += ")";
+            if (!type_filter.empty() && !schema.type_col.empty()) {
+                sql += " AND " + quote_ident(schema.type_col) + " = ?";
+                params.push_back(type_filter);
+            }
+            sql += " ORDER BY CASE WHEN lower(" + quote_ident(schema.name_col) + ") = lower(?) THEN 0 "
+                   "WHEN " + quote_ident(schema.name_col) + " LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, "
+                   + quote_ident(schema.name_col) + " COLLATE NOCASE LIMIT " + std::to_string(query_limit);
+            params.push_back(q);
+            params.push_back(escape_like(q) + "%");
+            rows = query(db, sql, params);
+            used_like_fallback = true;
+            effective_mode = used_fts ? "fts+contains" : (prefix ? "prefix" : "contains");
+        }
+
+        bool truncated = rows.size() > static_cast<size_t>(offset + limit);
+        Rows paged_rows;
+        const size_t start = std::min(static_cast<size_t>(offset), rows.size());
+        const size_t end = std::min(start + static_cast<size_t>(limit), rows.size());
+        paged_rows.reserve(end - start);
+        for (size_t i = start; i < end; ++i)
+            paged_rows.push_back(rows[i]);
+        rows = std::move(paged_rows);
+
+        json results = json::array();
+        for (const auto& row : rows) {
+            json item = row_to_object(row, schema, detail);
+            if (!row.get("_snippet").empty()) item["snippet"] = row.get("_snippet");
+            if (row.cols.count("_rank")) {
+                double rank = row.get_double("_rank", 0.0);
+                item["score"] = std::round((-rank) * 1000000.0) / 1000000.0;
+            }
+            results.push_back(item);
+        }
+
+        json root = {
+            {"success", true},
+            {"status", warnings.empty() ? "ok" : "warning"},
+            {"query", q},
+            {"mode", effective_mode},
+            {"type_filter", type_filter},
+            {"used_fts", used_fts},
+            {"used_like_fallback", used_like_fallback},
+            {"count", results.size()},
+            {"returned_count", results.size()},
+            {"limit", limit},
+            {"offset", offset},
+            {"projection", projection},
+            {"detail", detail},
+            {"limits", {
+                {"limit", limit},
+                {"offset", offset},
+                {"returned", results.size()},
+                {"max_limit", 5000},
+                {"max_window", max_window},
+                {"projection", projection},
+                {"detail", detail},
+                {"truncated", truncated},
+            }},
+            {"truncated", truncated},
+            {"warnings", warnings},
+            {"objects", results},
+            {"results", results},
+            {"next_actions", warnings.empty()
+                ? json::array({"console.get_object", "console.health"})
+                : json::array({"Use live MCP console.refresh_snapshot to populate EngineSource.db", "console.health", "console.get_object"})},
+        };
+        if (truncated)
+            root["next_cursor"] = std::to_string(offset + limit);
+        print_json(root);
+    }
+
+    void get_object(const Args& args) {
+        std::string name = args.opt("name");
+        if (name.empty() && !args.positional.empty()) name = args.positional[0];
+        if (name.empty()) {
+            print_json({
+                {"success", false},
+                {"status", "error"},
+                {"error", "console.get_object requires a name argument or --name"},
+                {"next_actions", json::array({"console.search_objects <query>", "console.health"})},
+            });
+            return;
+        }
+
+        ConsoleSchema schema = inspect_schema();
+        if (!schema.has_objects) {
+            print_json(missing_schema_json("console.get_object", "missing table console_objects in EngineSource.db; refresh the live console snapshot first"));
+            return;
+        }
+        if (schema.name_col.empty()) {
+            print_json(missing_schema_json("console.get_object", "console_objects is present but has no name/object_name/console_name column"));
+            return;
+        }
+
+        std::string sql =
+            "SELECT * FROM console_objects WHERE " + quote_ident(schema.name_col) +
+            " = ? COLLATE NOCASE ORDER BY CASE WHEN " + quote_ident(schema.name_col) +
+            " = ? THEN 0 ELSE 1 END LIMIT 1";
+        Rows rows = query(db, sql, {name, name});
+        json root = {
+            {"success", true},
+            {"status", "ok"},
+            {"name", name},
+            {"found", !rows.empty()},
+            {"truncated", false},
+            {"next_actions", json::array({"console.search_objects", "console.health"})},
+        };
+        root["object"] = rows.empty() ? json(nullptr) : row_to_object(rows[0], schema);
+        print_json(root);
+    }
+
+    void health(const Args& args) {
+        bool include_counts = args.opt_bool("include_counts", true);
+        ConsoleSchema schema = inspect_schema();
+        json root = {
+            {"success", true},
+            {"input", {{"include_counts", include_counts}}},
+            {"limits", {{"include_counts", include_counts}}},
+            {"checks", json::array()},
+            {"warnings", json::array()},
+            {"required_tables", json::array({"console_objects", "console_objects_fts"})},
+            {"optional_tables", json::array({"console_snapshot_meta"})},
+            {"truncated", false},
+        };
+        auto check = [&](const std::string& name, bool pass, const std::string& detail) {
+            root["checks"].push_back({{"check", name}, {"result", pass ? "ok" : "warning"}, {"detail", detail}});
+            if (!pass) root["warnings"].push_back(detail);
+        };
+        auto info = [&](const std::string& name, const std::string& detail) {
+            root["checks"].push_back({{"check", name}, {"result", "info"}, {"detail", detail}});
+        };
+
+        check("table:console_objects", schema.has_objects,
+              schema.has_objects ? "table console_objects present" : "missing table console_objects");
+        check("fts:console_objects_fts", schema.has_fts,
+              schema.has_fts ? "FTS table console_objects_fts present" : "missing FTS table console_objects_fts");
+        info("table:console_snapshot_meta",
+             schema.has_meta ? "optional table console_snapshot_meta present" : "optional table console_snapshot_meta absent");
+        if (schema.has_objects) {
+            check("schema:console_objects.name", !schema.name_col.empty(),
+                  schema.name_col.empty() ? "no name/object_name/console_name column on console_objects" : "name column=" + schema.name_col);
+            info("schema:console_objects.type",
+                 schema.type_col.empty() ? "no type/object_type/kind column on console_objects" : "type column=" + schema.type_col);
+        }
+
+        if (include_counts && schema.has_objects) {
+            int64_t objects = count_rows(db, "SELECT COUNT(*) FROM console_objects;");
+            root["row_counts"]["console_objects"] = objects;
+            if (schema.has_fts) {
+                int64_t fts = count_rows(db, "SELECT COUNT(*) FROM console_objects_fts;");
+                root["row_counts"]["console_objects_fts"] = fts;
+                check("fts:console_objects_row_parity", objects == fts,
+                      "console_objects=" + std::to_string(objects) + " console_objects_fts=" + std::to_string(fts) +
+                      (objects == fts ? "" : " (mismatch -> run live console.refresh_snapshot)"));
+            }
+        }
+        if (schema.has_meta) {
+            root["snapshot_meta"] = meta_rows_json();
+        }
+
+        root["status"] = root["warnings"].empty() ? "ok" : "warning";
+        root["summary"] = root["warnings"].empty()
+            ? "Console snapshot schema and FTS parity OK"
+            : std::to_string(root["warnings"].size()) + " console snapshot warning(s)";
+        root["next_actions"] = root["warnings"].empty()
+            ? json::array({"console.search_objects", "console.get_object"})
+            : json::array({"Use live MCP console.refresh_snapshot to populate EngineSource.db", "console.health", "source.health"});
+        print_json(root);
+    }
+
+    void live_only(const std::string& action, const std::string& detail) {
+        print_json(live_only_json(
+            "console." + action,
+            detail));
+    }
+
+    void refresh_snapshot(const Args&) {
+        live_only(
+            "refresh_snapshot",
+            "console.refresh_snapshot requires a running Unreal Editor/Monolith MCP server; monolith_query.exe is an offline SQLite reader and cannot snapshot IConsoleManager.");
+    }
+
+    void execute(const Args&) {
+        live_only(
+            "execute",
+            "console.execute mutates live console state and requires a running Unreal Editor/Monolith MCP server; offline CLI only reads EngineSource.db snapshots.");
+    }
+
+    void resolve_command(const Args&) {
+        live_only(
+            "resolve_command",
+            "console.resolve_command resolves live IConsoleManager command tokens and target-world availability; use MCP with a running Unreal Editor because monolith_query.exe cannot inspect in-process registry state.");
+    }
+
+    void get_log_cursor(const Args&) {
+        live_only(
+            "get_log_cursor",
+            "console.get_log_cursor reads the live Monolith editor log ring buffer and requires a running Unreal Editor/Monolith MCP server.");
+    }
+
+    void search_logs_since(const Args&) {
+        live_only(
+            "search_logs_since",
+            "console.search_logs_since reads live post-cursor editor logs and requires a running Unreal Editor/Monolith MCP server.");
+    }
+
+    void execute_and_expect(const Args&) {
+        live_only(
+            "execute_and_expect",
+            "console.execute_and_expect executes live console commands and evaluates live editor logs; use MCP with a running Unreal Editor.");
+    }
+
+    void wait_for_log(const Args&) {
+        live_only(
+            "wait_for_log",
+            "console.wait_for_log polls the live editor log ring buffer after a cursor; use MCP with a running Unreal Editor because offline CLI cannot poll live logs.");
+    }
+
+    void run_sequence(const Args&) {
+        live_only(
+            "run_sequence",
+            "console.run_sequence mutates live console/game state and evaluates live post-step logs with per-step evidence; use MCP with a running Unreal Editor.");
+    }
+
+    void execute_and_capture(const Args&) {
+        live_only(
+            "execute_and_capture",
+            "console.execute_and_capture runs live console commands and HighResShot capture; use MCP with a running Unreal Editor. Deferred viewport screenshots return capture_pending for console.poll_capture.");
+    }
+
+    void poll_capture(const Args&) {
+        live_only(
+            "poll_capture",
+            "console.poll_capture reads pending command-driven screenshot state; use MCP with the same running Unreal Editor session that created the capture_id.");
+    }
+
+    void diagnose_failure(const Args&) {
+        live_only(
+            "diagnose_failure",
+            "console.diagnose_failure classifies live console action result payloads through MCP; offline CLI does not accept live result objects.");
+    }
+
+    void set_cvar_scoped(const Args&) {
+        live_only(
+            "set_cvar_scoped",
+            "console.set_cvar_scoped temporarily mutates live CVars, runs a command sequence, and restores values; use MCP with a running Unreal Editor.");
     }
 };
 
@@ -7249,6 +8116,648 @@ static void split_sections(const std::string& markdown,
 }
 
 class MonolithActions {
+    static fs::path default_catalog_snapshot_path() {
+        fs::path plugin_root = resolve_plugin_root();
+        if (!plugin_root.empty())
+            return plugin_root / "Tools" / "MonolithQuery" / "Generated" / "monolith_catalog_snapshot.json";
+        return fs::path("Tools") / "MonolithQuery" / "Generated" / "monolith_catalog_snapshot.json";
+    }
+
+    static fs::path resolve_catalog_snapshot_path(const Args& args) {
+        std::string explicit_path = args.opt("snapshot");
+        if (!explicit_path.empty())
+            return fs::path(explicit_path);
+        return default_catalog_snapshot_path();
+    }
+
+    static bool load_catalog_snapshot(const Args& args, json& out_snapshot, fs::path& out_path, std::string& out_error) {
+        out_path = resolve_catalog_snapshot_path(args);
+        std::ifstream f(out_path.string());
+        if (!f.is_open()) {
+            out_error = "offline catalog snapshot not found: " + out_path.string();
+            return false;
+        }
+        try {
+            f >> out_snapshot;
+        } catch (const std::exception& e) {
+            out_error = std::string("offline catalog snapshot is invalid JSON: ") + e.what();
+            return false;
+        }
+        if (!out_snapshot.is_object() || !out_snapshot.contains("actions") || !out_snapshot["actions"].is_array()) {
+            out_error = "offline catalog snapshot is missing required actions array";
+            return false;
+        }
+        return true;
+    }
+
+    static json snapshot_metadata(const json& snapshot, const fs::path& path, const std::string& status = "loaded") {
+        json meta = {
+            {"status", status},
+            {"path", path.string()},
+            {"schema_version", snapshot.value("schema_version", 0)},
+            {"generated_at", snapshot.value("generated_at", "")},
+            {"generator", snapshot.value("generator", "")},
+            {"source", snapshot.value("source", "")},
+            {"source_hash", snapshot.value("source_hash", "")},
+            {"partial", snapshot.value("partial", false)},
+            {"freshness", "unchecked_offline"},
+            {"freshness_note", "Offline catalog data is generated from registry source/export; refresh the snapshot after action registration changes."},
+        };
+        return meta;
+    }
+
+    static json snapshot_blocker_json(const Args& args, const std::string& error) {
+        fs::path path = resolve_catalog_snapshot_path(args);
+        return {
+            {"success", false},
+            {"status", "blocked"},
+            {"snapshot", {
+                {"status", "missing_or_invalid"},
+                {"path", path.string()},
+                {"error", error},
+            }},
+            {"source_hash", SOURCE_HASH},
+            {"warnings", json::array({error})},
+            {"next_actions", json::array({
+                "Run python Tools\\MonolithQuery\\generate_monolith_catalog_snapshot.py from the plugin root.",
+                "If live registry metadata is required, recover MCP/editor first and regenerate/export the snapshot.",
+            })},
+        };
+    }
+
+    static fs::path resolve_host_project_root() {
+        fs::path plugin_root = resolve_plugin_root();
+        if (plugin_root.empty())
+            return fs::path();
+        fs::path plugins_dir = plugin_root.parent_path();
+        if (plugins_dir.empty())
+            return fs::path();
+        return plugins_dir.parent_path();
+    }
+
+    static std::string normalize_mcp_url(std::string value) {
+        value = trim_copy(value);
+        if (value.empty())
+            value = getenv_str("MONOLITH_URL", "http://localhost:9316/mcp");
+        if (value.empty())
+            value = "http://localhost:9316/mcp";
+        while (!value.empty() && value.back() == '/')
+            value.pop_back();
+        std::string lower = lower_copy(value);
+        if (lower.size() >= 7 && lower.substr(lower.size() - 7) == "/health")
+            return value.substr(0, value.size() - 7) + "/mcp";
+        if (lower.size() < 4 || lower.substr(lower.size() - 4) != "/mcp")
+            return value + "/mcp";
+        return value;
+    }
+
+    static std::string health_url_from_mcp_url(const std::string& mcp_url) {
+        std::string value = mcp_url;
+        while (!value.empty() && value.back() == '/')
+            value.pop_back();
+        std::string lower = lower_copy(value);
+        if (lower.size() >= 4 && lower.substr(lower.size() - 4) == "/mcp")
+            return value.substr(0, value.size() - 4) + "/health";
+        return value + "/health";
+    }
+
+    static int count_windows_unreal_editor_candidates() {
+        return -1;
+    }
+
+    static json bounded_recovery_step(int order,
+                                      const std::string& id,
+                                      const std::string& command,
+                                      const std::string& when,
+                                      const std::string& expected_result,
+                                      int max_wait_seconds) {
+        return {
+            {"order", order},
+            {"id", id},
+            {"command", command},
+            {"when", when},
+            {"expected_result", expected_result},
+            {"max_wait_seconds", max_wait_seconds},
+        };
+    }
+
+    static json offline_recovery_plan(const Args& args) {
+        fs::path plugin_root = resolve_plugin_root();
+        fs::path host_root = resolve_host_project_root();
+        fs::path recover_script = plugin_root.empty()
+            ? fs::path("Scripts") / "recover_mcp.ps1"
+            : plugin_root / "Scripts" / "recover_mcp.ps1";
+        fs::path headless_command = host_root.empty()
+            ? fs::path("BatchFiles") / "RunHeadlessEditor.bat"
+            : host_root / "BatchFiles" / "RunHeadlessEditor.bat";
+        fs::path headless_log_glob = host_root.empty()
+            ? fs::path("Saved") / "HeadlessMcp" / "Logs" / "HeadlessEditor-*.log"
+            : host_root / "Saved" / "HeadlessMcp" / "Logs" / "HeadlessEditor-*.log";
+
+        const std::string mcp_url = normalize_mcp_url(args.opt("mcp_url"));
+        const std::string health_url = health_url_from_mcp_url(mcp_url);
+        const std::string quoted_script = "\"" + recover_script.string() + "\"";
+        const std::string probe_command = "powershell -ExecutionPolicy Bypass -File " + quoted_script + " -ProbeOnly";
+        const std::string recover_command = "powershell -ExecutionPolicy Bypass -File " + quoted_script + " -TimeoutSec 600";
+        const int editor_candidates = count_windows_unreal_editor_candidates();
+
+        json editor_candidate_status = {
+            {"status", editor_candidates > 0 ? "candidate_process_found" : (editor_candidates == 0 ? "none_observed" : "unknown_offline")},
+            {"unreal_editor_process_count", editor_candidates < 0 ? 0 : editor_candidates},
+            {"process_filter", "UnrealEditor.exe|UnrealEditor-Cmd.exe"},
+            {"host_project_root", host_root.string()},
+            {"headless_editor_command", headless_command.string()},
+            {"headless_editor_command_exists", fs::exists(headless_command)},
+        };
+        if (editor_candidates < 0)
+            editor_candidate_status["note"] = "Process enumeration is unavailable on this platform; use the probe command for authoritative recovery.";
+
+        return {
+            {"endpoint_url", mcp_url},
+            {"health_url", health_url},
+            {"listener_status", {
+                {"status", "unknown_offline"},
+                {"server_running", false},
+                {"health_url", health_url},
+                {"authority", "Scripts\\recover_mcp.ps1 -ProbeOnly"},
+            }},
+            {"editor_candidate_status", editor_candidate_status},
+            {"recover_script_path", recover_script.string()},
+            {"recover_script_exists", fs::exists(recover_script)},
+            {"probe_command", probe_command},
+            {"recover_command", recover_command},
+            {"headless_log_glob", headless_log_glob.string()},
+            {"direct_streamable_http_note", "Direct clients can use endpoint_url for /mcp and health_url for readiness without monolith_proxy.py/.js."},
+            {"bounded_next_steps", json::array({
+                bounded_recovery_step(
+                    1,
+                    "probe",
+                    probe_command,
+                    "Before calling editor-backed MCP actions or when endpoint_url does not answer.",
+                    "One RESULT= token; ProbeOnly never launches the editor.",
+                    3),
+                bounded_recovery_step(
+                    2,
+                    "recover",
+                    recover_command,
+                    "When the probe reports MCP_DOWN and editor-backed actions are required.",
+                    "RESULT=MCP_UP, MCP_TIMEOUT, EDITOR_EXITED, or a concrete blocked result.",
+                    600),
+                bounded_recovery_step(
+                    3,
+                    "reconnect_and_verify",
+                    "Reconnect the existing MCP client, then call monolith status and monolith.get_readiness_status.",
+                    "After RESULT=MCP_UP or after changing editor/server settings.",
+                    "The MCP client sees the refreshed live tool list and readiness items.",
+                    60),
+            })},
+        };
+    }
+
+    static bool is_offline_action(const std::string& ns, const std::string& action) {
+        const auto& names = offline_dispatch_action_names();
+        auto it = names.find(ns);
+        if (it == names.end()) return false;
+        return std::find(it->second.begin(), it->second.end(), action) != it->second.end();
+    }
+
+    static json public_action_row(const json& source) {
+        json row = source;
+        const std::string ns = row.value("namespace", "");
+        const std::string action = row.value("action", "");
+        const bool offline = is_offline_action(ns, action);
+        row["available_offline"] = offline;
+        row["requires_live_editor"] = !offline;
+        if (!row.contains("full_name") || !row["full_name"].is_string())
+            row["full_name"] = ns + "." + action;
+        if (!row.contains("planning_signals") || !row["planning_signals"].is_array())
+            row["planning_signals"] = json::array();
+        if (!row.contains("proof_anchor"))
+            row["proof_anchor"] = "";
+        return row;
+    }
+
+    static std::vector<json> catalog_actions(const json& snapshot) {
+        std::vector<json> rows;
+        for (const auto& item : snapshot.value("actions", json::array())) {
+            if (item.is_object())
+                rows.push_back(public_action_row(item));
+        }
+        return rows;
+    }
+
+    static json limits_json(int limit, int offset, int total) {
+        return {
+            {"limit", limit},
+            {"offset", offset},
+            {"returned", std::max(0, std::min(limit, total - offset))},
+            {"total", total},
+            {"max_limit", 200},
+        };
+    }
+
+    static json namespace_summaries(const std::vector<json>& rows) {
+        std::map<std::string, json> by_namespace;
+        for (const auto& row : rows) {
+            std::string ns = row.value("namespace", "");
+            if (ns.empty()) continue;
+            if (!by_namespace.count(ns)) {
+                by_namespace[ns] = {
+                    {"namespace", ns},
+                    {"action_count", 0},
+                    {"offline_action_count", 0},
+                    {"live_only_action_count", 0},
+                    {"mutating_action_count", 0},
+                    {"proof_anchor_count", 0},
+                    {"actions_hint", "Use monolith discover --namespace " + ns + " --mode actions --limit 50 --offset 0 for paginated action names."},
+                };
+            }
+            auto& item = by_namespace[ns];
+            item["action_count"] = item.value("action_count", 0) + 1;
+            if (row.value("available_offline", false))
+                item["offline_action_count"] = item.value("offline_action_count", 0) + 1;
+            if (row.value("requires_live_editor", true))
+                item["live_only_action_count"] = item.value("live_only_action_count", 0) + 1;
+            if (row.value("mutates_assets", false))
+                item["mutating_action_count"] = item.value("mutating_action_count", 0) + 1;
+            if (!row.value("proof_anchor", "").empty())
+                item["proof_anchor_count"] = item.value("proof_anchor_count", 0) + 1;
+        }
+
+        json out = json::array();
+        for (const auto& pair : by_namespace)
+            out.push_back(pair.second);
+        return out;
+    }
+
+    static bool action_matches_filters(const json& row, const std::string& ns_filter, const std::string& action_filter) {
+        if (!ns_filter.empty() && row.value("namespace", "") != ns_filter)
+            return false;
+        if (!action_filter.empty() && row.value("action", "") != action_filter)
+            return false;
+        return true;
+    }
+
+    static bool json_string_array_contains_lower(const json& values, const std::string& needle_lower) {
+        if (!values.is_array())
+            return false;
+        for (const auto& value : values) {
+            if (value.is_string() && lower_copy(value.get<std::string>()) == needle_lower)
+                return true;
+        }
+        return false;
+    }
+
+    static bool action_matches_category(const json& row, const std::string& category_filter) {
+        const std::string category = lower_copy(trim_copy(category_filter));
+        if (category.empty())
+            return true;
+
+        if (category == lower_copy(row.value("namespace", "")))
+            return true;
+        if (category == lower_copy(row.value("skill", "")))
+            return true;
+        if (row.contains("category") && row["category"].is_string()
+            && category == lower_copy(row["category"].get<std::string>()))
+            return true;
+        if (json_string_array_contains_lower(row.value("planning_signals", json::array()), category))
+            return true;
+
+        if ((category == "mutating" || category == "write" || category == "writes")
+            && row.value("mutates_assets", false))
+            return true;
+        if ((category == "readonly" || category == "read_only" || category == "read")
+            && !row.value("mutates_assets", false))
+            return true;
+        if (category == "offline" && row.value("available_offline", false))
+            return true;
+        if ((category == "live" || category == "live_only" || category == "requires_live_editor")
+            && row.value("requires_live_editor", true))
+            return true;
+        if ((category == "long_running" || category == "long-running") && row.value("long_running", false))
+            return true;
+        if ((category == "progress" || category == "supports_progress") && row.value("supports_progress", false))
+            return true;
+        if ((category == "logs" || category == "writes_logs") && row.value("writes_logs", false))
+            return true;
+        if ((category == "proof" || category == "proof_anchor") && !row.value("proof_anchor", "").empty())
+            return true;
+
+        return false;
+    }
+
+    static std::string row_search_text(const json& row) {
+        std::ostringstream ss;
+        for (const char* key : {"namespace", "action", "full_name", "summary", "source_file", "skill", "proof_anchor", "implementation_status"}) {
+            if (row.contains(key) && row[key].is_string())
+                ss << row[key].get<std::string>() << " ";
+        }
+        if (row.contains("planning_signals") && row["planning_signals"].is_array()) {
+            for (const auto& value : row["planning_signals"]) {
+                if (value.is_string())
+                    ss << value.get<std::string>() << " ";
+            }
+        }
+        return lower_copy(ss.str());
+    }
+
+    static bool all_query_tokens_match(const std::string& text, const std::string& query_lower) {
+        std::istringstream iss(query_lower);
+        std::string token;
+        bool any = false;
+        while (iss >> token) {
+            token.erase(std::remove_if(token.begin(), token.end(), [](unsigned char ch) {
+                return !std::isalnum(ch) && ch != '_' && ch != '.';
+            }), token.end());
+            if (token.empty())
+                continue;
+            any = true;
+            if (text.find(token) == std::string::npos)
+                return false;
+        }
+        return any;
+    }
+
+    static bool action_matches_text_filter(const json& row, const std::string& filter) {
+        const std::string filter_lower = lower_copy(trim_copy(filter));
+        if (filter_lower.empty())
+            return true;
+        return row_search_text(row).find(filter_lower) != std::string::npos;
+    }
+
+    static json compact_action_row(const json& row) {
+        json compact = {
+            {"namespace", row.value("namespace", "")},
+            {"action", row.value("action", "")},
+            {"full_name", row.value("full_name", "")},
+            {"summary", row.value("summary", "")},
+            {"available_offline", row.value("available_offline", false)},
+            {"requires_live_editor", row.value("requires_live_editor", true)},
+            {"mutates_assets", row.value("mutates_assets", false)},
+            {"writes_logs", row.value("writes_logs", false)},
+            {"long_running", row.value("long_running", false)},
+            {"supports_progress", row.value("supports_progress", false)},
+            {"skill", row.value("skill", "")},
+        };
+        if (!row.value("proof_anchor", "").empty())
+            compact["proof_anchor"] = row.value("proof_anchor", "");
+        if (row.contains("planning_signals") && row["planning_signals"].is_array())
+            compact["planning_signals"] = row["planning_signals"];
+        return compact;
+    }
+
+    static int find_score(const json& row, const std::string& query_lower) {
+        const std::string full = lower_copy(row.value("full_name", ""));
+        const std::string ns = lower_copy(row.value("namespace", ""));
+        const std::string action = lower_copy(row.value("action", ""));
+        const std::string proof = lower_copy(row.value("proof_anchor", ""));
+        const std::string text = row_search_text(row);
+        if (full == query_lower) return 100;
+        if (action == query_lower) return 90;
+        if (proof == query_lower) return 85;
+        if (ns == query_lower) return 80;
+        if (full.find(query_lower) != std::string::npos) return 70;
+        if (action.find(query_lower) != std::string::npos) return 60;
+        if (proof.find(query_lower) != std::string::npos) return 55;
+        if (text.find(query_lower) != std::string::npos) return 40;
+        if (all_query_tokens_match(text, query_lower)) return 35;
+        return 0;
+    }
+
+    static bool metadata_field_present(const json& row, const std::string& field) {
+        if (!row.contains(field) || row[field].is_null())
+            return false;
+        const auto& value = row[field];
+        if (value.is_string())
+            return !value.get<std::string>().empty();
+        if (value.is_array())
+            return !value.empty();
+        return true;
+    }
+
+    static const std::vector<std::string>& metadata_required_fields() {
+        static const std::vector<std::string> fields = {
+            "skill",
+            "planning_signals",
+            "preconditions_status",
+            "output_contract_status",
+            "next_actions_status",
+            "available_offline",
+            "requires_live_editor",
+            "mutates_assets",
+            "writes_logs",
+            "long_running",
+            "supports_progress",
+        };
+        return fields;
+    }
+
+    static const std::vector<std::string>& metadata_high_traffic_namespaces() {
+        static const std::vector<std::string> namespaces = {
+            "monolith",
+            "source",
+            "project",
+            "blueprint",
+            "console",
+            "bridge",
+        };
+        return namespaces;
+    }
+
+    static bool is_high_traffic_metadata_namespace(const std::string& ns) {
+        const std::string normalized = lower_copy(ns);
+        const auto& namespaces = metadata_high_traffic_namespaces();
+        return std::find(namespaces.begin(), namespaces.end(), normalized) != namespaces.end();
+    }
+
+    static bool metadata_status_ready(const std::string& status) {
+        const std::string normalized = lower_copy(trim_copy(status));
+        return !normalized.empty() && normalized != "missing" && normalized != "not_declared";
+    }
+
+    static double metadata_ratio(int ready, int total) {
+        return total > 0 ? static_cast<double>(ready) / static_cast<double>(total) : 0.0;
+    }
+
+    static json metadata_coverage_summary(const std::vector<json>& rows) {
+        const auto& required_fields = metadata_required_fields();
+        int complete = 0;
+        int output_ready = 0;
+        int next_ready = 0;
+        int planning_ready = 0;
+        int policy_complete = 0;
+        json missing = json::array();
+        std::map<std::string, int> output_status_counts;
+        std::map<std::string, int> next_status_counts;
+        std::map<std::string, int> preconditions_status_counts;
+
+        for (const auto& row : rows) {
+            json missing_fields = json::array();
+            bool row_complete = true;
+            for (const auto& field : required_fields) {
+                if (!metadata_field_present(row, field)) {
+                    missing_fields.push_back(field);
+                    row_complete = false;
+                }
+            }
+            if (row_complete)
+                ++complete;
+            else
+                missing.push_back({
+                    {"full_name", row.value("full_name", "")},
+                    {"missing_fields", missing_fields},
+                });
+
+            const std::string output_status = row.value("output_contract_status", "");
+            const std::string next_status = row.value("next_actions_status", "");
+            const std::string preconditions_status = row.value("preconditions_status", "");
+            output_status_counts[output_status.empty() ? "missing" : output_status]++;
+            next_status_counts[next_status.empty() ? "missing" : next_status]++;
+            preconditions_status_counts[preconditions_status.empty() ? "missing" : preconditions_status]++;
+
+            if (metadata_status_ready(output_status))
+                ++output_ready;
+            if (metadata_status_ready(next_status))
+                ++next_ready;
+            if (row.contains("planning_signals") && row["planning_signals"].is_array() && !row["planning_signals"].empty())
+                ++planning_ready;
+
+            bool has_all_policy_fields = true;
+            for (const char* field : {"available_offline", "requires_live_editor", "mutates_assets", "writes_logs", "long_running", "supports_progress"}) {
+                if (!metadata_field_present(row, field)) {
+                    has_all_policy_fields = false;
+                    break;
+                }
+            }
+            if (has_all_policy_fields)
+                ++policy_complete;
+        }
+
+        auto counts_to_json = [](const std::map<std::string, int>& counts) {
+            json result = json::object();
+            for (const auto& [key, value] : counts)
+                result[key] = value;
+            return result;
+        };
+
+        const int total = static_cast<int>(rows.size());
+        return {
+            {"coverage", {
+                {"total_actions", total},
+                {"complete_actions", complete},
+                {"coverage_ratio", metadata_ratio(complete, total)},
+                {"required_fields", required_fields},
+            }},
+            {"status_counts", {
+                {"preconditions_status", counts_to_json(preconditions_status_counts)},
+                {"output_contract_status", counts_to_json(output_status_counts)},
+                {"next_actions_status", counts_to_json(next_status_counts)},
+            }},
+            {"contract_readiness", {
+                {"output_contract_ready", output_ready},
+                {"output_contract_ratio", metadata_ratio(output_ready, total)},
+                {"next_actions_ready", next_ready},
+                {"next_actions_ratio", metadata_ratio(next_ready, total)},
+                {"planning_signals_ready", planning_ready},
+                {"planning_signals_ratio", metadata_ratio(planning_ready, total)},
+                {"policy_fields_complete", policy_complete},
+                {"policy_fields_ratio", metadata_ratio(policy_complete, total)},
+            }},
+            {"missing", missing},
+        };
+    }
+
+    static json metadata_gate_check(const std::string& label_field,
+                                    const std::string& label,
+                                    const std::vector<json>& rows,
+                                    double min_contract_ratio) {
+        json summary = metadata_coverage_summary(rows);
+        const json readiness = summary["contract_readiness"];
+        const int total = static_cast<int>(rows.size());
+        const double output_ratio = readiness.value("output_contract_ratio", 0.0);
+        const double next_ratio = readiness.value("next_actions_ratio", 0.0);
+        const double planning_ratio = readiness.value("planning_signals_ratio", 0.0);
+        const double policy_ratio = readiness.value("policy_fields_ratio", 0.0);
+
+        json failures = json::array();
+        if (total <= 0)
+            failures.push_back("no_actions");
+        if (output_ratio < min_contract_ratio)
+            failures.push_back("output_contract_ratio_below_threshold");
+        if (next_ratio < min_contract_ratio)
+            failures.push_back("next_actions_ratio_below_threshold");
+        if (planning_ratio < 1.0)
+            failures.push_back("planning_signals_missing");
+        if (policy_ratio < 1.0)
+            failures.push_back("policy_fields_missing");
+
+        return {
+            {label_field, label},
+            {"action_count", total},
+            {"min_contract_ratio", min_contract_ratio},
+            {"output_contract_ratio", output_ratio},
+            {"next_actions_ratio", next_ratio},
+            {"planning_signals_ratio", planning_ratio},
+            {"policy_fields_ratio", policy_ratio},
+            {"passed", failures.empty()},
+            {"failures", failures},
+        };
+    }
+
+    static json metadata_coverage_gate(const std::vector<json>& all_rows,
+                                       const std::vector<json>& filtered_rows,
+                                       const std::string& gate_scope,
+                                       const std::string& ns_filter,
+                                       double min_contract_ratio) {
+        json checks = json::array();
+        json high_traffic = json::array();
+        for (const auto& ns : metadata_high_traffic_namespaces())
+            high_traffic.push_back(ns);
+
+        json gate = {
+            {"enabled", gate_scope != "off"},
+            {"scope", gate_scope},
+            {"min_contract_ratio", min_contract_ratio},
+            {"high_traffic_namespaces", high_traffic},
+        };
+        if (gate_scope == "off") {
+            gate["passed"] = true;
+            gate["skipped_reason"] = "gate_scope_off";
+            gate["checks"] = checks;
+            return gate;
+        }
+
+        if (gate_scope == "filtered" || (!ns_filter.empty() && gate_scope == "high_traffic" && is_high_traffic_metadata_namespace(ns_filter))) {
+            checks.push_back(metadata_gate_check("scope_name", ns_filter.empty() ? "filtered" : ns_filter, filtered_rows, min_contract_ratio));
+        } else {
+            std::map<std::string, std::vector<json>> by_namespace;
+            for (const auto& row : all_rows) {
+                const std::string ns = row.value("namespace", "");
+                if (ns.empty())
+                    continue;
+                const bool should_gate = gate_scope == "all" || (gate_scope == "high_traffic" && is_high_traffic_metadata_namespace(ns));
+                if (should_gate)
+                    by_namespace[ns].push_back(row);
+            }
+            for (const auto& [ns, rows] : by_namespace)
+                checks.push_back(metadata_gate_check("namespace", ns, rows, min_contract_ratio));
+        }
+
+        bool passed = true;
+        for (const auto& check : checks) {
+            if (!check.value("passed", false)) {
+                passed = false;
+                break;
+            }
+        }
+        gate["passed"] = passed;
+        gate["check_count"] = checks.size();
+        if (checks.empty())
+            gate["skipped_reason"] = "no_gated_namespace_matched";
+        gate["checks"] = checks;
+        return gate;
+    }
+
 public:
     // --- guide ---
     void print_guide(const Args& args) {
@@ -7310,6 +8819,238 @@ public:
         }
         std::cout << std::flush;
     }
+
+    void status(const Args& args) {
+        json snapshot;
+        fs::path path;
+        std::string error;
+        if (!load_catalog_snapshot(args, snapshot, path, error)) {
+            print_json(snapshot_blocker_json(args, error));
+            return;
+        }
+
+        std::vector<json> rows = catalog_actions(snapshot);
+        std::set<std::string> namespaces;
+        int offline_count = 0;
+        int live_only_count = 0;
+        int proof_count = 0;
+        for (const auto& row : rows) {
+            namespaces.insert(row.value("namespace", ""));
+            if (row.value("available_offline", false)) ++offline_count;
+            if (row.value("requires_live_editor", true)) ++live_only_count;
+            if (!row.value("proof_anchor", "").empty()) ++proof_count;
+        }
+
+        json warnings = json::array({
+            "Catalog snapshot freshness is not recomputed by the offline exe; regenerate after registry/source changes.",
+        });
+        if (snapshot.value("partial", false))
+            warnings.push_back("Catalog snapshot is marked partial.");
+
+        json root = {
+            {"success", true},
+            {"status", "ok"},
+            {"snapshot", snapshot_metadata(snapshot, path)},
+            {"tool", {{"source_hash", SOURCE_HASH}, {"parity_spec_rev", PARITY_SPEC_REV}}},
+            {"counts", {
+                {"namespaces", namespaces.size()},
+                {"actions", rows.size()},
+                {"offline_actions", offline_count},
+                {"live_only_actions", live_only_count},
+                {"proof_anchors", proof_count},
+            }},
+            {"limits", {{"default_limit", 50}, {"max_limit", 200}}},
+            {"warnings", warnings},
+            {"recovery_plan", offline_recovery_plan(args)},
+            {"next_actions", json::array({
+                "monolith discover --namespace blueprint --mode actions --limit 10",
+                "monolith find validate_game_ready --limit 10",
+                "monolith get_action_metadata_coverage --namespace blueprint",
+            })},
+        };
+        print_json(root);
+    }
+
+    void discover(const Args& args) {
+        json snapshot;
+        fs::path path;
+        std::string error;
+        if (!load_catalog_snapshot(args, snapshot, path, error)) {
+            print_json(snapshot_blocker_json(args, error));
+            return;
+        }
+
+        const std::string ns_filter = args.opt("namespace");
+        const std::string action_filter = args.opt("action");
+        const std::string text_filter = args.opt("filter");
+        const std::string category_filter = args.opt("category");
+        const bool detail = args.opt_bool("detail", true);
+        std::string mode = lower_copy(args.opt("mode", ns_filter.empty() ? "summary" : "actions"));
+        if (mode != "namespaces" && mode != "actions" && mode != "summary")
+            die("monolith discover --mode must be namespaces, actions, or summary");
+        const bool namespace_summary_mode = mode == "namespaces" || mode == "summary";
+        const std::string response_mode = namespace_summary_mode ? "summary" : mode;
+
+        const int limit = clamp_int(args.opt_int("limit", 50), 1, 200);
+        const int offset = std::max(0, args.opt_int("offset", 0));
+        std::vector<json> rows;
+        for (const auto& row : catalog_actions(snapshot)) {
+            if (action_matches_filters(row, ns_filter, action_filter)
+                && action_matches_text_filter(row, text_filter)
+                && action_matches_category(row, category_filter))
+            {
+                rows.push_back(row);
+            }
+        }
+        std::sort(rows.begin(), rows.end(), [](const json& a, const json& b) {
+            const bool a_proof = !a.value("proof_anchor", "").empty();
+            const bool b_proof = !b.value("proof_anchor", "").empty();
+            if (a_proof != b_proof) return a_proof;
+            return a.value("full_name", "") < b.value("full_name", "");
+        });
+
+        json all_results = json::array();
+        if (namespace_summary_mode) {
+            all_results = namespace_summaries(rows);
+        } else {
+            for (const auto& row : rows)
+                all_results.push_back(detail ? row : compact_action_row(row));
+        }
+
+        json page = json::array();
+        const int total = (int)all_results.size();
+        for (int i = offset; i < total && (int)page.size() < limit; ++i)
+            page.push_back(all_results[i]);
+
+        json warnings = json::array();
+        if (!ns_filter.empty() && rows.empty())
+            warnings.push_back("Namespace/action filter matched no snapshot actions.");
+
+        json root = {
+            {"success", true},
+            {"status", warnings.empty() ? "ok" : "warning"},
+            {"snapshot", snapshot_metadata(snapshot, path)},
+            {"source_hash", SOURCE_HASH},
+            {"mode", response_mode},
+            {"query", {{"namespace", ns_filter}, {"action", action_filter}, {"mode", response_mode}, {"filter", text_filter}, {"category", category_filter}, {"detail", detail}}},
+            {"results", page},
+            {"limits", limits_json(limit, offset, total)},
+            {"projection", namespace_summary_mode ? "summary" : (detail ? "full" : "compact")},
+            {"truncated", offset + limit < total},
+            {"warnings", warnings},
+        };
+        if (namespace_summary_mode) {
+            root["namespaces"] = page;
+            root["actions_hint"] = "Use monolith discover --namespace <name> --mode actions --limit 50 --offset 0 for paginated action listings.";
+        }
+        if (offset + limit < total)
+            root["next_cursor"] = std::to_string(offset + limit);
+        print_json(root);
+    }
+
+    void find(const Args& args) {
+        json snapshot;
+        fs::path path;
+        std::string error;
+        if (!load_catalog_snapshot(args, snapshot, path, error)) {
+            print_json(snapshot_blocker_json(args, error));
+            return;
+        }
+
+        std::string query = args.opt("query");
+        if (query.empty() && !args.positional.empty())
+            query = args.positional[0];
+        query = trim_copy(query);
+        if (query.empty())
+            die("monolith find requires a query argument or --query");
+
+        const int limit = clamp_int(args.opt_int("limit", 20), 1, 200);
+        const std::string query_lower = lower_copy(query);
+        std::vector<json> matches;
+        for (auto row : catalog_actions(snapshot)) {
+            const int score = find_score(row, query_lower);
+            if (score <= 0) continue;
+            row["score"] = score;
+            matches.push_back(row);
+        }
+        std::sort(matches.begin(), matches.end(), [](const json& a, const json& b) {
+            int sa = a.value("score", 0);
+            int sb = b.value("score", 0);
+            if (sa != sb) return sa > sb;
+            return a.value("full_name", "") < b.value("full_name", "");
+        });
+
+        json page = json::array();
+        for (const auto& row : matches) {
+            if ((int)page.size() >= limit) break;
+            page.push_back(row);
+        }
+
+        json root = {
+            {"success", true},
+            {"status", "ok"},
+            {"snapshot", snapshot_metadata(snapshot, path)},
+            {"source_hash", SOURCE_HASH},
+            {"query", query},
+            {"results", page},
+            {"limits", limits_json(limit, 0, (int)matches.size())},
+            {"truncated", (int)matches.size() > limit},
+            {"warnings", json::array()},
+        };
+        if (matches.empty())
+            root["warnings"].push_back("No snapshot actions matched the query.");
+        print_json(root);
+    }
+
+    void get_action_metadata_coverage(const Args& args) {
+        json snapshot;
+        fs::path path;
+        std::string error;
+        if (!load_catalog_snapshot(args, snapshot, path, error)) {
+            print_json(snapshot_blocker_json(args, error));
+            return;
+        }
+
+        const std::string ns_filter = args.opt("namespace");
+        double min_contract_ratio = args.opt_double("min_contract_ratio", 0.8);
+        if (min_contract_ratio < 0.0) min_contract_ratio = 0.0;
+        if (min_contract_ratio > 1.0) min_contract_ratio = 1.0;
+        std::string gate_scope = lower_copy(args.opt("gate_scope", "high_traffic"));
+        if (gate_scope != "high_traffic" && gate_scope != "filtered" && gate_scope != "all" && gate_scope != "off")
+            die("monolith get_action_metadata_coverage --gate-scope must be high_traffic, filtered, all, or off");
+
+        std::vector<json> all_rows = catalog_actions(snapshot);
+        std::vector<json> rows;
+        for (const auto& row : all_rows) {
+            if (ns_filter.empty() || row.value("namespace", "") == ns_filter)
+                rows.push_back(row);
+        }
+
+        json summary = metadata_coverage_summary(rows);
+        json gate = metadata_coverage_gate(all_rows, rows, gate_scope, ns_filter, min_contract_ratio);
+        json warnings = json::array();
+        if (rows.empty())
+            warnings.push_back("No snapshot actions matched the namespace filter.");
+        if (!gate.value("passed", true))
+            warnings.push_back("Metadata contract coverage gate failed; inspect gate.checks and missing samples before updating high-traffic action contracts.");
+
+        json root = {
+            {"success", true},
+            {"status", warnings.empty() ? "ok" : "warning"},
+            {"snapshot", snapshot_metadata(snapshot, path)},
+            {"source_hash", SOURCE_HASH},
+            {"coverage", summary["coverage"]},
+            {"status_counts", summary["status_counts"]},
+            {"contract_readiness", summary["contract_readiness"]},
+            {"missing", summary["missing"]},
+            {"gate", gate},
+            {"warnings", warnings},
+        };
+        root["coverage"]["namespace"] = ns_filter.empty() ? "all" : ns_filter;
+        root["coverage"]["min_contract_ratio"] = min_contract_ratio;
+        root["coverage"]["gate_scope"] = gate_scope;
+        print_json(root);
+    }
 };
 
 // ============================================================
@@ -7317,9 +9058,13 @@ public:
 // ============================================================
 
 int main(int argc, char* argv[]) {
+    CliInvocation cli = normalize_global_cli_options(argc, argv);
+    const int effective_argc = cli.argc();
+    char** effective_argv = cli.argv_data();
+
     // --version / -v: print the build stamp before the 3-arg usage gate fires.
-    for (int i = 1; i < argc; ++i) {
-        std::string a = argv[i];
+    for (int i = 1; i < effective_argc; ++i) {
+        std::string a = effective_argv[i];
         if (a == "--version" || a == "-v") {
             fs::path plugin_root = resolve_plugin_root();
             std::string version = parse_uplugin_version(plugin_root);
@@ -7334,7 +9079,7 @@ int main(int argc, char* argv[]) {
     }
 
     bool handled_help = false;
-    int help_exit_code = maybe_handle_help_or_catalog_check(argc, argv, handled_help);
+    int help_exit_code = maybe_handle_help_or_catalog_check(effective_argc, effective_argv, handled_help);
     if (handled_help) return help_exit_code;
 
     const std::string start_time = iso_local_now();
@@ -7356,9 +9101,13 @@ int main(int argc, char* argv[]) {
 
     try {
         auto phase_start = std::chrono::steady_clock::now();
-        args = parse_args(argc, argv);
+        args = parse_args(effective_argc, effective_argv);
         parsed_args = true;
         parse_args_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+        if (cli.globals.readonly && args.opt_bool("execute", false)) {
+            die("--readonly cannot be combined with --execute=true; rerun without --readonly for execute-gated maintenance actions.");
+        }
 
         validate_help_catalog_or_die();
         validate_known_command_or_die(args.ns, args.action);
@@ -7425,6 +9174,58 @@ int main(int argc, char* argv[]) {
             if (it == actions.end()) die("Unknown source action: " + args.action);
             phase_start = std::chrono::steady_clock::now();
             it->second(sa, args);
+            action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+        } else if (args.ns == "console") {
+            static const std::map<std::string, std::function<void(ConsoleActions&, const Args&)>> actions = {
+                {"search_objects",   [](ConsoleActions& c, const Args& a) { c.search_objects(a); }},
+                {"get_object",       [](ConsoleActions& c, const Args& a) { c.get_object(a); }},
+                {"health",           [](ConsoleActions& c, const Args& a) { c.health(a); }},
+                {"refresh_snapshot", [](ConsoleActions& c, const Args& a) { c.refresh_snapshot(a); }},
+                {"execute",          [](ConsoleActions& c, const Args& a) { c.execute(a); }},
+                {"resolve_command",  [](ConsoleActions& c, const Args& a) { c.resolve_command(a); }},
+                {"get_log_cursor",   [](ConsoleActions& c, const Args& a) { c.get_log_cursor(a); }},
+                {"search_logs_since",[](ConsoleActions& c, const Args& a) { c.search_logs_since(a); }},
+                {"execute_and_expect",[](ConsoleActions& c, const Args& a) { c.execute_and_expect(a); }},
+                {"wait_for_log",     [](ConsoleActions& c, const Args& a) { c.wait_for_log(a); }},
+                {"run_sequence",     [](ConsoleActions& c, const Args& a) { c.run_sequence(a); }},
+                {"execute_and_capture",[](ConsoleActions& c, const Args& a) { c.execute_and_capture(a); }},
+                {"poll_capture",     [](ConsoleActions& c, const Args& a) { c.poll_capture(a); }},
+                {"diagnose_failure", [](ConsoleActions& c, const Args& a) { c.diagnose_failure(a); }},
+                {"set_cvar_scoped",  [](ConsoleActions& c, const Args& a) { c.set_cvar_scoped(a); }},
+            };
+
+            auto it = actions.find(args.action);
+            if (it == actions.end()) die("Unknown console action: " + args.action);
+
+            ConsoleActions ca;
+            const bool live_only =
+                args.action == "refresh_snapshot" ||
+                args.action == "execute" ||
+                args.action == "resolve_command" ||
+                args.action == "get_log_cursor" ||
+                args.action == "search_logs_since" ||
+                args.action == "execute_and_expect" ||
+                args.action == "wait_for_log" ||
+                args.action == "run_sequence" ||
+                args.action == "execute_and_capture" ||
+                args.action == "poll_capture" ||
+                args.action == "diagnose_failure" ||
+                args.action == "set_cvar_scoped";
+            if (!live_only) {
+                phase_start = std::chrono::steady_clock::now();
+                std::string db_path = resolve_namespace_db_path(
+                    args.opt("source_db"), db_arg, db_dir, "EngineSource.db");
+                db_paths.push_back(db_path);
+                db_resolve_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+
+                phase_start = std::chrono::steady_clock::now();
+                ca.open(db_path);
+                db_open_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
+            }
+
+            phase_start = std::chrono::steady_clock::now();
+            it->second(ca, args);
             action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
         } else if (args.ns == "bridge") {
@@ -7497,10 +9298,14 @@ int main(int argc, char* argv[]) {
 
             static const std::map<std::string, std::function<void(MonolithActions&, const Args&)>> actions = {
                 {"guide", [](MonolithActions& m, const Args& a) { m.print_guide(a); }},
+                {"status", [](MonolithActions& m, const Args& a) { m.status(a); }},
+                {"discover", [](MonolithActions& m, const Args& a) { m.discover(a); }},
+                {"find", [](MonolithActions& m, const Args& a) { m.find(a); }},
+                {"get_action_metadata_coverage", [](MonolithActions& m, const Args& a) { m.get_action_metadata_coverage(a); }},
             };
 
             auto it = actions.find(args.action);
-            if (it == actions.end()) die("Unknown monolith action: " + args.action + " (expected 'guide')");
+            if (it == actions.end()) die("Unknown monolith action: " + args.action);
             phase_start = std::chrono::steady_clock::now();
             it->second(ma, args);
             action_exec_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
@@ -7614,7 +9419,7 @@ int main(int argc, char* argv[]) {
     std::cerr << stderr_text;
     const double stdout_capture_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - stdout_capture_start).count();
 
-    if (tool_log_enabled()) {
+    if (!cli.globals.suppress_query_log() && tool_log_enabled()) {
         const auto log_prepare_start = std::chrono::steady_clock::now();
         const auto end_clock = std::chrono::steady_clock::now();
         const double duration_ms = std::chrono::duration<double, std::milli>(end_clock - start_clock).count();
@@ -7664,22 +9469,22 @@ int main(int argc, char* argv[]) {
 
         std::string trace_id = getenv_str("MONOLITH_TRACE_ID");
         if (trace_id.empty()) {
-            trace_id = log_id("trace", start_time + ":query:" + argv_json(argc, argv).dump());
+            trace_id = log_id("trace", start_time + ":query:" + argv_json(effective_argc, effective_argv).dump());
         }
         const std::string parent_span_id = getenv_str("MONOLITH_PARENT_SPAN_ID");
-        const std::string span_id = log_id("span", trace_id + ":query:" + start_time + ":" + argv_json(argc, argv).dump());
+        const std::string span_id = log_id("span", trace_id + ":query:" + start_time + ":" + argv_json(effective_argc, effective_argv).dump());
         const std::string proc_instance_id = process_instance_id();
         const std::string record_id = log_id("rec", proc_instance_id + ":query:1:" + trace_id + ":" + span_id + ":" + start_time);
         const bool truncated = stdout_truncated || stderr_truncated;
 
         json call = {
-            {"argv", argv_json(argc, argv)},
+            {"argv", argv_json(effective_argc, effective_argv)},
             {"namespace", parsed_args ? args.ns : ""},
             {"action", parsed_args ? args.action : ""},
             {"options", redact_json(options)},
             {"positional", redact_json(positional)},
             {"db_path", db_paths},
-            {"retry_signature", hash_text((parsed_args ? args.ns + ":" + args.action : "usage") + argv_json(argc, argv).dump())}
+            {"retry_signature", hash_text((parsed_args ? args.ns + ":" + args.action : "usage") + argv_json(effective_argc, effective_argv).dump())}
         };
 
         json redaction = {

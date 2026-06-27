@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "montage_from_sections",
+  "route_edit_domain": "montage_from_sections",
+  "module_id": "asset_authoring.animation.montage_from_sections",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.montage_from_sections",
+    "edit": "asset_operation.edit.animation.montage_from_sections",
+    "save": "asset_operation.save.animation.montage_from_sections",
+    "readback_verify": "asset_operation.readback_verify.animation.montage_from_sections"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-425"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-425",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "montage_from_sections",
+      "blueprint_type": "",
+      "workflow": "animation_montage_from_sections_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "save_asset",
+        "create_montage_from_sections",
+        "get_montage_info",
+        "inspect_asset"
+      ],
+      "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-425",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource",
+              "/Game/Benchmarks/AssetAuthoring/AM_BenchCompositeSections"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchCompositeMontageSource",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_montage_from_sections",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchCompositeSections",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "slot_name": "BenchCompositeSlot",
+            "sections": [
+              {
+                "name": "Enter",
+                "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource",
+                "start_time": 0.0,
+                "next_section": "Loop"
+              },
+              {
+                "name": "Loop",
+                "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource",
+                "start_time": 0.1,
+                "next_section": "Exit"
+              },
+              {
+                "name": "Exit",
+                "anim_path": "/Game/Benchmarks/AssetAuthoring/A_BenchCompositeMontageSource",
+                "start_time": 0.2
+              }
+            ],
+            "blend": {
+              "blend_in_time": 0.05,
+              "blend_out_time": 0.15,
+              "blend_out_trigger_time": -1.0,
+              "enable_auto_blend_out": true
+            }
+          },
+          "contains": [
+            "AM_BenchCompositeSections",
+            "BenchCompositeSlot",
+            "section_count",
+            "3"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchCompositeSections"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_montage_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchCompositeSections"
+          },
+          "contains": [
+            "AM_BenchCompositeSections",
+            "BenchCompositeSlot",
+            "Enter",
+            "Loop",
+            "Exit"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AM_BenchCompositeSections"
+          },
+          "contains": [
+            "AM_BenchCompositeSections",
+            "AnimMontage"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "montage_from_sections",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_montage_from_sections_roundtrip",
+      "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "save_asset",
+          "create_montage_from_sections",
+          "get_montage_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

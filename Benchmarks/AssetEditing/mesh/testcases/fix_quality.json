@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "fix_quality",
+  "route_edit_domain": "fix_quality",
+  "module_id": "asset_authoring.mesh.fix_quality",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.fix_quality",
+    "edit": "asset_operation.edit.mesh.fix_quality",
+    "save": "asset_operation.save.mesh.fix_quality",
+    "readback_verify": "asset_operation.readback_verify.mesh.fix_quality"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-504"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-504",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "fix_quality",
+      "blueprint_type": "",
+      "workflow": "mesh_fix_quality_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_parametric_mesh",
+        "fix_mesh_quality",
+        "save_asset",
+        "analyze_mesh_quality",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Generate a parametric StaticMesh, run mesh quality repair operations through GeometryScript, save it, and read mesh quality and registry state back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-504",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_parametric_mesh",
+            "type": "chair",
+            "dimensions": {
+              "width": 52.0,
+              "depth": 48.0,
+              "height": 92.0
+            },
+            "params": {
+              "seat_height": 45.0,
+              "back_height": 42.0,
+              "leg_thickness": 4.0
+            },
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality",
+            "overwrite": true,
+            "auto_save": false,
+            "use_cache": false
+          },
+          "contains": [
+            "chair",
+            "SM_BenchFixQuality",
+            "cache_hit",
+            "false"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "fix_mesh_quality",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality",
+            "operations": [
+              "weld_edges",
+              "fix_normals"
+            ],
+            "weld_tolerance": 0.01
+          },
+          "contains": [
+            "SM_BenchFixQuality",
+            "operations_applied",
+            "weld_edges",
+            "fix_normals"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "analyze_mesh_quality",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality"
+          },
+          "contains": [
+            "SM_BenchFixQuality",
+            "metrics",
+            "triangles",
+            "vertices",
+            "overall_score"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality"
+          },
+          "contains": [
+            "SM_BenchFixQuality",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchFixQuality"
+          },
+          "contains": [
+            "SM_BenchFixQuality",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "fix_quality",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_fix_quality_roundtrip",
+      "description": "Generate a parametric StaticMesh, run mesh quality repair operations through GeometryScript, save it, and read mesh quality and registry state back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshTechArtActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_parametric_mesh",
+          "fix_mesh_quality",
+          "save_asset",
+          "analyze_mesh_quality",
+          "get_mesh_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

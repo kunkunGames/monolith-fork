@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "handle_boolean_remesh_material_ids",
+  "route_edit_domain": "handle_boolean_remesh_material_ids",
+  "module_id": "asset_authoring.mesh.handle_boolean_remesh_material_ids",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.handle_boolean_remesh_material_ids",
+    "edit": "asset_operation.edit.mesh.handle_boolean_remesh_material_ids",
+    "save": "asset_operation.save.mesh.handle_boolean_remesh_material_ids",
+    "readback_verify": "asset_operation.readback_verify.mesh.handle_boolean_remesh_material_ids"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-452"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-452",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "handle_boolean_remesh_material_ids",
+      "blueprint_type": "",
+      "workflow": "mesh_handle_boolean_remesh_material_ids_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "mesh_boolean",
+        "geometry_material_ids",
+        "mesh_remesh",
+        "generate_lods",
+        "save_handle",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "list_handles",
+        "inspect_asset"
+      ],
+      "description": "Create primitive mesh handles, union them, edit material IDs, remesh, generate a LOD handle, save as StaticMesh, release handles, and inspect the saved mesh"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-452",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleBooleanRemesh"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolA"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolB"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolResult"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolMat"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolMat_LOD1"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:box",
+            "handle": "AE_BenchMeshBoolA"
+          },
+          "contains": [
+            "AE_BenchMeshBoolA",
+            "primitive:box",
+            "triangle_count",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:sphere",
+            "handle": "AE_BenchMeshBoolB"
+          },
+          "contains": [
+            "AE_BenchMeshBoolB",
+            "primitive:sphere",
+            "triangle_count",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "mesh_boolean",
+            "handle_a": "AE_BenchMeshBoolA",
+            "handle_b": "AE_BenchMeshBoolB",
+            "operation": "union",
+            "result_handle": "AE_BenchMeshBoolResult"
+          },
+          "contains": [
+            "AE_BenchMeshBoolResult",
+            "union",
+            "triangle_count",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_material_ids",
+            "handle": "AE_BenchMeshBoolResult",
+            "verb": "clear",
+            "result_handle": "AE_BenchMeshBoolMat",
+            "clear_value": 2
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat",
+            "clear",
+            "clear_value",
+            "2",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "mesh_remesh",
+            "handle": "AE_BenchMeshBoolMat",
+            "target_edge_length": 25.0
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat",
+            "target_edge_length",
+            "25",
+            "result_triangles"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "generate_lods",
+            "handle": "AE_BenchMeshBoolMat",
+            "lod_count": 1,
+            "reduction_per_lod": 0.5
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat",
+            "lod_count",
+            "1",
+            "AE_BenchMeshBoolMat_LOD1",
+            "actual_triangles"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "save_handle",
+            "handle": "AE_BenchMeshBoolMat",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleBooleanRemesh",
+            "overwrite": true,
+            "collision": "box"
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat",
+            "SM_BenchHandleBooleanRemesh",
+            "collision_mode",
+            "box",
+            "saved"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolA"
+          },
+          "contains": [
+            "AE_BenchMeshBoolA",
+            "released"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolB"
+          },
+          "contains": [
+            "AE_BenchMeshBoolB",
+            "released"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolResult"
+          },
+          "contains": [
+            "AE_BenchMeshBoolResult",
+            "released"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolMat"
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat",
+            "released"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "AE_BenchMeshBoolMat_LOD1"
+          },
+          "contains": [
+            "AE_BenchMeshBoolMat_LOD1",
+            "released"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleBooleanRemesh"
+          },
+          "contains": [
+            "SM_BenchHandleBooleanRemesh",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleBooleanRemesh"
+          },
+          "contains": [
+            "extent",
+            "volume_cm3",
+            "surface_area_cm2"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "list_handles"
+          },
+          "not_contains": [
+            "AE_BenchMeshBoolA",
+            "AE_BenchMeshBoolB",
+            "AE_BenchMeshBoolResult",
+            "AE_BenchMeshBoolMat",
+            "AE_BenchMeshBoolMat_LOD1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleBooleanRemesh"
+          },
+          "contains": [
+            "SM_BenchHandleBooleanRemesh",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "handle_boolean_remesh_material_ids",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_handle_boolean_remesh_material_ids_roundtrip",
+      "description": "Create primitive mesh handles, union them, edit material IDs, remesh, generate a LOD handle, save as StaticMesh, release handles, and inspect the saved mesh",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshOperationActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "release_handle",
+          "create_handle",
+          "mesh_boolean",
+          "geometry_material_ids",
+          "mesh_remesh",
+          "generate_lods",
+          "save_handle",
+          "get_mesh_info",
+          "get_mesh_bounds",
+          "list_handles",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

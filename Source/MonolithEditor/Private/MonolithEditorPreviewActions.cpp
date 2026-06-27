@@ -299,10 +299,16 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureMaterialGrid(
 	if (Params->HasField(TEXT("columns")))
 	{
 		double ColsD = 0.0;
-		if (!Params->TryGetNumberField(TEXT("columns"), ColsD))
+		const TSharedPtr<FJsonValue> ColumnsValue = Params->TryGetField(TEXT("columns"));
+		if (!ColumnsValue.IsValid() || ColumnsValue->Type != EJson::Number || !ColumnsValue->TryGetNumber(ColsD))
 		{
 			return FMonolithActionResult::Error(
 				TEXT("Invalid param: 'columns' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!FMath::IsFinite(ColsD) || !FMath::IsNearlyEqual(ColsD, FMath::RoundToDouble(ColsD)))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("Invalid param: 'columns' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		Columns = FMath::Max(1, (int32)ColsD);
 	}

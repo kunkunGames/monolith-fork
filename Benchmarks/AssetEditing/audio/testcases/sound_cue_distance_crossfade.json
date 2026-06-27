@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "audio",
+  "asset_type_slug": "audio",
+  "edit_domain": "sound_cue_distance_crossfade",
+  "route_edit_domain": "sound_cue_distance_crossfade",
+  "module_id": "asset_authoring.audio.sound_cue_distance_crossfade",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.audio.sound_cue_distance_crossfade",
+    "edit": "asset_operation.edit.audio.sound_cue_distance_crossfade",
+    "save": "asset_operation.save.audio.sound_cue_distance_crossfade",
+    "readback_verify": "asset_operation.readback_verify.audio.sound_cue_distance_crossfade"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-359"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-359",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "audio",
+      "edit_domain": "sound_cue_distance_crossfade",
+      "blueprint_type": "",
+      "workflow": "audio_distance_crossfade_cue_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_test_wave",
+        "create_distance_crossfade_cue",
+        "save_asset",
+        "get_sound_cue_graph",
+        "find_sound_waves_in_cue",
+        "validate_sound_cue"
+      ],
+      "description": "Create near/far SoundWaves, build a DistanceCrossFade SoundCue template, save it, then inspect crossfade bands and references"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-359",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchNear",
+              "/Game/Benchmarks/AssetAuthoring/SW_BenchFar",
+              "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchNear",
+            "frequency_hz": 220.0,
+            "duration_seconds": 0.2,
+            "sample_rate": 44100,
+            "amplitude": 0.32
+          },
+          "contains": [
+            "SW_BenchNear"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_test_wave",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SW_BenchFar",
+            "frequency_hz": 880.0,
+            "duration_seconds": 0.2,
+            "sample_rate": 44100,
+            "amplitude": 0.32
+          },
+          "contains": [
+            "SW_BenchFar"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "create_distance_crossfade_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade",
+            "bands": [
+              {
+                "sound_wave": "/Game/Benchmarks/AssetAuthoring/SW_BenchNear",
+                "fade_in_distance_start": 0.0,
+                "fade_in_distance_end": 100.0,
+                "fade_out_distance_start": 850.0,
+                "fade_out_distance_end": 1200.0,
+                "volume": 1.0
+              },
+              {
+                "sound_wave": "/Game/Benchmarks/AssetAuthoring/SW_BenchFar",
+                "fade_in_distance_start": 700.0,
+                "fade_in_distance_end": 1100.0,
+                "fade_out_distance_start": 2200.0,
+                "fade_out_distance_end": 2600.0,
+                "volume": 0.82
+              }
+            ]
+          },
+          "contains": [
+            "SCue_BenchDistanceXFade",
+            "band_count",
+            "2"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "get_sound_cue_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade"
+          },
+          "contains": [
+            "SoundNodeDistanceCrossFade",
+            "CrossFadeInput",
+            "SW_BenchNear",
+            "SW_BenchFar"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "find_sound_waves_in_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade"
+          },
+          "contains": [
+            "SW_BenchNear",
+            "SW_BenchFar"
+          ]
+        },
+        {
+          "tool": "audio_query",
+          "args": {
+            "action": "validate_sound_cue",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SCue_BenchDistanceXFade"
+          },
+          "contains": [
+            "valid",
+            "true"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sound_cue_distance_crossfade",
+      "blueprint_type": "",
+      "domain": "audio",
+      "workflow": "audio_distance_crossfade_cue_roundtrip",
+      "description": "Create near/far SoundWaves, build a DistanceCrossFade SoundCue template, save it, then inspect crossfade bands and references",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_test_wave",
+          "create_distance_crossfade_cue",
+          "save_asset",
+          "get_sound_cue_graph",
+          "find_sound_waves_in_cue",
+          "validate_sound_cue"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

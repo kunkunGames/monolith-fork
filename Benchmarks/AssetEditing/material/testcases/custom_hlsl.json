@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "material_custom_hlsl",
+  "route_edit_domain": "custom_hlsl",
+  "module_id": "asset_authoring.material.custom_hlsl",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.custom_hlsl",
+    "edit": "asset_operation.edit.material.custom_hlsl",
+    "save": "asset_operation.save.material.custom_hlsl",
+    "readback_verify": "asset_operation.readback_verify.material.custom_hlsl"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-366"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-366",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "material_custom_hlsl",
+      "blueprint_type": "",
+      "workflow": "material_custom_hlsl_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "create_custom_hlsl_node",
+        "update_custom_hlsl_node",
+        "save_material",
+        "export_material_graph",
+        "inspect_asset"
+      ],
+      "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-366",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl",
+            "blend_mode": "Opaque",
+            "shading_model": "Unlit",
+            "material_domain": "Surface"
+          },
+          "contains": [
+            "M_BenchCustomHlsl"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_custom_hlsl_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl",
+            "code": "return float3(0.25, 0.5, 0.75);",
+            "description": "BenchCustomColor",
+            "output_type": "float3",
+            "pos_x": 160,
+            "pos_y": 120
+          },
+          "contains": [
+            "MaterialExpressionCustom_0",
+            "BenchCustomColor",
+            "Float3"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "update_custom_hlsl_node",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl",
+            "expression_name": "MaterialExpressionCustom_0",
+            "code": "return float3(0.75, 0.5, 0.25);",
+            "description": "BenchCustomColorFinal",
+            "output_type": "float3",
+            "inputs": [
+              {
+                "name": "BenchInput"
+              }
+            ],
+            "additional_outputs": [
+              {
+                "name": "BenchMask",
+                "type": "float"
+              }
+            ]
+          },
+          "contains": [
+            "MaterialExpressionCustom_0",
+            "updated_fields",
+            "code",
+            "inputs",
+            "additional_outputs"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "export_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl"
+          },
+          "contains": [
+            "BenchCustomColorFinal",
+            "return float3",
+            "BenchInput",
+            "BenchMask",
+            "MaterialExpressionCustom"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchCustomHlsl"
+          },
+          "contains": [
+            "M_BenchCustomHlsl",
+            "Material"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "material_custom_hlsl",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_custom_hlsl_roundtrip",
+      "description": "Create a Material, add and update a Custom HLSL expression, save, and export the material graph to read HLSL metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "create_custom_hlsl_node",
+          "update_custom_hlsl_node",
+          "save_material",
+          "export_material_graph",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

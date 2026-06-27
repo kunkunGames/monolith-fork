@@ -35,7 +35,7 @@ The compact merge target is:
 |----------|-----------------|--------|
 | P4 CL | `p4 describe -s 448` identifies the pending changelist as `Monolith 0.15.0 upgrade` with wide edits across Core, Blueprint, UI, Niagara, domain adapters, docs, tools, and binaries. | The merge is not a narrow patch; it needs an architectural audit before submit. |
 | Git range | `a14b72a26..9063f18d` includes 123 changed files under `Source`, `Docs`, `Tools`, `.jules`, `README.md`, `CHANGELOG.md`, and `Monolith.uplugin`, with about 17k insertions. | Review must classify features by capability family instead of by file only. |
-| Build history | A fresh GoGameEditor Win64 Development UBT build passed on 2026-05-26 after the compact-merge code changes. | Code compiles after curation. |
+| Build history | A fresh `<Project>Editor Win64 Development` UBT build passed on 2026-05-26 after the compact-merge code changes. | Code compiles after curation. |
 | Source-index health | `Binaries\monolith_query.exe source health` is readable; the remaining warning is the existing orphan-reference warning, with CRG parity OK. | Source-index parity no longer blocks this spec; orphan cleanup is outside this compact-merge pass. |
 | Existing docs | `Docs/SPEC_CORE.md`, `Docs/API_REFERENCE.md`, and this verification note now distinguish static in-tree reference counts from the live full-project 2026-05-26 registry snapshot. | Exact action/schema truth remains runtime `monolith_find`, `monolith_discover`, and `describe`; docs record the verified snapshot and deliberate conditional deltas. |
 
@@ -250,7 +250,7 @@ Latest focused compact-merge contract pass: [../testing/2026-05-26-compact-merge
 
 | Gate | Verified result |
 |------|-----------------|
-| Full C++ build | PASS. GoGameEditor Win64 Development built through UBT after the final code changes. |
+| Full C++ build | PASS. `<Project>Editor Win64 Development` built through UBT after the final code changes. |
 | Registry health | PASS. Live `monolith_status()` reported version `0.15.0`, 1584 actions, and 45 namespaces in the fully loaded project. |
 | MCP tool surface | PASS. `tools/list` exposed 77 MCP tools, including 44 `_query` namespace dispatch tools. |
 | Routing boundary smoke | PASS. `monolith_find` routes tasks, `monolith_discover` returns exact schemas, `describe` returns writable shapes, and `monolith_guide` returns editorial workflow prose. |
@@ -265,7 +265,7 @@ Latest focused compact-merge contract pass: [../testing/2026-05-26-compact-merge
 
 | Gate | Command or method | Expected result |
 |------|-------------------|-----------------|
-| Full C++ build | Resolve engine via `BatchFiles\Script\ResolveUnrealEngine.ps1`, then run UBT for `GoGameEditor Win64 Development -Project=D:\P4\game\GO.uproject -WaitMutex -NoHotReloadFromIDE`. | Build succeeds without relying on hard-coded engine paths. |
+| Full C++ build | Resolve engine via `BatchFiles\Script\ResolveUnrealEngine.ps1`, then run UBT for `<Project>Editor Win64 Development -Project=<Project>.uproject -WaitMutex -NoHotReloadFromIDE`. | Build succeeds without relying on hard-coded engine paths. |
 | Registry health | `monolith_status()` through the configured MCP client, or equivalent live health check. | Server is reachable and reports expected version/action counts. |
 | Routing boundary smoke | `monolith_find` for action search, `monolith_discover` for params, `describe.schema` for writable shape, and `monolith.guide(section="decisions")` for prose. | Each surface returns its own kind of information without duplicating another surface's output. |
 | Discovery count | `monolith_discover()` and per-namespace discover calls. | The live full-project snapshot is recorded as 1584 actions / 45 namespaces. Static in-tree reference tables either match their curated scope or explicitly defer exact schemas/counts to live discovery. |

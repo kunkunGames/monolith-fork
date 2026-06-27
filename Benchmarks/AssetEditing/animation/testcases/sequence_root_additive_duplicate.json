@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "sequence_root_additive_duplicate",
+  "route_edit_domain": "sequence_root_additive_duplicate",
+  "module_id": "asset_authoring.animation.sequence_root_additive_duplicate",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.sequence_root_additive_duplicate",
+    "edit": "asset_operation.edit.animation.sequence_root_additive_duplicate",
+    "save": "asset_operation.save.animation.sequence_root_additive_duplicate",
+    "readback_verify": "asset_operation.readback_verify.animation.sequence_root_additive_duplicate"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-395"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-395",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "sequence_root_additive_duplicate",
+      "blueprint_type": "",
+      "workflow": "animation_sequence_root_additive_duplicate_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "save_asset",
+        "duplicate_sequence",
+        "set_root_motion_settings",
+        "set_additive_settings",
+        "get_sequence_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-395",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveBase",
+              "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveBase",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchRootAdditiveBase",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveBase"
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "duplicate_sequence",
+            "source_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveBase",
+            "dest_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy"
+          },
+          "contains": [
+            "A_BenchRootAdditiveBase",
+            "A_BenchRootAdditiveCopy",
+            "AnimSequence"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_root_motion_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy",
+            "enable_root_motion": true,
+            "root_motion_lock": "Zero",
+            "force_root_lock": true
+          },
+          "contains": [
+            "A_BenchRootAdditiveCopy",
+            "enable_root_motion",
+            "true",
+            "root_motion_lock",
+            "Zero",
+            "force_root_lock",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_additive_settings",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy",
+            "additive_anim_type": "LocalSpace",
+            "ref_pose_type": "RefPose"
+          },
+          "contains": [
+            "A_BenchRootAdditiveCopy",
+            "LocalSpace",
+            "RefPose"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_sequence_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy"
+          },
+          "contains": [
+            "A_BenchRootAdditiveCopy",
+            "has_root_motion",
+            "true",
+            "force_root_lock",
+            "true",
+            "root_motion_lock",
+            "Zero",
+            "additive_type",
+            "LocalSpaceBase"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchRootAdditiveCopy"
+          },
+          "contains": [
+            "A_BenchRootAdditiveCopy",
+            "AnimSequence"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "sequence_root_additive_duplicate",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_sequence_root_additive_duplicate_roundtrip",
+      "description": "Create an AnimSequence, duplicate it, edit root-motion and additive settings on the duplicate, save, and read sequence metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "save_asset",
+          "duplicate_sequence",
+          "set_root_motion_settings",
+          "set_additive_settings",
+          "get_sequence_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

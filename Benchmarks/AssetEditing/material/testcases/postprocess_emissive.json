@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "postprocess_emissive",
+  "route_edit_domain": "postprocess_emissive",
+  "module_id": "asset_authoring.material.postprocess_emissive",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.postprocess_emissive",
+    "edit": "asset_operation.edit.material.postprocess_emissive",
+    "save": "asset_operation.save.material.postprocess_emissive",
+    "readback_verify": "asset_operation.readback_verify.material.postprocess_emissive"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-500"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-500",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "postprocess_emissive",
+      "blueprint_type": "",
+      "workflow": "material_postprocess_emissive_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_material",
+        "build_material_graph",
+        "recompile_material",
+        "save_material",
+        "get_material_properties",
+        "get_full_connection_graph",
+        "validate_material",
+        "inspect_asset"
+      ],
+      "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-500",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint",
+            "blend_mode": "Opaque",
+            "shading_model": "Unlit",
+            "material_domain": "PostProcess"
+          },
+          "contains": [
+            "M_BenchPostProcessTint"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "build_material_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint",
+            "clear_existing": true,
+            "graph_spec": {
+              "nodes": [
+                {
+                  "id": "BenchPostProcessTint",
+                  "class": "VectorParameter",
+                  "props": {
+                    "ParameterName": "BenchPostProcessTint"
+                  },
+                  "pos": [
+                    -420,
+                    -80
+                  ]
+                }
+              ],
+              "outputs": [
+                {
+                  "from": "BenchPostProcessTint",
+                  "from_pin": "RGB",
+                  "to_property": "EmissiveColor"
+                }
+              ]
+            }
+          },
+          "contains": [
+            "M_BenchPostProcessTint"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "recompile_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint",
+            "include_stats": true
+          },
+          "contains": [
+            "M_BenchPostProcessTint",
+            "recompiled"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_material_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+          },
+          "contains": [
+            "M_BenchPostProcessTint",
+            "PostProcess",
+            "Unlit"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+          },
+          "contains": [
+            "BenchPostProcessTint",
+            "EmissiveColor"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_material reports issues as isError; PostProcess domain, Unlit shading, and Emissive graph connection are asserted separately"
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchPostProcessTint"
+          },
+          "contains": [
+            "M_BenchPostProcessTint",
+            "Material"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "postprocess_emissive",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "material_postprocess_emissive_roundtrip",
+      "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/post-process-materials-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMaterial/Private/MonolithMaterialActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_material",
+          "build_material_graph",
+          "recompile_material",
+          "save_material",
+          "get_material_properties",
+          "get_full_connection_graph",
+          "validate_material",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

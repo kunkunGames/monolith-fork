@@ -10,6 +10,293 @@
 #include "K2Node_CreateDelegate.h"
 #include "EdGraphSchema_K2.h"
 
+namespace
+{
+	FString EventDispatcherDisplayName(const UEdGraph* Graph)
+	{
+		if (!Graph)
+		{
+			return FString();
+		}
+		FString DisplayName = Graph->GetName();
+		if (DisplayName.EndsWith(TEXT("_Signature")))
+		{
+			DisplayName.LeftChopInline(10, EAllowShrinking::No);
+		}
+		return DisplayName;
+	}
+
+	TArray<FString> EventDispatcherNames(const UBlueprint* BP)
+	{
+		TArray<FString> Names;
+		if (!BP)
+		{
+			return Names;
+		}
+		for (const UEdGraph* Graph : BP->DelegateSignatureGraphs)
+		{
+			const FString DisplayName = EventDispatcherDisplayName(Graph);
+			if (!DisplayName.IsEmpty())
+			{
+				Names.Add(DisplayName);
+			}
+		}
+		Names.Sort();
+		return Names;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		Out.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Out;
+	}
+
+	TArray<FString> RemoveEventDispatcherAcceptedParameters()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("dispatcher_name"));
+		Values.Add(TEXT("name"));
+		Values.Add(TEXT("missing_ok"));
+		Values.Add(TEXT("allow_missing"));
+		return Values;
+	}
+
+	TArray<FString> RenameFunctionAcceptedParameters()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("asset_path"));
+		Values.Add(TEXT("old_name"));
+		Values.Add(TEXT("new_name"));
+		return Values;
+	}
+
+	TArray<FString> OverrideParentFunctionAcceptedParameters()
+	{
+		TArray<FString> Values;
+		Values.Add(TEXT("asset_path"));
+		Values.Add(TEXT("parent_function_name"));
+		return Values;
+	}
+
+	template <typename GraphArrayType>
+	TArray<FString> GraphNames(const GraphArrayType& Graphs)
+	{
+		TArray<FString> Names;
+		Names.Reserve(Graphs.Num());
+		for (const auto& GraphRef : Graphs)
+		{
+			const UEdGraph* Graph = GraphRef;
+			if (Graph)
+			{
+				Names.Add(Graph->GetName());
+			}
+		}
+		Names.Sort();
+		return Names;
+	}
+
+	TArray<FString> FunctionGraphNames(const UBlueprint* BP)
+	{
+		return BP ? GraphNames(BP->FunctionGraphs) : TArray<FString>();
+	}
+
+	FString BlueprintGraphKind(const UBlueprint* BP, const UEdGraph* Graph, FString* OutInterfaceName = nullptr)
+	{
+		if (OutInterfaceName)
+		{
+			OutInterfaceName->Reset();
+		}
+		if (!BP || !Graph)
+		{
+			return TEXT("unknown");
+		}
+
+		UEdGraph* MutableGraph = const_cast<UEdGraph*>(Graph);
+		if (BP->UbergraphPages.Contains(MutableGraph)) return TEXT("event_graph");
+		if (BP->FunctionGraphs.Contains(MutableGraph)) return TEXT("function");
+		if (BP->MacroGraphs.Contains(MutableGraph)) return TEXT("macro");
+		if (BP->DelegateSignatureGraphs.Contains(MutableGraph)) return TEXT("delegate_signature");
+		for (const FBPInterfaceDescription& Iface : BP->ImplementedInterfaces)
+		{
+			if (Iface.Graphs.Contains(MutableGraph))
+			{
+				if (OutInterfaceName && Iface.Interface)
+				{
+					*OutInterfaceName = Iface.Interface->GetName();
+				}
+				return TEXT("interface");
+			}
+		}
+		return TEXT("unknown");
+	}
+
+	TArray<TSharedPtr<FJsonValue>> BlueprintGraphCatalogJsonValues(const UBlueprint* BP)
+	{
+		TArray<TSharedPtr<FJsonValue>> Graphs;
+		if (!BP)
+		{
+			return Graphs;
+		}
+
+		TArray<UEdGraph*> AllGraphs;
+		const_cast<UBlueprint*>(BP)->GetAllGraphs(AllGraphs);
+		Graphs.Reserve(AllGraphs.Num());
+		for (const UEdGraph* Graph : AllGraphs)
+		{
+			if (!Graph) continue;
+
+			FString InterfaceName;
+			const FString Kind = BlueprintGraphKind(BP, Graph, &InterfaceName);
+			TSharedPtr<FJsonObject> GraphObj = MakeShared<FJsonObject>();
+			GraphObj->SetStringField(TEXT("name"), Graph->GetName());
+			GraphObj->SetStringField(TEXT("graph_kind"), Kind);
+			GraphObj->SetNumberField(TEXT("node_count"), Graph->Nodes.Num());
+			if (!InterfaceName.IsEmpty())
+			{
+				GraphObj->SetStringField(TEXT("interface"), InterfaceName);
+			}
+			Graphs.Add(MakeShared<FJsonValueObject>(GraphObj));
+		}
+		return Graphs;
+	}
+
+	UEdGraph* FindFunctionGraphByName(const UBlueprint* BP, const FString& FunctionName)
+	{
+		if (!BP)
+		{
+			return nullptr;
+		}
+		for (const auto& GraphRef : BP->FunctionGraphs)
+		{
+			UEdGraph* Graph = GraphRef;
+			if (Graph && Graph->GetName() == FunctionName)
+			{
+				return Graph;
+			}
+		}
+		return nullptr;
+	}
+
+	bool FunctionHasReturnValue(const UFunction* Function)
+	{
+		if (!Function)
+		{
+			return false;
+		}
+		for (TFieldIterator<FProperty> PropIt(Function); PropIt && (PropIt->PropertyFlags & CPF_Parm); ++PropIt)
+		{
+			const FProperty* Prop = *PropIt;
+			if (Prop && Prop->HasAnyPropertyFlags(CPF_ReturnParm))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	FString NonOverridableReason(const UFunction* Function)
+	{
+		if (!Function)
+		{
+			return TEXT("function_not_found_on_parent_class");
+		}
+		if (Function->HasAnyFunctionFlags(FUNC_Final))
+		{
+			return TEXT("function_is_final");
+		}
+		if (Function->HasAnyFunctionFlags(FUNC_Static))
+		{
+			return TEXT("function_is_static");
+		}
+		if (Function->HasAnyFunctionFlags(FUNC_Private))
+		{
+			return TEXT("function_is_private");
+		}
+		if (!Function->HasAnyFunctionFlags(FUNC_BlueprintEvent))
+		{
+			return TEXT("function_is_not_blueprint_event");
+		}
+		return TEXT("engine_override_resolver_rejected_function");
+	}
+
+	TArray<TSharedPtr<FJsonValue>> OverrideableParentFunctionJsonValues(UBlueprint* BP, bool& bOutTruncated)
+	{
+		bOutTruncated = false;
+		TArray<TSharedPtr<FJsonValue>> Functions;
+		if (!BP || !BP->ParentClass)
+		{
+			return Functions;
+		}
+
+		TSet<FName> SeenNames;
+		for (TFieldIterator<UFunction> FuncIt(BP->ParentClass); FuncIt; ++FuncIt)
+		{
+			UFunction* Function = *FuncIt;
+			if (!Function || SeenNames.Contains(Function->GetFName()))
+			{
+				continue;
+			}
+			SeenNames.Add(Function->GetFName());
+
+			UFunction* ResolvedFunction = nullptr;
+			UClass* OverrideClass = FBlueprintEditorUtils::GetOverrideFunctionClass(
+				BP, Function->GetFName(), &ResolvedFunction);
+			if (!OverrideClass || !ResolvedFunction)
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> FunctionObj = MakeShared<FJsonObject>();
+			FunctionObj->SetStringField(TEXT("name"), ResolvedFunction->GetName());
+			FunctionObj->SetStringField(TEXT("declaring_class"), OverrideClass->GetName());
+			FunctionObj->SetBoolField(TEXT("has_return_value"), FunctionHasReturnValue(ResolvedFunction));
+			FunctionObj->SetBoolField(TEXT("already_overridden"), FindFunctionGraphByName(BP, ResolvedFunction->GetName()) != nullptr);
+			Functions.Add(MakeShared<FJsonValueObject>(FunctionObj));
+
+			if (Functions.Num() >= 50)
+			{
+				bOutTruncated = true;
+				break;
+			}
+		}
+		return Functions;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> NonOverridableParentFunctionMatchJsonValues(const UBlueprint* BP, const FString& FunctionName)
+	{
+		TArray<TSharedPtr<FJsonValue>> Matches;
+		if (!BP || !BP->ParentClass || FunctionName.IsEmpty())
+		{
+			return Matches;
+		}
+
+		for (TFieldIterator<UFunction> FuncIt(BP->ParentClass); FuncIt; ++FuncIt)
+		{
+			UFunction* Function = *FuncIt;
+			if (!Function || Function->GetName() != FunctionName)
+			{
+				continue;
+			}
+
+			TSharedPtr<FJsonObject> MatchObj = MakeShared<FJsonObject>();
+			MatchObj->SetStringField(TEXT("name"), Function->GetName());
+			MatchObj->SetStringField(TEXT("declaring_class"), Function->GetOwnerClass() ? Function->GetOwnerClass()->GetName() : FString());
+			MatchObj->SetStringField(TEXT("reason"), NonOverridableReason(Function));
+			MatchObj->SetBoolField(TEXT("is_blueprint_event"), Function->HasAnyFunctionFlags(FUNC_BlueprintEvent));
+			MatchObj->SetBoolField(TEXT("is_final"), Function->HasAnyFunctionFlags(FUNC_Final));
+			MatchObj->SetBoolField(TEXT("is_static"), Function->HasAnyFunctionFlags(FUNC_Static));
+			MatchObj->SetBoolField(TEXT("has_return_value"), FunctionHasReturnValue(Function));
+			Matches.Add(MakeShared<FJsonValueObject>(MatchObj));
+		}
+		return Matches;
+	}
+}
+
 // --- Registration ---
 
 void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Registry)
@@ -142,6 +429,8 @@ void FMonolithBlueprintGraphActions::RegisterActions(FMonolithToolRegistry& Regi
 			.RequiredAssetPath(TEXT("asset_path"),      TEXT("Blueprint asset path"))
 			.Optional(TEXT("dispatcher_name"), TEXT("string"), TEXT("Event dispatcher name (without _Signature suffix); alias: name"))
 			.Optional(TEXT("name"),            TEXT("string"), TEXT("Alias for dispatcher_name (matches add_event_dispatcher, which uses name)"))
+			.Optional(TEXT("missing_ok"),      TEXT("bool"), TEXT("Return a successful no-op when the dispatcher is already absent"), TEXT("false"))
+			.Optional(TEXT("allow_missing"),   TEXT("bool"), TEXT("Alias for missing_ok"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("set_event_dispatcher_params"),
@@ -300,7 +589,17 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 	FString ParentFuncName;
 	if (!Params->TryGetStringField(TEXT("parent_function_name"), ParentFuncName) || ParentFuncName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_function_name"));
+		bool bTruncated = false;
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_parent_function_parameter"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
+		ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: parent_function_name"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Retry with parent_function_name set to one of error_data.available_override_functions[].name."));
 	}
 
 	// Resolve the parent class that DECLARES this overridable function.
@@ -311,9 +610,24 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 
 	if (!OverrideFuncClass || !OverrideFunc)
 	{
+		bool bTruncated = false;
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("parent_function_not_overridable"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("blueprint"), BP->GetName());
+		ErrorData->SetStringField(TEXT("parent_class"), BP->ParentClass ? BP->ParentClass->GetName() : FString());
+		ErrorData->SetStringField(TEXT("offending_function"), ParentFuncName);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
+		ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
+		ErrorData->SetArrayField(TEXT("non_overridable_matches"), NonOverridableParentFunctionMatchJsonValues(BP, ParentFuncName));
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("Choose an available_override_functions[].name value, or add BlueprintImplementableEvent/BlueprintNativeEvent exposure to the parent class."));
 		return FMonolithActionResult::Error(FString::Printf(
 			TEXT("'%s' is not an overridable function on the parent of %s (not found, or not a BlueprintImplementableEvent / BlueprintNativeEvent)."),
-			*ParentFuncName, *BP->GetName()));
+			*ParentFuncName, *BP->GetName()))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Use error_data.available_override_functions for valid parent_function_name values; error_data.non_overridable_matches explains exact-name rejects."));
 	}
 
 	// Reject if an override graph with this name already exists.
@@ -321,8 +635,22 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 	{
 		if (Existing && Existing->GetName() == ParentFuncName)
 		{
+			bool bTruncated = false;
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("failure_cause"), TEXT("override_graph_already_exists"));
+			ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+			ErrorData->SetStringField(TEXT("offending_function"), ParentFuncName);
+			ErrorData->SetStringField(TEXT("existing_graph"), Existing->GetName());
+			ErrorData->SetStringField(TEXT("graph_kind"), BlueprintGraphKind(BP, Existing));
+			ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+			ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
+			ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
+			ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
 			return FMonolithActionResult::Error(FString::Printf(
-				TEXT("Override function graph already exists: %s"), *ParentFuncName));
+				TEXT("Override function graph already exists: %s"), *ParentFuncName))
+				.WithErrorData(ErrorData)
+				.WithHint(TEXT("The override graph is already present. Continue editing that graph or choose another available parent function."))
+				.WithRelatedAction(TEXT("blueprint.get_functions"));
 		}
 	}
 
@@ -522,23 +850,74 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 
 	if (OldName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_old_name"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Call blueprint.get_functions, then retry with old_name set to an existing function graph."));
 	}
 	if (NewName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_new_name"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("offending_function"), OldName);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"), FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Provide new_name with a non-conflicting function graph name."));
 	}
 
 	UEdGraph* Graph = MonolithBlueprintInternal::FindGraphByName(BP, OldName);
 	if (!Graph)
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Function not found: %s"), *OldName));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("function_not_found"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("offending_function"), OldName);
+		ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
+		ErrorData->SetArrayField(TEXT("candidate_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
+		ErrorData->SetStringField(TEXT("graph_read_action"), TEXT("blueprint.list_graphs"));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Function not found: %s"), *OldName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Retry with old_name set to one of error_data.candidate_functions; use error_data.available_graphs to distinguish macros/event graphs from functions."))
+			.WithRelatedActions({ TEXT("blueprint.get_functions"), TEXT("blueprint.list_graphs") });
 	}
 
 	// Ensure we're only renaming function graphs, not event graphs or macros
 	if (!BP->FunctionGraphs.Contains(Graph))
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Graph '%s' is not a function graph (cannot rename event graphs or macros this way)"), *OldName));
+		FString InterfaceName;
+		const FString GraphKind = BlueprintGraphKind(BP, Graph, &InterfaceName);
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("graph_kind_not_function"));
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetStringField(TEXT("offending_graph"), OldName);
+		ErrorData->SetStringField(TEXT("graph_kind"), GraphKind);
+		if (!InterfaceName.IsEmpty())
+		{
+			ErrorData->SetStringField(TEXT("interface"), InterfaceName);
+		}
+		ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
+		ErrorData->SetArrayField(TEXT("candidate_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
+		ErrorData->SetStringField(TEXT("recovery"), TEXT("Use rename_function only for function graphs; use rename_macro for macro graphs. Event graphs and delegate signatures are not renamed by this action."));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Graph '%s' is a %s graph, not a function graph"), *OldName, *GraphKind))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Use error_data.graph_kind to choose the correct graph action; rename_function only accepts function graphs."))
+			.WithRelatedActions({ TEXT("blueprint.get_functions"), TEXT("blueprint.list_graphs"), TEXT("blueprint.rename_macro") });
 	}
 
 	// Check for name collision
@@ -546,7 +925,20 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 	{
 		if (Existing && Existing != Graph && Existing->GetName() == NewName)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("A function named '%s' already exists"), *NewName));
+			TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+			ErrorData->SetStringField(TEXT("failure_cause"), TEXT("name_conflict"));
+			ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+			ErrorData->SetStringField(TEXT("offending_function"), OldName);
+			ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
+			ErrorData->SetStringField(TEXT("conflicting_graph"), Existing->GetName());
+			ErrorData->SetStringField(TEXT("conflicting_graph_kind"), BlueprintGraphKind(BP, Existing));
+			ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+			ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
+			ErrorData->SetStringField(TEXT("recovery"), TEXT("Choose a new_name that does not already name a function graph."));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("A function named '%s' already exists"), *NewName))
+				.WithErrorData(ErrorData)
+				.WithHint(TEXT("Choose a non-conflicting new_name; error_data.available_functions lists current function graph names."))
+				.WithRelatedAction(TEXT("blueprint.get_functions"));
 		}
 	}
 
@@ -555,6 +947,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("old_name"), OldName);
 	Root->SetStringField(TEXT("new_name"), Graph->GetName());
+	Root->SetBoolField(TEXT("references_preserved"), true);
+	Root->SetStringField(TEXT("reference_preservation"), TEXT("Renamed the existing function graph in place with FBlueprintEditorUtils::RenameGraph; existing graph object references are preserved."));
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -1168,9 +1562,23 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 		// Accept `name` as an alias so the param matches add_event_dispatcher (which takes `name`).
 		Params->TryGetStringField(TEXT("name"), DispatcherName);
 	}
+	bool bMissingOk = false;
+	Params->TryGetBoolField(TEXT("missing_ok"), bMissingOk);
+	if (!bMissingOk)
+	{
+		Params->TryGetBoolField(TEXT("allow_missing"), bMissingOk);
+	}
 	if (DispatcherName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name (or name)"));
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_dispatcher_parameter"));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(EventDispatcherNames(BP)));
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name (or name)"), -32602)
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Call blueprint.get_event_dispatchers to list valid dispatcher names, or pass dispatcher_name/name."))
+			.WithRelatedActions({ TEXT("blueprint.get_event_dispatchers"), TEXT("blueprint.get_event_dispatcher_details") });
 	}
 
 	// Find the delegate signature graph
@@ -1178,11 +1586,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	for (UEdGraph* Graph : BP->DelegateSignatureGraphs)
 	{
 		if (!Graph) continue;
-		FString DisplayName = Graph->GetName();
-		if (DisplayName.EndsWith(TEXT("_Signature")))
-		{
-			DisplayName.LeftChopInline(10, EAllowShrinking::No);
-		}
+		const FString DisplayName = EventDispatcherDisplayName(Graph);
 		if (DisplayName == DispatcherName)
 		{
 			SigGraph = Graph;
@@ -1192,8 +1596,32 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 
 	if (!SigGraph)
 	{
+		const TArray<FString> AvailableDispatchers = EventDispatcherNames(BP);
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("dispatcher_not_found"));
+		ErrorData->SetStringField(TEXT("dispatcher_name"), DispatcherName);
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(AvailableDispatchers));
+		ErrorData->SetBoolField(TEXT("missing_ok_allowed"), true);
+		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
+
+		if (bMissingOk)
+		{
+			TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+			Root->SetStringField(TEXT("asset_path"), AssetPath);
+			Root->SetStringField(TEXT("requested_dispatcher"), DispatcherName);
+			Root->SetBoolField(TEXT("removed"), false);
+			Root->SetBoolField(TEXT("no_op"), true);
+			Root->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(AvailableDispatchers));
+			Root->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
+			return FMonolithActionResult::Success(Root);
+		}
+
 		return FMonolithActionResult::Error(FString::Printf(
-			TEXT("Event dispatcher not found: %s"), *DispatcherName));
+				TEXT("Event dispatcher not found: %s"), *DispatcherName))
+			.WithErrorData(ErrorData)
+			.WithHint(TEXT("Call blueprint.get_event_dispatchers to choose an existing dispatcher, or pass missing_ok=true for cleanup/idempotent delete-first flows."))
+			.WithRelatedActions({ TEXT("blueprint.get_event_dispatchers"), TEXT("blueprint.get_event_dispatcher_details") });
 	}
 
 	// Warn if any CreateDelegate nodes still reference this dispatcher
@@ -1230,7 +1658,11 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	FBlueprintEditorUtils::RemoveGraph(BP, SigGraph, EGraphRemoveFlags::Recompile);
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), AssetPath);
 	Root->SetStringField(TEXT("removed_dispatcher"), DispatcherName);
+	Root->SetBoolField(TEXT("removed"), true);
+	Root->SetBoolField(TEXT("no_op"), false);
+	Root->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(EventDispatcherNames(BP)));
 
 	TArray<TSharedPtr<FJsonValue>> WarnArr;
 	for (const FString& W : Warnings)

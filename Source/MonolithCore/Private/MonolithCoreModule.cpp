@@ -6,6 +6,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithCoreTools.h"
 #include "MonolithToolProfileActions.h"
+#include "MonolithWorkflowActions.h"
 #include "MonolithCrashBreadcrumb.h"
 #include "Actions/MonolithBulkFillActions.h"
 #include "Misc/FileHelper.h"
@@ -89,6 +90,7 @@ void FMonolithCoreModule::ShutdownModule()
 	}
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("monolith"));
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("workflow"));
 	FMonolithBulkFillActions::UnregisterAll();
 
 	FMonolithCrashBreadcrumb::Get().Shutdown();
@@ -100,6 +102,7 @@ void FMonolithCoreModule::RegisterCoreTools()
 {
 	FMonolithCoreTools::RegisterAll();
 	FMonolithToolProfileActions::RegisterAll();
+	FMonolithWorkflowActions::RegisterAll();
 	RegisterMonolithExecutionGuardActions();
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (Settings && Settings->bEnableMcpResources)

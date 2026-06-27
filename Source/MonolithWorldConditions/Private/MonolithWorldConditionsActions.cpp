@@ -513,6 +513,7 @@ void FMonolithWorldConditionsActions::RegisterActions(FMonolithToolRegistry& Reg
 		FParamSchemaBuilder()
 			.Optional(TEXT("path_filter"), TEXT("string"), TEXT("Package path to search recursively."), TEXT("/Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum owners to return."), TEXT("100"))
+			.Range(TEXT("limit"), 1, MaxOwnerLimit)
 			.Build());
 
 	Registry.RegisterAction(TEXT("world_conditions"), TEXT("describe_query"),
@@ -521,6 +522,7 @@ void FMonolithWorldConditionsActions::RegisterActions(FMonolithToolRegistry& Reg
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("SmartObjectDefinition asset path."))
 			.Optional(TEXT("query"), TEXT("string"), TEXT("preconditions or slot_selection_preconditions."), TEXT("preconditions"))
+			.Enum(TEXT("query"), { TEXT("preconditions"), TEXT("slot_selection_preconditions") })
 			.Optional(TEXT("slot_index"), TEXT("integer"), TEXT("Required when query=slot_selection_preconditions."))
 			.Build());
 
@@ -529,6 +531,7 @@ void FMonolithWorldConditionsActions::RegisterActions(FMonolithToolRegistry& Reg
 		FMonolithActionHandler::CreateStatic(&HandleDescribeConditionTypes),
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum condition types to return."), TEXT("128"))
+			.Range(TEXT("limit"), 1, MaxConditionTypeLimit)
 			.Build());
 }
 

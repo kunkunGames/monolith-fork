@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "gas",
+  "asset_type_slug": "gas",
+  "edit_domain": "gameplay_cue_unlink_lifecycle",
+  "route_edit_domain": "gameplay_cue_unlink_lifecycle",
+  "module_id": "asset_authoring.gas.gameplay_cue_unlink_lifecycle",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.gas.gameplay_cue_unlink_lifecycle",
+    "edit": "asset_operation.edit.gas.gameplay_cue_unlink_lifecycle",
+    "save": "asset_operation.save.gas.gameplay_cue_unlink_lifecycle",
+    "readback_verify": "asset_operation.readback_verify.gas.gameplay_cue_unlink_lifecycle"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-482"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-482",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "gas",
+      "edit_domain": "gameplay_cue_unlink_lifecycle",
+      "blueprint_type": "",
+      "workflow": "gas_cue_unlink_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "add_gameplay_tags",
+        "create_gameplay_effect",
+        "create_gameplay_cue_notify",
+        "link_cue_to_effect",
+        "unlink_cue_from_effect",
+        "save_asset",
+        "get_gameplay_effect",
+        "find_cue_triggers",
+        "get_cue_info"
+      ],
+      "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-482",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked",
+              "/Game/Benchmarks/AssetAuthoring/GCN_BenchCueUnlinked"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "add_gameplay_tags",
+            "tags": [
+              {
+                "tag": "GameplayCue.Bench.Unlink",
+                "comment": "AssetEditing benchmark cue unlink fixture"
+              }
+            ]
+          },
+          "contains": [
+            "GameplayCue.Bench.Unlink"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_gameplay_effect",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked",
+            "duration_policy": "duration",
+            "duration": 1.25
+          },
+          "contains": [
+            "GE_BenchCueUnlinked"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "create_gameplay_cue_notify",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/GCN_BenchCueUnlinked",
+            "cue_tag": "GameplayCue.Bench.Unlink",
+            "type": "burst"
+          },
+          "contains": [
+            "GCN_BenchCueUnlinked",
+            "GameplayCue.Bench.Unlink",
+            "burst"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "link_cue_to_effect",
+            "effect_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked",
+            "cue_tag": "GameplayCue.Bench.Unlink"
+          },
+          "contains": [
+            "GameplayCue.Bench.Unlink"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "unlink_cue_from_effect",
+            "effect_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked",
+            "cue_tag": "GameplayCue.Bench.Unlink"
+          },
+          "contains": [
+            "GameplayCue.Bench.Unlink",
+            "removed",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GCN_BenchCueUnlinked"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_gameplay_effect",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GE_BenchCueUnlinked"
+          },
+          "contains": [
+            "GE_BenchCueUnlinked"
+          ],
+          "not_contains": [
+            "GameplayCue.Bench.Unlink"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "find_cue_triggers",
+            "cue_tag": "GameplayCue.Bench.Unlink"
+          },
+          "contains": [
+            "GameplayCue.Bench.Unlink",
+            "trigger_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "gas_query",
+          "args": {
+            "action": "get_cue_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/GCN_BenchCueUnlinked"
+          },
+          "contains": [
+            "GCN_BenchCueUnlinked",
+            "GameplayCue.Bench.Unlink",
+            "burst"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "gameplay_cue_unlink_lifecycle",
+      "blueprint_type": "",
+      "domain": "gas",
+      "workflow": "gas_cue_unlink_roundtrip",
+      "description": "Create a GameplayEffect and GameplayCue Notify, link the cue tag, unlink it from the effect, save both assets, and verify the cue asset remains while the effect no longer triggers it",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-cue-system-for-the-gameplay-ability-system-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithGAS/Private/MonolithGASCueActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "add_gameplay_tags",
+          "create_gameplay_effect",
+          "create_gameplay_cue_notify",
+          "link_cue_to_effect",
+          "unlink_cue_from_effect",
+          "save_asset",
+          "get_gameplay_effect",
+          "find_cue_triggers",
+          "get_cue_info"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

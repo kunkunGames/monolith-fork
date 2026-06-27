@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_scene_import",
+  "route_edit_domain": "scene_import",
+  "module_id": "asset_authoring.interchange.scene_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.scene_import",
+    "edit": "asset_operation.edit.interchange.scene_import",
+    "save": "asset_operation.save.interchange.scene_import",
+    "readback_verify": "asset_operation.readback_verify.interchange.scene_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-287"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-287",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_scene_import",
+      "blueprint_type": "",
+      "workflow": "interchange_scene_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_scene",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-287",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeScene"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_SCENE_OBJ__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true",
+            "Wavefront OBJ static mesh"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_scene",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_SCENE_OBJ__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "imported",
+            "SM_BenchInterchangeScene",
+            "StaticMesh"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeScene"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeScene"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "SM_BenchInterchangeScene.obj",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchInterchangeScene"
+          },
+          "contains": [
+            "SM_BenchInterchangeScene",
+            "StaticMesh",
+            "Triangles",
+            "12"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_scene_import",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_scene_import_roundtrip",
+      "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "can_import",
+          "import_scene",
+          "save_asset",
+          "get_import_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

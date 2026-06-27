@@ -63,5 +63,5 @@
 |------|----------|
 | Registration | `FMonolithDataflowModule::StartupModule` always registers `dataflow.get_status` and `dataflow.list_assets`; when `WITH_MONOLITH_DATAFLOW=1`, it also registers the six graph inspection actions. |
 | Routing cleanup | `MonolithMesh` no longer registers `mesh.get_dataflow_status` or `mesh.list_dataflow_assets`. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Release build | UBT build with `MONOLITH_RELEASE_BUILD=1` must succeed and omit hard Dataflow runtime dependencies. |

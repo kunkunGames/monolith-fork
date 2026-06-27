@@ -1417,6 +1417,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));
 	}
 
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
+	}
+
 	// Extract asset name from save path
 	int32 LastSlash;
 	if (!SavePath.FindLastChar(TEXT('/'), LastSlash))
@@ -1488,10 +1493,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleCreateDataAsset(con
 	}
 
 	// Create package
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{
@@ -1585,6 +1586,11 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	if (!Params->TryGetStringField(TEXT("class_name"), ClassName) || ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: class_name"));
+	}
+
+	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+	{
+		return FMonolithActionResult::Error(ValidationError);
 	}
 
 	const TSharedPtr<FJsonObject>* TreePtr = nullptr;
@@ -1700,11 +1706,6 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleSeedDataAsset(const
 	}
 
 	// Create package + instance.
-	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
-	{
-		return FMonolithActionResult::Error(ValidationError);
-	}
-
 	UPackage* Package = CreatePackage(*SavePath);
 	if (!Package)
 	{

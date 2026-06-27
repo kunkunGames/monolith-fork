@@ -300,10 +300,9 @@ namespace MonolithBulkFillActionsInternal
 		FMonolithBulkFillRegistry& Registry = FMonolithBulkFillRegistry::Get();
 		if (!Registry.HasAdapter(TargetNamespace))
 		{
-			return FMonolithActionResult::Success(BuildDescribeNamespaceGuidance(
-				TargetNamespace,
-				TEXT("no_adapter"),
-				FString::Printf(TEXT("No describe adapter is registered for namespace '%s'. Use one of the available_namespaces values or bulk_fill.list_namespaces."), *TargetNamespace)));
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("no describe adapter registered for namespace '%s'. Use describe.list_targets without target_namespace or bulk_fill.list_namespaces to inspect available namespaces."), *TargetNamespace),
+				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		const bool bInventorySupported = Registry.HasListTargetsAdapter(TargetNamespace);

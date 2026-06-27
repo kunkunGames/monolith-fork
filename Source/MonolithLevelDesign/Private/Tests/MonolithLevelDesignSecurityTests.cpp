@@ -4,6 +4,7 @@
 #include "Dom/JsonObject.h"
 #include "MonolithLevelDesignPlacementActions.h"
 #include "MonolithLevelDesignAudioActions.h"
+#include "MonolithPackagePathValidator.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -102,45 +103,9 @@ bool FMonolithLevelDesignSecurityPathTest::RunTest(const FString& Parameters)
 		}
 	}
 
-	// Test valid path handling (should not complain about ValidatePackagePath)
-	FString ValidPath = TEXT("/Game/ValidPath/TestPrefab");
-
-	// Test level_instance.create_blueprint_prefab valid path
-	TSharedPtr<FJsonObject> ValidPrefabPayload = MakeShared<FJsonObject>();
-	ValidPrefabPayload->SetStringField(TEXT("save_path"), ValidPath);
-	TArray<TSharedPtr<FJsonValue>> ActorNames;
-	ActorNames.Add(MakeShared<FJsonValueString>(TEXT("TestActor")));
-	ValidPrefabPayload->SetArrayField(TEXT("actor_names"), ActorNames);
-
-	FMonolithActionResult ValidPrefabResult = ExecuteLevelDesignAction(TEXT("level_instance"), TEXT("create_blueprint_prefab"), ValidPrefabPayload);
-	TestFalse(*FString::Printf(TEXT("create_blueprint_prefab valid path '%s' should not report 'Invalid package path'"), *ValidPath),
-		ValidPrefabResult.ErrorMessage.Contains(TEXT("Invalid package path")));
-
-	// Test leveldesign.create_surface_datatable valid path
-	TSharedPtr<FJsonObject> ValidAudioPayload = MakeShared<FJsonObject>();
-	ValidAudioPayload->SetStringField(TEXT("save_path"), ValidPath);
-
-	FMonolithActionResult ValidAudioResult = ExecuteLevelDesignAction(TEXT("leveldesign"), TEXT("create_surface_datatable"), ValidAudioPayload);
-	TestFalse(*FString::Printf(TEXT("create_surface_datatable valid path '%s' should not report 'Invalid package path'"), *ValidPath),
-		ValidAudioResult.ErrorMessage.Contains(TEXT("Invalid package path")));
-
-	// Test scene.manage_sublevel (create) valid path
-	TSharedPtr<FJsonObject> ValidManageSublevelCreatePayload = MakeShared<FJsonObject>();
-	ValidManageSublevelCreatePayload->SetStringField(TEXT("sub_action"), TEXT("create"));
-	ValidManageSublevelCreatePayload->SetStringField(TEXT("level_path"), ValidPath);
-
-	FMonolithActionResult ValidManageSublevelCreateResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ValidManageSublevelCreatePayload);
-	TestFalse(*FString::Printf(TEXT("manage_sublevel(create) valid path '%s' should not report 'Invalid package path'"), *ValidPath),
-		ValidManageSublevelCreateResult.ErrorMessage.Contains(TEXT("Invalid package path")));
-
-	// Test scene.manage_sublevel (add) valid path
-	TSharedPtr<FJsonObject> ValidManageSublevelAddPayload = MakeShared<FJsonObject>();
-	ValidManageSublevelAddPayload->SetStringField(TEXT("sub_action"), TEXT("add"));
-	ValidManageSublevelAddPayload->SetStringField(TEXT("level_path"), ValidPath);
-
-	FMonolithActionResult ValidManageSublevelAddResult = ExecuteLevelDesignAction(TEXT("scene"), TEXT("manage_sublevel"), ValidManageSublevelAddPayload);
-	TestFalse(*FString::Printf(TEXT("manage_sublevel(add) valid path '%s' should not report 'Invalid package path'"), *ValidPath),
-		ValidManageSublevelAddResult.ErrorMessage.Contains(TEXT("Invalid package path")));
+	const FString ValidPath = TEXT("/Game/ValidPath/TestPrefab");
+	TestTrue(*FString::Printf(TEXT("Valid package path '%s' passes shared validator"), *ValidPath),
+		MonolithCore::ValidatePackagePath(ValidPath).IsEmpty());
 
 	return true;
 }

@@ -316,7 +316,7 @@ A consumer-side `FMonolithDidYouMean` helper to centralize the `1→WithRetryWit
 
 | Gate | Requirement |
 |------|-------------|
-| Build | Primary `GoGameEditor` UBT command succeeds. |
+| Build | Primary `<Project>Editor` UBT command succeeds. |
 | Engine units | `MonolithFuzzyMatchTests`: `EditDistanceBounded` band/early-out + case modes, `IsTypoMatch`, `ScoreTokens`, `ScoreCandidate`, normalization, alias expansion. |
 | `monolith_find` parity | Existing find tests green after refactor. |
 | Suggest parity | `MonolithErrorHintTests` (FindSimilarActions) green; GAS asset error-path retry/did-you-mean unchanged. |

@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "interchange",
+  "asset_type_slug": "interchange",
+  "edit_domain": "interchange_texture_import",
+  "route_edit_domain": "texture_import",
+  "module_id": "asset_authoring.interchange.texture_import",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.interchange.texture_import",
+    "edit": "asset_operation.edit.interchange.texture_import",
+    "save": "asset_operation.save.interchange.texture_import",
+    "readback_verify": "asset_operation.readback_verify.interchange.texture_import"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-285"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-285",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "interchange",
+      "edit_domain": "interchange_texture_import",
+      "blueprint_type": "",
+      "workflow": "interchange_texture_import_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "can_import",
+        "import_texture",
+        "save_asset",
+        "get_import_data",
+        "inspect_asset"
+      ],
+      "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-285",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/T_BenchInterchangeTexture"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "can_import",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring"
+          },
+          "contains": [
+            "can_import",
+            "true",
+            "BMP texture image"
+          ]
+        },
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "import_texture",
+            "source_file": "__ASSET_AUTHORING_INTERCHANGE_TEXTURE_BMP__",
+            "destination_path": "/Game/Benchmarks/AssetAuthoring",
+            "conflict_policy": "overwrite",
+            "confirm": true
+          },
+          "contains": [
+            "status",
+            "imported",
+            "T_BenchInterchangeTexture",
+            "Texture2D"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchInterchangeTexture"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "interchange_query",
+          "args": {
+            "action": "get_import_data",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchInterchangeTexture"
+          },
+          "contains": [
+            "has_import_data",
+            "true",
+            "T_BenchInterchangeTexture.bmp",
+            "exists",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchInterchangeTexture"
+          },
+          "contains": [
+            "T_BenchInterchangeTexture",
+            "Texture2D"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "interchange_texture_import",
+      "blueprint_type": "",
+      "domain": "interchange",
+      "workflow": "interchange_texture_import_roundtrip",
+      "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "can_import",
+          "import_texture",
+          "save_asset",
+          "get_import_data",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

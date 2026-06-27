@@ -802,7 +802,7 @@ FMonolithActionResult FMonolithDataflowActions::GetDataflowGraph(const TSharedPt
 	Result->SetStringField(TEXT("asset_path"), RequestedPath);
 	Result->SetStringField(TEXT("object_path"), ObjectPath);
 	Result->SetBoolField(TEXT("read_only"), true);
-	Result->SetBoolField(TEXT("active"), Dataflow->bActive);
+	Result->SetBoolField(TEXT("active"), true);
 	Result->SetStringField(TEXT("dataflow_type"), StaticEnum<EDataflowType>() ? StaticEnum<EDataflowType>()->GetNameStringByValue(static_cast<int64>(Dataflow->Type)) : FString::FromInt(static_cast<int32>(Dataflow->Type)));
 	Result->SetNumberField(TEXT("node_count"), Nodes.Num());
 	Result->SetNumberField(TEXT("returned_node_count"), NodeRows.Num());

@@ -1,0 +1,1387 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "asset_authoring.interchange",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+  "task_count": 552,
+  "module_count": 9,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "asset_authoring.interchange",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: interchange",
+      "task_count": 8,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.interchange.audio_import",
+        "asset_authoring.interchange.batch_import",
+        "asset_authoring.interchange.batch_reimport",
+        "asset_authoring.interchange.generic_import",
+        "asset_authoring.interchange.generic_options_import",
+        "asset_authoring.interchange.scene_import",
+        "asset_authoring.interchange.static_mesh_reimport_export",
+        "asset_authoring.interchange.texture_import"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.interchange.audio_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "audio_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/audio_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_audio_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.batch_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "batch_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/batch_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_batch_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.batch_reimport",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "batch_reimport"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/batch_reimport",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_batch_reimport"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.generic_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "generic_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/generic_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_generic_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.generic_options_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "generic_options_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/generic_options_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_generic_options_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.scene_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "scene_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/scene_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_scene_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.static_mesh_reimport_export",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "static_mesh_reimport_export"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/static_mesh_reimport_export",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_static_mesh_reimport_export"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.interchange.texture_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "texture_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/texture_import",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_texture_import"
+        ]
+      },
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json",
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "asset_authoring.interchange": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: interchange",
+      "description": "Create/edit/save/read-back tasks for one Unreal asset-authoring domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ]
+      },
+      "task_count": 8,
+      "task_ids": [
+        "BEB-285",
+        "BEB-286",
+        "BEB-287",
+        "BEB-288",
+        "BEB-352",
+        "BEB-392",
+        "BEB-409",
+        "BEB-416"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-285",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_texture_import",
+          "blueprint_type": "",
+          "workflow": "interchange_texture_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_texture",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
+        },
+        {
+          "id": "BEB-286",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_static_mesh_reimport_export",
+          "blueprint_type": "",
+          "workflow": "interchange_static_mesh_reimport_export_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_mesh",
+            "save_asset",
+            "can_reimport",
+            "update_reimport_path",
+            "reimport_asset",
+            "export_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
+        },
+        {
+          "id": "BEB-287",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_scene_import",
+          "blueprint_type": "",
+          "workflow": "interchange_scene_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_scene",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
+        },
+        {
+          "id": "BEB-288",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_audio_import",
+          "blueprint_type": "",
+          "workflow": "interchange_audio_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_audio",
+            "save_asset",
+            "get_import_data",
+            "get_sound_wave_info",
+            "inspect_asset"
+          ],
+          "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
+        },
+        {
+          "id": "BEB-352",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_batch_import",
+          "blueprint_type": "",
+          "workflow": "interchange_batch_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_assets",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
+        },
+        {
+          "id": "BEB-392",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_generic_options_import",
+          "blueprint_type": "",
+          "workflow": "interchange_generic_options_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_with_options",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
+        },
+        {
+          "id": "BEB-409",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_batch_reimport",
+          "blueprint_type": "",
+          "workflow": "interchange_batch_reimport_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_assets",
+            "batch_rename_assets",
+            "reimport_assets",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
+        },
+        {
+          "id": "BEB-416",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_generic_import",
+          "blueprint_type": "",
+          "workflow": "interchange_generic_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_asset",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the generic Interchange import_asset entrypoint, save it, and read back import source metadata"
+        }
+      ],
+      "groups": {
+        "by_edit_domain": {
+          "interchange_audio_import": [
+            "BEB-288"
+          ],
+          "interchange_batch_import": [
+            "BEB-352"
+          ],
+          "interchange_batch_reimport": [
+            "BEB-409"
+          ],
+          "interchange_generic_import": [
+            "BEB-416"
+          ],
+          "interchange_generic_options_import": [
+            "BEB-392"
+          ],
+          "interchange_scene_import": [
+            "BEB-287"
+          ],
+          "interchange_static_mesh_reimport_export": [
+            "BEB-286"
+          ],
+          "interchange_texture_import": [
+            "BEB-285"
+          ]
+        },
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ],
+          "edit": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ],
+          "readback_verify": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ],
+          "save": [
+            "BEB-285",
+            "BEB-286",
+            "BEB-287",
+            "BEB-288",
+            "BEB-352",
+            "BEB-392",
+            "BEB-409",
+            "BEB-416"
+          ]
+        }
+      },
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.interchange.audio_import",
+        "asset_authoring.interchange.batch_import",
+        "asset_authoring.interchange.batch_reimport",
+        "asset_authoring.interchange.generic_import",
+        "asset_authoring.interchange.generic_options_import",
+        "asset_authoring.interchange.scene_import",
+        "asset_authoring.interchange.static_mesh_reimport_export",
+        "asset_authoring.interchange.texture_import"
+      ],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.audio_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.audio_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "audio_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/audio_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_audio_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-288"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-288",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_audio_import",
+          "blueprint_type": "",
+          "workflow": "interchange_audio_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_audio",
+            "save_asset",
+            "get_import_data",
+            "get_sound_wave_info",
+            "inspect_asset"
+          ],
+          "description": "Import a deterministic WAV through the Interchange typed audio path, save it, and read SoundWave import metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-288"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-288"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-288"
+          ],
+          "edit": [
+            "BEB-288"
+          ],
+          "readback_verify": [
+            "BEB-288"
+          ],
+          "save": [
+            "BEB-288"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.batch_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.batch_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "batch_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/batch_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_batch_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-352"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-352",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_batch_import",
+          "blueprint_type": "",
+          "workflow": "interchange_batch_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_assets",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Batch-import two Texture2D files through Interchange, save both generated assets, and verify each import-data source"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-352"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-352"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-352"
+          ],
+          "edit": [
+            "BEB-352"
+          ],
+          "readback_verify": [
+            "BEB-352"
+          ],
+          "save": [
+            "BEB-352"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.batch_reimport": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.batch_reimport",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "batch_reimport"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/batch_reimport",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_batch_reimport"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-409"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-409",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_batch_reimport",
+          "blueprint_type": "",
+          "workflow": "interchange_batch_reimport_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "import_assets",
+            "batch_rename_assets",
+            "reimport_assets",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Batch-import two Texture2D files through Interchange, reimport both assets as a batch, save them, and verify both source records"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-409"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-409"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-409"
+          ],
+          "edit": [
+            "BEB-409"
+          ],
+          "readback_verify": [
+            "BEB-409"
+          ],
+          "save": [
+            "BEB-409"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.generic_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.generic_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "generic_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/generic_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_generic_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-416"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-416",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_generic_import",
+          "blueprint_type": "",
+          "workflow": "interchange_generic_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_asset",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the generic Interchange import_asset entrypoint, save it, and read back import source metadata"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-416"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-416"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-416"
+          ],
+          "edit": [
+            "BEB-416"
+          ],
+          "readback_verify": [
+            "BEB-416"
+          ],
+          "save": [
+            "BEB-416"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.generic_options_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.generic_options_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "generic_options_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/generic_options_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_generic_options_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-392"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-392",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_generic_options_import",
+          "blueprint_type": "",
+          "workflow": "interchange_generic_options_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_with_options",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the generic Interchange options entrypoint, save it, and verify the import-data source plus echoed options contract"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-392"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-392"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-392"
+          ],
+          "edit": [
+            "BEB-392"
+          ],
+          "readback_verify": [
+            "BEB-392"
+          ],
+          "save": [
+            "BEB-392"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.scene_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.scene_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "scene_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/scene_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_scene_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-287"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-287",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_scene_import",
+          "blueprint_type": "",
+          "workflow": "interchange_scene_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_scene",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a simple scene source through the Interchange typed scene path, save the generated asset, and read source metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-287"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-287"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-287"
+          ],
+          "edit": [
+            "BEB-287"
+          ],
+          "readback_verify": [
+            "BEB-287"
+          ],
+          "save": [
+            "BEB-287"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.static_mesh_reimport_export": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.static_mesh_reimport_export",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "static_mesh_reimport_export"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/static_mesh_reimport_export",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_static_mesh_reimport_export"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-286"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-286",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_static_mesh_reimport_export",
+          "blueprint_type": "",
+          "workflow": "interchange_static_mesh_reimport_export_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_mesh",
+            "save_asset",
+            "can_reimport",
+            "update_reimport_path",
+            "reimport_asset",
+            "export_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a StaticMesh through Interchange, edit its reimport source path, reimport, export, and verify the exported source"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-286"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-286"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-286"
+          ],
+          "edit": [
+            "BEB-286"
+          ],
+          "readback_verify": [
+            "BEB-286"
+          ],
+          "save": [
+            "BEB-286"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    },
+    "asset_authoring.interchange.texture_import": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "asset_authoring.interchange.texture_import",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "interchange",
+        "texture_import"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: interchange/texture_import",
+      "description": "Asset creation/save plus concrete domain edit/read-back tasks routed by asset domain and edit domain.",
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "interchange"
+        ],
+        "edit_domain": [
+          "interchange_texture_import"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-285"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-285",
+          "category": "asset_authoring",
+          "namespace": "mixed",
+          "tool": "monolith_query",
+          "action": "op_chain",
+          "domain": "interchange",
+          "edit_domain": "interchange_texture_import",
+          "blueprint_type": "",
+          "workflow": "interchange_texture_import_roundtrip",
+          "operation_semantics": "create_save",
+          "lifecycle_phase": "create_save",
+          "asset_operations": [
+            "creation_or_import",
+            "save",
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "delete_assets",
+            "can_import",
+            "import_texture",
+            "save_asset",
+            "get_import_data",
+            "inspect_asset"
+          ],
+          "description": "Import a Texture2D through the Interchange typed texture path, save it, and read source import metadata back"
+        }
+      ],
+      "groups": {
+        "by_operation_semantics": {
+          "create_save": [
+            "BEB-285"
+          ]
+        },
+        "by_lifecycle_phase": {
+          "create_save": [
+            "BEB-285"
+          ]
+        },
+        "by_asset_operation": {
+          "creation_or_import": [
+            "BEB-285"
+          ],
+          "edit": [
+            "BEB-285"
+          ],
+          "readback_verify": [
+            "BEB-285"
+          ],
+          "save": [
+            "BEB-285"
+          ]
+        }
+      },
+      "parent_module_id": "asset_authoring.interchange",
+      "child_module_ids": [],
+      "module_shard_id": "asset_authoring.interchange",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/interchange.json"
+    }
+  }
+}

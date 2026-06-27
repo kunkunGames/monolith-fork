@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "hlod",
+  "asset_type_slug": "hlod",
+  "edit_domain": "mesh_setup_layer",
+  "route_edit_domain": "mesh_setup_layer",
+  "module_id": "asset_authoring.hlod.mesh_setup_layer",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.hlod.mesh_setup_layer",
+    "edit": "asset_operation.edit.hlod.mesh_setup_layer",
+    "save": "asset_operation.save.hlod.mesh_setup_layer",
+    "readback_verify": "asset_operation.readback_verify.hlod.mesh_setup_layer"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-485"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-485",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "hlod",
+      "edit_domain": "mesh_setup_layer",
+      "blueprint_type": "",
+      "workflow": "hlod_mesh_setup_layer_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "setup_hlod",
+        "save_asset",
+        "get_hlod_layer",
+        "inspect_asset"
+      ],
+      "description": "Create an HLODLayer through the mesh setup action, save it, and read reflected layer metadata back through the HLOD action surface"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-485",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/HLODLayer_BenchMeshSetup"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "setup_hlod",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/HLODLayer_BenchMeshSetup",
+            "layer_type": "MeshApproximate",
+            "cell_size": 32000,
+            "loading_range": 3.25
+          },
+          "contains": [
+            "HLODLayer_BenchMeshSetup",
+            "MeshApproximate",
+            "32000",
+            "3.25"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/HLODLayer_BenchMeshSetup"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "hlod_query",
+          "args": {
+            "action": "get_hlod_layer",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/HLODLayer_BenchMeshSetup"
+          },
+          "contains": [
+            "HLODLayer_BenchMeshSetup",
+            "HLODLayer"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/HLODLayer_BenchMeshSetup"
+          },
+          "contains": [
+            "HLODLayer_BenchMeshSetup"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "mesh_setup_layer",
+      "blueprint_type": "",
+      "domain": "hlod",
+      "workflow": "hlod_mesh_setup_layer_roundtrip",
+      "description": "Create an HLODLayer through the mesh setup action, save it, and read reflected layer metadata back through the HLOD action surface",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/world-partition---hierarchical-level-of-detail-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshQualityActions.cpp",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithHlodActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "setup_hlod",
+          "save_asset",
+          "get_hlod_layer",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

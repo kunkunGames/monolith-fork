@@ -86,6 +86,10 @@ bool FMonolithGetJobEnabledTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Pending status surfaced"), Known.Result->GetStringField(TEXT("status")), TEXT("pending"));
 		TestEqual(TEXT("Namespace echoed"), Known.Result->GetStringField(TEXT("namespace")), TEXT("project"));
 		TestEqual(TEXT("Action echoed"), Known.Result->GetStringField(TEXT("action")), TEXT("reindex"));
+		TestTrue(TEXT("Job is cancellable"), Known.Result->GetBoolField(TEXT("cancellable")));
+		TestTrue(TEXT("Job supports progress"), Known.Result->GetBoolField(TEXT("supports_progress")));
+		TestEqual(TEXT("Poll action surfaced"), Known.Result->GetStringField(TEXT("poll_action")), TEXT("monolith.get_job"));
+		TestEqual(TEXT("Cancel action surfaced"), Known.Result->GetStringField(TEXT("cancel_action")), TEXT("monolith.cancel_job"));
 	}
 
 	// Unknown id surfaces the registry's not_found, never an error.
@@ -128,7 +132,7 @@ bool FMonolithCancelJobTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Disabled reports no cancel"), Disabled.Result->GetBoolField(TEXT("cancel_requested")));
 	}
 
-	// Enabled: cancellation flips the registry row to the double-l cancelled token.
+	// Enabled: cancellation is requested first; the producer acknowledges terminal cancelled later.
 	Settings->bEnableAsyncJobs = true;
 	const FString JobId = Registry.SubmitJob(TEXT("ai"), TEXT("rebuild_zone_graph"));
 	Registry.UpdateProgress(JobId, 5.0, TEXT("rebuilding"), TEXT("started"));
@@ -139,7 +143,8 @@ bool FMonolithCancelJobTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Cancel flag is set on the registry row"), Registry.IsCancelRequested(JobId));
 	if (Cancelled.Result.IsValid())
 	{
-		TestEqual(TEXT("Returned row uses cancelled token"), Cancelled.Result->GetStringField(TEXT("status")), TEXT("cancelled"));
+		TestEqual(TEXT("Returned row keeps running until producer acknowledges cancellation"), Cancelled.Result->GetStringField(TEXT("status")), TEXT("running"));
+		TestTrue(TEXT("Returned row records cancel_requested"), Cancelled.Result->GetBoolField(TEXT("cancel_requested")));
 	}
 
 	Settings->bEnableAsyncJobs = bOriginal;

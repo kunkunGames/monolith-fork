@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "anim_blueprint_state_machine",
+  "route_edit_domain": "anim_blueprint_state_machine",
+  "module_id": "asset_authoring.animation.anim_blueprint_state_machine",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.anim_blueprint_state_machine",
+    "edit": "asset_operation.edit.animation.anim_blueprint_state_machine",
+    "save": "asset_operation.save.animation.anim_blueprint_state_machine",
+    "readback_verify": "asset_operation.readback_verify.animation.anim_blueprint_state_machine"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-412"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-412",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "anim_blueprint_state_machine",
+      "blueprint_type": "",
+      "workflow": "animation_abp_state_machine_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_sequence",
+        "create_anim_blueprint",
+        "build_state_machine",
+        "add_state_to_machine",
+        "add_transition",
+        "save_asset",
+        "get_state_machines",
+        "get_abp_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-412",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/A_BenchStateMachineIdle",
+              "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_sequence",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchStateMachineIdle",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton"
+          },
+          "contains": [
+            "A_BenchStateMachineIdle",
+            "SkeletalCube_Skeleton"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_anim_blueprint",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "parent_class": "AnimInstance"
+          },
+          "contains": [
+            "ABP_BenchStateMachine",
+            "SkeletalCube_Skeleton",
+            "AnimInstance",
+            "generated_class"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "build_state_machine",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine",
+            "state_machine_name": "BenchLocomotion",
+            "states": [
+              {
+                "name": "Idle",
+                "animation": "/Game/Benchmarks/AssetAuthoring/A_BenchStateMachineIdle"
+              },
+              {
+                "name": "Run"
+              }
+            ],
+            "transitions": [
+              {
+                "from": "Idle",
+                "to": "Run"
+              }
+            ],
+            "entry_state": "Idle"
+          },
+          "contains": [
+            "BenchLocomotion",
+            "Idle",
+            "Run",
+            "transitions_report",
+            "entry_state",
+            "Idle"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_state_to_machine",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine",
+            "machine_name": "BenchLocomotion",
+            "state_name": "Recover",
+            "position_x": 640,
+            "position_y": 180
+          },
+          "contains": [
+            "BenchLocomotion",
+            "Recover"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "add_transition",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine",
+            "machine_name": "BenchLocomotion",
+            "from_state": "Run",
+            "to_state": "Recover"
+          },
+          "contains": [
+            "BenchLocomotion",
+            "Run",
+            "Recover"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/A_BenchStateMachineIdle"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_state_machines",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine"
+          },
+          "contains": [
+            "BenchLocomotion",
+            "Idle",
+            "Run",
+            "Recover",
+            "entry_state",
+            "Idle",
+            "transition_count"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_abp_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine"
+          },
+          "contains": [
+            "ABP_BenchStateMachine",
+            "SkeletalCube_Skeleton",
+            "state_machine_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ABP_BenchStateMachine"
+          },
+          "contains": [
+            "ABP_BenchStateMachine",
+            "AnimBlueprint"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "anim_blueprint_state_machine",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_abp_state_machine_roundtrip",
+      "description": "Create an AnimBlueprint, build a locomotion state machine, add a follow-up state and transition, save it, and read the authored state graph back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_sequence",
+          "create_anim_blueprint",
+          "build_state_machine",
+          "add_state_to_machine",
+          "add_transition",
+          "save_asset",
+          "get_state_machines",
+          "get_abp_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

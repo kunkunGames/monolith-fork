@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ai",
+  "asset_type_slug": "ai",
+  "edit_domain": "behavior_tree",
+  "route_edit_domain": "behavior_tree",
+  "module_id": "asset_authoring.ai.behavior_tree",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ai.behavior_tree",
+    "edit": "asset_operation.edit.ai.behavior_tree",
+    "save": "asset_operation.save.ai.behavior_tree",
+    "readback_verify": "asset_operation.readback_verify.ai.behavior_tree"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-324"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-324",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ai",
+      "edit_domain": "behavior_tree",
+      "blueprint_type": "",
+      "workflow": "ai_blackboard_behavior_tree_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_blackboard",
+        "add_bb_key",
+        "rename_bb_key",
+        "save_asset",
+        "create_behavior_tree",
+        "set_bt_blackboard",
+        "get_blackboard",
+        "get_behavior_tree"
+      ],
+      "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-324",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision",
+              "/Game/Benchmarks/AssetAuthoring/BT_BenchDecision"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_blackboard",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision",
+            "key_name": "TargetActor",
+            "key_type": "Object",
+            "base_class": "Actor"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "add_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision",
+            "key_name": "PatrolIndex",
+            "key_type": "Int"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "rename_bb_key",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision",
+            "old_name": "PatrolIndex",
+            "new_name": "PatrolPointIndex"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "create_behavior_tree",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchDecision",
+            "blackboard_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          }
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "set_bt_blackboard",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchDecision",
+            "blackboard_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchDecision"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_blackboard",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BB_BenchDecision"
+          },
+          "contains": [
+            "TargetActor",
+            "PatrolPointIndex"
+          ]
+        },
+        {
+          "tool": "ai_query",
+          "args": {
+            "action": "get_behavior_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BT_BenchDecision"
+          },
+          "contains": [
+            "BB_BenchDecision"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "behavior_tree",
+      "blueprint_type": "",
+      "domain": "ai",
+      "workflow": "ai_blackboard_behavior_tree_roundtrip",
+      "description": "Create a Blackboard and BehaviorTree, edit Blackboard keys, link the tree to the Blackboard, save, and inspect both",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_blackboard",
+          "add_bb_key",
+          "rename_bb_key",
+          "save_asset",
+          "create_behavior_tree",
+          "set_bt_blackboard",
+          "get_blackboard",
+          "get_behavior_tree"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

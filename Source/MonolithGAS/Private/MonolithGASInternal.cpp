@@ -10,7 +10,6 @@
 #include "GameplayEffect.h"
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
-#include "PackageTools.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -304,50 +303,6 @@ bool TryReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const FStri
 	return true;
 }
 
-bool TryEvictLoadedPackageForCreate(const FString& PackagePath)
-{
-	UPackage* ExistingPackage = FindPackage(nullptr, *PackagePath);
-	if (!ExistingPackage)
-	{
-		return true;
-	}
-
-	ExistingPackage->SetDirtyFlag(false);
-	ResetLoaders(ExistingPackage);
-
-	TArray<UPackage*> PackagesToUnload;
-	PackagesToUnload.Add(ExistingPackage);
-	UPackageTools::UnloadPackages(PackagesToUnload);
-	CollectGarbage(RF_NoFlags);
-
-	ExistingPackage = FindPackage(nullptr, *PackagePath);
-	if (!ExistingPackage)
-	{
-		return true;
-	}
-
-	ResetLoaders(ExistingPackage);
-	ExistingPackage->SetDirtyFlag(false);
-
-	const FString AssetName = FPackageName::GetLongPackageAssetName(PackagePath);
-	const FString TrashPackageName = FString::Printf(
-		TEXT("/Temp/__monolith_gas_recreate_%s_%s"),
-		*AssetName,
-		*FGuid::NewGuid().ToString(EGuidFormats::Short));
-
-	if (ExistingPackage->Rename(
-		*TrashPackageName,
-		nullptr,
-		REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty))
-	{
-		ExistingPackage->MarkAsGarbage();
-		CollectGarbage(RF_NoFlags);
-		return FindPackage(nullptr, *PackagePath) == nullptr;
-	}
-
-	return false;
-}
-
 // ---------------------------------------------------------------------------
 // Asset Existence Guard
 // ---------------------------------------------------------------------------
@@ -380,7 +335,7 @@ bool EnsureAssetPathFree(const FString& PackagePath, const FString& AssetName, F
 		return false;
 	}
 
-	if (FindPackage(nullptr, *PackagePath) && !TryEvictLoadedPackageForCreate(PackagePath))
+	if (FindPackage(nullptr, *PackagePath))
 	{
 		OutError = FString::Printf(TEXT("Package '%s' already exists in memory. Delete it first."), *PackagePath);
 		return false;

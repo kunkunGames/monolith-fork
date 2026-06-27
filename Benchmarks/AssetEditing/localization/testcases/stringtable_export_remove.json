@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "localization",
+  "asset_type_slug": "localization",
+  "edit_domain": "stringtable_export_remove",
+  "route_edit_domain": "stringtable_export_remove",
+  "module_id": "asset_authoring.localization.stringtable_export_remove",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_export_remove",
+    "edit": "asset_operation.edit.localization.stringtable_export_remove",
+    "save": "asset_operation.save.localization.stringtable_export_remove",
+    "readback_verify": "asset_operation.readback_verify.localization.stringtable_export_remove"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-375"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-375",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_export_remove",
+      "blueprint_type": "",
+      "workflow": "localization_stringtable_export_remove_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_entry",
+        "export_string_table_csv",
+        "remove_string_entry",
+        "get_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-375",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "create_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "namespace": "Bench.ExportRemove",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "ST_BenchExportRemove"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "key": "Menu_Play",
+            "source_string": "Play",
+            "metadata": {
+              "Context": "MainMenu"
+            },
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_Play"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "set_string_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "key": "Menu_DebugOnly",
+            "source_string": "Debug Only",
+            "metadata": {
+              "Context": "Debug"
+            },
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_DebugOnly"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "export_string_table_csv",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "file_path": "Saved/Monolith/Benchmarks/AssetEditing/AssetAuthoringFixtures/ST_BenchExportRemove.csv",
+            "include_metadata": true,
+            "confirm": true
+          },
+          "contains": [
+            "row_count",
+            "2",
+            "ST_BenchExportRemove.csv"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "remove_string_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "key": "Menu_DebugOnly",
+            "confirm": true,
+            "save": true
+          },
+          "contains": [
+            "Menu_DebugOnly",
+            "entry_existed",
+            "true",
+            "changed",
+            "true"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "get_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove",
+            "include_metadata": true
+          },
+          "contains": [
+            "Menu_Play",
+            "Play",
+            "MainMenu"
+          ],
+          "not_contains": [
+            "Menu_DebugOnly",
+            "Debug Only"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "validate_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchExportRemove"
+          },
+          "contains": [
+            "valid",
+            "true"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "stringtable_export_remove",
+      "blueprint_type": "",
+      "domain": "localization",
+      "workflow": "localization_stringtable_export_remove_roundtrip",
+      "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_string_table",
+          "set_string_entry",
+          "export_string_table_csv",
+          "remove_string_entry",
+          "get_string_table",
+          "validate_string_table"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

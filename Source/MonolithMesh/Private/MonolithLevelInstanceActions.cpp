@@ -173,7 +173,7 @@ namespace
 			Result->SetStringField(TEXT("type"), TypeName);
 			Result->SetStringField(TEXT("save_path"), SavePath);
 			Result->SetNumberField(TEXT("source_actor_count"), ActorNames.Num());
-			Result->SetStringField(TEXT("next_step"), TEXT("Re-run with confirm=true to invoke mesh.create_prefab."));
+			Result->SetStringField(TEXT("next_step"), TEXT("Re-run with confirm=true to invoke level_instance.create_prefab."));
 			Result->SetObjectField(TEXT("edit_session"), MakeCapabilityNote());
 			return FMonolithActionResult::Success(Result);
 		}
@@ -182,7 +182,7 @@ namespace
 		ForwardParams->SetArrayField(TEXT("actor_names"), ActorNames);
 		ForwardParams->SetStringField(TEXT("save_path"), SavePath);
 		ForwardParams->SetStringField(TEXT("type"), TypeName);
-	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("create_prefab"), ForwardParams);
+	return FMonolithToolRegistry::Get().ExecuteAction(TEXT("level_instance"), TEXT("create_prefab"), ForwardParams);
 	}
 
 	FMonolithActionResult MakeLifecycleUnavailable(const FString& Action, const TSharedPtr<FJsonObject>& Params)

@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "material",
+  "asset_type_slug": "material",
+  "edit_domain": "pbr_material_from_disk",
+  "route_edit_domain": "pbr_material_from_disk",
+  "module_id": "asset_authoring.material.pbr_material_from_disk",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.material.pbr_material_from_disk",
+    "edit": "asset_operation.edit.material.pbr_material_from_disk",
+    "save": "asset_operation.save.material.pbr_material_from_disk",
+    "readback_verify": "asset_operation.readback_verify.material.pbr_material_from_disk"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-297"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-297",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "material",
+      "edit_domain": "pbr_material_from_disk",
+      "blueprint_type": "",
+      "workflow": "pbr_material_from_disk_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_pbr_material_from_disk",
+        "save_material",
+        "get_material_properties",
+        "get_full_connection_graph",
+        "validate_material",
+        "get_texture_properties"
+      ],
+      "description": "Import disk PBR texture maps, create and save a Material graph, then read back material and texture metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-297",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchDiskPbr_D",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchDiskPbr_N",
+              "/Game/Benchmarks/AssetAuthoring/T_BenchDiskPbr_R"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "create_pbr_material_from_disk",
+            "material_path": "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr",
+            "texture_folder": "/Game/Benchmarks/AssetAuthoring",
+            "maps": {
+              "basecolor": "__ASSET_AUTHORING_PBR_BASECOLOR_BMP__",
+              "normal": "__ASSET_AUTHORING_PBR_NORMAL_BMP__",
+              "roughness": "__ASSET_AUTHORING_PBR_ROUGHNESS_BMP__"
+            },
+            "blend_mode": "Opaque",
+            "shading_model": "DefaultLit",
+            "material_domain": "Surface",
+            "max_texture_size": 128,
+            "replace_existing": true
+          },
+          "contains": [
+            "M_BenchDiskPbr",
+            "textures_imported_count",
+            "nodes_created",
+            "connections_made",
+            "T_BenchDiskPbr_D",
+            "T_BenchDiskPbr_N",
+            "T_BenchDiskPbr_R"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "save_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_material_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr"
+          },
+          "contains": [
+            "M_BenchDiskPbr",
+            "Opaque",
+            "DefaultLit",
+            "Surface",
+            "expression_count"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_full_connection_graph",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr"
+          },
+          "contains": [
+            "BaseColor",
+            "Normal",
+            "Roughness",
+            "T_BenchDiskPbr_D",
+            "T_BenchDiskPbr_N",
+            "T_BenchDiskPbr_R"
+          ]
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "validate_material",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/M_BenchDiskPbr"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_material reports invalid material state as isError; PBR graph and texture bindings are asserted separately"
+        },
+        {
+          "tool": "material_query",
+          "args": {
+            "action": "get_texture_properties",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/T_BenchDiskPbr_N"
+          },
+          "contains": [
+            "T_BenchDiskPbr_N",
+            "Texture2D",
+            "TC_Normalmap",
+            "SAMPLERTYPE_Normal"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "pbr_material_from_disk",
+      "blueprint_type": "",
+      "domain": "material",
+      "workflow": "pbr_material_from_disk_roundtrip",
+      "description": "Import disk PBR texture maps, create and save a Material graph, then read back material and texture metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_pbr_material_from_disk",
+          "save_material",
+          "get_material_properties",
+          "get_full_connection_graph",
+          "validate_material",
+          "get_texture_properties"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

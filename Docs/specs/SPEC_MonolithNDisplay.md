@@ -54,4 +54,4 @@
 |------|----------|
 | Registration | `FMonolithNDisplayModule::StartupModule` registers `ndisplay.get_status` and `ndisplay.list_config_assets`. |
 | Ownership cleanup | `MonolithMesh` no longer registers or unregisters the `ndisplay` namespace. |
-| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from `GO.uproject`. |
+| UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |

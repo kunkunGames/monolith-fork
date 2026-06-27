@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "curvetable_row_maintenance",
+  "route_edit_domain": "curvetable_row_maintenance",
+  "module_id": "asset_authoring.data.curvetable_row_maintenance",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.curvetable_row_maintenance",
+    "edit": "asset_operation.edit.data.curvetable_row_maintenance",
+    "save": "asset_operation.save.data.curvetable_row_maintenance",
+    "readback_verify": "asset_operation.readback_verify.data.curvetable_row_maintenance"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-371"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-371",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "curvetable_row_maintenance",
+      "blueprint_type": "",
+      "workflow": "curvetable_row_maintenance_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_data_asset",
+        "set_curve_table_keys",
+        "add_curve_table_row",
+        "rename_curve_table_row",
+        "remove_curve_table_row",
+        "save_asset",
+        "read_curve_table",
+        "inspect_asset"
+      ],
+      "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-371",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_data_asset",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance",
+            "class_name": "CurveTable"
+          },
+          "contains": [
+            "CT_BenchRowMaintenance",
+            "CurveTable"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_curve_table_keys",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance",
+            "row_name": "DamageScale",
+            "keys": [
+              {
+                "time": 0.0,
+                "value": 1.0
+              },
+              {
+                "time": 5.0,
+                "value": 4.4
+              }
+            ],
+            "interp_mode": "linear",
+            "save": true
+          },
+          "contains": [
+            "DamageScale",
+            "keys_written",
+            "2",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "add_curve_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance",
+            "row_name": "TempScale",
+            "interp_mode": "linear",
+            "save": true
+          },
+          "contains": [
+            "TempScale",
+            "created",
+            "true"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "rename_curve_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance",
+            "old_name": "DamageScale",
+            "new_name": "DamageScaleRenamed",
+            "save": true
+          },
+          "contains": [
+            "DamageScale",
+            "DamageScaleRenamed",
+            "renamed",
+            "true"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "remove_curve_table_row",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance",
+            "row_name": "TempScale",
+            "save": true
+          },
+          "contains": [
+            "TempScale",
+            "removed",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "read_curve_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance"
+          },
+          "contains": [
+            "DamageScaleRenamed",
+            "4.4",
+            "total_rows",
+            "1"
+          ],
+          "not_contains": [
+            "TempScale"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/CT_BenchRowMaintenance"
+          },
+          "contains": [
+            "CT_BenchRowMaintenance",
+            "CurveTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "curvetable_row_maintenance",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "curvetable_row_maintenance_roundtrip",
+      "description": "Create a CurveTable, write keys, add a second row, rename the authored row, remove the temporary row, save, and read table rows back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_data_asset",
+          "set_curve_table_keys",
+          "add_curve_table_row",
+          "rename_curve_table_row",
+          "remove_curve_table_row",
+          "save_asset",
+          "read_curve_table",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

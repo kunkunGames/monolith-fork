@@ -15,7 +15,10 @@
 #include "Dom/JsonValue.h"
 #include "EditorSubsystem.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "HAL/FileManager.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/App.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Editor.h"
@@ -141,6 +144,123 @@ static FString MonolithTerseOneLineDescription(const FString& Full)
 	Trimmed.LeftInline(Tail);
 	Trimmed += TEXT("...");
 	return Trimmed;
+}
+
+static bool IsKnownOfflineAction(const FMonolithActionInfo& ActionInfo)
+{
+	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
+	static const TSet<FString> KnownOfflineActions = []()
+	{
+		TSet<FString> Actions;
+		for (const TCHAR* Id : {
+			TEXT("monolith.guide"),
+			TEXT("monolith.status"),
+			TEXT("monolith.discover"),
+			TEXT("monolith.find"),
+			TEXT("monolith.get_action_metadata_coverage"),
+			TEXT("bridge.search_asset_symbols"),
+			TEXT("source.search_source"),
+			TEXT("source.read_source"),
+			TEXT("source.find_references"),
+			TEXT("source.callers"),
+			TEXT("source.callees"),
+			TEXT("source.symbol_info"),
+			TEXT("source.impact_radius"),
+			TEXT("source.find_overrides"),
+			TEXT("source.find_virtuals"),
+			TEXT("source.risk_score"),
+			TEXT("source.review_context"),
+			TEXT("source.review_hotspots"),
+			TEXT("source.detect_changes"),
+			TEXT("source.pre_merge_check"),
+			TEXT("source.search_crg_graph"),
+			TEXT("source.health"),
+			TEXT("source.repair_crg_cache"),
+			TEXT("source.build_crg_graph"),
+			TEXT("source.get_include_path"),
+			TEXT("source.get_signature"),
+			TEXT("source.check_deprecations"),
+			TEXT("source.verify_symbols"),
+			TEXT("source.find_example_usage"),
+			TEXT("source.suggest_build_cs_deps"),
+			TEXT("source.lint_header"),
+			TEXT("source.generate_class_stub"),
+			TEXT("console.search_objects"),
+			TEXT("console.get_object"),
+			TEXT("console.health"),
+			TEXT("project.search"),
+			TEXT("project.find_by_type"),
+			TEXT("project.find_references"),
+			TEXT("project.get_stats"),
+			TEXT("project.get_asset_details"),
+			TEXT("project.impact_radius"),
+			TEXT("project.health"),
+			TEXT("project.repair_fts"),
+			TEXT("project.repair_crg_cache"),
+			TEXT("project.risk_score"),
+			TEXT("project.review_context"),
+			TEXT("project.review_hotspots"),
+			TEXT("project.find_unused"),
+			TEXT("project.detect_changes"),
+			TEXT("project.pre_merge_check"),
+			TEXT("project.snapshot"),
+			TEXT("project.diff_snapshots"),
+			TEXT("cppreflect.get_uclass"),
+			TEXT("cppreflect.list_uproperties"),
+			TEXT("cppreflect.list_ufunctions"),
+			TEXT("cppreflect.find_interface_impls"),
+			TEXT("cppreflect.find_class_specifier"),
+			TEXT("cppreflect.list_class_specifiers"),
+			TEXT("network.list_rpc_functions"),
+			TEXT("network.trace_rpc_path"),
+			TEXT("network.audit_replication"),
+			TEXT("network.analyze_bandwidth"),
+			TEXT("decision.list_decisions"),
+			TEXT("decision.get_decision"),
+			TEXT("decision.list_stale"),
+			TEXT("decision.search_rationale"),
+			TEXT("decision.suggest_update"),
+			TEXT("risk.risk_summary"),
+			TEXT("risk.symbol_risk"),
+			TEXT("risk.list_conditional_gates"),
+			TEXT("risk.get_release_window_hotspots"),
+			TEXT("risk.audit_module_dep_reality")
+		})
+		{
+			Actions.Add(Id);
+		}
+		return Actions;
+	}();
+	return KnownOfflineActions.Contains(ActionId);
+}
+
+static bool DoesActionMutateAssets(const FMonolithActionInfo& ActionInfo)
+{
+	return ActionInfo.bDestructiveHint
+		|| ActionInfo.ExecutionPolicy.bDirtyPackageTracking
+		|| ActionInfo.ExecutionPolicy.bTransactionWrapping
+		|| ActionInfo.ExecutionPolicy.bPostEditValidation;
+}
+
+static bool IsKnownLongRunningAction(const FMonolithActionInfo& ActionInfo)
+{
+	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
+	return ActionId == TEXT("monolith.reindex")
+		|| ActionId == TEXT("source.build_crg_graph")
+		|| ActionId == TEXT("source.rebuild_crg_graph")
+		|| ActionId == TEXT("ai.rebuild_zone_graph");
+}
+
+static void AddActionPolicyFields(TSharedPtr<FJsonObject>& ActionObj, const FMonolithActionInfo& ActionInfo)
+{
+	const bool bAvailableOffline = IsKnownOfflineAction(ActionInfo);
+	const bool bLongRunning = IsKnownLongRunningAction(ActionInfo);
+	ActionObj->SetBoolField(TEXT("available_offline"), bAvailableOffline);
+	ActionObj->SetBoolField(TEXT("requires_live_editor"), !bAvailableOffline);
+	ActionObj->SetBoolField(TEXT("mutates_assets"), DoesActionMutateAssets(ActionInfo));
+	ActionObj->SetBoolField(TEXT("writes_logs"), false);
+	ActionObj->SetBoolField(TEXT("long_running"), bLongRunning);
+	ActionObj->SetBoolField(TEXT("supports_progress"), bLongRunning);
 }
 
 struct FNotificationBoolSetting
@@ -526,6 +646,7 @@ static TSharedPtr<FJsonObject> MakeDiscoverActionRow(const FMonolithActionInfo& 
 	ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
 	ActionObj->SetStringField(TEXT("description"), ActionInfo.Description);
 	ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
+	AddActionPolicyFields(ActionObj, ActionInfo);
 	if (!ActionInfo.Category.IsEmpty())
 	{
 		ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
@@ -564,11 +685,54 @@ struct FMetadataCoverageBucket
 	TMap<FString, int32> OutputContractStatus;
 	TMap<FString, int32> NextActionsStatus;
 	TMap<FString, int32> PlanningSignalsStatus;
+	TMap<FString, int32> PolicyFieldPresence;
+	int32 OutputContractReady = 0;
+	int32 NextActionsReady = 0;
+	int32 PlanningSignalsReady = 0;
+	int32 PolicyFieldsComplete = 0;
 	TArray<FString> OutputNotDeclaredSamples;
 	TArray<FString> NextActionsNotDeclaredSamples;
 	TArray<FString> PreconditionsNoneRequiredSamples;
 	TArray<FString> PlanningSignalsMissingSamples;
+	TArray<FString> PolicyFieldMissingSamples;
 };
+
+static const TArray<FString>& MetadataGateHighTrafficNamespaces()
+{
+	static const TArray<FString> Namespaces = {
+		TEXT("monolith"),
+		TEXT("source"),
+		TEXT("project"),
+		TEXT("blueprint"),
+		TEXT("console"),
+		TEXT("bridge")
+	};
+	return Namespaces;
+}
+
+static bool IsHighTrafficMetadataNamespace(const FString& Namespace)
+{
+	for (const FString& Candidate : MetadataGateHighTrafficNamespaces())
+	{
+		if (Namespace.Equals(Candidate, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool IsMetadataStatusReady(const FString& Status)
+{
+	return !Status.IsEmpty()
+		&& !Status.Equals(TEXT("missing"), ESearchCase::IgnoreCase)
+		&& !Status.Equals(TEXT("not_declared"), ESearchCase::IgnoreCase);
+}
+
+static double MetadataCoverageRatio(int32 Ready, int32 Total)
+{
+	return Total > 0 ? static_cast<double>(Ready) / static_cast<double>(Total) : 0.0;
+}
 
 static void IncrementCoverageCounter(TMap<FString, int32>& Counts, const FString& Key)
 {
@@ -587,6 +751,19 @@ static TSharedPtr<FJsonObject> CoverageCountsToJson(const TMap<FString, int32>& 
 		Obj->SetNumberField(Key, Counts.FindChecked(Key));
 	}
 	return Obj;
+}
+
+static const TArray<FString>& MetadataPolicyFieldNames()
+{
+	static const TArray<FString> Fields = {
+		TEXT("available_offline"),
+		TEXT("requires_live_editor"),
+		TEXT("mutates_assets"),
+		TEXT("writes_logs"),
+		TEXT("long_running"),
+		TEXT("supports_progress")
+	};
+	return Fields;
 }
 
 static void AddCoverageSample(TArray<FString>& Samples, const FString& ActionId, int32 SampleLimit)
@@ -630,6 +807,33 @@ static void AccumulateMetadataCoverage(
 	IncrementCoverageCounter(Bucket.PlanningSignalsStatus, PlanningSignalsStatus);
 
 	const FString ActionId = ActionInfo.Namespace + TEXT(".") + ActionInfo.Action;
+	bool bAllPolicyFieldsPresent = true;
+	for (const FString& FieldName : MetadataPolicyFieldNames())
+	{
+		const bool bPresent = ActionRow->HasField(FieldName);
+		IncrementCoverageCounter(Bucket.PolicyFieldPresence, bPresent ? FieldName + TEXT(":present") : FieldName + TEXT(":missing"));
+		if (!bPresent)
+		{
+			bAllPolicyFieldsPresent = false;
+			AddCoverageSample(Bucket.PolicyFieldMissingSamples, ActionId + TEXT(":") + FieldName, SampleLimit);
+		}
+	}
+	if (IsMetadataStatusReady(OutputContractStatus))
+	{
+		++Bucket.OutputContractReady;
+	}
+	if (IsMetadataStatusReady(NextActionsStatus))
+	{
+		++Bucket.NextActionsReady;
+	}
+	if (PlanningSignalsStatus == TEXT("generated"))
+	{
+		++Bucket.PlanningSignalsReady;
+	}
+	if (bAllPolicyFieldsPresent)
+	{
+		++Bucket.PolicyFieldsComplete;
+	}
 	if (OutputContractStatus == TEXT("not_declared"))
 	{
 		AddCoverageSample(Bucket.OutputNotDeclaredSamples, ActionId, SampleLimit);
@@ -662,6 +866,18 @@ static TSharedPtr<FJsonObject> CoverageBucketToJson(const FMetadataCoverageBucke
 	Obj->SetObjectField(TEXT("output_contract_status"), CoverageCountsToJson(Bucket.OutputContractStatus));
 	Obj->SetObjectField(TEXT("next_actions_status"), CoverageCountsToJson(Bucket.NextActionsStatus));
 	Obj->SetObjectField(TEXT("planning_signals_status"), CoverageCountsToJson(Bucket.PlanningSignalsStatus));
+	Obj->SetObjectField(TEXT("policy_field_presence"), CoverageCountsToJson(Bucket.PolicyFieldPresence));
+
+	TSharedPtr<FJsonObject> Readiness = MakeShared<FJsonObject>();
+	Readiness->SetNumberField(TEXT("output_contract_ready"), Bucket.OutputContractReady);
+	Readiness->SetNumberField(TEXT("output_contract_ratio"), MetadataCoverageRatio(Bucket.OutputContractReady, Bucket.ActionCount));
+	Readiness->SetNumberField(TEXT("next_actions_ready"), Bucket.NextActionsReady);
+	Readiness->SetNumberField(TEXT("next_actions_ratio"), MetadataCoverageRatio(Bucket.NextActionsReady, Bucket.ActionCount));
+	Readiness->SetNumberField(TEXT("planning_signals_ready"), Bucket.PlanningSignalsReady);
+	Readiness->SetNumberField(TEXT("planning_signals_ratio"), MetadataCoverageRatio(Bucket.PlanningSignalsReady, Bucket.ActionCount));
+	Readiness->SetNumberField(TEXT("policy_fields_complete"), Bucket.PolicyFieldsComplete);
+	Readiness->SetNumberField(TEXT("policy_fields_ratio"), MetadataCoverageRatio(Bucket.PolicyFieldsComplete, Bucket.ActionCount));
+	Obj->SetObjectField(TEXT("contract_readiness"), Readiness);
 
 	if (SampleLimit > 0)
 	{
@@ -670,6 +886,7 @@ static TSharedPtr<FJsonObject> CoverageBucketToJson(const FMetadataCoverageBucke
 		Samples->SetArrayField(TEXT("next_actions_not_declared"), StringArrayToJson(Bucket.NextActionsNotDeclaredSamples));
 		Samples->SetArrayField(TEXT("preconditions_none_required"), StringArrayToJson(Bucket.PreconditionsNoneRequiredSamples));
 		Samples->SetArrayField(TEXT("planning_signals_missing"), StringArrayToJson(Bucket.PlanningSignalsMissingSamples));
+		Samples->SetArrayField(TEXT("policy_fields_missing"), StringArrayToJson(Bucket.PolicyFieldMissingSamples));
 		Obj->SetObjectField(TEXT("samples"), Samples);
 	}
 
@@ -694,6 +911,121 @@ static TArray<TSharedPtr<FJsonValue>> CoverageBucketMapToRows(
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 	}
 	return Rows;
+}
+
+static TSharedPtr<FJsonObject> MakeMetadataCoverageGateCheck(
+	const FString& LabelField,
+	const FString& Label,
+	const FMetadataCoverageBucket& Bucket,
+	double MinContractRatio)
+{
+	TSharedPtr<FJsonObject> Check = MakeShared<FJsonObject>();
+	Check->SetStringField(LabelField, Label);
+	Check->SetNumberField(TEXT("action_count"), Bucket.ActionCount);
+	Check->SetNumberField(TEXT("min_contract_ratio"), MinContractRatio);
+
+	const double OutputRatio = MetadataCoverageRatio(Bucket.OutputContractReady, Bucket.ActionCount);
+	const double NextRatio = MetadataCoverageRatio(Bucket.NextActionsReady, Bucket.ActionCount);
+	const double PlanningRatio = MetadataCoverageRatio(Bucket.PlanningSignalsReady, Bucket.ActionCount);
+	const double PolicyRatio = MetadataCoverageRatio(Bucket.PolicyFieldsComplete, Bucket.ActionCount);
+	Check->SetNumberField(TEXT("output_contract_ratio"), OutputRatio);
+	Check->SetNumberField(TEXT("next_actions_ratio"), NextRatio);
+	Check->SetNumberField(TEXT("planning_signals_ratio"), PlanningRatio);
+	Check->SetNumberField(TEXT("policy_fields_ratio"), PolicyRatio);
+
+	TArray<TSharedPtr<FJsonValue>> Failures;
+	if (Bucket.ActionCount <= 0)
+	{
+		Failures.Add(MakeShared<FJsonValueString>(TEXT("no_actions")));
+	}
+	if (OutputRatio < MinContractRatio)
+	{
+		Failures.Add(MakeShared<FJsonValueString>(TEXT("output_contract_ratio_below_threshold")));
+	}
+	if (NextRatio < MinContractRatio)
+	{
+		Failures.Add(MakeShared<FJsonValueString>(TEXT("next_actions_ratio_below_threshold")));
+	}
+	if (PlanningRatio < 1.0)
+	{
+		Failures.Add(MakeShared<FJsonValueString>(TEXT("planning_signals_missing")));
+	}
+	if (PolicyRatio < 1.0)
+	{
+		Failures.Add(MakeShared<FJsonValueString>(TEXT("policy_fields_missing")));
+	}
+	Check->SetArrayField(TEXT("failures"), Failures);
+	Check->SetBoolField(TEXT("passed"), Failures.Num() == 0);
+	return Check;
+}
+
+static TSharedPtr<FJsonObject> MakeMetadataCoverageGate(
+	const FMetadataCoverageBucket& Totals,
+	const TMap<FString, FMetadataCoverageBucket>& ByNamespace,
+	const FString& GateScope,
+	const FString& FilterNamespace,
+	double MinContractRatio)
+{
+	TSharedPtr<FJsonObject> Gate = MakeShared<FJsonObject>();
+	Gate->SetStringField(TEXT("scope"), GateScope);
+	Gate->SetNumberField(TEXT("min_contract_ratio"), MinContractRatio);
+	Gate->SetArrayField(TEXT("high_traffic_namespaces"), StringArrayToJson(MetadataGateHighTrafficNamespaces()));
+
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	if (GateScope.Equals(TEXT("off"), ESearchCase::IgnoreCase))
+	{
+		Gate->SetBoolField(TEXT("enabled"), false);
+		Gate->SetBoolField(TEXT("passed"), true);
+		Gate->SetStringField(TEXT("skipped_reason"), TEXT("gate_scope_off"));
+		Gate->SetArrayField(TEXT("checks"), Checks);
+		return Gate;
+	}
+
+	Gate->SetBoolField(TEXT("enabled"), true);
+	if (GateScope.Equals(TEXT("filtered"), ESearchCase::IgnoreCase)
+		|| (!FilterNamespace.IsEmpty() && GateScope.Equals(TEXT("high_traffic"), ESearchCase::IgnoreCase) && IsHighTrafficMetadataNamespace(FilterNamespace)))
+	{
+		const FString Label = FilterNamespace.IsEmpty() ? TEXT("filtered") : FilterNamespace;
+		Checks.Add(MakeShared<FJsonValueObject>(MakeMetadataCoverageGateCheck(TEXT("scope_name"), Label, Totals, MinContractRatio)));
+	}
+	else
+	{
+		TArray<FString> Keys;
+		ByNamespace.GetKeys(Keys);
+		Keys.Sort();
+		for (const FString& Namespace : Keys)
+		{
+			const bool bShouldGate = GateScope.Equals(TEXT("all"), ESearchCase::IgnoreCase)
+				|| (GateScope.Equals(TEXT("high_traffic"), ESearchCase::IgnoreCase) && IsHighTrafficMetadataNamespace(Namespace));
+			if (bShouldGate)
+			{
+				Checks.Add(MakeShared<FJsonValueObject>(
+					MakeMetadataCoverageGateCheck(TEXT("namespace"), Namespace, ByNamespace.FindChecked(Namespace), MinContractRatio)));
+			}
+		}
+	}
+
+	bool bPassed = true;
+	for (const TSharedPtr<FJsonValue>& CheckValue : Checks)
+	{
+		const TSharedPtr<FJsonObject>* CheckObj = nullptr;
+		if (CheckValue.IsValid() && CheckValue->TryGetObject(CheckObj) && CheckObj && CheckObj->IsValid())
+		{
+			bool bCheckPassed = false;
+			if (!(*CheckObj)->TryGetBoolField(TEXT("passed"), bCheckPassed) || !bCheckPassed)
+			{
+				bPassed = false;
+			}
+		}
+	}
+	Gate->SetBoolField(TEXT("passed"), bPassed);
+	Gate->SetNumberField(TEXT("check_count"), Checks.Num());
+	if (Checks.Num() == 0)
+	{
+		Gate->SetStringField(TEXT("skipped_reason"), TEXT("no_gated_namespace_matched"));
+	}
+	Gate->SetArrayField(TEXT("checks"), Checks);
+	return Gate;
 }
 
 static FString GetBrowserAccessMode(const UMonolithSettings* Settings)
@@ -1009,6 +1341,119 @@ static TSharedPtr<FJsonObject> ReadinessHelpToJson(const FString& Component, con
 	return Obj;
 }
 
+static FString GetMonolithPluginRootForReadiness()
+{
+	if (const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("Monolith")))
+	{
+		return FPaths::ConvertRelativePathToFull(Plugin->GetBaseDir());
+	}
+	return FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("Monolith")));
+}
+
+static FString QuoteForReadinessCommand(const FString& Path)
+{
+	return FString::Printf(TEXT("\"%s\""), *Path);
+}
+
+static TSharedPtr<FJsonObject> MakeReadinessStep(
+	int32 Order,
+	const FString& Id,
+	const FString& Command,
+	const FString& When,
+	const FString& ExpectedResult,
+	int32 MaxWaitSeconds)
+{
+	TSharedPtr<FJsonObject> Step = MakeShared<FJsonObject>();
+	Step->SetNumberField(TEXT("order"), Order);
+	Step->SetStringField(TEXT("id"), Id);
+	Step->SetStringField(TEXT("command"), Command);
+	Step->SetStringField(TEXT("when"), When);
+	Step->SetStringField(TEXT("expected_result"), ExpectedResult);
+	Step->SetNumberField(TEXT("max_wait_seconds"), MaxWaitSeconds);
+	return Step;
+}
+
+static TSharedPtr<FJsonObject> BuildMonolithRecoveryPlan(
+	const UMonolithSettings* Settings,
+	const FMonolithHttpServer* Server)
+{
+	const int32 ConfiguredPort = Settings ? Settings->ServerPort : 9316;
+	const int32 ActualPort = Server ? Server->GetPort() : 0;
+	const bool bServerRunning = Server && Server->IsRunning();
+	const int32 EndpointPort = bServerRunning && ActualPort > 0 ? ActualPort : ConfiguredPort;
+	const FString EndpointUrl = FString::Printf(TEXT("http://localhost:%d/mcp"), EndpointPort);
+	const FString HealthUrl = FString::Printf(TEXT("http://localhost:%d/health"), EndpointPort);
+
+	const FString PluginRoot = GetMonolithPluginRootForReadiness();
+	const FString RecoverScript = FPaths::ConvertRelativePathToFull(FPaths::Combine(PluginRoot, TEXT("Scripts"), TEXT("recover_mcp.ps1")));
+	const FString HostRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	const FString HeadlessCommand = FPaths::ConvertRelativePathToFull(FPaths::Combine(HostRoot, TEXT("BatchFiles"), TEXT("RunHeadlessEditor.bat")));
+	const FString HeadlessLogGlob = FPaths::ConvertRelativePathToFull(FPaths::Combine(HostRoot, TEXT("Saved"), TEXT("HeadlessMcp"), TEXT("Logs"), TEXT("HeadlessEditor-*.log")));
+	const bool bRecoverScriptExists = IFileManager::Get().FileExists(*RecoverScript);
+	const bool bHeadlessCommandExists = IFileManager::Get().FileExists(*HeadlessCommand);
+
+	TSharedPtr<FJsonObject> Listener = MakeShared<FJsonObject>();
+	Listener->SetStringField(TEXT("status"), bServerRunning ? TEXT("listening") : TEXT("not_listening"));
+	Listener->SetBoolField(TEXT("server_running"), bServerRunning);
+	Listener->SetNumberField(TEXT("configured_port"), ConfiguredPort);
+	Listener->SetNumberField(TEXT("actual_port"), ActualPort);
+	Listener->SetBoolField(TEXT("configured_port_matches_actual"), bServerRunning && ConfiguredPort == ActualPort);
+	Listener->SetStringField(TEXT("health_url"), HealthUrl);
+
+	TSharedPtr<FJsonObject> EditorCandidate = MakeShared<FJsonObject>();
+	EditorCandidate->SetStringField(TEXT("status"), TEXT("current_editor_process"));
+	EditorCandidate->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
+	EditorCandidate->SetBoolField(TEXT("commandlet"), IsRunningCommandlet());
+	EditorCandidate->SetBoolField(TEXT("unattended"), FApp::IsUnattended());
+	EditorCandidate->SetStringField(TEXT("host_project_root"), HostRoot);
+	EditorCandidate->SetStringField(TEXT("headless_editor_command"), HeadlessCommand);
+	EditorCandidate->SetBoolField(TEXT("headless_editor_command_exists"), bHeadlessCommandExists);
+
+	TArray<TSharedPtr<FJsonValue>> Steps;
+	const FString ProbeCommand = FString::Printf(
+		TEXT("powershell -ExecutionPolicy Bypass -File %s -ProbeOnly"),
+		*QuoteForReadinessCommand(RecoverScript));
+	const FString RecoverCommand = FString::Printf(
+		TEXT("powershell -ExecutionPolicy Bypass -File %s -TimeoutSec 600"),
+		*QuoteForReadinessCommand(RecoverScript));
+
+	Steps.Add(MakeShared<FJsonValueObject>(MakeReadinessStep(
+		1,
+		TEXT("probe"),
+		ProbeCommand,
+		TEXT("Before calling editor-backed MCP actions or when endpoint_url does not answer."),
+		TEXT("One RESULT= token; ProbeOnly never launches the editor."),
+		3)));
+	Steps.Add(MakeShared<FJsonValueObject>(MakeReadinessStep(
+		2,
+		TEXT("recover"),
+		RecoverCommand,
+		TEXT("When the probe reports MCP_DOWN and editor-backed actions are required."),
+		TEXT("RESULT=MCP_UP, MCP_TIMEOUT, EDITOR_EXITED, or a concrete blocked result."),
+		600)));
+	Steps.Add(MakeShared<FJsonValueObject>(MakeReadinessStep(
+		3,
+		TEXT("reconnect_and_verify"),
+		TEXT("Reconnect the existing MCP client, then call monolith.status and monolith.get_readiness_status."),
+		TEXT("After RESULT=MCP_UP or after changing editor/server settings."),
+		TEXT("The MCP client sees the refreshed live tool list and readiness items."),
+		60)));
+
+	TSharedPtr<FJsonObject> Plan = MakeShared<FJsonObject>();
+	Plan->SetStringField(TEXT("endpoint_url"), EndpointUrl);
+	Plan->SetStringField(TEXT("health_url"), HealthUrl);
+	Plan->SetObjectField(TEXT("listener_status"), Listener);
+	Plan->SetObjectField(TEXT("editor_candidate_status"), EditorCandidate);
+	Plan->SetStringField(TEXT("recover_script_path"), RecoverScript);
+	Plan->SetBoolField(TEXT("recover_script_exists"), bRecoverScriptExists);
+	Plan->SetStringField(TEXT("probe_command"), ProbeCommand);
+	Plan->SetStringField(TEXT("recover_command"), RecoverCommand);
+	Plan->SetStringField(TEXT("headless_log_glob"), HeadlessLogGlob);
+	Plan->SetStringField(TEXT("direct_streamable_http_note"), TEXT("Direct clients can use endpoint_url for /mcp and health_url for readiness without monolith_proxy.py/.js."));
+	Plan->SetArrayField(TEXT("bounded_next_steps"), Steps);
+	return Plan;
+}
+
 void FMonolithCoreTools::RegisterAll()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
@@ -1047,8 +1492,8 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter over action name or description."))
 				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter. Only used when limit > 0."), TEXT("0"))
 				.Range(TEXT("offset"), 0, 1000000)
-				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. 0 means return every post-filter action."), TEXT("0"))
-				.Range(TEXT("limit"), 0, 1000000)
+				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. Defaults to 50; explicit 0 keeps the legacy full-list behavior."), TEXT("50"))
+				.Range(TEXT("limit"), 0, 1000)
 				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
 				.Build()
 		);
@@ -1208,6 +1653,10 @@ void FMonolithCoreTools::RegisterAll()
 			.Optional(TEXT("skill"), TEXT("string"), TEXT("Optional owning-skill filter such as unreal-cpp or monolith-mcp."))
 			.Optional(TEXT("sample_limit"), TEXT("integer"), TEXT("Maximum per-bucket action-id samples for missing factual metadata."), TEXT("10"))
 			.Range(TEXT("sample_limit"), 0, 50)
+			.Optional(TEXT("min_contract_ratio"), TEXT("number"), TEXT("Minimum output/next-action contract readiness ratio for gated namespaces."), TEXT("0.8"))
+			.Range(TEXT("min_contract_ratio"), 0, 1)
+			.Optional(TEXT("gate_scope"), TEXT("string"), TEXT("Coverage gate scope: high_traffic, filtered, all, or off."), TEXT("high_traffic"))
+			.Enum(TEXT("gate_scope"), { TEXT("high_traffic"), TEXT("filtered"), TEXT("all"), TEXT("off") })
 			.Build()
 	);
 
@@ -1534,6 +1983,8 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 	FString FilterNamespace;
 	FString FilterSkill;
 	double SampleLimitValue = 10.0;
+	double MinContractRatio = 0.8;
+	FString GateScope = TEXT("high_traffic");
 	if (Params.IsValid())
 	{
 		FString ErrMsg;
@@ -1549,9 +2000,25 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
+		if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("min_contract_ratio"), MinContractRatio, ErrMsg, MinContractRatio, 0, 1))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("gate_scope"), GateScope, ErrMsg, GateScope, true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	FilterNamespace.TrimStartAndEndInline();
 	FilterSkill.TrimStartAndEndInline();
+	GateScope.TrimStartAndEndInline();
+	GateScope.ToLowerInline();
+	if (GateScope != TEXT("high_traffic") && GateScope != TEXT("filtered") && GateScope != TEXT("all") && GateScope != TEXT("off"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Parameter 'gate_scope' must be one of high_traffic, filtered, all, off; got '%s'"), *GateScope),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 	const int32 SampleLimit = FMath::Clamp(static_cast<int32>(SampleLimitValue), 0, 50);
 
 	TArray<FMonolithActionInfo> Actions = FilterNamespace.IsEmpty()
@@ -1576,13 +2043,19 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 		AccumulateMetadataCoverage(BySkill.FindOrAdd(Skill), ActionInfo, ActionRow, SampleLimit);
 	}
 
+	TSharedPtr<FJsonObject> Gate = MakeMetadataCoverageGate(Totals, ByNamespace, GateScope, FilterNamespace, MinContractRatio);
+	bool bGatePassed = true;
+	Gate->TryGetBoolField(TEXT("passed"), bGatePassed);
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("status"), TEXT("ok"));
+	Result->SetStringField(TEXT("status"), bGatePassed ? TEXT("ok") : TEXT("warning"));
 	Result->SetStringField(TEXT("scope"), TEXT("active_profile_registry"));
 	Result->SetStringField(TEXT("active_profile"), FMonolithToolProfileManager::Get().GetActiveProfileId());
 	Result->SetStringField(TEXT("report_semantics"),
 		TEXT("not_declared means no factual output or next-action contract has been declared; agents must not infer or fabricate workflow edges from this report. planning_signals are generated from registry facts such as skill mapping, schemas, search metadata, and execution policy."));
 	Result->SetNumberField(TEXT("sample_limit"), SampleLimit);
+	Result->SetNumberField(TEXT("min_contract_ratio"), MinContractRatio);
+	Result->SetStringField(TEXT("gate_scope"), GateScope);
 	if (!FilterNamespace.IsEmpty())
 	{
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
@@ -1594,6 +2067,7 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 	Result->SetObjectField(TEXT("totals"), CoverageBucketToJson(Totals, SampleLimit));
 	Result->SetArrayField(TEXT("by_namespace"), CoverageBucketMapToRows(ByNamespace, TEXT("namespace"), SampleLimit));
 	Result->SetArrayField(TEXT("by_skill"), CoverageBucketMapToRows(BySkill, TEXT("skill"), SampleLimit));
+	Result->SetObjectField(TEXT("gate"), Gate);
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -1761,13 +2235,15 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			});
 		}
 
-		// Pagination is OPT-IN. limit=0 (default) returns ALL post-filter actions so
-		// discoverability never regresses; any limit>0 slices [offset, offset+limit).
+		// P0.5: namespace action listings are bounded by default. Explicit limit=0
+		// remains a legacy full-list escape hatch for callers that truly need it.
 		const int32 TotalCount = Actions.Num();
 		int32 Offset = 0;
-		int32 Limit = 0;
+		int32 Limit = 50;
 		Params->TryGetNumberField(TEXT("offset"), Offset);
 		Params->TryGetNumberField(TEXT("limit"), Limit);
+		Offset = FMath::Clamp(Offset, 0, 1000000);
+		Limit = FMath::Clamp(Limit, 0, 1000);
 
 		int32 SliceStart = 0;
 		int32 SliceEnd = TotalCount;
@@ -1804,6 +2280,9 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 				TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
 				ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
 				ActionObj->SetStringField(TEXT("description"), MonolithTerseOneLineDescription(ActionInfo.Description));
+				ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
+				AddActionPolicyFields(ActionObj, ActionInfo);
+				AddPlanningFields(ActionObj, ActionInfo);
 				if (!ActionInfo.Category.IsEmpty())
 				{
 					ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
@@ -1812,9 +2291,20 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			}
 			Result->SetArrayField(TEXT("actions"), ActionArray);
 			Result->SetNumberField(TEXT("total"), TotalCount);
+			Result->SetBoolField(TEXT("truncated"), Limit > 0 && SliceEnd < TotalCount);
+			TSharedPtr<FJsonObject> LimitsObj = MakeShared<FJsonObject>();
+			LimitsObj->SetNumberField(TEXT("default_limit"), 50);
+			LimitsObj->SetNumberField(TEXT("max_limit"), 1000);
+			LimitsObj->SetNumberField(TEXT("limit"), Limit);
+			LimitsObj->SetNumberField(TEXT("offset"), SliceStart);
+			LimitsObj->SetNumberField(TEXT("total"), TotalCount);
+			LimitsObj->SetNumberField(TEXT("returned"), ActionArray.Num());
+			Result->SetObjectField(TEXT("limits"), LimitsObj);
 			if (Limit > 0 && SliceEnd < TotalCount)
 			{
-				Result->SetNumberField(TEXT("next_offset"), SliceStart + Limit);
+				const int32 NextOffset = SliceStart + Limit;
+				Result->SetNumberField(TEXT("next_offset"), NextOffset);
+				Result->SetStringField(TEXT("next_cursor"), FString::FromInt(NextOffset));
 			}
 			if (!bDetail)
 			{
@@ -1847,14 +2337,9 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			TSharedPtr<FJsonObject> NsObj = MakeShared<FJsonObject>();
 			NsObj->SetStringField(TEXT("namespace"), Ns);
 			NsObj->SetNumberField(TEXT("action_count"), Actions.Num());
-
-			TArray<TSharedPtr<FJsonValue>> ActionNames;
-			ActionNames.Reserve(Actions.Num());
-			for (const FString& ActionName : Actions)
-			{
-				ActionNames.Add(MakeShared<FJsonValueString>(ActionName));
-			}
-			NsObj->SetArrayField(TEXT("actions"), ActionNames);
+			NsObj->SetStringField(TEXT("projection"), TEXT("summary"));
+			NsObj->SetStringField(TEXT("actions_hint"),
+				FString::Printf(TEXT("Call monolith.discover(namespace=\"%s\", mode=\"actions\", limit=50, offset=0) for paginated action names."), *Ns));
 			NsArray.Add(MakeShared<FJsonValueObject>(NsObj));
 		}
 		// Append known optional modules that aren't already registered
@@ -1913,6 +2398,14 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 
 		Result->SetArrayField(TEXT("namespaces"), NsArray);
 		Result->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
+		Result->SetBoolField(TEXT("truncated"), false);
+		Result->SetStringField(TEXT("projection"), TEXT("summary"));
+		TSharedPtr<FJsonObject> LimitsObj = MakeShared<FJsonObject>();
+		LimitsObj->SetNumberField(TEXT("namespace_count"), NsArray.Num());
+		LimitsObj->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
+		LimitsObj->SetStringField(TEXT("actions_projection"), TEXT("omitted_in_summary"));
+		LimitsObj->SetStringField(TEXT("actions_hint"), TEXT("Use namespace-scoped monolith.discover with mode=actions plus limit/offset for action listings."));
+		Result->SetObjectField(TEXT("limits"), LimitsObj);
 		Result->SetStringField(TEXT("guide_hint"), TEXT("Call monolith_guide() for editorial cross-namespace workflow recipes, decision matrices, and error-recovery maps. Section-keyed to bound context cost."));
 	}
 
@@ -1927,9 +2420,11 @@ FMonolithActionResult FMonolithCoreTools::HandleStatus(const TSharedPtr<FJsonObj
 	Result->SetStringField(TEXT("version"), MONOLITH_VERSION);
 
 	// Server status
+	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	FMonolithHttpServer* Server = FMonolithCoreModule::Get().GetHttpServer();
 	Result->SetBoolField(TEXT("server_running"), Server != nullptr && Server->IsRunning());
 	Result->SetNumberField(TEXT("server_port"), Server ? Server->GetPort() : 0);
+	Result->SetObjectField(TEXT("recovery_plan"), BuildMonolithRecoveryPlan(Settings, Server));
 
 	// Registry stats
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
@@ -2082,10 +2577,19 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 			: TEXT("StartIncrementalIndexWithAsyncJob");
 		UFunction* JobFunc = IndexSubsystemClass->FindFunctionByName(*JobFuncName);
 		FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
-		const FString JobId = JobRegistry.SubmitJob(TEXT("project"), TEXT("reindex"));
+		const FString JobId = JobRegistry.SubmitJob(
+			TEXT("project"),
+			TEXT("reindex"),
+			/*bCancellable=*/true,
+			/*bSupportsProgress=*/true,
+			TEXT("monolith.get_job"),
+			TEXT("monolith.cancel_job"));
 
 		Result->SetStringField(TEXT("job_id"), JobId);
 		Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+		Result->SetStringField(TEXT("cancel_action"), TEXT("monolith.cancel_job"));
+		Result->SetBoolField(TEXT("supports_progress"), true);
+		Result->SetBoolField(TEXT("cancellable"), true);
 
 		if (!JobFunc)
 		{
@@ -2108,12 +2612,14 @@ FMonolithActionResult FMonolithCoreTools::HandleReindex(const TSharedPtr<FJsonOb
 
 		if (JobParams.ReturnValue)
 		{
-			Result->SetStringField(TEXT("status"), TEXT("reindex_started"));
+			Result->SetStringField(TEXT("status"), TEXT("started"));
+			Result->SetStringField(TEXT("legacy_status"), TEXT("reindex_started"));
 			Result->SetStringField(TEXT("message"),
 				FString::Printf(TEXT("%s triggered successfully."), *TriggerLabel));
 		}
 		else
 		{
+			JobRegistry.FailJob(JobId, FString::Printf(TEXT("%s did not start."), *TriggerLabel));
 			Result->SetStringField(TEXT("status"), TEXT("reindex_not_started"));
 			Result->SetStringField(TEXT("message"),
 				FString::Printf(TEXT("%s did not start; poll job_id for failure details."), *TriggerLabel));
@@ -2329,6 +2835,7 @@ FMonolithActionResult FMonolithCoreTools::HandleGetReadinessStatus(const TShared
 	Result->SetNumberField(TEXT("warning_count"), WarningCount);
 	Result->SetArrayField(TEXT("items"), Items);
 	Result->SetObjectField(TEXT("notification_settings"), NotificationSettingsToJson(Settings));
+	Result->SetObjectField(TEXT("recovery_plan"), BuildMonolithRecoveryPlan(Settings, Server));
 	return FMonolithActionResult::Success(Result);
 }
 

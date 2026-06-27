@@ -1110,6 +1110,95 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	CheckFtsParity(TEXT("fts:actors_row_parity"), TEXT("actors"), TEXT("fts_actors"));
 	CheckFtsParity(TEXT("fts:asset_search_values_row_parity"), TEXT("asset_search_values"), TEXT("fts_asset_search_values"));
 
+	const int64 BlueprintLikeCnt = CountRows(Db, TEXT("SELECT COUNT(*) FROM assets WHERE asset_class LIKE '%Blueprint%';"));
+	const int64 BlueprintWithNodesCnt = CountRows(Db, TEXT(
+		"SELECT COUNT(DISTINCT a.id) FROM assets a "
+		"JOIN nodes n ON n.asset_id = a.id "
+		"WHERE a.asset_class LIKE '%Blueprint%';"));
+	const int64 BlueprintWithoutAnyNodesCnt = CountRows(Db, TEXT(
+		"SELECT COUNT(*) FROM ("
+		"SELECT a.id FROM assets a "
+		"LEFT JOIN nodes n ON n.asset_id = a.id "
+		"WHERE a.asset_class LIKE '%Blueprint%' "
+		"GROUP BY a.id "
+		"HAVING COUNT(n.id) = 0);"));
+	const bool bHasCrgMetricsForSemantic = ObjectExists(Db, TEXT("table"), TEXT("crg_nodes"))
+		&& ObjectExists(Db, TEXT("table"), TEXT("crg_node_metrics"));
+	const int64 BlueprintExpectedDetailCnt = bHasCrgMetricsForSemantic
+		? CountRows(Db, TEXT(
+			"SELECT COUNT(*) FROM assets a "
+			"JOIN crg_nodes cn ON cn.domain='project' AND cn.native_table='assets' AND cn.native_id=a.id "
+			"JOIN crg_node_metrics m ON m.node_id=cn.id "
+			"WHERE a.asset_class LIKE '%Blueprint%' "
+			"AND COALESCE(m.raw_counts_json,'') NOT LIKE '%\"nodes\":0,%';"))
+		: BlueprintLikeCnt;
+	const int64 BlueprintWithoutNodesCnt = bHasCrgMetricsForSemantic
+		? CountRows(Db, TEXT(
+			"SELECT COUNT(*) FROM ("
+			"SELECT a.id FROM assets a "
+			"JOIN crg_nodes cn ON cn.domain='project' AND cn.native_table='assets' AND cn.native_id=a.id "
+			"JOIN crg_node_metrics m ON m.node_id=cn.id "
+			"LEFT JOIN nodes n ON n.asset_id = a.id "
+			"WHERE a.asset_class LIKE '%Blueprint%' "
+			"AND COALESCE(m.raw_counts_json,'') NOT LIKE '%\"nodes\":0,%' "
+			"GROUP BY a.id "
+			"HAVING COUNT(n.id) = 0);"))
+		: BlueprintWithoutAnyNodesCnt;
+	FJsonArr EmptyBlueprintSamples;
+	{
+		FSQLitePreparedStatement Stmt;
+		const FString SampleSql = bHasCrgMetricsForSemantic
+			? TEXT(
+				"SELECT a.package_path, a.asset_class FROM assets a "
+				"JOIN crg_nodes cn ON cn.domain='project' AND cn.native_table='assets' AND cn.native_id=a.id "
+				"JOIN crg_node_metrics m ON m.node_id=cn.id "
+				"LEFT JOIN nodes n ON n.asset_id = a.id "
+				"WHERE a.asset_class LIKE '%Blueprint%' "
+				"AND COALESCE(m.raw_counts_json,'') NOT LIKE '%\"nodes\":0,%' "
+				"GROUP BY a.id, a.package_path, a.asset_class "
+				"HAVING COUNT(n.id) = 0 "
+				"ORDER BY a.package_path LIMIT 10;")
+			: TEXT(
+				"SELECT a.package_path, a.asset_class FROM assets a "
+				"LEFT JOIN nodes n ON n.asset_id = a.id "
+				"WHERE a.asset_class LIKE '%Blueprint%' "
+				"GROUP BY a.id, a.package_path, a.asset_class "
+				"HAVING COUNT(n.id) = 0 "
+				"ORDER BY a.package_path LIMIT 10;");
+		if (Stmt.Create(*Db.GetRawDatabase(), *SampleSql))
+		{
+			while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
+			{
+				FString Path;
+				FString ClassName;
+				Stmt.GetColumnValueByIndex(0, Path);
+				Stmt.GetColumnValueByIndex(1, ClassName);
+				TSharedPtr<FJsonObject> Sample = MakeShared<FJsonObject>();
+				Sample->SetStringField(TEXT("asset_path"), Path);
+				Sample->SetStringField(TEXT("asset_class"), ClassName);
+				EmptyBlueprintSamples.Add(MakeShared<FJsonValueObject>(Sample));
+			}
+		}
+	}
+	TSharedPtr<FJsonObject> SemanticReadiness = MakeShared<FJsonObject>();
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets"), static_cast<double>(BlueprintLikeCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_with_nodes"), static_cast<double>(BlueprintWithNodesCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_without_nodes"), static_cast<double>(BlueprintWithoutNodesCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_without_any_nodes"), static_cast<double>(BlueprintWithoutAnyNodesCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_expected_detail"), static_cast<double>(BlueprintExpectedDetailCnt));
+	SemanticReadiness->SetArrayField(TEXT("empty_blueprint_samples"), EmptyBlueprintSamples);
+	Root->SetObjectField(TEXT("semantic_readiness"), SemanticReadiness);
+	const bool bBlueprintDetailCoverage = BlueprintExpectedDetailCnt == 0 || BlueprintWithNodesCnt > 0;
+	Check(TEXT("semantic:blueprint_detail_coverage"), bBlueprintDetailCoverage,
+		bBlueprintDetailCoverage
+			? FString::Printf(TEXT("blueprint_like_assets=%lld expected_detail=%lld with_indexed_nodes=%lld"), BlueprintLikeCnt, BlueprintExpectedDetailCnt, BlueprintWithNodesCnt)
+			: FString::Printf(TEXT("%lld Blueprint-like asset(s) with prior graph detail now have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run a full project reindex, then project.health)"), BlueprintExpectedDetailCnt));
+	const bool bNoEmptyBlueprintSamples = BlueprintExpectedDetailCnt == 0 || BlueprintWithoutNodesCnt == 0;
+	Check(TEXT("semantic:empty_blueprint_detail_samples"), bNoEmptyBlueprintSamples,
+		bNoEmptyBlueprintSamples
+			? TEXT("no previously indexed Blueprint-like assets missing graph nodes")
+			: FString::Printf(TEXT("%lld of %lld Blueprint-like asset(s) with prior graph detail now have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run monolith.reindex, then project.health)"), BlueprintWithoutNodesCnt, BlueprintExpectedDetailCnt));
+
 	bool bHasAllCrg = true;
 	static const TCHAR* ExpectedCrgTables[] = {
 		TEXT("crg_nodes"), TEXT("crg_edges"), TEXT("crg_node_metrics"), TEXT("crg_meta") };
@@ -1210,7 +1299,14 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
-	AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.repair_fts"), TEXT("project.get_stats") });
+	if (BlueprintWithoutNodesCnt > 0)
+	{
+		AddNext(Root, { TEXT("monolith.reindex"), TEXT("project.health"), TEXT("project.get_stats") });
+	}
+	else
+	{
+		AddNext(Root, { TEXT("project.repair_crg_cache"), TEXT("project.repair_fts"), TEXT("project.get_stats") });
+	}
 	return Root;
 }
 

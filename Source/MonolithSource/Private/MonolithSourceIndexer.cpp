@@ -1,5 +1,6 @@
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceDatabase.h"
+#include "MonolithSourceSchema.h"
 #include "MonolithSQLiteMaintenance.h"
 #include "MonolithCppParser.h"
 #include "MonolithShaderParser.h"
@@ -782,7 +783,7 @@ void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 	UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Reference extraction complete — %d refs from %d files"), RefCount, FilesProcessed);
 
 	// Set meta
-	DB.SetMeta(TEXT("schema_version"), FString::FromInt(1));
+	DB.SetMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
 	DB.SetMeta(TEXT("index_timestamp"), FString::FromInt(FDateTime::UtcNow().ToUnixTimestamp()));
 	DB.SetMeta(TEXT("total_files"), FString::FromInt(TotalFilesProcessed.Load()));
 	DB.SetMeta(TEXT("total_symbols"), FString::FromInt(TotalSymbolsExtracted.Load()));

@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "animation",
+  "asset_type_slug": "animation",
+  "edit_domain": "aim_offset_axis",
+  "route_edit_domain": "aim_offset_axis",
+  "module_id": "asset_authoring.animation.aim_offset_axis",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.animation.aim_offset_axis",
+    "edit": "asset_operation.edit.animation.aim_offset_axis",
+    "save": "asset_operation.save.animation.aim_offset_axis",
+    "readback_verify": "asset_operation.readback_verify.animation.aim_offset_axis"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-311"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-311",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "animation",
+      "edit_domain": "aim_offset_axis",
+      "blueprint_type": "",
+      "workflow": "animation_aim_offset_axis_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_aim_offset",
+        "set_blend_space_axis",
+        "save_asset",
+        "get_blend_space_info",
+        "inspect_asset"
+      ],
+      "description": "Create an AimOffset BlendSpace, edit both axes, save, and inspect axis metadata"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-311",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "create_aim_offset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D",
+            "skeleton_path": "/Engine/EngineMeshes/SkeletalCube_Skeleton",
+            "axis_x_name": "BenchYaw",
+            "axis_x_min": -120,
+            "axis_x_max": 120,
+            "axis_y_name": "BenchPitch",
+            "axis_y_min": -45,
+            "axis_y_max": 45
+          },
+          "contains": [
+            "AO_BenchAim2D",
+            "SkeletalCube_Skeleton",
+            "BenchYaw",
+            "BenchPitch"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_blend_space_axis",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D",
+            "axis": "X",
+            "name": "BenchYawEdited",
+            "min": -135,
+            "max": 135,
+            "grid_divisions": 9,
+            "snap_to_grid": true
+          },
+          "contains": [
+            "X",
+            "BenchYawEdited",
+            "grid_divisions",
+            "9",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "set_blend_space_axis",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D",
+            "axis": "Y",
+            "name": "BenchPitchEdited",
+            "min": -60,
+            "max": 60,
+            "grid_divisions": 7,
+            "snap_to_grid": true
+          },
+          "contains": [
+            "Y",
+            "BenchPitchEdited",
+            "grid_divisions",
+            "7",
+            "baked",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "animation_query",
+          "args": {
+            "action": "get_blend_space_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D"
+          },
+          "contains": [
+            "AO_BenchAim2D",
+            "BenchYawEdited",
+            "BenchPitchEdited",
+            "grid_divisions",
+            "9",
+            "7"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/AO_BenchAim2D"
+          },
+          "contains": [
+            "AO_BenchAim2D",
+            "AimOffsetBlendSpace"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "aim_offset_axis",
+      "blueprint_type": "",
+      "domain": "animation",
+      "workflow": "animation_aim_offset_axis_roundtrip",
+      "description": "Create an AimOffset BlendSpace, edit both axes, save, and inspect axis metadata",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_aim_offset",
+          "set_blend_space_axis",
+          "save_asset",
+          "get_blend_space_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

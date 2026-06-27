@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_clear_emitter_modules",
+  "route_edit_domain": "clear_emitter_modules",
+  "module_id": "asset_authoring.niagara.clear_emitter_modules",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.clear_emitter_modules",
+    "edit": "asset_operation.edit.niagara.clear_emitter_modules",
+    "save": "asset_operation.save.niagara.clear_emitter_modules",
+    "readback_verify": "asset_operation.readback_verify.niagara.clear_emitter_modules"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-424"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-424",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_clear_emitter_modules",
+      "blueprint_type": "",
+      "workflow": "niagara_clear_emitter_modules_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_module_from_hlsl",
+        "create_system",
+        "create_emitter",
+        "request_compile",
+        "add_module",
+        "clear_emitter_modules",
+        "save_system",
+        "get_ordered_modules",
+        "inspect_asset"
+      ],
+      "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-424",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+              "/Game/Benchmarks/AssetAuthoring/NM_BenchClearScale"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_module_from_hlsl",
+            "name": "NM_BenchClearScale",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NM_BenchClearScale",
+            "hlsl": "OutValue = InValue + Offset;",
+            "inputs": [
+              {
+                "name": "InValue",
+                "type": "float"
+              },
+              {
+                "name": "Offset",
+                "type": "float"
+              }
+            ],
+            "outputs": [
+              {
+                "name": "OutValue",
+                "type": "float"
+              }
+            ],
+            "description": "Benchmark clear-stage module"
+          },
+          "contains": [
+            "NM_BenchClearScale",
+            "InValue",
+            "OutValue"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules"
+          },
+          "contains": [
+            "NS_BenchClearModules"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+            "name": "ClearEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "ClearEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "request_compile",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+            "force": true,
+            "synchronous": true
+          },
+          "contains": [
+            "NS_BenchClearModules"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_module",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+            "emitter": "ClearEmitter",
+            "usage": "particle_update",
+            "module_script": "/Game/Benchmarks/AssetAuthoring/NM_BenchClearScale.NM_BenchClearScale"
+          },
+          "contains": [
+            "node_guid"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "clear_emitter_modules",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+            "emitter": "ClearEmitter",
+            "usage": "particle_update"
+          },
+          "contains": [
+            "removed_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_ordered_modules",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules",
+            "emitter": "ClearEmitter",
+            "usage": "particle_update"
+          },
+          "not_contains": [
+            "NM_BenchClearScale"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchClearModules"
+          },
+          "contains": [
+            "NS_BenchClearModules",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_clear_emitter_modules",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_clear_emitter_modules_roundtrip",
+      "description": "Create a Niagara module script, add it to an emitter stack, clear that stage, save, and verify the module was removed",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_module_from_hlsl",
+          "create_system",
+          "create_emitter",
+          "request_compile",
+          "add_module",
+          "clear_emitter_modules",
+          "save_system",
+          "get_ordered_modules",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

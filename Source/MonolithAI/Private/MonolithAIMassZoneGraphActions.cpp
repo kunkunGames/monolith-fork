@@ -13,6 +13,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Containers/Ticker.h"
 #include "GameFramework/Actor.h"
 #include "Modules/ModuleManager.h"
 
@@ -65,6 +66,39 @@ namespace
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Y));
 		Arr.Add(MakeShared<FJsonValueNumber>(Value.Z));
 		return Arr;
+	}
+
+	TSharedPtr<FJsonObject> MakeProgressObject(double Percent, const FString& Stage, const FString& Message)
+	{
+		TSharedPtr<FJsonObject> Progress = MakeShared<FJsonObject>();
+		Progress->SetNumberField(TEXT("percent"), Percent);
+		Progress->SetStringField(TEXT("stage"), Stage);
+		Progress->SetStringField(TEXT("message"), Message);
+		return Progress;
+	}
+
+	TSharedPtr<FJsonObject> MakeRebuildZoneGraphJobResponse(
+		const FString& JobId,
+		const FString& Status,
+		const FString& ProgressStage,
+		const FString& ProgressMessage,
+		double ProgressPercent = 0.0)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("action"), TEXT("ai.rebuild_zone_graph"));
+		Result->SetStringField(TEXT("status"), Status);
+		Result->SetStringField(TEXT("job_id"), JobId);
+		Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
+		Result->SetStringField(TEXT("cancel_action"), TEXT("monolith.cancel_job"));
+		Result->SetBoolField(TEXT("supports_progress"), true);
+		Result->SetBoolField(TEXT("cancellable"), true);
+		Result->SetObjectField(TEXT("progress"), MakeProgressObject(ProgressPercent, ProgressStage, ProgressMessage));
+
+		TArray<TSharedPtr<FJsonValue>> NextActions;
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.get_job")));
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.cancel_job")));
+		Result->SetArrayField(TEXT("next_actions"), NextActions);
+		return Result;
 	}
 
 	bool TryReadLocationObject(const TSharedPtr<FJsonObject>& Params, FVector& OutLocation, FString& OutError)
@@ -549,8 +583,8 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::SetZoneShapeTags(const TS
 
 FMonolithActionResult FMonolithAIMassZoneGraphActions::RebuildZoneGraph(const TSharedPtr<FJsonObject>& Params)
 {
-	// P1b (PRD Spec 10): gated behind the async polling surface and the ZoneGraph producer flag.
-	// Off preserves the byte-identical legacy "unavailable" report.
+	// P1b / ROI P0.6: gated behind the async polling surface and the ZoneGraph
+	// producer flag. Off preserves the byte-identical legacy "unavailable" report.
 	const UMonolithSettings* Settings = UMonolithSettings::Get();
 	if (!Settings || !Settings->bEnableAsyncJobs || !Settings->bEnableZoneGraphRebuildJob)
 	{
@@ -561,6 +595,7 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::RebuildZoneGraph(const TS
 	// even on the failure paths below.
 	FMonolithAsyncJobRegistry& JobRegistry = FMonolithAsyncJobRegistry::Get();
 	const FString JobId = JobRegistry.SubmitJob(TEXT("ai"), TEXT("rebuild_zone_graph"));
+	JobRegistry.UpdateProgress(JobId, 0.0, TEXT("queued"), TEXT("ZoneGraph rebuild queued for the next editor tick."));
 
 #if WITH_DEV_AUTOMATION_TESTS
 	if (GRebuildZoneGraphJobSubmittedHookForTests)
@@ -569,18 +604,6 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::RebuildZoneGraph(const TS
 	}
 #endif
 
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("action"), TEXT("ai.rebuild_zone_graph"));
-	Result->SetStringField(TEXT("job_id"), JobId);
-	Result->SetStringField(TEXT("poll_action"), TEXT("monolith.get_job"));
-
-	if (JobRegistry.IsCancelRequested(JobId))
-	{
-		Result->SetStringField(TEXT("status"), TEXT("cancelled"));
-		Result->SetStringField(TEXT("reason"), TEXT("Cancellation was requested before the ZoneGraph rebuild broadcast."));
-		return FMonolithActionResult::Success(Result);
-	}
-
 #if WITH_ZONEGRAPH
 	// GEditor is required: the ZoneGraph rebuild delegate is WITH_EDITOR-only and
 	// drives editor-world data. Refuse honestly (FailJob, no fake completion) when
@@ -588,55 +611,81 @@ FMonolithActionResult FMonolithAIMassZoneGraphActions::RebuildZoneGraph(const TS
 	if (!GEditor)
 	{
 		JobRegistry.FailJob(JobId, TEXT("GEditor is unavailable; ZoneGraph rebuild requires the editor."));
-		Result->SetStringField(TEXT("status"), TEXT("failed"));
+		TSharedPtr<FJsonObject> Result = MakeRebuildZoneGraphJobResponse(
+			JobId,
+			TEXT("failed"),
+			TEXT("failed"),
+			TEXT("GEditor is unavailable; ZoneGraph rebuild requires the editor."));
 		Result->SetStringField(TEXT("reason"), TEXT("GEditor is unavailable; ZoneGraph rebuild requires the editor."));
 		return FMonolithActionResult::Success(Result);
 	}
 
-	JobRegistry.UpdateProgress(JobId, 10.0, TEXT("rebuilding"), TEXT("Broadcasting OnZoneGraphRequestRebuild."));
+	FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateLambda([JobId](float /*DeltaTime*/) -> bool
+		{
+			FMonolithAsyncJobRegistry& DeferredJobRegistry = FMonolithAsyncJobRegistry::Get();
+			if (DeferredJobRegistry.IsCancelRequested(JobId))
+			{
+				DeferredJobRegistry.CancelJob(JobId, TEXT("Cancellation was acknowledged before the ZoneGraph rebuild broadcast."));
+				return false;
+			}
+
+			if (!GEditor)
+			{
+				DeferredJobRegistry.FailJob(JobId, TEXT("GEditor became unavailable before the ZoneGraph rebuild broadcast."));
+				return false;
+			}
+
+			DeferredJobRegistry.UpdateProgress(JobId, 10.0, TEXT("rebuilding"), TEXT("Broadcasting OnZoneGraphRequestRebuild."));
 
 #if WITH_DEV_AUTOMATION_TESTS
-	if (GRebuildZoneGraphBeforeBroadcastHookForTests)
-	{
-		GRebuildZoneGraphBeforeBroadcastHookForTests(JobId);
-	}
+			if (GRebuildZoneGraphBeforeBroadcastHookForTests)
+			{
+				GRebuildZoneGraphBeforeBroadcastHookForTests(JobId);
+			}
 #endif
 
-	if (JobRegistry.IsCancelRequested(JobId))
-	{
-		Result->SetStringField(TEXT("status"), TEXT("cancelled"));
-		Result->SetStringField(TEXT("reason"), TEXT("Cancellation was requested before the ZoneGraph rebuild broadcast."));
-		return FMonolithActionResult::Success(Result);
-	}
+			if (DeferredJobRegistry.IsCancelRequested(JobId))
+			{
+				DeferredJobRegistry.CancelJob(JobId, TEXT("Cancellation was acknowledged before the ZoneGraph rebuild broadcast."));
+				return false;
+			}
 
-	// The subsystem's OnRequestRebuild handler runs RebuildGraph(true) synchronously
-	// on this broadcast, so when Broadcast() returns the rebuild has completed. There
-	// is no separate completion delegate to wait on, so reporting Completed here is
-	// honest rather than faked.
-	UE::ZoneGraphDelegates::OnZoneGraphRequestRebuild.Broadcast();
+			// The subsystem's OnRequestRebuild handler runs RebuildGraph(true)
+			// synchronously on this broadcast. The job is marked Completed only
+			// after Broadcast() returns, so polling never sees a false complete.
+			UE::ZoneGraphDelegates::OnZoneGraphRequestRebuild.Broadcast();
 
-	if (JobRegistry.IsCancelRequested(JobId))
-	{
-		Result->SetStringField(TEXT("status"), TEXT("cancelled"));
-		Result->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
-		Result->SetStringField(TEXT("reason"), TEXT("Cancellation was requested while the synchronous ZoneGraph rebuild broadcast was in progress."));
-		return FMonolithActionResult::Success(Result);
-	}
+			if (DeferredJobRegistry.IsCancelRequested(JobId))
+			{
+				DeferredJobRegistry.CancelJob(JobId, TEXT("Cancellation was acknowledged after the synchronous ZoneGraph rebuild broadcast returned."));
+				return false;
+			}
 
-	TSharedPtr<FJsonObject> JobResult = MakeShared<FJsonObject>();
-	JobResult->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
-	JobResult->SetStringField(TEXT("note"), TEXT("Synchronous editor ZoneGraph rebuild broadcast completed."));
-	JobRegistry.UpdateProgress(JobId, 100.0, TEXT("completed"), TEXT("ZoneGraph rebuild broadcast completed."));
-	JobRegistry.CompleteJob(JobId, JobResult);
+			TSharedPtr<FJsonObject> JobResult = MakeShared<FJsonObject>();
+			JobResult->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
+			JobResult->SetStringField(TEXT("note"), TEXT("Synchronous editor ZoneGraph rebuild broadcast completed."));
+			DeferredJobRegistry.UpdateProgress(JobId, 100.0, TEXT("completed"), TEXT("ZoneGraph rebuild broadcast completed."));
+			DeferredJobRegistry.CompleteJob(JobId, JobResult);
+			return false;
+		}),
+		0.0f);
 
-	Result->SetStringField(TEXT("status"), TEXT("completed"));
-	Result->SetStringField(TEXT("rebuild_trigger"), TEXT("OnZoneGraphRequestRebuild"));
+	TSharedPtr<FJsonObject> Result = MakeRebuildZoneGraphJobResponse(
+		JobId,
+		TEXT("started"),
+		TEXT("queued"),
+		TEXT("ZoneGraph rebuild queued for the next editor tick."));
 	return FMonolithActionResult::Success(Result);
 #else
 	// ZoneGraph compiled out of this build: the rebuild cannot run. Fail the job
 	// honestly instead of pretending it completed.
 	JobRegistry.FailJob(JobId, TEXT("ZoneGraph support is not compiled into this build (WITH_ZONEGRAPH=0)."));
-	Result->SetStringField(TEXT("status"), TEXT("failed"));
+	TSharedPtr<FJsonObject> Result = MakeRebuildZoneGraphJobResponse(
+		JobId,
+		TEXT("failed"),
+		TEXT("failed"),
+		TEXT("ZoneGraph support is not compiled into this build (WITH_ZONEGRAPH=0)."));
 	Result->SetStringField(TEXT("reason"), TEXT("ZoneGraph support is not compiled into this build (WITH_ZONEGRAPH=0)."));
 	return FMonolithActionResult::Success(Result);
 #endif // WITH_ZONEGRAPH

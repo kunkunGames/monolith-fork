@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "localization",
+  "asset_type_slug": "localization",
+  "edit_domain": "stringtable_blueprint_bulk",
+  "route_edit_domain": "stringtable_blueprint_bulk",
+  "module_id": "asset_authoring.localization.stringtable_blueprint_bulk",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.localization.stringtable_blueprint_bulk",
+    "edit": "asset_operation.edit.localization.stringtable_blueprint_bulk",
+    "save": "asset_operation.save.localization.stringtable_blueprint_bulk",
+    "readback_verify": "asset_operation.readback_verify.localization.stringtable_blueprint_bulk"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-483"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-483",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "localization",
+      "edit_domain": "stringtable_blueprint_bulk",
+      "blueprint_type": "",
+      "workflow": "localization_blueprint_stringtable_bulk_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_string_table",
+        "set_string_table_entries",
+        "remove_string_table_entry",
+        "save_asset",
+        "read_string_table",
+        "validate_string_table"
+      ],
+      "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-483",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "create_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk",
+            "namespace": "BenchBlueprintBulk",
+            "entries": {
+              "Menu_Play": "Play",
+              "Menu_DebugOnly": "Debug"
+            },
+            "overwrite": true,
+            "save": true
+          },
+          "contains": [
+            "ST_BenchBlueprintBulk",
+            "BenchBlueprintBulk"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_string_table_entries",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk",
+            "namespace": "BenchBlueprintBulk",
+            "entries": [
+              {
+                "key": "Menu_Play",
+                "source_string": "Start Game"
+              },
+              {
+                "key": "Menu_Options",
+                "source_string": "Options"
+              }
+            ],
+            "mode": "upsert",
+            "save": true
+          },
+          "contains": [
+            "ST_BenchBlueprintBulk",
+            "updated",
+            "2"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "remove_string_table_entry",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk",
+            "key": "Menu_DebugOnly",
+            "save": true
+          },
+          "contains": [
+            "Menu_DebugOnly",
+            "removed",
+            "true"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "read_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk",
+            "include_meta": false
+          },
+          "contains": [
+            "BenchBlueprintBulk",
+            "Menu_Play",
+            "Start Game",
+            "Menu_Options",
+            "Options",
+            "total_entries",
+            "2"
+          ],
+          "not_contains": [
+            "Menu_DebugOnly",
+            "Debug"
+          ]
+        },
+        {
+          "tool": "localization_query",
+          "args": {
+            "action": "validate_string_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/ST_BenchBlueprintBulk"
+          },
+          "server_ok_only": true,
+          "server_ok_reason": "validate_string_table reports table contract failures as isError; final entry content is asserted by read_string_table"
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "stringtable_blueprint_bulk",
+      "blueprint_type": "",
+      "domain": "localization",
+      "workflow": "localization_blueprint_stringtable_bulk_roundtrip",
+      "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/string-tables-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithBlueprint/Private/MonolithBlueprintStringTableActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_string_table",
+          "set_string_table_entries",
+          "remove_string_table_entry",
+          "save_asset",
+          "read_string_table",
+          "validate_string_table"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

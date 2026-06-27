@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "geometry_direct_ops",
+  "route_edit_domain": "geometry_direct_ops",
+  "module_id": "asset_authoring.mesh.geometry_direct_ops",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.geometry_direct_ops",
+    "edit": "asset_operation.edit.mesh.geometry_direct_ops",
+    "save": "asset_operation.save.mesh.geometry_direct_ops",
+    "readback_verify": "asset_operation.readback_verify.mesh.geometry_direct_ops"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-396"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-396",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "geometry_direct_ops",
+      "blueprint_type": "",
+      "workflow": "mesh_geometry_direct_ops_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_plane_cut",
+        "geometry_recompute_normals",
+        "geometry_smooth",
+        "generate_collision",
+        "save_handle",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_collision",
+        "get_mesh_bounds",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript mesh handle, run plane-cut, normal recompute, smoothing, and collision generation, save it as StaticMesh, and inspect geometry/collision"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-396",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "BenchGeometryOps"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:sphere",
+            "handle": "BenchGeometryOps"
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "primitive:sphere",
+            "status",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_plane_cut",
+            "handle": "BenchGeometryOps",
+            "mode": "slice",
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "fill_holes": true
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "slice",
+            "result_triangles",
+            "status",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_recompute_normals",
+            "handle": "BenchGeometryOps",
+            "mode": "split",
+            "split_angle": 30.0
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "split",
+            "triangle_count",
+            "status",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_smooth",
+            "handle": "BenchGeometryOps",
+            "iterations": 4,
+            "speed": 0.2
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "iterations",
+            "4",
+            "speed",
+            "0.2",
+            "result_triangles",
+            "status",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "generate_collision",
+            "handle": "BenchGeometryOps",
+            "method": "auto_box",
+            "max_hulls": 2
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "auto_box",
+            "shape_count",
+            "status",
+            "generated"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "save_handle",
+            "handle": "BenchGeometryOps",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps",
+            "overwrite": true,
+            "collision": "box"
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "SM_BenchGeometryOps",
+            "collision_mode",
+            "box",
+            "status",
+            "saved"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "BenchGeometryOps"
+          },
+          "contains": [
+            "BenchGeometryOps",
+            "released"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+          },
+          "contains": [
+            "SM_BenchGeometryOps",
+            "StaticMesh",
+            "triangles",
+            "vertices",
+            "box"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_collision",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+          },
+          "contains": [
+            "collision_type",
+            "simple_shapes",
+            "boxes"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+          },
+          "contains": [
+            "SM_BenchGeometryOps",
+            "extent",
+            "sphere_radius",
+            "volume_cm3"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchGeometryOps"
+          },
+          "contains": [
+            "SM_BenchGeometryOps",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "geometry_direct_ops",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_geometry_direct_ops_roundtrip",
+      "description": "Create a GeometryScript mesh handle, run plane-cut, normal recompute, smoothing, and collision generation, save it as StaticMesh, and inspect geometry/collision",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "release_handle",
+          "create_handle",
+          "geometry_plane_cut",
+          "geometry_recompute_normals",
+          "geometry_smooth",
+          "generate_collision",
+          "save_handle",
+          "save_asset",
+          "get_mesh_info",
+          "get_mesh_collision",
+          "get_mesh_bounds",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

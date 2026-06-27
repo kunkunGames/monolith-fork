@@ -1,0 +1,2224 @@
+{
+  "schema_version": 2,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "generated_at": "2026-06-27T10:36:20.300533+00:00",
+  "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
+  "source_task_sha256": "3d224715e84840b603464a2a5e578f272b169b7acdece8a85a2385f036cc527a",
+  "module_storage": "module_shard",
+  "shard_id": "blueprint.character",
+  "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+  "task_count": 552,
+  "module_count": 10,
+  "routing_axes": [
+    "category",
+    "domain",
+    "edit_domain",
+    "blueprint_type",
+    "workflow",
+    "asset_operation",
+    "lifecycle_phase",
+    "operation_semantics"
+  ],
+  "module_refs": [
+    {
+      "module_id": "blueprint.character",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Character",
+      "task_count": 27,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.character.class",
+        "blueprint.character.compilation",
+        "blueprint.character.component",
+        "blueprint.character.event",
+        "blueprint.character.function",
+        "blueprint.character.general",
+        "blueprint.character.node",
+        "blueprint.character.state",
+        "blueprint.character.variable"
+      ]
+    },
+    {
+      "module_id": "blueprint.character.class",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "class"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/class",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "class"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/compilation",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.component",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "component"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/component",
+      "task_count": 3,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "component"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/event",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/function",
+      "task_count": 2,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/general",
+      "task_count": 12,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/node",
+      "task_count": 3,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/state",
+      "task_count": 1,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "blueprint.character.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/variable",
+      "task_count": 3,
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json",
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": []
+    }
+  ],
+  "modules": {
+    "blueprint.character": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character"
+      ],
+      "track": "blueprint",
+      "title": "Blueprint: Character",
+      "description": "Blueprint read, workflow, edit, duplicate, error, and compile tasks for one fixture type.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ]
+      },
+      "task_count": 27,
+      "task_ids": [
+        "BEB-002",
+        "BEB-010",
+        "BEB-016",
+        "BEB-025",
+        "BEB-026",
+        "BEB-027",
+        "BEB-045",
+        "BEB-046",
+        "BEB-059",
+        "BEB-060",
+        "BEB-073",
+        "BEB-074",
+        "BEB-156",
+        "BEB-157",
+        "BEB-176",
+        "BEB-177",
+        "BEB-178",
+        "BEB-179",
+        "BEB-180",
+        "BEB-181",
+        "BEB-182",
+        "BEB-183",
+        "BEB-184",
+        "BEB-185",
+        "BEB-237",
+        "BEB-243",
+        "BEB-551"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-002",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query 'BPB_TestCharacter'"
+        },
+        {
+          "id": "BEB-010",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query 'Character Blueprint'"
+        },
+        {
+          "id": "BEB-016",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query '/Game/Benchmarks/BPB_TestCharacter'"
+        },
+        {
+          "id": "BEB-025",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Character fixture"
+        },
+        {
+          "id": "BEB-026",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Character fixture default graph data"
+        },
+        {
+          "id": "BEB-027",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Character fixture"
+        },
+        {
+          "id": "BEB-045",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Character fixture BPB_TestCharacter"
+        },
+        {
+          "id": "BEB-046",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Character fixture BPB_TestCharacter"
+        },
+        {
+          "id": "BEB-059",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Character fixture"
+        },
+        {
+          "id": "BEB-060",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Character fixture"
+        },
+        {
+          "id": "BEB-073",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Character fixture"
+        },
+        {
+          "id": "BEB-074",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Character"
+        },
+        {
+          "id": "BEB-156",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "class",
+          "blueprint_type": "Character",
+          "workflow": "implement_interface",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "implement_interface",
+            "compile_blueprint",
+            "get_interfaces"
+          ],
+          "description": "Implement BPI_TestInterface on the Character, compile clean, read back the implemented interface"
+        },
+        {
+          "id": "BEB-157",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "component_assembly",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "set_component_property",
+            "compile_blueprint",
+            "get_components"
+          ],
+          "description": "Add a SphereComponent, set a real property on it, compile clean, read back the component"
+        },
+        {
+          "id": "BEB-176",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCharJump function graph to Character"
+        },
+        {
+          "id": "BEB-177",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchCharOnLanded custom event to Character EventGraph"
+        },
+        {
+          "id": "BEB-178",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add GetVelocity CallFunction node to Character EventGraph"
+        },
+        {
+          "id": "BEB-179",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchCharStamina variable to Character"
+        },
+        {
+          "id": "BEB-180",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set MoveSpeed fixture variable default to 600.0 (idempotent)"
+        },
+        {
+          "id": "BEB-181",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add SphereComponent BenchOverlapComp to Character"
+        },
+        {
+          "id": "BEB-182",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCharOnJumped event dispatcher to Character"
+        },
+        {
+          "id": "BEB-183",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_replicated_variable",
+            "get_variables"
+          ],
+          "description": "Add replicated float BenchCharNetHealth to Character"
+        },
+        {
+          "id": "BEB-184",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Character EventGraph (idempotent)"
+        },
+        {
+          "id": "BEB-185",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Character blueprint"
+        },
+        {
+          "id": "BEB-237",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Character EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-243",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire MoveSpeed (float) -> PrintString.Duration on Character EventGraph (executed data-pin connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-551",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_component",
+            "remove_component"
+          ],
+          "description": "Character add_component must reject duplicate helper component names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-551"
+          ],
+          "edit_execute": [
+            "BEB-176",
+            "BEB-177",
+            "BEB-178",
+            "BEB-179",
+            "BEB-180",
+            "BEB-181",
+            "BEB-182",
+            "BEB-183",
+            "BEB-184",
+            "BEB-185",
+            "BEB-237",
+            "BEB-243"
+          ],
+          "graph_read": [
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046"
+          ],
+          "type_discovery": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016"
+          ],
+          "variable_read": [
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074"
+          ],
+          "workflow_execute": [
+            "BEB-156",
+            "BEB-157"
+          ]
+        },
+        "by_edit_domain": {
+          "class": [
+            "BEB-156"
+          ],
+          "compilation": [
+            "BEB-185"
+          ],
+          "component": [
+            "BEB-157",
+            "BEB-181",
+            "BEB-551"
+          ],
+          "event": [
+            "BEB-182"
+          ],
+          "function": [
+            "BEB-176",
+            "BEB-177"
+          ],
+          "general": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016",
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046",
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074"
+          ],
+          "node": [
+            "BEB-178",
+            "BEB-237",
+            "BEB-243"
+          ],
+          "state": [
+            "BEB-184"
+          ],
+          "variable": [
+            "BEB-179",
+            "BEB-180",
+            "BEB-183"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-157",
+            "BEB-176",
+            "BEB-177",
+            "BEB-178",
+            "BEB-179",
+            "BEB-180",
+            "BEB-181",
+            "BEB-182",
+            "BEB-183",
+            "BEB-237",
+            "BEB-243",
+            "BEB-551"
+          ],
+          "read_only": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016",
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046",
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074",
+            "BEB-156",
+            "BEB-184",
+            "BEB-185"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-157",
+            "BEB-176",
+            "BEB-177",
+            "BEB-178",
+            "BEB-179",
+            "BEB-180",
+            "BEB-181",
+            "BEB-182",
+            "BEB-183",
+            "BEB-237",
+            "BEB-243",
+            "BEB-551"
+          ],
+          "readback_verify": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016",
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046",
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074",
+            "BEB-156",
+            "BEB-157",
+            "BEB-176",
+            "BEB-177",
+            "BEB-178",
+            "BEB-179",
+            "BEB-180",
+            "BEB-181",
+            "BEB-182",
+            "BEB-183",
+            "BEB-184",
+            "BEB-185",
+            "BEB-237",
+            "BEB-243",
+            "BEB-551"
+          ]
+        }
+      },
+      "parent_module_id": "",
+      "child_module_ids": [
+        "blueprint.character.class",
+        "blueprint.character.compilation",
+        "blueprint.character.component",
+        "blueprint.character.event",
+        "blueprint.character.function",
+        "blueprint.character.general",
+        "blueprint.character.node",
+        "blueprint.character.state",
+        "blueprint.character.variable"
+      ],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.class": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.class",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "class"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/class",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "class"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-156"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-156",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "class",
+          "blueprint_type": "Character",
+          "workflow": "implement_interface",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "implement_interface",
+            "compile_blueprint",
+            "get_interfaces"
+          ],
+          "description": "Implement BPI_TestInterface on the Character, compile clean, read back the implemented interface"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "workflow_execute": [
+            "BEB-156"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-156"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-156"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.compilation": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.compilation",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "compilation"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/compilation",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "compilation"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-185"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-185",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "compile_blueprint",
+          "domain": "gameplay",
+          "edit_domain": "compilation",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "compile_blueprint"
+          ],
+          "description": "Compile Character blueprint"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-185"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-185"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-185"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.component": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.component",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "component"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/component",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "component"
+        ]
+      },
+      "task_count": 3,
+      "task_ids": [
+        "BEB-157",
+        "BEB-181",
+        "BEB-551"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-157",
+          "category": "workflow_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "component_assembly",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_component",
+            "set_component_property",
+            "compile_blueprint",
+            "get_components"
+          ],
+          "description": "Add a SphereComponent, set a real property on it, compile clean, read back the component"
+        },
+        {
+          "id": "BEB-181",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_component",
+            "add_component",
+            "get_components"
+          ],
+          "description": "Add SphereComponent BenchOverlapComp to Character"
+        },
+        {
+          "id": "BEB-551",
+          "category": "duplicate_reject",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_component",
+          "domain": "gameplay",
+          "edit_domain": "component",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_component",
+            "remove_component"
+          ],
+          "description": "Character add_component must reject duplicate helper component names"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "duplicate_reject": [
+            "BEB-551"
+          ],
+          "edit_execute": [
+            "BEB-181"
+          ],
+          "workflow_execute": [
+            "BEB-157"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-157",
+            "BEB-181",
+            "BEB-551"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-157",
+            "BEB-181",
+            "BEB-551"
+          ],
+          "readback_verify": [
+            "BEB-157",
+            "BEB-181",
+            "BEB-551"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.event": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.event",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "event"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/event",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "event"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-182"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-182",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "event",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_event_dispatcher",
+            "add_event_dispatcher",
+            "get_event_dispatchers"
+          ],
+          "description": "Add BenchCharOnJumped event dispatcher to Character"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-182"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-182"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-182"
+          ],
+          "readback_verify": [
+            "BEB-182"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.function": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.function",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "function"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/function",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "function"
+        ]
+      },
+      "task_count": 2,
+      "task_ids": [
+        "BEB-176",
+        "BEB-177"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-176",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_function",
+            "add_function",
+            "get_functions"
+          ],
+          "description": "Add BenchCharJump function graph to Character"
+        },
+        {
+          "id": "BEB-177",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_event_node",
+          "domain": "gameplay",
+          "edit_domain": "function",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_event_node",
+            "get_graph_data"
+          ],
+          "description": "Add BenchCharOnLanded custom event to Character EventGraph"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-176",
+            "BEB-177"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-176",
+            "BEB-177"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-176",
+            "BEB-177"
+          ],
+          "readback_verify": [
+            "BEB-176",
+            "BEB-177"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.general": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.general",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "general"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/general",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "general"
+        ]
+      },
+      "task_count": 12,
+      "task_ids": [
+        "BEB-002",
+        "BEB-010",
+        "BEB-016",
+        "BEB-025",
+        "BEB-026",
+        "BEB-027",
+        "BEB-045",
+        "BEB-046",
+        "BEB-059",
+        "BEB-060",
+        "BEB-073",
+        "BEB-074"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-002",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query 'BPB_TestCharacter'"
+        },
+        {
+          "id": "BEB-010",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query 'Character Blueprint'"
+        },
+        {
+          "id": "BEB-016",
+          "category": "type_discovery",
+          "namespace": "project",
+          "tool": "project_query",
+          "action": "search",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "search"
+          ],
+          "description": "Discover Character fixture with project.search query '/Game/Benchmarks/BPB_TestCharacter'"
+        },
+        {
+          "id": "BEB-025",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "list_graphs",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "list_graphs"
+          ],
+          "description": "List graphs for Character fixture"
+        },
+        {
+          "id": "BEB-026",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_data",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_data"
+          ],
+          "description": "Read Character fixture default graph data"
+        },
+        {
+          "id": "BEB-027",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_graph_summary",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_graph_summary"
+          ],
+          "description": "Read graph summary for Character fixture"
+        },
+        {
+          "id": "BEB-045",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_blueprint_info",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_blueprint_info"
+          ],
+          "description": "Read blueprint info for Character fixture BPB_TestCharacter"
+        },
+        {
+          "id": "BEB-046",
+          "category": "graph_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_parent_class",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_parent_class"
+          ],
+          "description": "Read parent class for Character fixture BPB_TestCharacter"
+        },
+        {
+          "id": "BEB-059",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read variables for Character fixture"
+        },
+        {
+          "id": "BEB-060",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read inherited variables for Character fixture"
+        },
+        {
+          "id": "BEB-073",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_functions",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_functions"
+          ],
+          "description": "Read setup-created function stubs for Character fixture"
+        },
+        {
+          "id": "BEB-074",
+          "category": "variable_read",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "get_variables",
+          "domain": "gameplay",
+          "edit_domain": "",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "get_variables"
+          ],
+          "description": "Read declared fixture variables only for Character"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "graph_read": [
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046"
+          ],
+          "type_discovery": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016"
+          ],
+          "variable_read": [
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016",
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046",
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-002",
+            "BEB-010",
+            "BEB-016",
+            "BEB-025",
+            "BEB-026",
+            "BEB-027",
+            "BEB-045",
+            "BEB-046",
+            "BEB-059",
+            "BEB-060",
+            "BEB-073",
+            "BEB-074"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.node": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.node",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "node"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/node",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "node"
+        ]
+      },
+      "task_count": 3,
+      "task_ids": [
+        "BEB-178",
+        "BEB-237",
+        "BEB-243"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-178",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "add_node",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "add_node",
+            "get_graph_data"
+          ],
+          "description": "Add GetVelocity CallFunction node to Character EventGraph"
+        },
+        {
+          "id": "BEB-237",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins"
+          ],
+          "description": "Wire PrintString.then -> PrintString.execute on Character EventGraph (executed connect_pins + read-back)"
+        },
+        {
+          "id": "BEB-243",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "node",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "add_node",
+            "connect_pins",
+            "compile_blueprint"
+          ],
+          "description": "Wire MoveSpeed (float) -> PrintString.Duration on Character EventGraph (executed data-pin connect_pins + read-back)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-178",
+            "BEB-237",
+            "BEB-243"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-178",
+            "BEB-237",
+            "BEB-243"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-178",
+            "BEB-237",
+            "BEB-243"
+          ],
+          "readback_verify": [
+            "BEB-178",
+            "BEB-237",
+            "BEB-243"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.state": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.state",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "state"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/state",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "state"
+        ]
+      },
+      "task_count": 1,
+      "task_ids": [
+        "BEB-184"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-184",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "auto_layout",
+          "domain": "gameplay",
+          "edit_domain": "state",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "read_only",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "readback_verify"
+          ],
+          "actions": [
+            "auto_layout"
+          ],
+          "description": "Auto-layout Character EventGraph (idempotent)"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-184"
+          ]
+        },
+        "by_operation_semantics": {
+          "read_only": [
+            "BEB-184"
+          ]
+        },
+        "by_asset_operation": {
+          "readback_verify": [
+            "BEB-184"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    },
+    "blueprint.character.variable": {
+      "schema_version": 1,
+      "benchmark": "AssetEditing",
+      "generated_by": "asset_editing_benchmark.py",
+      "module_id": "blueprint.character.variable",
+      "route": [
+        "AssetEditing",
+        "blueprint",
+        "Character",
+        "variable"
+      ],
+      "track": "blueprint_edit_domain",
+      "title": "Blueprint edit domain: Character/variable",
+      "description": "Blueprint fixture tasks grouped by Blueprint class and edit/read-back domain.",
+      "filters": {
+        "blueprint_type": [
+          "Character"
+        ],
+        "edit_domain": [
+          "variable"
+        ]
+      },
+      "task_count": 3,
+      "task_ids": [
+        "BEB-179",
+        "BEB-180",
+        "BEB-183"
+      ],
+      "task_refs": [
+        {
+          "id": "BEB-179",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_variable",
+            "get_variables"
+          ],
+          "description": "Add float BenchCharStamina variable to Character"
+        },
+        {
+          "id": "BEB-180",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "set_variable_defaults",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "set_variable_defaults",
+            "get_variables"
+          ],
+          "description": "Set MoveSpeed fixture variable default to 600.0 (idempotent)"
+        },
+        {
+          "id": "BEB-183",
+          "category": "edit_execute",
+          "namespace": "blueprint",
+          "tool": "blueprint_query",
+          "action": "op_chain",
+          "domain": "gameplay",
+          "edit_domain": "variable",
+          "blueprint_type": "Character",
+          "workflow": "",
+          "operation_semantics": "edit",
+          "lifecycle_phase": "not_applicable",
+          "asset_operations": [
+            "edit",
+            "readback_verify"
+          ],
+          "actions": [
+            "op_chain",
+            "remove_variable",
+            "add_replicated_variable",
+            "get_variables"
+          ],
+          "description": "Add replicated float BenchCharNetHealth to Character"
+        }
+      ],
+      "groups": {
+        "by_category": {
+          "edit_execute": [
+            "BEB-179",
+            "BEB-180",
+            "BEB-183"
+          ]
+        },
+        "by_operation_semantics": {
+          "edit": [
+            "BEB-179",
+            "BEB-180",
+            "BEB-183"
+          ]
+        },
+        "by_asset_operation": {
+          "edit": [
+            "BEB-179",
+            "BEB-180",
+            "BEB-183"
+          ],
+          "readback_verify": [
+            "BEB-179",
+            "BEB-180",
+            "BEB-183"
+          ]
+        }
+      },
+      "parent_module_id": "blueprint.character",
+      "child_module_ids": [],
+      "module_shard_id": "blueprint.character",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/character.json"
+    }
+  }
+}

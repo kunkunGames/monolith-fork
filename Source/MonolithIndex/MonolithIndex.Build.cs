@@ -115,7 +115,7 @@ public class MonolithIndex : ModuleRules
 
 		// --- Conditional: PaperZD (project/marketplace plugin) ---
 		// Issue #71: gate on ENABLEMENT (read from the .uproject), not disk presence. PaperZD is a
-		// project plugin (GO.uproject Plugins[] -> Enabled:true in this checkout) but is not
+		// project plugin (host .uproject Plugins[] -> Enabled:true) but is not
 		// guaranteed in arbitrary Monolith checkouts, so a non-PaperZD project would otherwise
 		// hard-link the PaperZD module -> build break. When enabled, FPaperZDIndexer indexes
 		// UPaperZDAnimSequence_Flipbook (~1665) + UPaperZDAnimBP (~114); when absent it is gated

@@ -16,6 +16,7 @@
 #include "MonolithIndexSubsystem.h"
 #endif
 #include "Editor.h"
+#include "Misc/CoreDelegates.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogMonolithLogicDriver, Log, All);
 DEFINE_LOG_CATEGORY(LogMonolithLogicDriver);
@@ -42,7 +43,7 @@ void FMonolithLogicDriverModule::StartupModule()
 	FMonolithLogicDriverComponentActions::RegisterActions(Registry);
 	FMonolithLogicDriverTextGraphActions::RegisterActions(Registry);
 
-	PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+	PostEngineInitHandle = FCoreDelegates::GetOnPostEngineInit().AddLambda([this]()
 	{
 		if (GEditor)
 		{
@@ -74,7 +75,7 @@ void FMonolithLogicDriverModule::ShutdownModule()
 {
 	if (PostEngineInitHandle.IsValid())
 	{
-		FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+		FCoreDelegates::GetOnPostEngineInit().Remove(PostEngineInitHandle);
 		PostEngineInitHandle.Reset();
 	}
 

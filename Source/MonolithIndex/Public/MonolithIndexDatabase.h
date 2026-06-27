@@ -159,8 +159,12 @@ struct FProjectSearchOptions
 
 	// PRD AssetSearchSemanticSearch residual (min-should-match): require at least
 	// ceil(N*pct/100) of the N query tokens, expressed natively in FTS5 as the OR of all
-	// K-token subsets. 0 (default) = off (AND + Q3 streak fusion, identical output).
+	// K-token subsets. 0 (default) = off; EscapeFTS returns a pure AND-prefix token query.
 	int32 MinShouldMatchPct = 0;
+
+	// Pagination is applied after cross-table RRF fusion so pages preserve the final
+	// search ranking instead of slicing one FTS table before evidence is merged.
+	int32 Offset = 0;
 
 	static FProjectSearchOptions AssetNodeOnly()
 	{
@@ -282,7 +286,7 @@ public:
 
 	// --- FTS5 Search ---
 	// MinShouldMatchPct>0 builds an exact "at least ceil(N*pct/100) of N tokens" FTS5 expression
-	// (OR of all K-token subsets); 0 (default) keeps the AND + Q3 streak-fusion behavior.
+	// (OR of all K-token subsets); 0 (default) keeps the pure AND-prefix behavior.
 	static FString EscapeFTS(const FString& Query, int32 MinShouldMatchPct = 0);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit = 50);
 	TArray<FSearchResult> FullTextSearch(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);

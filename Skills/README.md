@@ -8,7 +8,7 @@ Codex or Claude global skill roots with `Scripts/install_monolith_skills.ps1`; s
 
 ## Start here
 
-The catalog is **runtime-discovered** (~1,600 actions across ~40 namespaces) and changes
+The catalog is **runtime-discovered** (~1,900 actions across ~60 namespaces) and changes
 between versions. Don't trust a hard-coded action list — confirm against the live catalog:
 
 ```
@@ -36,6 +36,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-cpp` | `source` | 27 | C++ symbol/text search, references, hierarchy, risk/review/impact |
 | `unreal-project-search` | `project` | ~20 | Asset search, references, type filter, gameplay tags, review/snapshots |
 | `unreal-bridge` | `bridge` | 5 | Map assets/Blueprint nodes to their backing C++ symbols |
+| `unreal-console` | `console` | 6 | Console object registry snapshots, cvars, console commands, hints, and guarded execution |
 | `unreal-asset` | `asset` | 12 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename |
 | `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
 | `unreal-build` | `editor` | 57* | Build, hot reload, compile errors |
@@ -95,7 +96,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 ### Project ops
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
-| `unreal-config` | `config` | 10 | `.ini` config, sections, console variables |
+| `unreal-config` | `config` | 10 | `.ini` config, sections, focused console-variable lookup |
 | `unreal-source-control` | `source_control` | 9 | Perforce/Git status, checkout/add/delete, revert |
 | `unreal-collection` | `collection` | 13 | Editor asset Collections |
 | `unreal-localization` | `localization` | 10 | Localization targets, string tables, cultures |

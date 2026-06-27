@@ -15,7 +15,7 @@ The `ai` namespace is the largest uncovered surface in the suite (182 actions); 
 benchmark its only coverage was a handful of SchemaCompleteness param-scans and ActionGuidance
 discovery probes — i.e. NOTHING executed an AI asset edit and read it back.
 
-It is modelled closely on the gold-standard BlueprintEditing v5.1 runner. Like that runner, the
+It is modelled closely on the gold-standard AssetEditing runner. Like that runner, the
 weight is concentrated on ADVERSARIAL categories that a clean-fixture happy-path suite cannot fake:
 
   discovery        - ai.list_* / search_ai_assets find the seeded fixtures (portable; not GO content)
@@ -36,7 +36,7 @@ weight is concentrated on ADVERSARIAL categories that a clean-fixture happy-path
                      always says "invalid" fails here).
 
 Why no large clean happy-path block: the ROI report (PART B) is explicit — a clean-fixture-only
-AI suite "would inherit the exact BlueprintEditing blind spot" (a green benchmark over broken
+AI suite "would inherit the exact AssetEditing blind spot" (a green benchmark over broken
 actions). So happy-path reads are minimized and the bulk of the weight sits on read-back-verified
 edits, the offending-identifier error gate, duplicate rejection, and the lint/validate gate.
 
@@ -94,7 +94,7 @@ AI_TOOL = "ai_query"
 # write_comparison_markdown(), and the module docstring all derive from this dict, so a weight
 # can never drift between the code, the docs, and the comparison report again. Must sum to 1.0.
 #
-# Weighting rationale (mirrors BlueprintEditing's adversarial concentration): the executed,
+# Weighting rationale (mirrors AssetEditing's adversarial concentration): the executed,
 # read-back-verified edit_execute dominates; the three falsifiability dimensions (error_path,
 # duplicate_reject, compile_gate) together carry 0.34 so a green-on-broken server cannot pass;
 # schema-only signals are residual tripwires; happy-path discovery is the smallest slice.

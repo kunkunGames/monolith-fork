@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "procedural_terrain_patch",
+  "route_edit_domain": "procedural_terrain_patch",
+  "module_id": "asset_authoring.mesh.procedural_terrain_patch",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.procedural_terrain_patch",
+    "edit": "asset_operation.edit.mesh.procedural_terrain_patch",
+    "save": "asset_operation.save.mesh.procedural_terrain_patch",
+    "readback_verify": "asset_operation.readback_verify.mesh.procedural_terrain_patch"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-454"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-454",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "procedural_terrain_patch",
+      "blueprint_type": "",
+      "workflow": "mesh_terrain_patch_static_mesh_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_terrain_patch",
+        "save_asset",
+        "get_mesh_info",
+        "get_mesh_bounds",
+        "analyze_mesh_quality",
+        "inspect_asset"
+      ],
+      "description": "Generate a deterministic terrain-patch StaticMesh with seeded multi-octave displacement, save it, and read mesh quality and bounds back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-454",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_terrain_patch",
+            "size": [
+              512.0,
+              512.0
+            ],
+            "resolution": 8,
+            "amplitude": 25.0,
+            "frequency": 0.02,
+            "octaves": 2,
+            "persistence": 0.5,
+            "lacunarity": 2.0,
+            "seed": 1337,
+            "save_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch",
+            "overwrite": true,
+            "use_cache": false,
+            "auto_save": false
+          },
+          "contains": [
+            "terrain_patch",
+            "triangle_count",
+            "resolution",
+            "8",
+            "seed",
+            "1337",
+            "SM_BenchTerrainPatch"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+          },
+          "contains": [
+            "SM_BenchTerrainPatch",
+            "StaticMesh",
+            "triangles",
+            "vertices"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_bounds",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+          },
+          "contains": [
+            "SM_BenchTerrainPatch",
+            "extent",
+            "volume_cm3"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "analyze_mesh_quality",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+          },
+          "contains": [
+            "SM_BenchTerrainPatch",
+            "overall_score"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchTerrainPatch"
+          },
+          "contains": [
+            "SM_BenchTerrainPatch",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "procedural_terrain_patch",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_terrain_patch_static_mesh_roundtrip",
+      "description": "Generate a deterministic terrain-patch StaticMesh with seeded multi-octave displacement, save it, and read mesh quality and bounds back",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/geometry-scripting-users-guide-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithMesh/Private/MonolithMeshProceduralActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_terrain_patch",
+          "save_asset",
+          "get_mesh_info",
+          "get_mesh_bounds",
+          "analyze_mesh_quality",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

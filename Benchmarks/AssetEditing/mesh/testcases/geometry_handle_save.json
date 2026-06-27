@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "mesh",
+  "asset_type_slug": "mesh",
+  "edit_domain": "geometry_handle_save",
+  "route_edit_domain": "geometry_handle_save",
+  "module_id": "asset_authoring.mesh.geometry_handle_save",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.mesh.geometry_handle_save",
+    "edit": "asset_operation.edit.mesh.geometry_handle_save",
+    "save": "asset_operation.save.mesh.geometry_handle_save",
+    "readback_verify": "asset_operation.readback_verify.mesh.geometry_handle_save"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-387"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-387",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "mesh",
+      "edit_domain": "geometry_handle_save",
+      "blueprint_type": "",
+      "workflow": "mesh_geometry_handle_save_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "release_handle",
+        "create_handle",
+        "geometry_subdivide",
+        "compute_uvs",
+        "save_handle",
+        "save_asset",
+        "get_mesh_info",
+        "inspect_asset"
+      ],
+      "description": "Create a GeometryScript mesh handle, subdivide it, compute UVs, save it as StaticMesh, release the handle, and inspect the saved asset"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-387",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleEdited"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "allow_error": true,
+          "args": {
+            "action": "release_handle",
+            "handle": "BenchHandleBox"
+          }
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "create_handle",
+            "source": "primitive:box",
+            "handle": "BenchHandleBox"
+          },
+          "contains": [
+            "BenchHandleBox",
+            "primitive:box",
+            "status",
+            "created"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "geometry_subdivide",
+            "handle": "BenchHandleBox",
+            "method": "uniform",
+            "level": 1
+          },
+          "contains": [
+            "BenchHandleBox",
+            "uniform",
+            "result_triangles",
+            "status",
+            "completed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "compute_uvs",
+            "handle": "BenchHandleBox",
+            "method": "box_project",
+            "uv_channel": 0
+          },
+          "contains": [
+            "BenchHandleBox",
+            "box_project",
+            "status",
+            "computed"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "save_handle",
+            "handle": "BenchHandleBox",
+            "target_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleEdited",
+            "overwrite": true,
+            "collision": "box"
+          },
+          "contains": [
+            "BenchHandleBox",
+            "SM_BenchHandleEdited",
+            "collision_mode",
+            "box",
+            "status",
+            "saved"
+          ]
+        },
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "release_handle",
+            "handle": "BenchHandleBox"
+          },
+          "contains": [
+            "BenchHandleBox",
+            "released"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleEdited"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "mesh_query",
+          "args": {
+            "action": "get_mesh_info",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleEdited"
+          },
+          "contains": [
+            "SM_BenchHandleEdited",
+            "StaticMesh",
+            "triangles",
+            "vertices",
+            "box"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/SM_BenchHandleEdited"
+          },
+          "contains": [
+            "SM_BenchHandleEdited",
+            "StaticMesh"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "geometry_handle_save",
+      "blueprint_type": "",
+      "domain": "mesh",
+      "workflow": "mesh_geometry_handle_save_roundtrip",
+      "description": "Create a GeometryScript mesh handle, subdivide it, compute UVs, save it as StaticMesh, release the handle, and inspect the saved asset",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "release_handle",
+          "create_handle",
+          "geometry_subdivide",
+          "compute_uvs",
+          "save_handle",
+          "save_asset",
+          "get_mesh_info",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

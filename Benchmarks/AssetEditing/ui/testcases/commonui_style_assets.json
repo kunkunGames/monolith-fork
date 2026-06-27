@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "ui",
+  "asset_type_slug": "ui",
+  "edit_domain": "commonui_style_assets",
+  "route_edit_domain": "commonui_style_assets",
+  "module_id": "asset_authoring.ui.commonui_style_assets",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.ui.commonui_style_assets",
+    "edit": "asset_operation.edit.ui.commonui_style_assets",
+    "save": "asset_operation.save.ui.commonui_style_assets",
+    "readback_verify": "asset_operation.readback_verify.ui.commonui_style_assets"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-442"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-442",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "ui",
+      "edit_domain": "commonui_style_assets",
+      "blueprint_type": "",
+      "workflow": "ui_commonui_style_assets_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_dialog",
+        "convert_textblock_to_common",
+        "configure_common_text",
+        "convert_border_to_common",
+        "configure_common_border",
+        "create_common_text_style",
+        "create_common_border_style",
+        "apply_style_to_widget",
+        "compile_widget",
+        "save_asset",
+        "get_widget_tree",
+        "inspect_asset",
+        "inspect_assets_batch"
+      ],
+      "description": "Create a dialog Widget Blueprint, convert text and border widgets to CommonUI variants, create CommonText/CommonBorder style assets, apply them, save, and read back the styled tree"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-442",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+              "/Game/Benchmarks/AssetAuthoring/TS_BenchCommonTitle",
+              "/Game/Benchmarks/AssetAuthoring/BRS_BenchCommonPanel"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_dialog",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "title": "Styled Benchmark",
+            "body": "CommonUI style asset roundtrip",
+            "confirm_text": "Accept",
+            "cancel_text": "Cancel"
+          },
+          "contains": [
+            "WBP_BenchCommonStyle",
+            "Styled Benchmark",
+            "Accept",
+            "Cancel",
+            "saved",
+            "true"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "convert_textblock_to_common",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogTitle"
+          },
+          "contains": [
+            "DialogTitle",
+            "CommonTextBlock"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_common_text",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogTitle",
+            "wrap_text_width": 420,
+            "line_height_percentage": 1.15,
+            "mobile_font_size_multiplier": 1.1,
+            "text_case": "ToUpper"
+          },
+          "contains": [
+            "DialogTitle"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "convert_border_to_common",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogBox"
+          },
+          "contains": [
+            "DialogBox",
+            "CommonBorder"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "configure_common_border",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogBox",
+            "reduce_padding_by_safezone": true,
+            "minimum_padding": "(Left=24,Top=20,Right=24,Bottom=20)"
+          },
+          "contains": [
+            "DialogBox"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_common_text_style",
+            "package_path": "/Game/Benchmarks/AssetAuthoring",
+            "asset_name": "TS_BenchCommonTitle",
+            "properties": {}
+          },
+          "contains": [
+            "TS_BenchCommonTitle",
+            "class"
+          ],
+          "capture": {
+            "text_style_asset": "$.asset_path",
+            "text_style_class": "$.class"
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "create_common_border_style",
+            "package_path": "/Game/Benchmarks/AssetAuthoring",
+            "asset_name": "BRS_BenchCommonPanel",
+            "properties": {}
+          },
+          "contains": [
+            "BRS_BenchCommonPanel",
+            "class"
+          ],
+          "capture": {
+            "border_style_asset": "$.asset_path",
+            "border_style_class": "$.class"
+          }
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "apply_style_to_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogTitle",
+            "style_asset": "${text_style_class}"
+          },
+          "contains": [
+            "DialogTitle",
+            "style_class",
+            "UCommonTextBlock::SetStyle"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "apply_style_to_widget",
+            "wbp_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle",
+            "widget_name": "DialogBox",
+            "style_asset": "${border_style_class}"
+          },
+          "contains": [
+            "DialogBox",
+            "style_class",
+            "UCommonBorder::SetStyle"
+          ]
+        },
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "compile_widget",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle"
+          },
+          "contains": [
+            "compiled",
+            "true",
+            "error_count",
+            "0"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "${text_style_asset}"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "${border_style_asset}"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "ui_query",
+          "args": {
+            "action": "get_widget_tree",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle"
+          },
+          "contains": [
+            "DialogTitle",
+            "CommonTextBlock",
+            "DialogBox",
+            "CommonBorder",
+            "Styled Benchmark"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/WBP_BenchCommonStyle"
+          },
+          "contains": [
+            "WBP_BenchCommonStyle",
+            "WidgetBlueprint"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_assets_batch",
+            "asset_paths": [
+              "${text_style_asset}",
+              "${border_style_asset}"
+            ],
+            "include_references": false
+          },
+          "contains": [
+            "TS_BenchCommonTitle",
+            "BRS_BenchCommonPanel"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "commonui_style_assets",
+      "blueprint_type": "",
+      "domain": "ui",
+      "workflow": "ui_commonui_style_assets_roundtrip",
+      "description": "Create a dialog Widget Blueprint, convert text and border widgets to CommonUI variants, create CommonText/CommonBorder style assets, apply them, save, and read back the styled tree",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_dialog",
+          "convert_textblock_to_common",
+          "configure_common_text",
+          "convert_border_to_common",
+          "configure_common_border",
+          "create_common_text_style",
+          "create_common_border_style",
+          "apply_style_to_widget",
+          "compile_widget",
+          "save_asset",
+          "get_widget_tree",
+          "inspect_asset",
+          "inspect_assets_batch"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "data",
+  "asset_type_slug": "data",
+  "edit_domain": "datatable_dry_run_strict_apply",
+  "route_edit_domain": "datatable_dry_run_strict_apply",
+  "module_id": "asset_authoring.data.datatable_dry_run_strict_apply",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.data.datatable_dry_run_strict_apply",
+    "edit": "asset_operation.edit.data.datatable_dry_run_strict_apply",
+    "save": "asset_operation.save.data.datatable_dry_run_strict_apply",
+    "readback_verify": "asset_operation.readback_verify.data.datatable_dry_run_strict_apply"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-514"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-514",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "data",
+      "edit_domain": "datatable_dry_run_strict_apply",
+      "blueprint_type": "",
+      "workflow": "data_datatable_dry_run_strict_apply_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_user_defined_struct",
+        "create_data_table",
+        "set_data_table_rows",
+        "read_data_table",
+        "save_asset",
+        "describe_data_table_schema",
+        "inspect_asset"
+      ],
+      "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-514",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/S_BenchDryRunRow",
+              "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_user_defined_struct",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/S_BenchDryRunRow",
+            "fields": [
+              {
+                "name": "DisplayName",
+                "type": "text"
+              },
+              {
+                "name": "Power",
+                "type": "int",
+                "default_value": "0"
+              }
+            ]
+          },
+          "contains": [
+            "S_BenchDryRunRow",
+            "DisplayName",
+            "Power"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "create_data_table",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows",
+            "row_struct": "/Game/Benchmarks/AssetAuthoring/S_BenchDryRunRow.S_BenchDryRunRow"
+          },
+          "contains": [
+            "DT_BenchDryRunRows"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows",
+            "rows": [
+              {
+                "row_name": "PreviewSword",
+                "values": {
+                  "DisplayName": "Preview Sword",
+                  "Power": 9
+                }
+              }
+            ],
+            "strict": true,
+            "dry_run": true,
+            "save": false
+          },
+          "contains": [
+            "success",
+            "true",
+            "dry_run",
+            "true",
+            "PreviewSword",
+            "rows_written",
+            "1"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "read_data_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows",
+            "include_schema": true
+          },
+          "contains": [
+            "DT_BenchDryRunRows",
+            "DisplayName",
+            "Power",
+            "row_count",
+            "0"
+          ],
+          "not_contains": [
+            "PreviewSword"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "set_data_table_rows",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows",
+            "rows": [
+              {
+                "row_name": "FinalSword",
+                "values": {
+                  "DisplayName": "Final Sword",
+                  "Power": 12
+                }
+              }
+            ],
+            "strict": true,
+            "dry_run": false,
+            "save": true
+          },
+          "contains": [
+            "success",
+            "true",
+            "dry_run",
+            "false",
+            "FinalSword",
+            "rows_written",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/S_BenchDryRunRow"
+          }
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "save_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "read_data_table",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows",
+            "include_schema": true
+          },
+          "contains": [
+            "FinalSword",
+            "Final Sword",
+            "12",
+            "DisplayName",
+            "Power",
+            "row_count",
+            "1"
+          ],
+          "not_contains": [
+            "PreviewSword"
+          ]
+        },
+        {
+          "tool": "blueprint_query",
+          "args": {
+            "action": "describe_data_table_schema",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows"
+          },
+          "contains": [
+            "S_BenchDryRunRow",
+            "DisplayName",
+            "Power",
+            "row_count",
+            "1"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/DT_BenchDryRunRows"
+          },
+          "contains": [
+            "DT_BenchDryRunRows",
+            "DataTable"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "datatable_dry_run_strict_apply",
+      "blueprint_type": "",
+      "domain": "data",
+      "workflow": "data_datatable_dry_run_strict_apply_roundtrip",
+      "description": "Create a schema-backed DataTable, prove a strict dry-run row write does not persist, then apply and save a valid strict row set",
+      "reference_context": [
+        "ue_docs: https://dev.epicgames.com/documentation/en-us/unreal-engine/data-driven-gameplay-elements-in-unreal-engine",
+        "source: Plugins/Monolith/Source/MonolithBlueprint/Private/MonolithBlueprintDataTableActions.cpp"
+      ],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_user_defined_struct",
+          "create_data_table",
+          "set_data_table_rows",
+          "read_data_table",
+          "save_asset",
+          "describe_data_table_schema",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

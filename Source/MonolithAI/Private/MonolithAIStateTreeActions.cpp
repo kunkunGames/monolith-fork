@@ -560,7 +560,7 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("StateTree asset path"))
 			.Required(TEXT("state_id"), TEXT("string"), TEXT("GUID of the state to move"))
 			.Required(TEXT("new_parent_id"), TEXT("string"), TEXT("GUID of new parent state (empty = move to root)"))
-			.Optional(TEXT("index"), TEXT("number"), TEXT("Index within new parent's children (-1 = append)"))
+			.Optional(TEXT("index"), TEXT("integer"), TEXT("Index within new parent's children (-1 = append)"))
 			.Build());
 
 	// 54. set_st_state_properties
@@ -3652,7 +3652,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		// Look for any UEdGraph owned by the StateTree
 		TArray<UObject*> SubObjects;
-		GetObjectsWithOuter(ST, SubObjects, /*bIncludeNestedObjects=*/true);
+		GetObjectsWithOuter(ST, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
 		for (UObject* Sub : SubObjects)
 		{
 			EdGraph = Cast<UEdGraph>(Sub);
@@ -3661,7 +3661,7 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 
 		if (!EdGraph)
 		{
-			GetObjectsWithOuter(EditorData, SubObjects, /*bIncludeNestedObjects=*/true);
+			GetObjectsWithOuter(EditorData, SubObjects, EGetObjectsFlags::IncludeNestedObjects);
 			for (UObject* Sub : SubObjects)
 			{
 				EdGraph = Cast<UEdGraph>(Sub);

@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "niagara",
+  "asset_type_slug": "niagara",
+  "edit_domain": "niagara_event_handler_metadata",
+  "route_edit_domain": "event_handler_metadata",
+  "module_id": "asset_authoring.niagara.event_handler_metadata",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.niagara.event_handler_metadata",
+    "edit": "asset_operation.edit.niagara.event_handler_metadata",
+    "save": "asset_operation.save.niagara.event_handler_metadata",
+    "readback_verify": "asset_operation.readback_verify.niagara.event_handler_metadata"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-364"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-364",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "niagara",
+      "edit_domain": "niagara_event_handler_metadata",
+      "blueprint_type": "",
+      "workflow": "niagara_event_handler_metadata_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "create_system",
+        "create_emitter",
+        "add_event_handler",
+        "save_system",
+        "get_event_handlers",
+        "list_emitters",
+        "inspect_asset"
+      ],
+      "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-364",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_system",
+            "save_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers"
+          },
+          "contains": [
+            "NS_BenchEventHandlers"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers",
+            "name": "SourceEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "SourceEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "create_emitter",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers",
+            "name": "BurstEmitter",
+            "sim_target": "cpu"
+          },
+          "contains": [
+            "BurstEmitter"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "add_event_handler",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers",
+            "emitter": "BurstEmitter",
+            "event_name": "DeathEvent",
+            "source_emitter": "SourceEmitter",
+            "execution_mode": "spawned_particles",
+            "max_events_per_frame": 16,
+            "spawn_number": 3
+          },
+          "contains": [
+            "DeathEvent",
+            "particle_event",
+            "handler_index"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "save_system",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers"
+          }
+        }
+      ],
+      "verify": [
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "get_event_handlers",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers",
+            "emitter": "BurstEmitter"
+          },
+          "contains": [
+            "DeathEvent",
+            "SourceEmitter",
+            "SpawnedParticles",
+            "spawn_number",
+            "3"
+          ]
+        },
+        {
+          "tool": "niagara_query",
+          "args": {
+            "action": "list_emitters",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers"
+          },
+          "contains": [
+            "SourceEmitter",
+            "BurstEmitter"
+          ]
+        },
+        {
+          "tool": "asset_query",
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/NS_BenchEventHandlers"
+          },
+          "contains": [
+            "NS_BenchEventHandlers",
+            "NiagaraSystem"
+          ]
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "niagara_event_handler_metadata",
+      "blueprint_type": "",
+      "domain": "niagara",
+      "workflow": "niagara_event_handler_metadata_roundtrip",
+      "description": "Create source/listener Niagara emitters, add a DeathEvent handler with explicit source emitter, save, and read handler metadata back",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "create_system",
+          "create_emitter",
+          "add_event_handler",
+          "save_system",
+          "get_event_handlers",
+          "list_emitters",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}
