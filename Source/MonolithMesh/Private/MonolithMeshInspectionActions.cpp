@@ -732,19 +732,19 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetMeshUvs(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	double LodIndexD;
-	int32 LodIndex = 0;
-	if (Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
+	double LodIndexD = 0.0;
+	if (Params->HasField(TEXT("lod_index")) && !Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		LodIndex = static_cast<int32>(LodIndexD);
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."));
 	}
+	int32 LodIndex = static_cast<int32>(LodIndexD);
 
-	double TargetChannelD;
-	int32 TargetChannel = -1;
-	if (Params->TryGetNumberField(TEXT("uv_channel"), TargetChannelD))
+	double TargetChannelD = -1.0;
+	if (Params->HasField(TEXT("uv_channel")) && !Params->TryGetNumberField(TEXT("uv_channel"), TargetChannelD))
 	{
-		TargetChannel = static_cast<int32>(TargetChannelD);
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'uv_channel'. Expected number."));
 	}
+	int32 TargetChannel = static_cast<int32>(TargetChannelD);
 
 	FString Error;
 	UStaticMesh* SM = MonolithMeshUtils::LoadStaticMesh(AssetPath, Error);
@@ -1299,26 +1299,26 @@ FMonolithActionResult FMonolithMeshInspectionActions::GetVertexData(const TShare
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
-	double LodIndexD;
-	int32 LodIndex = 0;
-	if (Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
+	double LodIndexD = 0.0;
+	if (Params->HasField(TEXT("lod_index")) && !Params->TryGetNumberField(TEXT("lod_index"), LodIndexD))
 	{
-		LodIndex = static_cast<int32>(LodIndexD);
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_index'. Expected number."));
 	}
+	int32 LodIndex = static_cast<int32>(LodIndexD);
 
-	double OffsetD;
-	int32 Offset = 0;
-	if (Params->TryGetNumberField(TEXT("offset"), OffsetD))
+	double OffsetD = 0.0;
+	if (Params->HasField(TEXT("offset")) && !Params->TryGetNumberField(TEXT("offset"), OffsetD))
 	{
-		Offset = static_cast<int32>(OffsetD);
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'offset'. Expected number."));
 	}
+	int32 Offset = static_cast<int32>(OffsetD);
 
-	double LimitD;
-	int32 Limit = 1000;
-	if (Params->TryGetNumberField(TEXT("limit"), LimitD))
+	double LimitD = 1000.0;
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitD))
 	{
-		Limit = static_cast<int32>(LimitD);
+		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'limit'. Expected number."));
 	}
+	int32 Limit = static_cast<int32>(LimitD);
 	Limit = FMath::Clamp(Limit, 1, 5000); // Hard max 5000
 
 	FString Error;
