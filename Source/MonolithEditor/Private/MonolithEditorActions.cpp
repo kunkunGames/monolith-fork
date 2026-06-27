@@ -2573,7 +2573,7 @@ bool FMonolithEditorActions::CaptureMaterialFrame(
 			MeshPath = TEXT("/Engine/BasicShapes/Plane");
 		}
 
-		UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+		UStaticMesh* Mesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(*MeshPath);
 		if (!Mesh)
 		{
 			UE_LOG(LogMonolith, Error, TEXT("CaptureMaterialFrame: Failed to load mesh %s"), *MeshPath);
@@ -8974,7 +8974,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 			if (UStaticMeshComponent* FloorComp = Floor->GetStaticMeshComponent())
 			{
 				FloorComp->SetMobility(EComponentMobility::Static);
-				if (UStaticMesh* FloorMesh = LoadObject<UStaticMesh>(nullptr, *FloorMeshPath))
+				if (UStaticMesh* FloorMesh = FMonolithAssetUtils::LoadAssetByPath<UStaticMesh>(*FloorMeshPath))
 				{
 					FloorComp->SetStaticMesh(FloorMesh);
 				}
