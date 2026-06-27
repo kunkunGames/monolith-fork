@@ -19,3 +19,8 @@ Prevention: Replace unguarded GetNumberField with TryGetNumberField to explicitl
 ## 2026-06-03 - MeshCartographer type-safety in Mesh Operation Actions
 Malformed input pattern: Mesh operation actions used GetStringField and GetBoolField blindly which crashes on bad payloads (e.g. providing an integer where a string is expected).
 Prevention: Use TryGetStringField and TryGetBoolField to handle missing properties or incorrect types safely before any GeometryScript API calls. If the payload is bad, return FMonolithActionResult::Error gracefully.
+## 2026-06-27 - Forbid template-echo PR titles and numeric branch evasion
+**Coordination issue:** MeshCartographer generated branches with large numeric suffixes (e.g., `-16679409565204700769`) and used generic "concise mesh-domain improvement." PR titles despite rules forbidding this.
+**Learning:** General instructions in `AGENTS.md` to avoid generic placeholder names and random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions. When an agent creates a PR title of "concise mesh-domain improvement.", it is echoing the prompt's instructions rather than describing the actual change.
+**Prevention:** Always replace the PR title placeholder with a concrete description of the change. Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
+**Avoid:** Using `MeshCartographer: concise mesh-domain improvement.` as a PR title or generating branches with `-<number>` suffixes.
