@@ -11,48 +11,43 @@ bool FMonolithUIRenameWidgetAcceptsAliasTest::RunTest(const FString& Parameters)
 	FMonolithUIActions::RegisterActions(Registry);
 
 	TSharedPtr<FJsonObject> Schema;
-	if (!Registry.GetActionSchema(TEXT("ui"), TEXT("rename_widget"), Schema))
+	for (const FMonolithActionInfo& ActionInfo : Registry.GetActions(TEXT("ui")))
 	{
-		AddError(TEXT("Action ui.rename_widget not found in registry"));
-		return false;
-	}
-
-	const TArray<TSharedPtr<FJsonValue>>* ParamsArray = nullptr;
-	if (!Schema->TryGetArrayField(TEXT("params"), ParamsArray))
-	{
-		AddError(TEXT("Action schema has no params array"));
-		return false;
-	}
-
-	bool bFoundWbpPath = false;
-	bool bHasAssetPathAlias = false;
-
-	for (const TSharedPtr<FJsonValue>& ParamVal : *ParamsArray)
-	{
-		const TSharedPtr<FJsonObject> ParamObj = ParamVal->AsObject();
-		if (!ParamObj.IsValid()) continue;
-
-		FString ParamName;
-		if (ParamObj->TryGetStringField(TEXT("name"), ParamName) && ParamName == TEXT("wbp_path"))
+		if (ActionInfo.Action == TEXT("rename_widget"))
 		{
-			bFoundWbpPath = true;
+			Schema = ActionInfo.ParamSchema;
+			break;
+		}
+	}
 
-			const TArray<TSharedPtr<FJsonValue>>* AliasesArray = nullptr;
-			if (ParamObj->TryGetArrayField(TEXT("aliases"), AliasesArray))
+	if (!Schema.IsValid())
+	{
+		AddError(TEXT("Action ui.rename_widget schema not found in registry"));
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject>* WbpPathParam = nullptr;
+	if (!Schema->TryGetObjectField(TEXT("wbp_path"), WbpPathParam) || !WbpPathParam || !WbpPathParam->IsValid())
+	{
+		AddError(TEXT("Action schema has no wbp_path param"));
+		return false;
+	}
+
+	bool bHasAssetPathAlias = false;
+	const TArray<TSharedPtr<FJsonValue>>* AliasesArray = nullptr;
+	if ((*WbpPathParam)->TryGetArrayField(TEXT("aliases"), AliasesArray) && AliasesArray)
+	{
+		for (const TSharedPtr<FJsonValue>& AliasVal : *AliasesArray)
+		{
+			if (AliasVal.IsValid() && AliasVal->AsString() == TEXT("asset_path"))
 			{
-				for (const TSharedPtr<FJsonValue>& AliasVal : *AliasesArray)
-				{
-					if (AliasVal->AsString() == TEXT("asset_path"))
-					{
-						bHasAssetPathAlias = true;
-						break;
-					}
-				}
+				bHasAssetPathAlias = true;
+				break;
 			}
 		}
 	}
 
-	TestTrue(TEXT("wbp_path param exists"), bFoundWbpPath);
+	TestTrue(TEXT("wbp_path param exists"), WbpPathParam && WbpPathParam->IsValid());
 	TestTrue(TEXT("wbp_path has asset_path alias"), bHasAssetPathAlias);
 
 	return true;

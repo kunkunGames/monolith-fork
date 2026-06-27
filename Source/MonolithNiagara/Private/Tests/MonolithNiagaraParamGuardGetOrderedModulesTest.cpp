@@ -1,10 +1,11 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithNiagaraActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardGetOrderedModulesTest, "Monolith.Niagara.ParamGuard.GetOrderedModules", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardGetOrderedModulesTest, "Monolith.Niagara.ParamGuard.GetOrderedModules", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardGetOrderedModulesTest::RunTest(const FString& Parameters)
 {
