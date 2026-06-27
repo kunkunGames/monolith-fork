@@ -1146,6 +1146,24 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catal
 
 ---
 
+## modelgen
+
+Text-to-StaticMesh and caller-supplied generated-model jobs, provenance tracking, and import. (Split from `mesh` on 2026-05-20).
+
+| Action | Params |
+|--------|--------|
+| `list_model_generation_providers` | none |
+| `submit_generated_model_job` | `prompt` (required string), `provider` (optional string), `model` (optional string), `asset_name` (optional string) |
+| `get_generated_model_job` | `job_id` (required string) |
+| `cancel_generated_model_job` | `job_id` (required string) |
+| `download_generated_model_result` | `job_id` (required string) |
+| `import_generated_model` | `destination` (required string), `job_id` (optional string), `file_path` (optional string), `provider` (optional string), `model` (optional string), `prompt` (optional string), `source_image_hash` (optional string), `replace_existing` (optional boolean), `material_import` (optional string), `save` (optional boolean) |
+| `get_generated_model_provenance` | `asset_path` (required string) |
+
+See `Docs/specs/SPEC_MonolithModelGen.md` for the deep dive.
+
+---
+
 ## paper2d
 
 Optional Paper2D asset discovery. Read-only probes; does not load Paper2D modules or mutate assets.
