@@ -210,6 +210,32 @@ UObject* FMonolithAssetUtils::LoadAssetByPath(UClass* ExpectedClass, const FStri
 	return nullptr;
 }
 
+bool FMonolithAssetUtils::TryLoadAssetByPath(UClass* ExpectedClass, const FString& AssetPath, UObject*& OutAsset, FString& OutResolvedPath, FString& OutError)
+{
+	OutAsset = nullptr;
+	OutResolvedPath = ResolveAssetPath(AssetPath);
+	OutError.Reset();
+
+	if (OutResolvedPath.IsEmpty())
+	{
+		OutError = TEXT("Asset path must be a non-empty string");
+		return false;
+	}
+
+	UClass* EffectiveClass = ExpectedClass ? ExpectedClass : UObject::StaticClass();
+	OutAsset = LoadAssetByPath(EffectiveClass, OutResolvedPath);
+	if (!OutAsset)
+	{
+		OutError = FString::Printf(
+			TEXT("Failed to load asset '%s' as %s"),
+			*OutResolvedPath,
+			*EffectiveClass->GetName());
+		return false;
+	}
+
+	return true;
+}
+
 bool FMonolithAssetUtils::AssetExists(const FString& AssetPath)
 {
 	FString Resolved = ResolveAssetPath(AssetPath);

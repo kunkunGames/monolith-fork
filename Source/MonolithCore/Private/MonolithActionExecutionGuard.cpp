@@ -980,14 +980,15 @@ FMonolithPostEditValidationResult FMonolithActionExecutionGuard::RunDefaultPostE
 			FString::Printf(TEXT("Post-edit validation for %s.%s could not find an asset_path, blueprint_path, widget_blueprint, wbp_path, save_path, or new_path target."), *Context.Namespace, *Context.Action));
 	}
 
-	const FString TargetPath = FMonolithAssetUtils::ResolveAssetPath(TargetPathRaw);
-	UBlueprint* Blueprint = FMonolithAssetUtils::LoadAssetByPath<UBlueprint>(TargetPath);
-	if (!Blueprint)
+	FString TargetPath;
+	FString LoadError;
+	UBlueprint* Blueprint = nullptr;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UBlueprint>(TargetPathRaw, Blueprint, TargetPath, LoadError))
 	{
 		return FMonolithPostEditValidationResult::Failed(
 			TEXT("validation_target_not_blueprint"),
 			TEXT("builtin_blueprint_compile"),
-			FString::Printf(TEXT("Post-edit validation target is not a Blueprint asset: %s"), *TargetPath),
+			FString::Printf(TEXT("Post-edit validation target is not a Blueprint asset: %s (%s)"), *TargetPath, *LoadError),
 			TargetPath);
 	}
 

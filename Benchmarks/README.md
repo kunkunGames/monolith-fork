@@ -22,6 +22,23 @@ Benchmark `summary.json` and `partial_summary.json` files include two top-level 
 
 Runner defaults are resolved relative to the Monolith plugin root, so `Benchmarks\...\tasks.jsonl` means `Plugins\Monolith\Benchmarks\...\tasks.jsonl` regardless of the current working directory. Hosted static CI validates that configured task/probe JSONL non-empty line counts match each benchmark manifest count and that runner default paths resolve to the configured files without needing a live MCP server.
 
+## Release Packaging
+
+Benchmark corpora are source-checkout inputs, not runtime plugin payload. `Scripts\make_release.ps1`
+keeps release ZIPs lean by excluding generated AssetEditing JSON/JSONL corpus files while leaving
+the benchmark scripts and documentation available in source. Local benchmark use is unchanged
+because the tracked corpus remains in the repository.
+
+Use this report before release hygiene reviews:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\summarize_benchmark_corpus.ps1
+```
+
+If a generated corpus must be shared outside the source checkout, publish it as a separate
+benchmark-corpus artifact with the Monolith commit SHA, manifest SHA, and task SHA, then restore it
+under `Benchmarks\...` before running the benchmark. Do not add generated corpora to runtime ZIPs.
+
 ## Running All Benchmarks
 
 Run each benchmark in sequence from the Monolith plugin root. All scripts require a live MCP endpoint at `http://localhost:9316/mcp` except OfflineParity which can run offline.

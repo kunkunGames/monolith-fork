@@ -39,6 +39,23 @@ public:
 		return Cast<T>(LoadAssetByPath(T::StaticClass(), AssetPath));
 	}
 
+	/**
+	 * Resolve and load an asset with an expected class, returning the normalized
+	 * path and caller-facing validation error instead of forcing every action
+	 * handler to duplicate ResolveAssetPath + LoadAssetByPath + error text.
+	 */
+	static bool TryLoadAssetByPath(UClass* ExpectedClass, const FString& AssetPath, UObject*& OutAsset, FString& OutResolvedPath, FString& OutError);
+
+	/** Resolve and load an asset as a specific type. */
+	template<typename T>
+	static bool TryLoadAssetByPath(const FString& AssetPath, T*& OutAsset, FString& OutResolvedPath, FString& OutError)
+	{
+		UObject* RawAsset = nullptr;
+		const bool bLoaded = TryLoadAssetByPath(T::StaticClass(), AssetPath, RawAsset, OutResolvedPath, OutError);
+		OutAsset = Cast<T>(RawAsset);
+		return bLoaded && OutAsset != nullptr;
+	}
+
 	/** Check if an asset exists at the given path */
 	static bool AssetExists(const FString& AssetPath);
 

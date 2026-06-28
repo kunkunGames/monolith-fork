@@ -20,6 +20,27 @@ Measures Monolith MCP asset editing capability across Blueprint graph/class/comp
 | `test_blueprints.md` | Fixture Blueprint contract used by graph, variable, function, and edit-read-back tasks |
 | `Scripts/asset_editing_benchmark.py` | Runner/generator script |
 
+## Generated Corpus and Release Packaging
+
+The JSON/JSONL corpus is tracked for local benchmark reproducibility, but it is intentionally
+excluded from Monolith runtime release ZIPs by `Scripts\make_release.ps1`. Excluded release payloads
+include the root `tasks.jsonl`, `manifest.json`, `asset_types.json`, `testsets\`, and generated
+per-AssetType `index.json`, `tasks.jsonl`, and `testcases\*.json` slices.
+
+Local source-checkout use is unchanged. To rebuild the corpus after generator changes, run:
+
+```powershell
+python Scripts\asset_editing_benchmark.py generate `
+  --tasks Benchmarks\AssetEditing\tasks.jsonl `
+  --manifest Benchmarks\AssetEditing\manifest.json `
+  --testsets Benchmarks\AssetEditing\testsets
+```
+
+For external benchmark distribution, package the generated corpus separately from runtime release
+ZIPs and include the Monolith commit SHA plus the generated task, manifest, and testset hashes.
+Restore that archive under `Benchmarks\AssetEditing\...` before running `select`, `list_testsets`,
+or routed `run` commands.
+
 ## AssetType Support
 
 `generate` keeps the root `tasks.jsonl` as the canonical full-suite stream, then mirrors

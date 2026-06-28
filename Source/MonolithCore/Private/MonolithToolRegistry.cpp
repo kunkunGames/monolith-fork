@@ -10,6 +10,8 @@
 #include "HAL/PlatformMisc.h"
 #include "Dom/JsonValue.h"
 
+#include <initializer_list>
+
 // =============================================================================
 //  File-local helpers. FindSimilarActions edit distance now lives in
 //  FMonolithFuzzyMatch::EditDistanceBounded (MonolithFuzzyMatch.h).
@@ -140,6 +142,174 @@ namespace
 		if (!Value.IsEmpty() && !Values.Contains(Value))
 		{
 			Values.Add(Value);
+		}
+	}
+
+	struct FHighTrafficPlanningMetadataSeed
+	{
+		FString Namespace;
+		FString Skill;
+		TArray<FString> Outputs;
+		TArray<FString> NextActions;
+	};
+
+	void AddHighTrafficPlanningMetadataSeed(
+		TArray<FHighTrafficPlanningMetadataSeed>& Seeds,
+		const TCHAR* Namespace,
+		const TCHAR* Skill,
+		std::initializer_list<const TCHAR*> Outputs,
+		std::initializer_list<const TCHAR*> NextActions)
+	{
+		FHighTrafficPlanningMetadataSeed Seed;
+		Seed.Namespace = Namespace;
+		Seed.Skill = Skill;
+		Seed.Outputs.Reserve(static_cast<int32>(Outputs.size()));
+		for (const TCHAR* Output : Outputs)
+		{
+			Seed.Outputs.Add(Output);
+		}
+		Seed.NextActions.Reserve(static_cast<int32>(NextActions.size()));
+		for (const TCHAR* NextAction : NextActions)
+		{
+			Seed.NextActions.Add(NextAction);
+		}
+		Seeds.Add(MoveTemp(Seed));
+	}
+
+	const TArray<FHighTrafficPlanningMetadataSeed>& GetHighTrafficPlanningMetadataSeeds()
+	{
+		static const TArray<FHighTrafficPlanningMetadataSeed> Seeds = []()
+		{
+			TArray<FHighTrafficPlanningMetadataSeed> Result;
+			Result.Reserve(6);
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("source"),
+				TEXT("unreal-cpp"),
+				{
+					TEXT("Success returns the source action's JSON object result with bounded C++ source-related data such as matches, snippets, files, symbols, references, call graph, risk/review rows, generated text, snapshots, or health status.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("source.health"),
+					TEXT("source.search_source"),
+					TEXT("source.read_source"),
+					TEXT("source.review_context")
+				});
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("project"),
+				TEXT("unreal-project-search"),
+				{
+					TEXT("Success returns the project action's JSON object result with bounded ProjectIndex or AssetRegistry data such as asset rows, references, details, gameplay tags, impact/risk rows, snapshots, or health status.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("project.health"),
+					TEXT("project.search"),
+					TEXT("project.get_asset_details"),
+					TEXT("project.review_context")
+				});
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("blueprint"),
+				TEXT("unreal-blueprints"),
+				{
+					TEXT("Success returns the blueprint action's JSON object result with Blueprint asset, graph, node, pin, variable, component, compilation, validation, or scaffold status data according to the action.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("blueprint.get_graph_summary"),
+					TEXT("blueprint.get_node_details"),
+					TEXT("blueprint.search_functions"),
+					TEXT("blueprint.validate_node_cache")
+				});
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("console"),
+				TEXT("unreal-console"),
+				{
+					TEXT("Success returns the console action's JSON object result with console object, CVar/command, log cursor, expectation, sequence, capture, or diagnosis data according to the action.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("console.health"),
+					TEXT("console.resolve_command"),
+					TEXT("console.get_log_cursor"),
+					TEXT("console.search_logs_since")
+				});
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("bridge"),
+				TEXT("unreal-bridge"),
+				{
+					TEXT("Success returns the bridge action's JSON object result with bridge index readiness, search result, bounded attachment, asset-symbol link, or indexing status data according to the action.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("bridge.get_index_status"),
+					TEXT("bridge.search_items"),
+					TEXT("source.search_source"),
+					TEXT("project.search")
+				});
+
+			AddHighTrafficPlanningMetadataSeed(
+				Result,
+				TEXT("monolith"),
+				TEXT("monolith-mcp"),
+				{
+					TEXT("Success returns the monolith admin action's JSON object result with discovery, status, readiness, profile, coverage, job, session, notification, or domain state data according to the action.")
+				},
+				{
+					TEXT("monolith.discover"),
+					TEXT("monolith.find"),
+					TEXT("monolith.get_mcp_server_status"),
+					TEXT("monolith.get_action_metadata_coverage"),
+					TEXT("monolith.get_readiness_status")
+				});
+
+			return Result;
+		}();
+		return Seeds;
+	}
+
+	const FHighTrafficPlanningMetadataSeed* FindHighTrafficPlanningMetadataSeed(const FString& Namespace)
+	{
+		for (const FHighTrafficPlanningMetadataSeed& Seed : GetHighTrafficPlanningMetadataSeeds())
+		{
+			if (Seed.Namespace.Equals(Namespace, ESearchCase::IgnoreCase))
+			{
+				return &Seed;
+			}
+		}
+		return nullptr;
+	}
+
+	void ApplyHighTrafficPlanningMetadataSeed(FMonolithActionInfo& ActionInfo)
+	{
+		const FHighTrafficPlanningMetadataSeed* Seed = FindHighTrafficPlanningMetadataSeed(ActionInfo.Namespace);
+		if (!Seed)
+		{
+			return;
+		}
+
+		FMonolithActionPlanningMetadata& Planning = ActionInfo.PlanningMetadata;
+		if (Planning.Skill.IsEmpty())
+		{
+			Planning.Skill = Seed->Skill;
+		}
+		if (Planning.Outputs.Num() == 0)
+		{
+			Planning.Outputs = Seed->Outputs;
+		}
+		if (Planning.NextActions.Num() == 0)
+		{
+			Planning.NextActions = Seed->NextActions;
 		}
 	}
 
@@ -1160,6 +1330,7 @@ void FMonolithToolRegistry::RegisterAction(
 	RegAction.Info.ExecutionPolicy = InferExecutionPolicy(Namespace, Action, ExecutionPolicy);
 	RegAction.Info.SearchMetadata = SearchMetadata;
 	RegAction.Info.PlanningMetadata = PlanningMetadata;
+	ApplyHighTrafficPlanningMetadataSeed(RegAction.Info);
 	RegAction.Info.ParamSchema = ParamSchema;
 	RegAction.Handler = Handler;
 	if (RegistrationOwnerStack.Num() > 0)

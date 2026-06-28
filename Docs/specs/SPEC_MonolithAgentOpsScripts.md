@@ -1,19 +1,19 @@
-# Monolith — Agent Ops Scripts (MCP Recovery, Index Freshness)
+# Monolith — Agent Ops Scripts (MCP Recovery, Index Freshness, Branch Hygiene)
 
 **Parent:** [../SPEC_CORE.md](../SPEC_CORE.md)
-**Status:** Implemented and verified 2026-06-11
-**Scope:** `Scripts/recover_mcp.ps1`, `Scripts/check_index_freshness.ps1`; the offline invocation-log reader contract lives in [SPEC_MonolithToolInvocationLogs.md](SPEC_MonolithToolInvocationLogs.md)
+**Status:** Implemented and verified 2026-06-11; branch hygiene report added 2026-06-29
+**Scope:** `Scripts/recover_mcp.ps1`, `Scripts/check_index_freshness.ps1`, `Scripts/prune_invocation_logs.ps1`, `Scripts/report_stale_branches.ps1`; the offline invocation-log reader contract lives in [SPEC_MonolithToolInvocationLogs.md](SPEC_MonolithToolInvocationLogs.md)
 **Created:** 2026-06-11
 
 ---
 
 ## 1. Purpose
 
-Two recurring agent workflows were documented only as prose (CLAUDE.md sections 12 and 14, `Skills/monolith-mcp/SKILL.md`): recovering the editor-backed MCP endpoint, and walking the index health -> repair -> re-verify chain. Both are fragile, order-dependent shell sequences — the case where the Agent Skills guidance prefers a deterministic script over re-derived instructions. These scripts give every agent the same floor: one invocation, line-oriented `RESULT=` output, and documented exit codes.
+Recurring agent workflows were documented only as prose (CLAUDE.md sections 12 and 14, `Skills/monolith-mcp/SKILL.md`): recovering the editor-backed MCP endpoint, walking the index health -> repair -> re-verify chain, and inspecting stale branch buildup without taking destructive GitHub actions. These are fragile, order-dependent shell sequences — the case where the Agent Skills guidance prefers a deterministic script over re-derived instructions. These scripts give every agent the same floor: one invocation, line-oriented `RESULT=` output, and documented exit codes.
 
 They intentionally do not wrap live MCP namespace actions. Agents call MCP actions through their MCP client; the runtime catalog stays the only source of truth for action names and schemas.
 
-Both scripts are Windows-host helpers (they drive `RunHeadlessEditor.bat` and `Binaries/monolith_query.exe`, which are Windows surfaces in this checkout). The invocation-log reader is cross-platform Python.
+The MCP and index scripts are Windows-host helpers (they drive `RunHeadlessEditor.bat` and `Binaries/monolith_query.exe`, which are Windows surfaces in this checkout). The branch-hygiene report uses only the Git CLI and is intentionally non-destructive. The invocation-log reader is cross-platform Python.
 
 ## 2. Scripts
 
@@ -22,6 +22,7 @@ Both scripts are Windows-host helpers (they drive `RunHeadlessEditor.bat` and `B
 | `Scripts/recover_mcp.ps1` | Probe MCP `/health`; when down, launch the host project's headless editor wrapper and wait for the endpoint | No repo/DB writes; launches an editor process |
 | `Scripts/check_index_freshness.ps1` | `source`/`project` health -> stale detection -> repair recommendation; `-Execute` runs warning-indicated repairs and re-verifies | `-Execute` writes `Saved/EngineSource.db` / `Saved/ProjectIndex.db` through `monolith_query.exe` |
 | `Scripts/prune_invocation_logs.ps1` | Retention pruning for `Logs/yyyyMMdd` folders (age and/or total-size rules); dry-run by default | `-Execute` deletes pruned date folders |
+| `Scripts/report_stale_branches.ps1` | Non-destructive report for remote branch cleanup review candidates: merged into base, stale by date, no-op-like, numeric suffix/id token, protected prefix | No; delete commands are printed as suggestions only |
 | `Analyzer/analyze_invocation_logs.py` | Offline reader for daily invocation logs (contract: [SPEC_MonolithInvocationLogAnalyzer.md](SPEC_MonolithInvocationLogAnalyzer.md)) | Writes reports under `Saved/Monolith/LogAnalysis/` only |
 
 ## 3. `recover_mcp.ps1` Contract
@@ -98,7 +99,44 @@ Retention for the daily JSONL logs stays manual (SPEC_MonolithToolInvocationLogs
 | 2 | Dry run found prunable folders (re-run with `-Execute`) |
 | 3 | Blocked: log root missing |
 
-## 6. Verification Record (2026-06-11)
+## 6. `report_stale_branches.ps1` Contract
+
+Remote branch hygiene is a reporting-only workflow. The script reads local remote-tracking refs with Git, classifies branches that may be worth human review, and prints `git push <remote> --delete <branch>` suggestions without executing them. It never fetches, pushes, deletes branches, closes PRs, or calls GitHub APIs.
+
+Default base is `origin/master`. A branch is a cleanup review candidate only when it is not protected and at least one signal applies:
+
+- merged into the base ref (`git branch -r --merged <base>`)
+- stale by committer date (`-StaleDays`, default 14)
+- no-op-like by branch name, commit subject, or empty `git diff --quiet <base>...<branch>`
+- generated-looking numeric suffix or large numeric token
+
+Protected prefixes classify branches that should not receive delete suggestions. Defaults include `master`, `main`, `develop`, `release/`, `hotfix/`, `production`, `staging`, `stable`, and `gh-pages`.
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `-Remote` | `origin` | Remote-tracking namespace under `refs/remotes/<remote>` |
+| `-BaseRef` | `<Remote>/master` | Base ref for merged and no-op diff checks |
+| `-StaleDays` | 14 | Age threshold; candidate presence does not affect exit code |
+| `-ProtectedPrefixes` | built-in protected names/prefixes | Entries ending in `/` are prefix matches; other entries are exact local branch names |
+| `-NoDiffCheck` | off | Skips the per-branch `git diff --quiet <base>...<branch>` content no-op check |
+| `-ShowAll` | off | Prints non-candidate `KEEP` lines |
+| `-Limit` | 0 | Limits printed `CANDIDATE` lines; summary still counts all candidates |
+
+Confidence labels are review priority, not authorization:
+
+| Confidence | Meaning |
+|---|---|
+| `high` | branch is merged into base or no-op-like |
+| `medium` | branch is stale and has a numeric generated-looking token |
+| `low` | branch has only one weaker signal such as stale-only or numeric-only |
+| `protected` | branch matches a protected exact name or prefix; no delete suggestion printed |
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Report completed, regardless of how many candidates were found |
+| 1 | Script/runtime error: missing Git, invalid repo/ref, unparseable Git output, or a Git command failure |
+
+## 7. Verification Record (2026-06-11)
 
 | Gate | Result |
 |---|---|
@@ -120,3 +158,11 @@ Retention for the daily JSONL logs stays manual (SPEC_MonolithToolInvocationLogs
 | Death-detection false positive fixed | A transient empty `Win32_Process` CIM sample had produced `RESULT=EDITOR_EXITED` while the editor was alive and logging; existence now comes from `Get-Process` with a two-sample debounce. |
 | Wrapper wait correctness | `Start-Process -Wait` was replaced with .NET `WaitForExit(60s)`: under Windows PowerShell 5.1, `-Wait` waited on the backgrounded editor as a descendant, hanging the script and exposing the editor to the caller's process-tree kill (this, not an engine fault, explained one boot's silent death minutes after launch). |
 | Retention dry runs | `prune_invocation_logs.ps1` default (`-KeepDays 30`) kept all 24 date folders and exited 0; `-KeepDays 15` listed 8 prunable folders / 96.25 MB reclaimable, exited 2, and deleted nothing; folder count unchanged afterwards. |
+
+2026-06-29 branch-hygiene verification:
+
+| Gate | Result |
+|---|---|
+| PowerShell parse | `[System.Management.Automation.Language.Parser]::ParseFile('Scripts\report_stale_branches.ps1', ...)` returned no parse errors. |
+| Non-destructive report | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts\report_stale_branches.ps1 -Limit 5` read `origin` remote-tracking refs, printed five candidate suggestions plus a protected `origin/master` line, and exited 0. |
+| Candidate classification sample | The report classified 203 `origin` branches: 201 candidates, one protected, one keep; candidate reasons included `stale_*d`, `no_op_diff`, `no_op_name`, `no_op_subject`, and `numeric_suffix`. |

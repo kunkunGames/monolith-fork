@@ -119,6 +119,30 @@ $LegacyZip = Join-Path $ProjectDir "Monolith-v$Version.zip"  # legacy bridge (= 
 #     FIVEPOINT8 does not contain these, so the toggle is a harmless no-op there.
 $ExcludeProjectPlugins = @('HordeForge', 'OptimizedGASP')
 
+# Generated benchmark corpora are useful in source checkouts, but they are not runtime
+# plugin payload. Keep release zips lean and make benchmark-corpus distribution an
+# explicit separate artifact instead of silently shipping internal generated JSON.
+$ReleaseExcludedBenchmarkCorpusPatterns = @(
+    "Benchmarks/AssetEditing/tasks.jsonl",
+    "Benchmarks/AssetEditing/manifest.json",
+    "Benchmarks/AssetEditing/asset_types.json",
+    "Benchmarks/AssetEditing/testsets/*",
+    "Benchmarks/AssetEditing/*/index.json",
+    "Benchmarks/AssetEditing/*/tasks.jsonl",
+    "Benchmarks/AssetEditing/*/testcases/*"
+)
+
+function Test-ReleaseExcludedBenchmarkCorpus {
+    param([string]$Path)
+
+    foreach ($pattern in $ReleaseExcludedBenchmarkCorpusPatterns) {
+        if ($Path -like $pattern) {
+            return $true
+        }
+    }
+    return $false
+}
+
 $EngineMatrix = @(
     [PSCustomObject]@{
         Tag        = "UE5.7"                               # asset/marker engine tag
@@ -763,6 +787,12 @@ $trackedFiles = $allTrackedFiles | Where-Object {
     if ($keep -and $path -eq "Docs/MISSING_FEATURES.md") {
         $keep = $false
     }
+    # Strip generated benchmark corpora from runtime release zips. Source checkouts retain
+    # these tracked files for local benchmarking; release users can regenerate or download a
+    # separate benchmark-corpus artifact when they intentionally run the benchmark suite.
+    if ($keep -and (Test-ReleaseExcludedBenchmarkCorpus -Path $path)) {
+        $keep = $false
+    }
     $keep
 }
 $strippedSourceCount = $allTrackedFiles.Count - $trackedFiles.Count
@@ -775,7 +805,7 @@ foreach ($file in $trackedFiles) {
     Copy-Item $file -Destination $destPath -Force
 }
 Pop-Location
-Write-Host "    $($trackedFiles.Count) files copied ($strippedSourceCount stripped: $($StrippedModules -join ', '))" -ForegroundColor Green
+Write-Host "    $($trackedFiles.Count) files copied ($strippedSourceCount stripped by release filters)" -ForegroundColor Green
 
 # Stage the freshly built offline CLI exe + its sibling tools into the shared content's
 # Binaries dir. These are engine-agnostic and live at the TOP LEVEL of THIS repo's
