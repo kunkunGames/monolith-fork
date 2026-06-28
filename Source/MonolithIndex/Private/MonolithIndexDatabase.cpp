@@ -508,7 +508,14 @@ bool FMonolithIndexDatabase::ResetDatabase()
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS meta;"));
 	ExecuteSQL(TEXT("DROP TABLE IF EXISTS assets;"));
 
-	return CreateTables();
+	if (!CreateTables())
+	{
+		return false;
+	}
+
+	return WriteMeta(TEXT("schema_version"), TEXT("2"))
+		&& WriteMeta(TEXT("asset_search_values_schema_version"), TEXT("1"))
+		&& WriteMeta(TEXT("asset_search_values_extractor_version"), TEXT("2"));
 }
 
 // ============================================================
