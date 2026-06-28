@@ -34,6 +34,25 @@
 
 using namespace UE::Geometry;
 
+
+namespace
+{
+	template <typename T>
+	TOptional<FString> ExtractOptionalNumber(const TSharedPtr<FJsonObject>& Object, const FString& FieldName, T& OutValue)
+	{
+		if (Object->HasField(FieldName))
+		{
+			double TempVal;
+			if (!Object->TryGetNumberField(FieldName, TempVal))
+			{
+				return FString::Printf(TEXT("Invalid type for parameter '%s'. Expected number."), *FieldName);
+			}
+			OutValue = static_cast<T>(TempVal);
+		}
+		return TOptional<FString>();
+	}
+}
+
 UMonolithMeshHandlePool* FMonolithMeshProceduralActions::Pool = nullptr;
 
 void FMonolithMeshProceduralActions::SetHandlePool(UMonolithMeshHandlePool* InPool)
@@ -469,64 +488,29 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	if (Type == TEXT("chair"))
 	{
 		float SeatH = 45.0f;
-		if (SubParams->HasField(TEXT("seat_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("seat_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seat_height'. Expected number."));
-			SeatH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("seat_height"), SeatH)) return FMonolithActionResult::Error(Err.GetValue());
 		float BackH = Height - SeatH;
-		if (SubParams->HasField(TEXT("back_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("back_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'back_height'. Expected number."));
-			BackH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("back_height"), BackH)) return FMonolithActionResult::Error(Err.GetValue());
 		float LegT = 4.0f;
-		if (SubParams->HasField(TEXT("leg_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("leg_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'leg_thickness'. Expected number."));
-			LegT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("leg_thickness"), LegT)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildChair(Mesh, Width, Depth, Height, SeatH, BackH, LegT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("table"))
 	{
 		float LegT = 5.0f;
-		if (SubParams->HasField(TEXT("leg_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("leg_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'leg_thickness'. Expected number."));
-			LegT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("leg_thickness"), LegT)) return FMonolithActionResult::Error(Err.GetValue());
 		float TopT = 4.0f;
-		if (SubParams->HasField(TEXT("top_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("top_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'top_thickness'. Expected number."));
-			TopT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("top_thickness"), TopT)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildTable(Mesh, Width, Depth, Height, LegT, TopT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("desk"))
 	{
 		float LegT = 5.0f;
-		if (SubParams->HasField(TEXT("leg_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("leg_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'leg_thickness'. Expected number."));
-			LegT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("leg_thickness"), LegT)) return FMonolithActionResult::Error(Err.GetValue());
 		float TopT = 4.0f;
-		if (SubParams->HasField(TEXT("top_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("top_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'top_thickness'. Expected number."));
-			TopT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("top_thickness"), TopT)) return FMonolithActionResult::Error(Err.GetValue());
 		bool bDrawer = true;
 		if (SubParams->HasField(TEXT("has_drawer")) && !SubParams->TryGetBoolField(TEXT("has_drawer"), bDrawer))
 		{
@@ -538,38 +522,18 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("shelf"))
 	{
 		int32 ShelfN = 4;
-		if (SubParams->HasField(TEXT("shelf_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("shelf_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'shelf_count'. Expected number."));
-			ShelfN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("shelf_count"), ShelfN)) return FMonolithActionResult::Error(Err.GetValue());
 		float BoardT = 2.0f;
-		if (SubParams->HasField(TEXT("board_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("board_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'board_thickness'. Expected number."));
-			BoardT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("board_thickness"), BoardT)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildShelf(Mesh, Width, Depth, Height, ShelfN, BoardT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("cabinet"))
 	{
 		float WallT = 3.0f;
-		if (SubParams->HasField(TEXT("wall_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-			WallT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 		float RecessD = Depth - WallT * 2;
-		if (SubParams->HasField(TEXT("recess_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("recess_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'recess_depth'. Expected number."));
-			RecessD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("recess_depth"), RecessD)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildCabinet(Mesh, Width, Depth, Height, WallT, RecessD, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -577,38 +541,18 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("bed"))
 	{
 		float MattH = 20.0f;
-		if (SubParams->HasField(TEXT("mattress_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("mattress_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'mattress_height'. Expected number."));
-			MattH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("mattress_height"), MattH)) return FMonolithActionResult::Error(Err.GetValue());
 		float HeadH = 50.0f;
-		if (SubParams->HasField(TEXT("headboard_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("headboard_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'headboard_height'. Expected number."));
-			HeadH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("headboard_height"), HeadH)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildBed(Mesh, Width, Depth, Height, MattH, HeadH, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("door_frame"))
 	{
 		float FrameT = 10.0f;
-		if (SubParams->HasField(TEXT("frame_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("frame_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'frame_thickness'. Expected number."));
-			FrameT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("frame_thickness"), FrameT)) return FMonolithActionResult::Error(Err.GetValue());
 		float FrameD = Depth;
-		if (SubParams->HasField(TEXT("frame_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("frame_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'frame_depth'. Expected number."));
-			FrameD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("frame_depth"), FrameD)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildDoorFrame(Mesh, Width, Height, FrameT, FrameD, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -616,26 +560,11 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("window_frame"))
 	{
 		float FrameT = 8.0f;
-		if (SubParams->HasField(TEXT("frame_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("frame_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'frame_thickness'. Expected number."));
-			FrameT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("frame_thickness"), FrameT)) return FMonolithActionResult::Error(Err.GetValue());
 		float FrameD = Depth;
-		if (SubParams->HasField(TEXT("frame_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("frame_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'frame_depth'. Expected number."));
-			FrameD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("frame_depth"), FrameD)) return FMonolithActionResult::Error(Err.GetValue());
 		float SillH = 90.0f;
-		if (SubParams->HasField(TEXT("sill_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("sill_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'sill_height'. Expected number."));
-			SillH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("sill_height"), SillH)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildWindowFrame(Mesh, Width, Height, FrameT, FrameD, SillH, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -643,26 +572,11 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("stairs"))
 	{
 		int32 StepN = 8;
-		if (SubParams->HasField(TEXT("stair_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("stair_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'stair_count'. Expected number."));
-			StepN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("stair_count"), StepN)) return FMonolithActionResult::Error(Err.GetValue());
 		float StepH = Height;
-		if (SubParams->HasField(TEXT("step_height")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("step_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'step_height'. Expected number."));
-			StepH = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("step_height"), StepH)) return FMonolithActionResult::Error(Err.GetValue());
 		float StepD = Depth;
-		if (SubParams->HasField(TEXT("step_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("step_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'step_depth'. Expected number."));
-			StepD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("step_depth"), StepD)) return FMonolithActionResult::Error(Err.GetValue());
 		bool bFloat = false;
 		if (SubParams->HasField(TEXT("floating")) && !SubParams->TryGetBoolField(TEXT("floating"), bFloat))
 		{
@@ -680,12 +594,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	{
 		float Radius = Width * 0.5f;
 		int32 Sides = 12;
-		if (SubParams->HasField(TEXT("sides")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("sides"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'sides'. Expected number."));
-			Sides = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("sides"), Sides)) return FMonolithActionResult::Error(Err.GetValue());
 		bool bRound = true;
 		if (SubParams->HasField(TEXT("round")) && !SubParams->TryGetBoolField(TEXT("round"), bRound))
 		{
@@ -697,24 +606,14 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("counter"))
 	{
 		float TopT = 5.0f;
-		if (SubParams->HasField(TEXT("top_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("top_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'top_thickness'. Expected number."));
-			TopT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("top_thickness"), TopT)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildCounter(Mesh, Width, Depth, Height, TopT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("toilet"))
 	{
 		float BowlD = 15.0f;
-		if (SubParams->HasField(TEXT("bowl_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("bowl_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'bowl_depth'. Expected number."));
-			BowlD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("bowl_depth"), BowlD)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildToilet(Mesh, Width, Depth, Height, BowlD, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -722,19 +621,9 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("sink"))
 	{
 		float BowlR = FMath::Min(Width, Depth) * 0.35f;
-		if (SubParams->HasField(TEXT("bowl_radius")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("bowl_radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'bowl_radius'. Expected number."));
-			BowlR = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("bowl_radius"), BowlR)) return FMonolithActionResult::Error(Err.GetValue());
 		float BowlD = 12.0f;
-		if (SubParams->HasField(TEXT("bowl_depth")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("bowl_depth"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'bowl_depth'. Expected number."));
-			BowlD = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("bowl_depth"), BowlD)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildSink(Mesh, Width, Depth, Height, BowlR, BowlD, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -742,12 +631,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateParametricMesh(const
 	else if (Type == TEXT("bathtub"))
 	{
 		float WallT = 5.0f;
-		if (SubParams->HasField(TEXT("wall_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-			WallT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildBathtub(Mesh, Width, Depth, Height, WallT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -793,12 +677,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateHorrorProp(const TSh
 	Type = Type.ToLower().TrimStartAndEnd();
 
 	int32 Seed = 0;
-	if (Params->HasField(TEXT("seed")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed'. Expected number."));
-		Seed = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return FMonolithActionResult::Error(Err.GetValue());
 
 	float Width, Depth, Height;
 	FString DimensionError;
@@ -835,19 +714,9 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateHorrorProp(const TSh
 	if (Type == TEXT("barricade"))
 	{
 		int32 BoardN = 5;
-		if (SubParams->HasField(TEXT("board_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("board_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'board_count'. Expected number."));
-			BoardN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("board_count"), BoardN)) return FMonolithActionResult::Error(Err.GetValue());
 		float GapR = 0.3f;
-		if (SubParams->HasField(TEXT("gap_ratio")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("gap_ratio"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'gap_ratio'. Expected number."));
-			GapR = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("gap_ratio"), GapR)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildBarricade(Mesh, Width, Height, Depth, BoardN, GapR, Seed, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
@@ -855,50 +724,25 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateHorrorProp(const TSh
 	{
 		float Radius  = FMath::Max(Width, Depth) * 0.5f;
 		int32 PieceN = 12;
-		if (SubParams->HasField(TEXT("piece_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("piece_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'piece_count'. Expected number."));
-			PieceN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("piece_count"), PieceN)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildDebrisPile(Mesh, Radius, Height, PieceN, Seed, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("cage"))
 	{
 		int32 BarN = 8;
-		if (SubParams->HasField(TEXT("bar_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("bar_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'bar_count'. Expected number."));
-			BarN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("bar_count"), BarN)) return FMonolithActionResult::Error(Err.GetValue());
 		float BarR = 1.5f;
-		if (SubParams->HasField(TEXT("bar_radius")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("bar_radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'bar_radius'. Expected number."));
-			BarR = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("bar_radius"), BarR)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildCage(Mesh, Width, Depth, Height, BarN, BarR, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("coffin"))
 	{
 		float WallT = 3.0f;
-		if (SubParams->HasField(TEXT("wall_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-			WallT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 		float LidGap = 2.0f;
-		if (SubParams->HasField(TEXT("lid_gap")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("lid_gap"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lid_gap'. Expected number."));
-			LidGap = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("lid_gap"), LidGap)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildCoffin(Mesh, Width, Depth, Height, WallT, LidGap, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -906,31 +750,16 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateHorrorProp(const TSh
 	else if (Type == TEXT("gurney"))
 	{
 		float LegR = 2.0f;
-		if (SubParams->HasField(TEXT("leg_radius")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("leg_radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'leg_radius'. Expected number."));
-			LegR = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("leg_radius"), LegR)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildGurney(Mesh, Width, Depth, Height, LegR, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
 	else if (Type == TEXT("broken_wall"))
 	{
 		float NoiseS = 0.3f;
-		if (SubParams->HasField(TEXT("noise_scale")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("noise_scale"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'noise_scale'. Expected number."));
-			NoiseS = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("noise_scale"), NoiseS)) return FMonolithActionResult::Error(Err.GetValue());
 		float HoleR = 60.0f;
-		if (SubParams->HasField(TEXT("hole_radius")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("hole_radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'hole_radius'. Expected number."));
-			HoleR = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("hole_radius"), HoleR)) return FMonolithActionResult::Error(Err.GetValue());
 		bHadBooleans = true;
 		if (!BuildBrokenWall(Mesh, Width, Height, Depth, NoiseS, HoleR, Seed, BuildError))
 			return FMonolithActionResult::Error(BuildError);
@@ -938,19 +767,9 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateHorrorProp(const TSh
 	else if (Type == TEXT("vent_grate"))
 	{
 		int32 SlotN = 6;
-		if (SubParams->HasField(TEXT("slot_count")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("slot_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'slot_count'. Expected number."));
-			SlotN = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("slot_count"), SlotN)) return FMonolithActionResult::Error(Err.GetValue());
 		float FrameT = 3.0f;
-		if (SubParams->HasField(TEXT("frame_thickness")))
-		{
-			double TempVal;
-			if (!SubParams->TryGetNumberField(TEXT("frame_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'frame_thickness'. Expected number."));
-			FrameT = static_cast<float>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(SubParams, TEXT("frame_thickness"), FrameT)) return FMonolithActionResult::Error(Err.GetValue());
 		if (!BuildVentGrate(Mesh, Width, Height, Depth, SlotN, FrameT, BuildError))
 			return FMonolithActionResult::Error(BuildError);
 	}
@@ -1948,12 +1767,7 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 		}
 
 		int32 Seed = -1;
-		if (Params->HasField(TEXT("seed")))
-		{
-			double TempVal;
-			if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return TEXT("Invalid type for parameter 'seed'. Expected number.");
-			Seed = static_cast<int32>(TempVal);
-		}
+		if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return FMonolithActionResult::Error(Err.GetValue());
 
 		FString HashForPath = bUseCache ? Hash : FMonolithMeshProceduralCache::Get().ComputeHash(ActionName, Params);
 		SavePath = FMonolithMeshProceduralCache::Get().GenerateAutoPath(Category, Type, Width, Depth, Height, HashForPath, Seed);
@@ -2070,20 +1884,10 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateStructure(const TSha
 	}
 
 	float WallT = 20.0f;
-	if (Params->HasField(TEXT("wall_thickness")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-		WallT = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 
 	float FloorT = 3.0f;
-	if (Params->HasField(TEXT("floor_thickness")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("floor_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_thickness'. Expected number."));
-		FloorT = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("floor_thickness"), FloorT)) return FMonolithActionResult::Error(Err.GetValue());
 
 	bool bCeiling = true;
 	if (Params->HasField(TEXT("has_ceiling")) && !Params->TryGetBoolField(TEXT("has_ceiling"), bCeiling))
@@ -2475,33 +2279,13 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateBuildingShell(const 
 	}
 
 	int32 Floors = 1;
-	if (Params->HasField(TEXT("floors")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("floors"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floors'. Expected number."));
-		Floors = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("floors"), Floors)) return FMonolithActionResult::Error(Err.GetValue());
 	float FloorH = 300.0f;
-	if (Params->HasField(TEXT("floor_height")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("floor_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_height'. Expected number."));
-		FloorH = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("floor_height"), FloorH)) return FMonolithActionResult::Error(Err.GetValue());
 	float WallT = 25.0f;
-	if (Params->HasField(TEXT("wall_thickness")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-		WallT = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 	float SlabT = 15.0f;
-	if (Params->HasField(TEXT("floor_thickness")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("floor_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_thickness'. Expected number."));
-		SlabT = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("floor_thickness"), SlabT)) return FMonolithActionResult::Error(Err.GetValue());
 
 	Floors = FMath::Clamp(Floors, 1, 20);
 
@@ -2879,33 +2663,13 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateMaze(const TSharedPt
 	}
 
 	float CellSize = 200.0f;
-	if (Params->HasField(TEXT("cell_size")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("cell_size"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'cell_size'. Expected number."));
-		CellSize = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("cell_size"), CellSize)) return FMonolithActionResult::Error(Err.GetValue());
 	float WallH = 250.0f;
-	if (Params->HasField(TEXT("wall_height")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("wall_height"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_height'. Expected number."));
-		WallH = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("wall_height"), WallH)) return FMonolithActionResult::Error(Err.GetValue());
 	float WallT = 20.0f;
-	if (Params->HasField(TEXT("wall_thickness")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("wall_thickness"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'wall_thickness'. Expected number."));
-		WallT = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("wall_thickness"), WallT)) return FMonolithActionResult::Error(Err.GetValue());
 	int32 Seed = 0;
-	if (Params->HasField(TEXT("seed")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed'. Expected number."));
-		Seed = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return FMonolithActionResult::Error(Err.GetValue());
 	bool bMerge = false;
 	if (Params->HasField(TEXT("merge_walls")) && !Params->TryGetBoolField(TEXT("merge_walls"), bMerge))
 	{
@@ -3062,28 +2826,13 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreatePipeNetwork(const TS
 	}
 
 	float Radius = 10.0f;
-	if (Params->HasField(TEXT("radius")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("radius"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'radius'. Expected number."));
-		Radius = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("radius"), Radius)) return FMonolithActionResult::Error(Err.GetValue());
 
 	int32 Segments = 12;
-	if (Params->HasField(TEXT("segments")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("segments"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'segments'. Expected number."));
-		Segments = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("segments"), Segments)) return FMonolithActionResult::Error(Err.GetValue());
 
 	float MiterLimit = 2.0f;
-	if (Params->HasField(TEXT("miter_limit")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("miter_limit"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'miter_limit'. Expected number."));
-		MiterLimit = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("miter_limit"), MiterLimit)) return FMonolithActionResult::Error(Err.GetValue());
 
 	bool bBallJoints = false;
 	if (Params->HasField(TEXT("ball_joints")) && !Params->TryGetBoolField(TEXT("ball_joints"), bBallJoints))
@@ -3092,12 +2841,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreatePipeNetwork(const TS
 	}
 
 	float JointScale = 1.3f;
-	if (Params->HasField(TEXT("joint_radius_scale")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("joint_radius_scale"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'joint_radius_scale'. Expected number."));
-		JointScale = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("joint_radius_scale"), JointScale)) return FMonolithActionResult::Error(Err.GetValue());
 
 	Segments = FMath::Clamp(Segments, 3, 64);
 
@@ -3177,36 +2921,16 @@ FMonolithActionResult FMonolithMeshProceduralActions::CreateFragments(const TSha
 	}
 
 	int32 FragCount = 8;
-	if (Params->HasField(TEXT("fragment_count")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("fragment_count"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'fragment_count'. Expected number."));
-		FragCount = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("fragment_count"), FragCount)) return FMonolithActionResult::Error(Err.GetValue());
 
 	float Noise = 0.0f;
-	if (Params->HasField(TEXT("noise")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("noise"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'noise'. Expected number."));
-		Noise = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("noise"), Noise)) return FMonolithActionResult::Error(Err.GetValue());
 
 	int32 Seed = 0;
-	if (Params->HasField(TEXT("seed")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("seed"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed'. Expected number."));
-		Seed = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return FMonolithActionResult::Error(Err.GetValue());
 
 	float GapWidth = 0.5f;
-	if (Params->HasField(TEXT("gap_width")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("gap_width"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'gap_width'. Expected number."));
-		GapWidth = static_cast<float>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("gap_width"), GapWidth)) return FMonolithActionResult::Error(Err.GetValue());
 	FString HandlePrefix;
 	if (!Params->TryGetStringField(TEXT("handle_prefix"), HandlePrefix) || HandlePrefix.IsEmpty())
 	{
@@ -3518,12 +3242,7 @@ FMonolithActionResult FMonolithMeshProceduralActions::ListCachedMeshes(const TSh
 	FString TypeFilter;
 	Params->TryGetStringField(TEXT("type"), TypeFilter);
 	int32 Limit = 100;
-	if (Params->HasField(TEXT("limit")))
-	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("limit"), TempVal)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'limit'. Expected number."));
-		Limit = static_cast<int32>(TempVal);
-	}
+	if (auto Err = ExtractOptionalNumber(Params, TEXT("limit"), Limit)) return FMonolithActionResult::Error(Err.GetValue());
 	Limit = ClampListCachedMeshesLimit(Limit);
 
 	TSharedPtr<FJsonObject> Result = FMonolithMeshProceduralCache::Get().ListEntries(TypeFilter, Limit);
