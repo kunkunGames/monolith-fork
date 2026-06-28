@@ -34,7 +34,7 @@ The feature is for automation and agent workstations where the editor is not alr
 | Term | Meaning |
 |------|---------|
 | Headless editor | `UnrealEditor.exe <Project>.uproject` launched without an interactive UI workflow, using `-Unattended`, `-NullRHI`, `-NoSplash`, `-NoSound`, and `-Log` by default. It is not a commandlet. |
-| Batch wrapper | Project-owned batch file that resolves the engine and starts the editor. For Go: `BatchFiles\RunHeadlessEditor.bat`. |
+| Batch wrapper | Project-owned batch file that resolves the engine and starts the editor. For Speed: `Build\BatchFiles\RunHeadlessEditor.bat`. |
 | Proxy | Existing stdio-to-HTTP MCP bridge. MCP client configuration remains pointed at this proxy, which forwards to the editor-side HTTP server. The launcher prefers Python 3.8+ and falls back to Node.js when local Python/py launcher entries are unavailable or broken. |
 | Instance record | Optional bounded JSON file under `Saved/HeadlessMcp/` describing a managed editor process (`pid`, project, log path, state). It must not contain secrets. |
 | Capability profile | Runtime report of which action families are expected to work in the current editor mode (`interactive`, `headless`, `headless_nullrhi`, `commandlet`). |
@@ -45,7 +45,7 @@ The feature is for automation and agent workstations where the editor is not alr
 
 ### 4.1 Agent Starts With No Editor Running
 
-1. Agent launches `BatchFiles\RunHeadlessEditor.bat` when no suitable editor is already running.
+1. Agent launches `Build\BatchFiles\RunHeadlessEditor.bat` when no suitable editor is already running.
 2. Batch resolves the editor from the host `.uproject`.
 3. Batch starts the full editor with rendering disabled by `-NullRHI`, leaves P4 enabled, and exits.
 4. MCP client keeps using the existing Monolith stdio proxy configuration.
@@ -79,7 +79,7 @@ The feature is for automation and agent workstations where the editor is not alr
 Primary editor launch helper:
 
 ```powershell
-D:\P4\game\BatchFiles\RunHeadlessEditor.bat
+D:\P4\speed\Build\BatchFiles\RunHeadlessEditor.bat
 ```
 
 MCP config remains on the existing Monolith stdio proxy command. Do not point MCP config at `RunHeadlessEditor.bat`, and do not require MCP config files to pass separate `--auto-launch-editor`, `--headless`, `--project`, `-MonolithHeadlessMcp`, or `-MonolithMcpPort` controls.
@@ -106,7 +106,7 @@ UnrealEditor.exe D:\Path\To\Project\<Project>.uproject -Unattended -NullRHI -NoS
 Rules:
 
 - Do not use `-run=...`, commandlets, cook, compile, `-server`, or game-only modes for MCP serving.
-- Do not add `-NoP4`; Go project headless MCP workflows need P4/source control.
+- Do not add `-NoP4`; Speed project headless MCP workflows need P4/source control.
 - Do not add Monolith-specific editor args. `UMonolithSettings` / config decides whether the MCP server starts and which port it uses.
 - `-AbsLog=<path>` is required for managed launch so failures can be diagnosed without an editor UI.
 - The launcher must resolve the engine executable from the `.uproject` `EngineAssociation` when possible and must not hard-code a local engine path.
@@ -257,7 +257,7 @@ Forbidden:
 
 ### P1 — Project Batch Wrapper
 
-- Add `BatchFiles\RunHeadlessEditor.bat`.
+- Use Speed's project-owned `Build\BatchFiles\RunHeadlessEditor.bat`.
 - Resolve engine from `.uproject` `EngineAssociation`.
 - Spawn full editor process with managed log path and render-disabled headless flags.
 - Keep P4 enabled by omitting `-NoP4`.
@@ -295,7 +295,7 @@ Forbidden:
 
 | Scenario | Command / check | Expected |
 |----------|-----------------|----------|
-| No editor running | `BatchFiles\RunHeadlessEditor.bat`, then existing MCP proxy | Editor starts, existing proxy attaches, MCP tools become available. |
+| No editor running | `Build\BatchFiles\RunHeadlessEditor.bat`, then existing MCP proxy | Editor starts, existing proxy attaches, MCP tools become available. |
 | Existing matching editor | Start batch while editor already runs | First implementation may start another editor; future reuse guard should avoid duplicates. |
 | Existing wrong project | Start batch against occupied URL | Proxy follows configured URL; future reuse guard should report mismatch. |
 | NullRHI mode | Run the batch with defaults | Source/project/editor log actions work; viewport actions report unavailable. |
@@ -314,11 +314,11 @@ $editorTarget = if ($targetFile) {
 } else {
   "$([System.IO.Path]::GetFileNameWithoutExtension($uproject.Name))Editor"
 }
-$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File "$projectRoot\BatchFiles\Script\ResolveUnrealEngine.ps1" -Project $uproject.FullName -Output Root
+$engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File "$projectRoot\Build\BatchFiles\Script\ResolveUnrealEngine.ps1" -Project $uproject.FullName -Output Root
 & "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" $editorTarget Win64 Development "-Project=$($uproject.FullName)" -WaitMutex -NoHotReloadFromIDE
 ```
 
-Plus a real headless MCP smoke run through `D:\P4\game\BatchFiles\RunHeadlessEditor.bat`.
+Plus a real headless MCP smoke run through `D:\P4\speed\Build\BatchFiles\RunHeadlessEditor.bat`.
 
 ---
 

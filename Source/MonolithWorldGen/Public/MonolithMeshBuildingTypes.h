@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
@@ -438,19 +438,16 @@ struct FBuildingDescriptor
 		Json->TryGetStringField(TEXT("building_id"), D.BuildingId);
 		Json->TryGetStringField(TEXT("asset_path"), D.AssetPath);
 
-		double TmpGCS;
-		if (Json->TryGetNumberField(TEXT("grid_cell_size"), TmpGCS))
-			D.GridCellSize = static_cast<float>(TmpGCS);
+		if (Json->HasField(TEXT("grid_cell_size")))
+			D.GridCellSize = static_cast<float>(Json->GetNumberField(TEXT("grid_cell_size")));
 
 		const TSharedPtr<FJsonObject>* WallObj = nullptr;
 		if (Json->TryGetObjectField(TEXT("wall_thickness"), WallObj) && WallObj && (*WallObj).IsValid())
 		{
-			double TmpExt;
-			if ((*WallObj)->TryGetNumberField(TEXT("exterior"), TmpExt))
-				D.ExteriorWallThickness = static_cast<float>(TmpExt);
-			double TmpInt;
-			if ((*WallObj)->TryGetNumberField(TEXT("interior"), TmpInt))
-				D.InteriorWallThickness = static_cast<float>(TmpInt);
+			if ((*WallObj)->HasField(TEXT("exterior")))
+				D.ExteriorWallThickness = static_cast<float>((*WallObj)->GetNumberField(TEXT("exterior")));
+			if ((*WallObj)->HasField(TEXT("interior")))
+				D.InteriorWallThickness = static_cast<float>((*WallObj)->GetNumberField(TEXT("interior")));
 		}
 
 		return D;

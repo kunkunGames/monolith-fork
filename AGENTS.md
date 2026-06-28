@@ -112,10 +112,10 @@ Default `--include-content=true` is the high-recall discovery mode. Use `--inclu
 For project checkout work that needs editor-backed Monolith actions, use the configured MCP client connection to `http://localhost:9316/mcp` and confirm it with `monolith_status()` or the active MCP client's health check before calling editor actions. If the MCP endpoint is unreachable or the transport fails, start the project headless editor wrapper and reconnect the existing Monolith proxy/client instead of bypassing Monolith:
 
 ```powershell
-D:\P4\game\BatchFiles\RunHeadlessEditor.bat
+D:\P4\speed\Build\BatchFiles\RunHeadlessEditor.bat
 ```
 
-Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\game\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
+Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\speed\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
 `Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances and MCP-disabled editor processes are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/Script/SPEC_MonolithAgentOpsScripts.md`.
 

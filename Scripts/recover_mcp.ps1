@@ -11,8 +11,8 @@ Skills/monolith-mcp) as one deterministic entry point:
   2. If down and -ProbeOnly: report and stop.
   3. Resolve the host checkout root (walk up from this script until a
      *.uproject is found, or use -ProjectRoot) and require
-     BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch is
-     attempted when the wrapper is missing.
+     Build/BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch
+     is attempted when the wrapper is missing.
   4. Skip the launch when an UnrealEditor process already exists (a boot may
      be in progress) unless -ForceLaunch is passed.
   5. Poll /health until it answers 200 or -TimeoutSec elapses; on timeout,
@@ -265,7 +265,7 @@ if (-not $hostRoot) {
     Write-Output 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
     exit 3
 }
-$wrapper = Join-Path $hostRoot 'BatchFiles\RunHeadlessEditor.bat'
+$wrapper = Join-Path $hostRoot 'Build\BatchFiles\RunHeadlessEditor.bat'
 if (-not (Test-Path $wrapper)) {
     Write-Output ("RESULT=BLOCKED reason=headless_wrapper_missing path={0}" -f $wrapper)
     exit 3

@@ -40,6 +40,13 @@ public:
 	/** Whether this is a sentinel indexer (does its own AR enumeration) */
 	virtual bool IsSentinel() const { return false; }
 
+	/**
+	 * Whether assets whose leaf class has no exact indexer may be routed to this indexer through
+	 * the AssetRegistry inheritance tree. Most indexers are exact-class contracts; opt in only when
+	 * the extraction logic is valid for arbitrary subclasses without imposing a narrower asset type.
+	 */
+	virtual bool SupportsDerivedClassDispatch() const { return false; }
+
 	/** Whether this sentinel supports scoped (incremental) indexing */
 	virtual bool SupportsIncrementalIndex() const { return false; }
 

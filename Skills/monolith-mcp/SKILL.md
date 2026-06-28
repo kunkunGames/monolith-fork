@@ -144,7 +144,7 @@ For project work that needs editor-backed Monolith actions, use the configured M
 If the endpoint is unreachable or the MCP transport fails, treat it as an editor/server availability issue and start the project wrapper from the checkout root:
 
 ```powershell
-.\BatchFiles\RunHeadlessEditor.bat
+.\Build\BatchFiles\RunHeadlessEditor.bat
 ```
 
 Keep the MCP client configuration on the existing Monolith proxy command; do not point MCP config at this wrapper. The wrapper should resolve `UnrealEditor.exe` from the host `.uproject`, launch the full editor with rendering disabled by default (`-NullRHI`) plus unattended args, and leave source control enabled. Script contract: `Docs\specs\SPEC_MonolithHeadlessMcpLaunch.md`.

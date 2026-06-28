@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Plan: Plugins/Monolith/Docs/plans/2026-05-28-reflection-intelligence.md (Phase 4a — v0.17.0).
 //
 // FAuditAdapter — implementation. Four audit handlers registered against
@@ -179,25 +179,13 @@ FSQLiteDatabase* FAuditAdapter::GetRawDB()
 
 FMonolithActionResult FAuditAdapter::HandleAuditOrphanMaterials(const TSharedPtr<FJsonObject>& Params)
 {
-		double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."));
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	const int32 ReqLimit = Params->HasField(TEXT("limit"))
+		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
 	constexpr int32 HARD_CAP = 200;
-	if (ReqLimit > HARD_CAP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("`limit` exceeds maximum allowed (%d)"), HARD_CAP));
-	}
-	if (ReqLimit < 1)
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be at least 1"));
-	}
-	const int32 Limit = ReqLimit;
+	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({});
 
 	int32 Page = 0;
@@ -297,25 +285,13 @@ FMonolithActionResult FAuditAdapter::HandleAuditNiagaraCrossAssetRefs(const TSha
 			     "or build the project at least once so UHT artefacts exist."));
 	}
 
-		double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."));
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	const int32 ReqLimit = Params->HasField(TEXT("limit"))
+		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
 	constexpr int32 HARD_CAP = 200;
-	if (ReqLimit > HARD_CAP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("`limit` exceeds maximum allowed (%d)"), HARD_CAP));
-	}
-	if (ReqLimit < 1)
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be at least 1"));
-	}
-	const int32 Limit = ReqLimit;
+	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({});
 
 	int32 Page = 0;
@@ -398,25 +374,13 @@ FMonolithActionResult FAuditAdapter::HandleAuditCdoDrift(const TSharedPtr<FJsonO
 {
 	const FString ClassFilter = Params->HasField(TEXT("class_filter"))
 		? Params->GetStringField(TEXT("class_filter")) : FString();
-		double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."));
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	const int32 ReqLimit = Params->HasField(TEXT("limit"))
+		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
 	constexpr int32 HARD_CAP = 200;
-	if (ReqLimit > HARD_CAP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("`limit` exceeds maximum allowed (%d)"), HARD_CAP));
-	}
-	if (ReqLimit < 1)
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be at least 1"));
-	}
-	const int32 Limit = ReqLimit;
+	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({ ClassFilter });
 
 	int32 Page = 0;
@@ -551,25 +515,13 @@ FMonolithActionResult FAuditAdapter::HandleAuditOrphanAssets(const TSharedPtr<FJ
 
 	const FString AssetClassFilter = Params->HasField(TEXT("asset_class_filter"))
 		? Params->GetStringField(TEXT("asset_class_filter")) : FString();
-		double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."));
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	const int32 ReqLimit = Params->HasField(TEXT("limit"))
+		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
 	constexpr int32 HARD_CAP = 200;
-	if (ReqLimit > HARD_CAP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("`limit` exceeds maximum allowed (%d)"), HARD_CAP));
-	}
-	if (ReqLimit < 1)
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be at least 1"));
-	}
-	const int32 Limit = ReqLimit;
+	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({ AssetClassFilter });
 
 	int32 Page = 0;

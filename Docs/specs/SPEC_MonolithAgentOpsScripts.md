@@ -26,7 +26,7 @@ Both scripts are Windows-host helpers (they drive `RunHeadlessEditor.bat` and `B
 
 ## 3. `recover_mcp.ps1` Contract
 
-Sequence: GET `<McpUrl with /health>` (3s timeout, 200 = up) -> resolve host checkout root (`-ProjectRoot`, else walk up from the script until a `*.uproject` is found) -> require `BatchFiles/RunHeadlessEditor.bat` -> launch unless a real editor instance already exists -> poll `/health` until 200 or `-TimeoutSec`.
+Sequence: GET `<McpUrl with /health>` (3s timeout, 200 = up) -> resolve host checkout root (`-ProjectRoot`, else walk up from the script until a `*.uproject` is found) -> require `Build/BatchFiles/RunHeadlessEditor.bat` -> launch unless a real editor instance already exists -> poll `/health` until 200 or `-TimeoutSec`.
 
 | Parameter | Default | Notes |
 |---|---|---|
@@ -42,7 +42,7 @@ Behavior notes:
 - The duplicate-launch guard inspects process command lines: `UnrealEditor.exe` / `UnrealEditor-Cmd.exe` instances running with `-game` or `-server` can never bind the MCP port and are not counted as a booting editor. Process existence comes from `Get-Process` (CIM alone can transiently report a live process as missing); CIM only classifies command lines, and a process whose command line cannot be read stays a candidate.
 - The wrapper is started through `Start-Process` with its own hidden console and the wrapper process is awaited with .NET `WaitForExit` (60s bound). Piping the wrapper would block on the stdio handles the backgrounded editor inherits; sharing this script's console group would forward a later Ctrl/kill of the script's tree to the editor as `ConsoleCtrl`; and Windows PowerShell 5.1's `Start-Process -Wait` waits on the whole descendant tree — including the backgrounded editor — which also exposes the editor to the caller's process-tree kill.
 - While polling, the loop watches the editor-server candidate process set; two consecutive empty samples (debounced against transient CIM misses) stop the script early with `RESULT=EDITOR_EXITED` (exit 6) and the newest editor log path instead of waiting out the full timeout.
-- When the wrapper is missing, the script reports `RESULT=BLOCKED` and stops. It never substitutes a direct `UnrealEditor.exe` launch; `RunHeadlessEditor.bat` (game checkout `Docs/specs/Script/RunHeadlessEditor_SPEC.md`) owns engine resolution and launch arguments.
+- When the wrapper is missing, the script reports `RESULT=BLOCKED` and stops. It never substitutes a direct `UnrealEditor.exe` launch; `Build\BatchFiles\RunHeadlessEditor.bat` owns engine resolution and launch arguments.
 - On timeout it prints the newest `Saved/HeadlessMcp/Logs/HeadlessEditor-*.log` path for inspection.
 - MCP client configuration is untouched; the existing Monolith proxy detects the server transition (`/health` poll) and refreshes its tool list. Re-run `monolith_status()` before namespace actions.
 
@@ -106,7 +106,7 @@ Retention for the daily JSONL logs stays manual (SPEC_MonolithToolInvocationLogs
 | Freshness execute mode | With the MCP endpoint down, ran `project repair_crg_cache --execute` once (deduplicated from two warnings), re-ran health, reported `VERIFY db=project before=warning after=ok` and `RESULT=REPAIRED`, exited 0. |
 | Recovery probe mode | With no MCP server, `-ProbeOnly` reported `RESULT=MCP_DOWN` and exited 2. |
 | Recovery guard precision | A running `UnrealEditor.exe <project> -game` instance (which never hosts the editor MCP server) was correctly excluded from the duplicate-launch guard via command-line inspection. |
-| Recovery launch + wait | `recover_mcp.ps1` launched `BatchFiles/RunHeadlessEditor.bat` from the resolved host root via detached `Start-Process`, printed the new editor log path, and polled `/health` with 30s `WAITING` heartbeats; `RESULT=MCP_TIMEOUT` (exit 5) and `RESULT=EDITOR_EXITED` (exit 6, detected ~8s after the editor died) were both exercised live. |
+| Recovery launch + wait | `recover_mcp.ps1` launched `Build/BatchFiles/RunHeadlessEditor.bat` from the resolved host root via detached `Start-Process`, printed the new editor log path, and polled `/health` with 30s `WAITING` heartbeats; `RESULT=MCP_TIMEOUT` (exit 5) and `RESULT=EDITOR_EXITED` (exit 6, detected ~8s after the editor died) were both exercised live. |
 | Recovery success path | Verified against a stub `/health` HTTP server: parsed and reported `version`/`tools_registered`/`pid`/`uptime_seconds`, printed the reconnect guidance line, ended with `RESULT=MCP_UP` and exit 0. Headless editor logs from the same session show the real Monolith server binding 9316 at +17s and +7s after wrapper launch, so the live success path is reachable whenever the editor survives boot. |
 | Environment blocker (not a script defect) | During verification the Go checkout's headless editor crash-looped ~10s after boot in `FTabManager::SavePersistentLayout` -> `FGenericWindow::GetRestoredDimensions` (`GenericWindow.cpp:113`, engine NullRHI layout-save crash; observed identically across three boots; one earlier boot survived 7 minutes). Until that project/engine issue is fixed, launch-based recovery on that machine state ends in `RESULT=EDITOR_EXITED`. |
 | Live-editor refusal path | Not exercised end-to-end in this pass (no pending warnings remained after repair); the gate is enforced by the `RESULT=REFUSED` branch before any repair invocation. |

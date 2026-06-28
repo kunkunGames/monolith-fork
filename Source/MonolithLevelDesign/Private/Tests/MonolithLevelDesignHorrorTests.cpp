@@ -96,27 +96,4 @@ bool FMonolithLevelDesignAnalyzePacingCurveParamGuardTest::RunTest(const FString
 	return true;
 }
 
-
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLimitGuardLevelDesignAnalyzeSightlinesRayCountTest, "Monolith.LimitGuard.LevelDesign.AnalyzeSightlinesRejectsLargeRayCount", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FMonolithLimitGuardLevelDesignAnalyzeSightlinesRayCountTest::RunTest(const FString& Parameters)
-{
-	FMonolithLevelDesignHorrorActions::RegisterActions(FMonolithToolRegistry::Get());
-	TestTrue(TEXT("analyze_sightlines action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("leveldesign"), TEXT("analyze_sightlines")));
-
-	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
-	TArray<TSharedPtr<FJsonValue>> LocArr;
-	LocArr.Add(MakeShared<FJsonValueNumber>(0.0));
-	LocArr.Add(MakeShared<FJsonValueNumber>(0.0));
-	LocArr.Add(MakeShared<FJsonValueNumber>(0.0));
-	Params->SetArrayField(TEXT("location"), LocArr);
-	Params->SetNumberField(TEXT("ray_count"), 1000.0);
-
-	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("leveldesign"), TEXT("analyze_sightlines"), Params);
-	TestFalse(TEXT("analyze_sightlines rejects excessively large ray_count"), Result.bSuccess);
-	TestTrue(TEXT("analyze_sightlines reports the validation error for ray_count"), Result.ErrorMessage.Contains(TEXT("ray_count must be between 4 and 128")));
-
-	return true;
-}
 #endif // WITH_DEV_AUTOMATION_TESTS

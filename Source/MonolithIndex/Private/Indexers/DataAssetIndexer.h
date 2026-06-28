@@ -20,6 +20,7 @@ public:
 
 	virtual bool IndexAsset(const FAssetData& AssetData, UObject* LoadedAsset, FMonolithIndexDatabase& DB, int64 AssetId) override;
 	virtual FString GetName() const override { return TEXT("DataAssetIndexer"); }
+	virtual bool SupportsDerivedClassDispatch() const override { return true; }
 
 private:
 	static TSharedPtr<FJsonObject> SerializeObjectProperties(UObject* Object);

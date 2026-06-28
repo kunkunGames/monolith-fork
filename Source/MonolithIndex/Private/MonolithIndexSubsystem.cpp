@@ -331,12 +331,10 @@ TSharedPtr<IMonolithIndexer> UMonolithIndexSubsystem::ResolveDeepIndexer(
 	// 2) Inheritance parent-walk fallback. Runs ONLY on an exact miss, so every exact hit is
 	//    byte-for-byte unchanged. GetAncestorClassNames returns ancestors most-derived-first
 	//    from the AssetRegistry inheritance tree WITHOUT loading any UClass; we take the first
-	//    ancestor that has a registered NON-sentinel, non-generic indexer. This routes the
-	//    ~546 UGo*DataAsset : UPrimaryDataAsset types to FDataAssetIndexer via their
-	//    "PrimaryDataAsset"/"DataAsset" ancestors. Skipping FGenericAssetIndexer prevents a leaf
-	//    with no real deep indexer from being inheritance-upgraded into the shallow name-only
-	//    handler; skipping sentinels is a belt-and-suspenders invariant (their "__"-prefixed keys
-	//    can never equal a real class leaf name anyway).
+	//    ancestor whose indexer explicitly opts into derived-class dispatch. This routes the
+	//    UGo*DataAsset : UPrimaryDataAsset family to FDataAssetIndexer while preventing narrower
+	//    exact-class contracts (for example BlueprintIndexer) from deep-loading unrelated
+	//    subclasses such as ControlRigBlueprint.
 	if (AssetRegistry && ClassPath.IsValid())
 	{
 		TArray<FTopLevelAssetPath> Ancestors;
@@ -349,7 +347,7 @@ TSharedPtr<IMonolithIndexer> UMonolithIndexSubsystem::ResolveDeepIndexer(
 				{
 					if (Found->IsValid()
 						&& !(*Found)->IsSentinel()
-						&& (*Found)->GetName() != TEXT("GenericAssetIndexer"))
+						&& (*Found)->SupportsDerivedClassDispatch())
 					{
 						return *Found;
 					}
@@ -372,7 +370,11 @@ FString UMonolithIndexSubsystem::ComputeIndexerFleetSignature() const
 	{
 		if (Indexer.IsValid())
 		{
-			Parts.Add(FString::Printf(TEXT("%s:%d"), *Indexer->GetName(), Indexer->GetIndexerVersion()));
+			Parts.Add(FString::Printf(
+				TEXT("%s:%d:D%d"),
+				*Indexer->GetName(),
+				Indexer->GetIndexerVersion(),
+				Indexer->SupportsDerivedClassDispatch() ? 1 : 0));
 		}
 	}
 	Parts.Sort();
@@ -911,7 +913,7 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 
 		// Queue assets that have deep indexers (Blueprint, Material, etc.). Exact leaf-class
 		// dispatch first; on a miss the resolver walks the parent class chain (most-derived
-		// first) to the first registered non-sentinel, non-generic ancestor indexer - e.g. a
+		// first) only through indexers that opt into derived-class dispatch - e.g. a
 		// project-specific U*DataAsset : UPrimaryDataAsset type reaches FDataAssetIndexer via
 		// its "PrimaryDataAsset" ancestor. Distribution stays keyed on the leaf class for
 		// honest per-type telemetry (for example, "MonsterDataAsset: 83").

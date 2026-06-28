@@ -136,8 +136,8 @@ private:
 	/**
 	 * Resolve the deep indexer for an asset class: exact leaf-class-name match first, then an
 	 * inheritance parent-walk (most-derived registered ancestor) when the leaf has no exact
-	 * indexer. The walk skips sentinel indexers and the shallow FGenericAssetIndexer, so a leaf
-	 * with no real deep indexer is never inheritance-upgraded. Routes UGo*DataAsset :
+	 * indexer. The walk only considers indexers that opt into derived-class dispatch, so narrow
+	 * exact-class contracts are not applied to unrelated subclasses. Routes UGo*DataAsset :
 	 * UPrimaryDataAsset (and any future subclass type) to FDataAssetIndexer via its ancestors.
 	 * Reads the AssetRegistry inheritance tree via GetAncestorClassNames; loads no UClass.
 	 * @param AssetRegistry  may be null (the parent-walk is skipped). Returns an invalid ptr if

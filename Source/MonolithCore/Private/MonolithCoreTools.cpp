@@ -1387,7 +1387,7 @@ static TSharedPtr<FJsonObject> BuildMonolithRecoveryPlan(
 	const FString PluginRoot = GetMonolithPluginRootForReadiness();
 	const FString RecoverScript = FPaths::ConvertRelativePathToFull(FPaths::Combine(PluginRoot, TEXT("Scripts"), TEXT("recover_mcp.ps1")));
 	const FString HostRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-	const FString HeadlessCommand = FPaths::ConvertRelativePathToFull(FPaths::Combine(HostRoot, TEXT("BatchFiles"), TEXT("RunHeadlessEditor.bat")));
+	const FString HeadlessCommand = FPaths::ConvertRelativePathToFull(FPaths::Combine(HostRoot, TEXT("Build"), TEXT("BatchFiles"), TEXT("RunHeadlessEditor.bat")));
 	const FString HeadlessLogGlob = FPaths::ConvertRelativePathToFull(FPaths::Combine(HostRoot, TEXT("Saved"), TEXT("HeadlessMcp"), TEXT("Logs"), TEXT("HeadlessEditor-*.log")));
 	const bool bRecoverScriptExists = IFileManager::Get().FileExists(*RecoverScript);
 	const bool bHeadlessCommandExists = IFileManager::Get().FileExists(*HeadlessCommand);

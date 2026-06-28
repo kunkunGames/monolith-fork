@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Plan: Plugins/Monolith/Docs/plans/2026-05-28-reflection-intelligence.md (Phase 2 — v0.17.0).
 //
 // FModuleDepRealityAdapter — implementation.
@@ -398,25 +398,13 @@ FMonolithActionResult FModuleDepRealityAdapter::HandleAuditModuleDepReality(cons
 
 	const FString ScanRoot = Params->HasField(TEXT("scan_root"))
 		? Params->GetStringField(TEXT("scan_root")) : FString();
-		double LimitDouble = 50.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be a number."));
-	}
-	const int32 ReqLimit = static_cast<int32>(LimitDouble);
+	const int32 ReqLimit = Params->HasField(TEXT("limit"))
+		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
 	const FString CursorIn = Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
 	constexpr int32 HARD_CAP = 200;
-	if (ReqLimit > HARD_CAP)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("`limit` exceeds maximum allowed (%d)"), HARD_CAP));
-	}
-	if (ReqLimit < 1)
-	{
-		return FMonolithActionResult::Error(TEXT("`limit` must be at least 1"));
-	}
-	const int32 Limit = ReqLimit;
+	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = HashCombine(GetTypeHash(ScanRoot), GetTypeHash(Limit));
 
 	int32 Page = 0;
