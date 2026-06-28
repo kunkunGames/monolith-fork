@@ -594,6 +594,7 @@ namespace
 				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 			const int32 SpawnCount = Result.RequestedCount;
+			Result.Actors.Reserve(SpawnCount);
 			for (int32 i = 0; i < SpawnCount; ++i)
 			{
 				FPieSmokeSpawnedActorResult ActorResult;
