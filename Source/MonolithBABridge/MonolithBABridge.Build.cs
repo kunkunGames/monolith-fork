@@ -50,6 +50,31 @@ public class MonolithBABridge : ModuleRules
 		return false;
 	}
 
+
+	private static bool HasPluginDir(string BaseDir, string PluginName)
+	{
+		if (!Directory.Exists(BaseDir))
+		{
+			return false;
+		}
+
+		if (File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
+		{
+			return true;
+		}
+
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "*", SearchOption.AllDirectories);
+		foreach (string Dir in Dirs)
+		{
+			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public MonolithBABridge(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -61,7 +86,29 @@ public class MonolithBABridge : ModuleRules
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
 		// This ensures binary releases don't link against plugins the user may not have.
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-		bool bHasBlueprintAssist = !bReleaseBuild && IsPluginEnabled(Target, "BlueprintAssist");
+
+		bool bHasBlueprintAssist = false;
+		if (!bReleaseBuild && IsPluginEnabled(Target, "BlueprintAssist"))
+		{
+			if (Target.ProjectFile != null)
+			{
+				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
+				bHasBlueprintAssist = HasPluginDir(ProjectPluginsDir, "BlueprintAssist");
+			}
+
+			if (!bHasBlueprintAssist)
+			{
+				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
+				bHasBlueprintAssist = HasPluginDir(MarketplaceDir, "BlueprintAssist");
+
+				if (!bHasBlueprintAssist)
+				{
+					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
+					bHasBlueprintAssist = HasPluginDir(EnginePluginsDir, "BlueprintAssist");
+				}
+			}
+		}
 
 		if (bHasBlueprintAssist)
 		{
