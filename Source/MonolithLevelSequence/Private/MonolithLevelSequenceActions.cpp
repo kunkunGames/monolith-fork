@@ -741,14 +741,23 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetReplayStatus(const TShar
 FMonolithActionResult FMonolithLevelSequenceActions::ListSavedReplays(const TSharedPtr<FJsonObject>& Params)
 {
 	double RequestedLimit = 100.0;
-	Params->TryGetNumberField(TEXT("limit"), RequestedLimit);
+	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), RequestedLimit))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'limit\', expected a number."));
+	}
 	const int32 Limit = FMath::Clamp(static_cast<int32>(RequestedLimit), 1, MaxReplayRows);
 
 	bool bIncludeFiles = false;
-	Params->TryGetBoolField(TEXT("include_files"), bIncludeFiles);
+	if (Params->HasField(TEXT("include_files")) && !Params->TryGetBoolField(TEXT("include_files"), bIncludeFiles))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'include_files\', expected a boolean."));
+	}
 
 	bool bIncludeNestedFiles = true;
-	Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles);
+	if (Params->HasField(TEXT("include_nested_files")) && !Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'include_nested_files\', expected a boolean."));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	Rows.Reserve(Limit);
@@ -786,19 +795,32 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListSavedReplays(const TSha
 FMonolithActionResult FMonolithLevelSequenceActions::GetSavedReplay(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SavedRelativePathParam;
-	if (!Params->TryGetStringField(TEXT("saved_relative_path"), SavedRelativePathParam))
+	if (Params->HasField(TEXT("saved_relative_path")) && !Params->TryGetStringField(TEXT("saved_relative_path"), SavedRelativePathParam))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'saved_relative_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("saved_relative_path")))
 	{
 		return FMonolithActionResult::Error(TEXT("saved_relative_path is required"));
 	}
 
 	bool bIncludeFiles = true;
-	Params->TryGetBoolField(TEXT("include_files"), bIncludeFiles);
+	if (Params->HasField(TEXT("include_files")) && !Params->TryGetBoolField(TEXT("include_files"), bIncludeFiles))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'include_files\', expected a boolean."));
+	}
 
 	bool bIncludeNestedFiles = true;
-	Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles);
+	if (Params->HasField(TEXT("include_nested_files")) && !Params->TryGetBoolField(TEXT("include_nested_files"), bIncludeNestedFiles))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'include_nested_files\', expected a boolean."));
+	}
 
 	double FileLimitValue = 100.0;
-	Params->TryGetNumberField(TEXT("file_limit"), FileLimitValue);
+	if (Params->HasField(TEXT("file_limit")) && !Params->TryGetNumberField(TEXT("file_limit"), FileLimitValue))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'file_limit\', expected a number."));
+	}
 	const int32 FileLimit = FMath::Clamp(static_cast<int32>(FileLimitValue), 0, MaxSavedReplayFileRows);
 
 	FString ResolvedPath;
@@ -874,7 +896,10 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectors(const TShared
 
 	// Optional glob filter; convert * -> %, ? -> _ for SQL LIKE.
 	FString PathFilter;
-	Params->TryGetStringField(TEXT("asset_path_filter"), PathFilter);
+	if (Params->HasField(TEXT("asset_path_filter")) && !Params->TryGetStringField(TEXT("asset_path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path_filter\', expected a string."));
+	}
 
 	FString SQL = TEXT("SELECT ls_path, director_bp_name, function_count, variable_count "
 	                   "FROM level_sequence_directors");
@@ -946,7 +971,11 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetDirectorInfo(const TShar
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -1085,13 +1114,20 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorFunctions(const
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
 	FString KindFilter;
-	Params->TryGetStringField(TEXT("kind"), KindFilter);
+	if (Params->HasField(TEXT("kind")) && !Params->TryGetStringField(TEXT("kind"), KindFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'kind\', expected a string."));
+	}
 	KindFilter = KindFilter.ToLower();
 
 	// Build WHERE clause for kind filter.
@@ -1215,7 +1251,11 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListEventBindings(const TSh
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -1410,13 +1450,20 @@ FMonolithActionResult FMonolithLevelSequenceActions::FindDirectorFunctionCallers
 	}
 
 	FString FunctionName;
-	if (!Params->TryGetStringField(TEXT("function_name"), FunctionName) || FunctionName.IsEmpty())
+	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FunctionName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'function_name\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("function_name")) || FunctionName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("function_name is required"));
 	}
 
 	FString PathFilter;
-	Params->TryGetStringField(TEXT("asset_path_filter"), PathFilter);
+	if (Params->HasField(TEXT("asset_path_filter")) && !Params->TryGetStringField(TEXT("asset_path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path_filter\', expected a string."));
+	}
 
 	// Build SQL with optional ls_path filter (glob → LIKE).
 	FString PathClause;
@@ -1517,7 +1564,11 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListDirectorVariables(const
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
@@ -1602,13 +1653,20 @@ FMonolithActionResult FMonolithLevelSequenceActions::ListBindings(const TSharedP
 	}
 
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
 	FString KindFilter;
-	Params->TryGetStringField(TEXT("kind"), KindFilter);
+	if (Params->HasField(TEXT("kind")) && !Params->TryGetStringField(TEXT("kind"), KindFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'kind\', expected a string."));
+	}
 	KindFilter = KindFilter.ToLower();
 	const bool bFilterByKind = !KindFilter.IsEmpty() && KindFilter != TEXT("all");
 
@@ -1803,13 +1861,20 @@ FMonolithActionResult FMonolithLevelSequenceActions::GetAnimMixerStatus(const TS
 FMonolithActionResult FMonolithLevelSequenceActions::ListAnimMixerTracks(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'asset_path\', expected a string."));
+	}
+	if (!Params->HasField(TEXT("asset_path")) || AssetPath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("asset_path is required"));
 	}
 
 	bool bIncludeLayers = true;
-	Params->TryGetBoolField(TEXT("include_layers"), bIncludeLayers);
+	if (Params->HasField(TEXT("include_layers")) && !Params->TryGetBoolField(TEXT("include_layers"), bIncludeLayers))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for \'include_layers\', expected a boolean."));
+	}
 
 	ULevelSequence* Sequence = LoadObject<ULevelSequence>(nullptr, *AssetPath);
 	if (!Sequence)

@@ -371,7 +371,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::LoadQueue(const TSharedP
 	}
 
 	bool bPromptOnDirty = false;
-	Params->TryGetBoolField(TEXT("prompt_on_dirty"), bPromptOnDirty);
+	if (Params->HasField(TEXT("prompt_on_dirty")) && !Params->TryGetBoolField(TEXT("prompt_on_dirty"), bPromptOnDirty))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'prompt_on_dirty\', expected a boolean."));
+	}
 	if (!Subsystem->LoadQueue(LoadedQueue, bPromptOnDirty))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load Movie Render Queue asset: %s"), *AssetPath));
@@ -423,7 +426,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::SaveQueue(const TSharedP
 	const FString ObjectPath = ObjectPathForPackage(AssetPath);
 
 	bool bAllowOverwrite = false;
-	Params->TryGetBoolField(TEXT("allow_overwrite"), bAllowOverwrite);
+	if (Params->HasField(TEXT("allow_overwrite")) && !Params->TryGetBoolField(TEXT("allow_overwrite"), bAllowOverwrite))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'allow_overwrite\', expected a boolean."));
+	}
 	if (!bAllowOverwrite && LoadObject<UObject>(nullptr, *ObjectPath))
 	{
 		return ErrorInvalidParams(FString::Printf(TEXT("Queue asset already exists at %s; set allow_overwrite=true to replace it"), *ObjectPath));
@@ -501,7 +507,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::AddJob(const TSharedPtr<
 	}
 
 	bool bClearExisting = false;
-	Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting);
+	if (Params->HasField(TEXT("clear_existing")) && !Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'clear_existing\', expected a boolean."));
+	}
 	if (bClearExisting)
 	{
 		Queue->Modify();
@@ -516,24 +525,44 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::AddJob(const TSharedPtr<
 	UMoviePipelineEditorBlueprintLibrary::EnsureJobHasDefaultSettings(Job);
 
 	FString StringValue;
-	if (Params->TryGetStringField(TEXT("map_path"), StringValue) && !StringValue.TrimStartAndEnd().IsEmpty())
+	if (Params->HasField(TEXT("map_path")) && !Params->TryGetStringField(TEXT("map_path"), StringValue))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'map_path\', expected a string."));
+	}
+	if (Params->HasField(TEXT("map_path")) && !StringValue.TrimStartAndEnd().IsEmpty())
 	{
 		Job->Map = FSoftObjectPath(NormalizePackagePath(StringValue));
 	}
-	if (Params->TryGetStringField(TEXT("job_name"), StringValue))
+	if (Params->HasField(TEXT("job_name")) && !Params->TryGetStringField(TEXT("job_name"), StringValue))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'job_name\', expected a string."));
+	}
+	if (Params->HasField(TEXT("job_name")))
 	{
 		Job->JobName = StringValue;
 	}
-	if (Params->TryGetStringField(TEXT("author"), StringValue))
+	if (Params->HasField(TEXT("author")) && !Params->TryGetStringField(TEXT("author"), StringValue))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'author\', expected a string."));
+	}
+	if (Params->HasField(TEXT("author")))
 	{
 		Job->Author = StringValue;
 	}
-	if (Params->TryGetStringField(TEXT("comment"), StringValue))
+	if (Params->HasField(TEXT("comment")) && !Params->TryGetStringField(TEXT("comment"), StringValue))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'comment\', expected a string."));
+	}
+	if (Params->HasField(TEXT("comment")))
 	{
 		Job->Comment = StringValue;
 	}
 	bool bEnabled = true;
-	if (Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	if (Params->HasField(TEXT("enabled")) && !Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'enabled\', expected a boolean."));
+	}
+	if (Params->HasField(TEXT("enabled")))
 	{
 		Job->SetIsEnabled(bEnabled);
 	}
@@ -695,7 +724,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::ListSettings(const TShar
 	return OptionalDepUnavailable();
 #else
 	FString Filter;
-	Params->TryGetStringField(TEXT("filter"), Filter);
+	if (Params->HasField(TEXT("filter")) && !Params->TryGetStringField(TEXT("filter"), Filter))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'filter\', expected a string."));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Settings;
 	for (TObjectIterator<UClass> It; It; ++It)
@@ -739,7 +771,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::RenderQueue(const TShare
 	return OptionalDepUnavailable();
 #else
 	bool bConfirm = false;
-	Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+	if (Params->HasField(TEXT("confirm")) && !Params->TryGetBoolField(TEXT("confirm"), bConfirm))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'confirm\', expected a boolean."));
+	}
 	if (!bConfirm)
 	{
 		return ErrorInvalidParams(TEXT("confirm=true is required to launch a Movie Render Queue render"));
@@ -762,7 +797,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::RenderQueue(const TShare
 	}
 
 	FString ExecutorClassPath;
-	Params->TryGetStringField(TEXT("executor_class"), ExecutorClassPath);
+	if (Params->HasField(TEXT("executor_class")) && !Params->TryGetStringField(TEXT("executor_class"), ExecutorClassPath))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'executor_class\', expected a string."));
+	}
 	FString Error;
 	UClass* ExecutorClass = ResolveExecutorClass(ExecutorClassPath, Error);
 	if (!ExecutorClass)
@@ -852,7 +890,10 @@ FMonolithActionResult FMonolithMovieRenderQueueActions::CancelRender(const TShar
 	}
 
 	bool bCancelAll = true;
-	Params->TryGetBoolField(TEXT("cancel_all"), bCancelAll);
+	if (Params->HasField(TEXT("cancel_all")) && !Params->TryGetBoolField(TEXT("cancel_all"), bCancelAll))
+	{
+		return ErrorInvalidParams(TEXT("Invalid type for \'cancel_all\', expected a boolean."));
+	}
 	if (bCancelAll)
 	{
 		Executor->CancelAllJobs();
