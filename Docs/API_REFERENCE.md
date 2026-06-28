@@ -1990,6 +1990,30 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
 
 ---
 
+## movie_render
+
+Movie Render Queue (MRQ) operations for Level Sequences. Backed by `MonolithLevelSequence` module.
+
+| Action | Key params | Notes |
+|--------|-----------|-------|
+| `get_queue` | — | Get the current MRQ queue |
+| `load_queue` | `asset_path` | Load a saved Queue asset |
+| `save_queue` | `asset_path` | Save the current queue |
+| `add_job` | `sequence_path`, `map_path` | Add a job to the queue |
+| `duplicate_job` | `job_index` | Duplicate a job |
+| `delete_job` | `job_index` | Delete a job |
+| `delete_all_jobs` | — | Clear the queue |
+| `set_job_index` | `job_index`, `new_index` | Move a job |
+| `list_settings` | `job_index` | List job settings |
+| `render_queue` | `executor?` | Start rendering |
+| `is_rendering` | — | Check if MRQ is active |
+| `render_progress` | — | Get ongoing render progress |
+| `cancel_render` | — | Cancel the active render |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLevelSequence.md`.
+
+---
+
 ## bulk_fill
 
 Reflection-walker bulk property fill across 11 in-tree per-namespace adapters, with optional sibling adapters when installed. **2 actions.** Framework dispatcher in `MonolithCore` (0.15.0); each adapter self-registers from its owning module — zero compile-time linkage from core into adapter modules.
