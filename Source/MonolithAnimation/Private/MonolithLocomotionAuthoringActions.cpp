@@ -233,7 +233,12 @@ FMonolithActionResult FMonolithLocomotionAuthoringActions::HandleGetRootMotionSp
 		int32 SampleRate = 30;
 		if (Params->HasField(TEXT("sample_rate")))
 		{
-			SampleRate = FMath::Max(1, static_cast<int32>(Params->GetNumberField(TEXT("sample_rate"))));
+			double TmpSampleRate = 30.0;
+			if (!Params->TryGetNumberField(TEXT("sample_rate"), TmpSampleRate))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' must be a number"));
+			}
+			SampleRate = FMath::Max(1, static_cast<int32>(TmpSampleRate));
 		}
 
 		const double SampleInterval = 1.0 / static_cast<double>(SampleRate);
@@ -329,13 +334,23 @@ FMonolithActionResult FMonolithLocomotionAuthoringActions::HandleBakeDistanceCur
 	int32 SampleRate = 30;
 	if (Params->HasField(TEXT("sample_rate")))
 	{
-		SampleRate = FMath::Max(1, static_cast<int32>(Params->GetNumberField(TEXT("sample_rate"))));
+		double TmpSampleRate = 30.0;
+		if (!Params->TryGetNumberField(TEXT("sample_rate"), TmpSampleRate))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' must be a number"));
+		}
+		SampleRate = FMath::Max(1, static_cast<int32>(TmpSampleRate));
 	}
 
 	float StopSpeedThreshold = 5.0f;
 	if (Params->HasField(TEXT("stop_speed_threshold")))
 	{
-		StopSpeedThreshold = static_cast<float>(Params->GetNumberField(TEXT("stop_speed_threshold")));
+		double TmpStopSpeedThreshold = 5.0;
+		if (!Params->TryGetNumberField(TEXT("stop_speed_threshold"), TmpStopSpeedThreshold))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'stop_speed_threshold' must be a number"));
+		}
+		StopSpeedThreshold = static_cast<float>(TmpStopSpeedThreshold);
 	}
 
 	GEditor->BeginTransaction(FText::FromString(TEXT("Bake Distance Curve")));

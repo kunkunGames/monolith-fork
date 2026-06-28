@@ -1,6 +1,7 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithAnimationActions.h"
+#include "MonolithLocomotionAuthoringActions.h"
 #include "MonolithToolRegistry.h"
 #include "Animation/AnimSequence.h"
 #include "Dom/JsonObject.h"
@@ -197,6 +198,34 @@ bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Param
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLocomotionAuthoringParamGuardTest, "Monolith.ParamGuard.Animation.LocomotionAuthoring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_Montage");
+
+	// Test bake_distance_curve sample_rate validation
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("anim_path"), AssetPath);
+		Params->SetStringField(TEXT("sample_rate"), TEXT("not_a_number"));
+		FMonolithActionResult Result = FMonolithLocomotionAuthoringActions::HandleBakeDistanceCurve(Params);
+		TestFalse(TEXT("bake_distance_curve with malformed sample_rate should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention 'sample_rate' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'sample_rate' must be a number")));
+	}
+
+	// Test bake_distance_curve stop_speed_threshold validation
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("anim_path"), AssetPath);
+		Params->SetStringField(TEXT("stop_speed_threshold"), TEXT("not_a_number"));
+		FMonolithActionResult Result = FMonolithLocomotionAuthoringActions::HandleBakeDistanceCurve(Params);
+		TestFalse(TEXT("bake_distance_curve with malformed stop_speed_threshold should return Error"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention 'stop_speed_threshold' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'stop_speed_threshold' must be a number")));
+	}
+
+	return true;
+}
 
 #if WITH_CHOOSER
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithValidateChooserParamGuardTest, "Monolith.ParamGuard.Animation.ValidateChooser", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
