@@ -30,10 +30,17 @@ FMonolithActionResult FProjectListGameplayTagsAction::Execute(const TSharedPtr<F
 		{
 			return FMonolithActionResult::Error(TEXT("'offset' parameter must be a number"), -32602);
 		}
+		if (OffsetValue < 0.0 || OffsetValue > 100000.0)
+		{
+			return FMonolithActionResult::Error(TEXT("'offset' parameter must be within 0..100000"), -32602);
+		}
 		Offset = static_cast<int32>(OffsetValue);
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
-	Offset = FMath::Max(0, Offset);
+	if (static_cast<int64>(Offset) + static_cast<int64>(Limit) > 100000)
+	{
+		return FMonolithActionResult::Error(TEXT("'offset' + 'limit' exceeds the max window of 100000"), -32602);
+	}
 
 	UMonolithIndexSubsystem* Subsystem = GEditor->GetEditorSubsystem<UMonolithIndexSubsystem>();
 	if (!Subsystem)
