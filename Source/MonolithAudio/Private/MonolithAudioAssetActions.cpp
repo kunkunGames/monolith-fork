@@ -144,6 +144,12 @@ namespace MonolithAudio
 			return false;
 		}
 
+		if (Params->HasField(TEXT("asset_path")) && Params->HasField(TEXT("path")))
+		{
+			OutError = TEXT("Cannot specify both 'asset_path' and its alias 'path' (collision). Use only one.");
+			return false;
+		}
+
 		OutAssetPath.Reset();
 		if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), OutAssetPath))
 		{
