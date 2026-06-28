@@ -634,14 +634,14 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'lod_count'. Expected number."));
 	}
 	int32 LodCount = static_cast<int32>(LodCountD);
-	LodCount = FMath::Clamp(LodCount, 1, 8);
+	if (LodCount < 1 || LodCount > 8) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'lod_count' must be between 1 and 8 (received: %d)"), LodCount)); }
 
 	double ReductionPerLod = 0.5;
 	if (Params->HasField(TEXT("reduction_per_lod")) && !Params->TryGetNumberField(TEXT("reduction_per_lod"), ReductionPerLod))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
 	}
-	ReductionPerLod = FMath::Clamp(ReductionPerLod, 0.1, 0.9);
+	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
 
 	bool bPreserveUV = true;
 	if (Params->HasField(TEXT("preserve_uv_borders")) && !Params->TryGetBoolField(TEXT("preserve_uv_borders"), bPreserveUV))

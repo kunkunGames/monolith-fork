@@ -555,7 +555,7 @@ FMonolithActionResult FMonolithMeshOperationActions::MeshSimplify(const TSharedP
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'target_percentage' must be a number"));
 		}
-		Pct = FMath::Clamp(Pct, 0.0, 1.0);
+		if (Pct < 0.0 || Pct > 1.0) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'target_percentage' must be between 0.0 and 1.0 (received: %f)"), Pct)); }
 		TargetTris = FMath::Max(4, FMath::RoundToInt32(OriginalTris * Pct));
 	}
 	else
@@ -746,7 +746,7 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
 	}
-	ReductionPerLod = FMath::Clamp(ReductionPerLod, 0.1, 0.9);
+	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
 
 	FString Error;
 	UDynamicMesh* SourceMesh = Pool->GetHandle(HandleName, Error);
@@ -1325,14 +1325,16 @@ FMonolithActionResult FMonolithMeshOperationActions::GeometrySmooth(const TShare
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'iterations'. Expected number."));
 	}
-	const int32 Iterations = FMath::Clamp(static_cast<int32>(TempIterations), 1, 200);
+	int32 Iterations = static_cast<int32>(TempIterations);
+	if (Iterations < 1 || Iterations > 200) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'iterations' must be between 1 and 200 (received: %d)"), Iterations)); }
 
 	double TempSpeed = 0.25;
 	if (Params->HasField(TEXT("speed")) && !Params->TryGetNumberField(TEXT("speed"), TempSpeed))
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'speed'. Expected number."));
 	}
-	const float Speed = FMath::Clamp(static_cast<float>(TempSpeed), 0.0f, 1.0f);
+	float Speed = static_cast<float>(TempSpeed);
+	if (Speed < 0.0f || Speed > 1.0f) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'speed' must be between 0.0 and 1.0 (received: %f)"), Speed)); }
 
 	FString WorkingHandle;
 	FString Error;

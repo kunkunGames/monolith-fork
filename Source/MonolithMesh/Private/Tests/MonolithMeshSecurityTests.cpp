@@ -100,4 +100,21 @@ bool FMonolithMeshCatalogSearchWildcardTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithMeshSmoothValidationTest, "Monolith.MeshCartographer.Mesh.SmoothParamValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMeshSmoothValidationTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+	Payload->SetStringField(TEXT("handle"), TEXT("invalid_handle"));
+	Payload->SetNumberField(TEXT("iterations"), 250);
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("geometry_smooth"), Payload);
+
+	TestFalse(TEXT("geometry_smooth should fail on invalid iterations"), Result.bSuccess);
+	TestTrue(TEXT("geometry_smooth error should mention iterations range"), Result.ErrorMessage.Contains(TEXT("must be between 1 and 200")));
+
+	return true;
+}
 #endif // WITH_DEV_AUTOMATION_TESTS
