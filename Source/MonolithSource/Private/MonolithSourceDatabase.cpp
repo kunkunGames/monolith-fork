@@ -4654,13 +4654,14 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	}
 
 	const bool bDoSymbols = (T == TEXT("all") || T == TEXT("symbols"));
+	const bool bDoConsole = (T == TEXT("all") || T == TEXT("console_objects"));
 	const bool bAskedSource = (T == TEXT("all") || T == TEXT("source"));
 
-	if (T != TEXT("all") && T != TEXT("symbols") && T != TEXT("source"))
+	if (T != TEXT("all") && T != TEXT("symbols") && T != TEXT("console_objects") && T != TEXT("source"))
 	{
 		Root->SetStringField(TEXT("status"), TEXT("error"));
 		Root->SetStringField(TEXT("summary"),
-			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|source)"), *T));
+			FString::Printf(TEXT("Unknown target '%s' (expected all|symbols|console_objects|source)"), *T));
 		Root->SetArrayField(TEXT("warnings"), Warnings);
 		Root->SetBoolField(TEXT("truncated"), false);
 		AddNextActions(Root, { TEXT("source.repair_fts"), TEXT("source.health") });
@@ -4679,12 +4680,19 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	TSharedPtr<FJsonObject> Before = MakeShared<FJsonObject>();
 	if (bDoSymbols) Before->SetNumberField(TEXT("symbols_fts"),
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
+	if (bDoConsole) Before->SetNumberField(TEXT("console_objects_fts"),
+		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM console_objects_fts;"))));
 	Root->SetObjectField(TEXT("before"), Before);
 
 	if (bDoSymbols)
 	{
 		Plan.Add(MakeShared<FJsonValueString>(
 			TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")));
+	}
+	if (bDoConsole)
+	{
+		Plan.Add(MakeShared<FJsonValueString>(
+			TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');")));
 	}
 	if (bAskedSource)
 	{
@@ -4700,8 +4708,8 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	if (!bExecute)
 	{
 		Root->SetStringField(TEXT("status"), TEXT("ok"));
-		Root->SetStringField(TEXT("summary"), bDoSymbols
-			? TEXT("Dry-run: symbols_fts would be rebuilt. Pass execute=true to apply.")
+		Root->SetStringField(TEXT("summary"), (bDoSymbols || bDoConsole)
+			? TEXT("Dry-run: FTS table(s) would be rebuilt. Pass execute=true to apply.")
 			: TEXT("Dry-run: nothing rebuildable for this target."));
 		Root->SetObjectField(TEXT("after"), MakeShared<FJsonObject>());
 		Root->SetArrayField(TEXT("warnings"), Warnings);
@@ -4711,13 +4719,18 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	}
 
 	bool bOk = true;
-	if (bDoSymbols)
+	if (bDoSymbols || bDoConsole)
 	{
 		bOk = Database->Execute(TEXT("BEGIN;"));
-		if (bOk && !Database->Execute(TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")))
+		if (bOk && bDoSymbols && !Database->Execute(TEXT("INSERT INTO symbols_fts(symbols_fts) VALUES('rebuild');")))
 		{
 			bOk = false;
 			Warnings.Add(MakeShared<FJsonValueString>(TEXT("symbols_fts rebuild failed")));
+		}
+		if (bOk && bDoConsole && !Database->Execute(TEXT("INSERT INTO console_objects_fts(console_objects_fts) VALUES('rebuild');")))
+		{
+			bOk = false;
+			Warnings.Add(MakeShared<FJsonValueString>(TEXT("console_objects_fts rebuild failed")));
 		}
 		if (bOk)
 		{
@@ -4729,13 +4742,15 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::RepairFts(const FString& Target
 	TSharedPtr<FJsonObject> After = MakeShared<FJsonObject>();
 	if (bDoSymbols) After->SetNumberField(TEXT("symbols_fts"),
 		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM symbols_fts;"))));
+	if (bDoConsole) After->SetNumberField(TEXT("console_objects_fts"),
+		static_cast<double>(Count(TEXT("SELECT COUNT(*) FROM console_objects_fts;"))));
 	Root->SetObjectField(TEXT("after"), After);
 
 	Root->SetStringField(TEXT("status"), bOk ? TEXT("ok") : TEXT("error"));
 	Root->SetStringField(TEXT("summary"), bOk
-		? (bDoSymbols ? TEXT("Rebuilt symbols_fts")
+		? ((bDoSymbols || bDoConsole) ? TEXT("Rebuilt FTS tables")
 			: TEXT("Nothing rebuilt; see warnings for source_fts reindex guidance"))
-		: TEXT("symbols_fts rebuild failed; rolled back"));
+		: TEXT("FTS rebuild failed; rolled back"));
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
 	AddNextActions(Root, { TEXT("source.health"), TEXT("source.search_symbols") });
