@@ -42,6 +42,7 @@
 #include "Indexers/MeshCatalogIndexer.h"
 #include "Indexers/GASIndexer.h"
 #include "Indexers/MetaSoundIndexer.h"
+#include "Indexers/DomainAssetIndexer.h"
 
 // ============================================================
 // Incremental-reachability GC override (RAII)
@@ -437,6 +438,8 @@ void UMonolithIndexSubsystem::RegisterDefaultIndexers()
 		RegisterIndexer(MakeShared<FMeshCatalogIndexer>());
 	if (Settings->bIndexGAS)
 		RegisterIndexer(MakeShared<FGASIndexer>());
+	if (Settings->bIndexDomainAssets)
+		RegisterIndexer(MakeShared<FDomainAssetIndexer>());
 #if WITH_METASOUND
 	if (Settings->bIndexMetaSounds)
 		RegisterIndexer(MakeShared<FMetaSoundIndexer>());
@@ -1502,6 +1505,33 @@ uint32 UMonolithIndexSubsystem::FIndexingTask::Run()
 		}
 	}
 
+	// Run domain asset indexer on game thread. It is AssetRegistry-only and intentionally
+	// avoids loading ControlRig/RigVM/StateTree/Chooser assets during full indexing.
+	if (!CheckCancellation())
+	{
+		Owner->IndexingStatusMessage = TEXT("Indexing domain asset metadata...");
+		TSharedPtr<IMonolithIndexer>* DomainIndexer = Owner->ClassToIndexer.Find(TEXT("__DomainAssets__"));
+		if (DomainIndexer && DomainIndexer->IsValid())
+		{
+			double SentinelStart = FPlatformTime::Seconds();
+			UE_LOG(LogMonolithIndex, Log, TEXT("Running domain asset indexer..."));
+			TSharedPtr<IMonolithIndexer> DomainIndexerCopy = *DomainIndexer;
+			FEvent* DomainEvent = FPlatformProcess::GetSynchEventFromPool(true);
+			FMonolithCompilerSafeDispatch::RunOnGameThreadWhenCompilerIdle(
+				[DB, DomainIndexerCopy]()
+			{
+				DB->BeginTransaction();
+				FAssetData DummyData;
+				DomainIndexerCopy->IndexAsset(DummyData, nullptr, *DB, 0);
+				DB->CommitTransaction();
+			},
+			DomainEvent);
+			DomainEvent->Wait();
+			FPlatformProcess::ReturnSynchEventToPool(DomainEvent);
+			UE_LOG(LogMonolithIndex, Log, TEXT("Domain asset indexer completed in %.2fs"), FPlatformTime::Seconds() - SentinelStart);
+		}
+	}
+
 	UE_LOG(LogMonolithIndex, Log, TEXT("Post-pass indexers complete"));
 
 	// Write index timestamp to meta (only if not cancelled and asset count looks valid)
@@ -2194,6 +2224,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	Database->BeginTransaction();
 
 	TSet<FString> PathsToDeepIndex;
+	TSet<FString> PathsForScopedSentinels;
 	TSet<FString> RemovedPaths;
 	TSet<FString> CrgTouchedPaths;
 
@@ -2228,6 +2259,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 
 			Database->InsertAsset(IndexedAsset);
 			CrgTouchedPaths.Add(IndexedAsset.PackagePath);
+			PathsForScopedSentinels.Add(IndexedAsset.PackagePath);
 
 			FString ClassName = Change.AssetData.AssetClassPath.GetAssetName().ToString();
 			if (ClassToIndexer.Contains(ClassName))
@@ -2270,6 +2302,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 				Database->InsertAsset(IndexedAsset);
 			}
 			CrgTouchedPaths.Add(IndexedAsset.PackagePath);
+			PathsForScopedSentinels.Add(IndexedAsset.PackagePath);
 
 			FString ClassName = Change.AssetData.AssetClassPath.GetAssetName().ToString();
 			if (ClassToIndexer.Contains(ClassName))
@@ -2292,6 +2325,7 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 			FString NewAssetName = Change.AssetData.AssetName.ToString();
 			CrgTouchedPaths.Add(OldPackageName);
 			CrgTouchedPaths.Add(NewPath);
+			PathsForScopedSentinels.Add(NewPath);
 
 			if (Database->UpdateAssetPath(OldPackageName, NewPath, NewAssetName))
 			{
@@ -2318,8 +2352,8 @@ void UMonolithIndexSubsystem::ProcessPendingChanges()
 	Database->CommitTransaction();
 
 	// Sentinels after commit (they manage own transactions)
-	if (PathsToDeepIndex.Num() > 0 || RemovedPaths.Num() > 0)
-		RunScopedSentinels(PathsToDeepIndex, RemovedPaths);
+	if (PathsForScopedSentinels.Num() > 0 || RemovedPaths.Num() > 0)
+		RunScopedSentinels(PathsForScopedSentinels, RemovedPaths);
 
 	RefreshProjectCrgCacheForChangedAssets(Database.Get(), CrgTouchedPaths, TEXT("Live asset index changes processed"));
 }

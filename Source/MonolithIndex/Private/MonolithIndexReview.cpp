@@ -1115,6 +1115,18 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 		"SELECT COUNT(DISTINCT a.id) FROM assets a "
 		"JOIN nodes n ON n.asset_id = a.id "
 		"WHERE a.asset_class LIKE '%Blueprint%';"));
+	const int64 BlueprintWithDomainDetailCnt = CountRows(Db, TEXT(
+		"SELECT COUNT(DISTINCT a.id) FROM assets a "
+		"JOIN asset_search_values v ON v.asset_id = a.id "
+		"WHERE a.asset_class LIKE '%Blueprint%' "
+		"AND v.source_kind='domain_asset' "
+		"AND v.field_name='domain';"));
+	const int64 BlueprintWithSemanticDetailCnt = CountRows(Db, TEXT(
+		"SELECT COUNT(DISTINCT a.id) FROM assets a "
+		"LEFT JOIN nodes n ON n.asset_id = a.id "
+		"LEFT JOIN asset_search_values v ON v.asset_id = a.id AND v.source_kind='domain_asset' AND v.field_name='domain' "
+		"WHERE a.asset_class LIKE '%Blueprint%' "
+		"AND (n.id IS NOT NULL OR v.id IS NOT NULL);"));
 	const int64 BlueprintWithoutAnyNodesCnt = CountRows(Db, TEXT(
 		"SELECT COUNT(*) FROM ("
 		"SELECT a.id FROM assets a "
@@ -1139,10 +1151,11 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 			"JOIN crg_nodes cn ON cn.domain='project' AND cn.native_table='assets' AND cn.native_id=a.id "
 			"JOIN crg_node_metrics m ON m.node_id=cn.id "
 			"LEFT JOIN nodes n ON n.asset_id = a.id "
+			"LEFT JOIN asset_search_values v ON v.asset_id = a.id AND v.source_kind='domain_asset' AND v.field_name='domain' "
 			"WHERE a.asset_class LIKE '%Blueprint%' "
 			"AND COALESCE(m.raw_counts_json,'') NOT LIKE '%\"nodes\":0,%' "
 			"GROUP BY a.id "
-			"HAVING COUNT(n.id) = 0);"))
+			"HAVING COUNT(n.id) = 0 AND COUNT(v.id) = 0);"))
 		: BlueprintWithoutAnyNodesCnt;
 	FJsonArr EmptyBlueprintSamples;
 	{
@@ -1153,10 +1166,11 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 				"JOIN crg_nodes cn ON cn.domain='project' AND cn.native_table='assets' AND cn.native_id=a.id "
 				"JOIN crg_node_metrics m ON m.node_id=cn.id "
 				"LEFT JOIN nodes n ON n.asset_id = a.id "
+				"LEFT JOIN asset_search_values v ON v.asset_id = a.id AND v.source_kind='domain_asset' AND v.field_name='domain' "
 				"WHERE a.asset_class LIKE '%Blueprint%' "
 				"AND COALESCE(m.raw_counts_json,'') NOT LIKE '%\"nodes\":0,%' "
 				"GROUP BY a.id, a.package_path, a.asset_class "
-				"HAVING COUNT(n.id) = 0 "
+				"HAVING COUNT(n.id) = 0 AND COUNT(v.id) = 0 "
 				"ORDER BY a.package_path LIMIT 10;")
 			: TEXT(
 				"SELECT a.package_path, a.asset_class FROM assets a "
@@ -1183,21 +1197,23 @@ TSharedPtr<FJsonObject> FMonolithIndexReview::Health(FMonolithIndexDatabase& Db,
 	TSharedPtr<FJsonObject> SemanticReadiness = MakeShared<FJsonObject>();
 	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets"), static_cast<double>(BlueprintLikeCnt));
 	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_with_nodes"), static_cast<double>(BlueprintWithNodesCnt));
-	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_without_nodes"), static_cast<double>(BlueprintWithoutNodesCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_with_domain_detail"), static_cast<double>(BlueprintWithDomainDetailCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_with_semantic_detail"), static_cast<double>(BlueprintWithSemanticDetailCnt));
+	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_without_semantic_detail"), static_cast<double>(BlueprintWithoutNodesCnt));
 	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_without_any_nodes"), static_cast<double>(BlueprintWithoutAnyNodesCnt));
 	SemanticReadiness->SetNumberField(TEXT("blueprint_like_assets_expected_detail"), static_cast<double>(BlueprintExpectedDetailCnt));
 	SemanticReadiness->SetArrayField(TEXT("empty_blueprint_samples"), EmptyBlueprintSamples);
 	Root->SetObjectField(TEXT("semantic_readiness"), SemanticReadiness);
-	const bool bBlueprintDetailCoverage = BlueprintExpectedDetailCnt == 0 || BlueprintWithNodesCnt > 0;
+	const bool bBlueprintDetailCoverage = BlueprintExpectedDetailCnt == 0 || BlueprintWithSemanticDetailCnt > 0;
 	Check(TEXT("semantic:blueprint_detail_coverage"), bBlueprintDetailCoverage,
 		bBlueprintDetailCoverage
-			? FString::Printf(TEXT("blueprint_like_assets=%lld expected_detail=%lld with_indexed_nodes=%lld"), BlueprintLikeCnt, BlueprintExpectedDetailCnt, BlueprintWithNodesCnt)
-			: FString::Printf(TEXT("%lld Blueprint-like asset(s) with prior graph detail now have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run a full project reindex, then project.health)"), BlueprintExpectedDetailCnt));
+			? FString::Printf(TEXT("blueprint_like_assets=%lld expected_detail=%lld with_indexed_nodes=%lld with_domain_detail=%lld with_semantic_detail=%lld"), BlueprintLikeCnt, BlueprintExpectedDetailCnt, BlueprintWithNodesCnt, BlueprintWithDomainDetailCnt, BlueprintWithSemanticDetailCnt)
+			: FString::Printf(TEXT("%lld Blueprint-like asset(s) with prior graph detail now have no indexed graph/domain details; sample paths are in semantic_readiness.empty_blueprint_samples (run a full project reindex, then project.health)"), BlueprintExpectedDetailCnt));
 	const bool bNoEmptyBlueprintSamples = BlueprintExpectedDetailCnt == 0 || BlueprintWithoutNodesCnt == 0;
 	Check(TEXT("semantic:empty_blueprint_detail_samples"), bNoEmptyBlueprintSamples,
 		bNoEmptyBlueprintSamples
-			? TEXT("no previously indexed Blueprint-like assets missing graph nodes")
-			: FString::Printf(TEXT("%lld of %lld Blueprint-like asset(s) with prior graph detail now have no indexed graph nodes; sample paths are in semantic_readiness.empty_blueprint_samples (run monolith.reindex, then project.health)"), BlueprintWithoutNodesCnt, BlueprintExpectedDetailCnt));
+			? TEXT("no previously indexed Blueprint-like assets missing graph/domain details")
+			: FString::Printf(TEXT("%lld of %lld Blueprint-like asset(s) with prior graph detail now have no indexed graph/domain details; sample paths are in semantic_readiness.empty_blueprint_samples (run monolith.reindex, then project.health)"), BlueprintWithoutNodesCnt, BlueprintExpectedDetailCnt));
 
 	bool bHasAllCrg = true;
 	static const TCHAR* ExpectedCrgTables[] = {

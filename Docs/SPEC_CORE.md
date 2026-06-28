@@ -360,8 +360,8 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bEnableUI | True | Enable UI module |
 | bEnableMesh | True | Enable Mesh module (core actions) |
 | bEnableGAS | True | Enable GAS module (requires GameplayAbilities plugin; no-op if `WITH_GBA=0`) |
-| bEnableComboGraph | True | Enable ComboGraph module (no-op if `WITH_COMBOGRAPH=0`) |
-| bEnableLogicDriver | True | Enable Logic Driver Pro module (no-op if `WITH_LOGICDRIVER=0`) |
+| bEnableComboGraph | True (`Config\DefaultMonolith.ini` in this checkout overrides to False) | Enable ComboGraph module (no-op if `WITH_COMBOGRAPH=0`) |
+| bEnableLogicDriver | True (`Config\DefaultMonolith.ini` in this checkout overrides to False) | Enable Logic Driver Pro module (no-op if `WITH_LOGICDRIVER=0`) |
 | bEnableAI | True | Enable AI module (Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, Perception, Navigation) |
 | bEnableAudio | True | Enable Audio module (Sound Cues, MetaSounds, batch ops, AI Perception bind) |
 | bEnableExternalInventoryModule | True | Allow an external sibling plugin to register `inventory_query` actions |
@@ -370,6 +370,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | bDeferFirstTimeIndex | False | If true, first-time indexing won't run automatically. Use `Monolith.StartIndex` console command to trigger |
 | bLogMemoryStats | False | Log memory usage during indexing for debugging. Default off — enable when investigating memory pressure |
 | LogVerbosity | 3 (Log) | 0=Silent, 1=Error, 2=Warning, 3=Log, 4=Verbose |
+| bIndexDomainAssets | True | Enable AssetRegistry-only supplemental ProjectIndex rows for graph-like domains such as ControlRig/RigVM, StateTree, and Chooser without loading their UObject graphs. |
 
 **Note:** Module enable toggles are functional — each module checks its toggle at registration time and skips action registration if disabled. **Exception — `bEnableIndex`:** the Index module always registers its query actions (so `project_query` answers from an existing DB); the toggle instead gates the indexing *run* at `UMonolithIndexSubsystem::Initialize`. `bDeferFirstTimeIndex` similarly skips only the automatic first-time index, leaving it triggerable via the `Monolith.StartIndex` console command.
 

@@ -316,6 +316,12 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexMeshCatalog = true;
 
+	/** Enable AssetRegistry-only indexing for ControlRig/RigVM, StateTree, and Chooser domain assets. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers",
+		meta=(DisplayName="Index Domain Asset Metadata",
+			  ToolTip="Indexes ControlRig/RigVM, StateTree, and Chooser assets from AssetRegistry metadata only. Does not deep-load those graph assets."))
+	bool bIndexDomainAssets = true;
+
 	/** Index content from enabled marketplace plugins (installed via Fab/Epic launcher) */
 	UPROPERTY(config, EditAnywhere, Category="Indexing")
 	bool bIndexMarketplacePlugins = true;
