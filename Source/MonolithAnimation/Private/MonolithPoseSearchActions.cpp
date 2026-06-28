@@ -839,6 +839,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchSchema(c
 	if (!Skeleton) return FMonolithActionResult::Error(FString::Printf(TEXT("Skeleton not found: %s"), *SkeletonPath));
 
 	FString AssetName;
+	if (FString PkgError = MonolithCore::ValidatePackagePath(AssetPath); !PkgError.IsEmpty())
+		return FMonolithActionResult::Error(PkgError);
+
 	int32 LastSlash;
 	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath));
@@ -914,6 +917,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreatePoseSearchDatabase
 	if (!Schema) return FMonolithActionResult::Error(FString::Printf(TEXT("PoseSearchSchema not found: %s"), *SchemaPath));
 
 	FString AssetName;
+	if (FString PkgError = MonolithCore::ValidatePackagePath(AssetPath); !PkgError.IsEmpty())
+		return FMonolithActionResult::Error(PkgError);
+
 	int32 LastSlash;
 	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath));
@@ -1549,6 +1555,9 @@ FMonolithActionResult FMonolithPoseSearchActions::HandleCreateNormalizationSet(c
 	}
 
 	FString AssetName;
+	if (FString PkgError = MonolithCore::ValidatePackagePath(AssetPath); !PkgError.IsEmpty())
+		return FMonolithActionResult::Error(PkgError);
+
 	int32 LastSlash;
 	if (!AssetPath.FindLastChar('/', LastSlash) || LastSlash == AssetPath.Len() - 1)
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid asset path: %s"), *AssetPath));
