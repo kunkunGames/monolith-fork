@@ -1767,7 +1767,7 @@ FString FMonolithMeshProceduralActions::FinalizeProceduralMesh(UDynamicMesh* Mes
 		}
 
 		int32 Seed = -1;
-		if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return FMonolithActionResult::Error(Err.GetValue());
+		if (auto Err = ExtractOptionalNumber(Params, TEXT("seed"), Seed)) return Err.GetValue();
 
 		FString HashForPath = bUseCache ? Hash : FMonolithMeshProceduralCache::Get().ComputeHash(ActionName, Params);
 		SavePath = FMonolithMeshProceduralCache::Get().GenerateAutoPath(Category, Type, Width, Depth, Height, HashForPath, Seed);

@@ -202,6 +202,7 @@ bool FMonolithBuildSequenceFromPosesParamGuardTest::RunTest(const FString& Param
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLocomotionAuthoringParamGuardTest, "Monolith.ParamGuard.Animation.LocomotionAuthoring", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Parameters)
 {
+	FMonolithLocomotionAuthoringActions::RegisterActions(FMonolithToolRegistry::Get());
 	const FString AssetPath = TEXT("/Game/Tests/Monolith/AnimWeaver_Montage");
 
 	// Test bake_distance_curve sample_rate validation
@@ -209,7 +210,7 @@ bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Paramete
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("anim_path"), AssetPath);
 		Params->SetStringField(TEXT("sample_rate"), TEXT("not_a_number"));
-		FMonolithActionResult Result = FMonolithLocomotionAuthoringActions::HandleBakeDistanceCurve(Params);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("bake_distance_curve"), Params);
 		TestFalse(TEXT("bake_distance_curve with malformed sample_rate should return Error"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention 'sample_rate' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'sample_rate' must be a number")));
 	}
@@ -219,7 +220,7 @@ bool FMonolithLocomotionAuthoringParamGuardTest::RunTest(const FString& Paramete
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("anim_path"), AssetPath);
 		Params->SetStringField(TEXT("stop_speed_threshold"), TEXT("not_a_number"));
-		FMonolithActionResult Result = FMonolithLocomotionAuthoringActions::HandleBakeDistanceCurve(Params);
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("bake_distance_curve"), Params);
 		TestFalse(TEXT("bake_distance_curve with malformed stop_speed_threshold should return Error"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention 'stop_speed_threshold' and 'number'"), Result.ErrorMessage.Contains(TEXT("Parameter 'stop_speed_threshold' must be a number")));
 	}
