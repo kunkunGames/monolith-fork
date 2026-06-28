@@ -352,9 +352,13 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
 
     bool bDryRun = false;
-    if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun))
+    if (const TSharedPtr<FJsonValue> DryRunField = Params->TryGetField(TEXT("dry_run")))
     {
-        return FMonolithActionResult::Error(TEXT("dry_run must be a boolean"));
+        if (DryRunField->Type != EJson::Boolean && DryRunField->Type != EJson::Null)
+        {
+            return FMonolithActionResult::Error(TEXT("dry_run must be a boolean"));
+        }
+        DryRunField->TryGetBool(bDryRun);
     }
 
     FString CleanName = ClassName;
