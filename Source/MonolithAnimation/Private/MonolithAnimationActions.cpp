@@ -12307,9 +12307,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodeFunctionBindin
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeId;
-	Params->TryGetStringField(TEXT("node_id"), NodeId);
+	if (Params->HasField(TEXT("node_id")) && !Params->TryGetStringField(TEXT("node_id"), NodeId)) return FMonolithActionResult::Error(TEXT("Parameter 'node_id' must be a string"));
 	FString GraphFilter;
-	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
@@ -12379,15 +12379,15 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodeFunctionBindin
 	FString NodeId = Params->GetStringField(TEXT("node_id"));
 	FString Binding = Params->GetStringField(TEXT("binding"));
 	FString FunctionName;
-	Params->TryGetStringField(TEXT("function_name"), FunctionName);
+	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FunctionName)) return FMonolithActionResult::Error(TEXT("Parameter 'function_name' must be a string"));
 	FString FunctionClassPath;
-	Params->TryGetStringField(TEXT("function_class"), FunctionClassPath);
+	if (Params->HasField(TEXT("function_class")) && !Params->TryGetStringField(TEXT("function_class"), FunctionClassPath)) return FMonolithActionResult::Error(TEXT("Parameter 'function_class' must be a string"));
 	FString GraphFilter;
-	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 	bool bRecompile = true;
-	Params->TryGetBoolField(TEXT("recompile"), bRecompile);
+	if (Params->HasField(TEXT("recompile")) && !Params->TryGetBoolField(TEXT("recompile"), bRecompile)) return FMonolithActionResult::Error(TEXT("Parameter 'recompile' must be a boolean"));
 	bool bAllowNonThreadSafe = false;
-	Params->TryGetBoolField(TEXT("allow_non_thread_safe"), bAllowNonThreadSafe);
+	if (Params->HasField(TEXT("allow_non_thread_safe")) && !Params->TryGetBoolField(TEXT("allow_non_thread_safe"), bAllowNonThreadSafe)) return FMonolithActionResult::Error(TEXT("Parameter 'allow_non_thread_safe' must be a boolean"));
 
 	if (Binding != TEXT("initial_update") && Binding != TEXT("become_relevant") && Binding != TEXT("update"))
 	{
@@ -12512,9 +12512,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetAnimNodePinBindings(co
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeId;
-	Params->TryGetStringField(TEXT("node_id"), NodeId);
+	if (Params->HasField(TEXT("node_id")) && !Params->TryGetStringField(TEXT("node_id"), NodeId)) return FMonolithActionResult::Error(TEXT("Parameter 'node_id' must be a string"));
 	FString GraphFilter;
-	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AssetPath);
 	if (!ABP) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimBlueprint not found: %s"), *AssetPath));
@@ -12631,9 +12631,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodePinBinding(con
 	FString NodeId = Params->GetStringField(TEXT("node_id"));
 	FString Pin = Params->GetStringField(TEXT("pin"));
 	FString GraphFilter;
-	Params->TryGetStringField(TEXT("graph_name"), GraphFilter);
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphFilter)) return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"));
 	bool bRecompile = true;
-	Params->TryGetBoolField(TEXT("recompile"), bRecompile);
+	if (Params->HasField(TEXT("recompile")) && !Params->TryGetBoolField(TEXT("recompile"), bRecompile)) return FMonolithActionResult::Error(TEXT("Parameter 'recompile' must be a boolean"));
 
 	// path: string array (empty/null clears by removing the pin's map entry).
 	TArray<FString> Path;
