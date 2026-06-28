@@ -378,6 +378,40 @@ bool FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest::Ru
 	TestTrue(TEXT("BindSoundToPerception with malformed asset_path should return Error"), !Result.bSuccess);
 	TestTrue(TEXT("BindSoundToPerception reports malformed asset_path"), Result.ErrorMessage.Contains(TEXT("asset_path must be a string")));
 
+	// Test negative loudness
+	Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SW_Test"));
+	Params->SetNumberField(TEXT("loudness"), -1.0);
+	Result = ExecuteAudioAction(TEXT("bind_sound_to_perception"), Params);
+	TestTrue(TEXT("BindSoundToPerception with negative loudness should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BindSoundToPerception reports negative loudness"), Result.ErrorMessage.Contains(TEXT("loudness must be >= 0")));
+
+	// Test negative max_range
+	Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SW_Test"));
+	Params->SetNumberField(TEXT("max_range"), -500.0);
+	Result = ExecuteAudioAction(TEXT("bind_sound_to_perception"), Params);
+	TestTrue(TEXT("BindSoundToPerception with negative max_range should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BindSoundToPerception reports negative max_range"), Result.ErrorMessage.Contains(TEXT("max_range must be >= 0")));
+
+	// Test overlength tag
+	Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SW_Test"));
+	FString LongTag;
+	for (int i = 0; i < 260; ++i) LongTag += TEXT("A");
+	Params->SetStringField(TEXT("tag"), LongTag);
+	Result = ExecuteAudioAction(TEXT("bind_sound_to_perception"), Params);
+	TestTrue(TEXT("BindSoundToPerception with overlength tag should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BindSoundToPerception reports overlength tag"), Result.ErrorMessage.Contains(TEXT("tag exceeds 255 characters")));
+
+	// Test unsupported sense_class
+	Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SW_Test"));
+	Params->SetStringField(TEXT("sense_class"), TEXT("Sight"));
+	Result = ExecuteAudioAction(TEXT("bind_sound_to_perception"), Params);
+	TestTrue(TEXT("BindSoundToPerception with unsupported sense_class should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("BindSoundToPerception reports unsupported sense_class"), Result.ErrorMessage.Contains(TEXT("Unsupported sense_class")));
+
 	return true;
 }
 
