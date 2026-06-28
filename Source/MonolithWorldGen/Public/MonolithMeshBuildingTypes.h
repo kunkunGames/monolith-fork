@@ -438,16 +438,19 @@ struct FBuildingDescriptor
 		Json->TryGetStringField(TEXT("building_id"), D.BuildingId);
 		Json->TryGetStringField(TEXT("asset_path"), D.AssetPath);
 
-		if (Json->HasField(TEXT("grid_cell_size")))
-			D.GridCellSize = static_cast<float>(Json->GetNumberField(TEXT("grid_cell_size")));
+		double TmpGCS;
+		if (Json->TryGetNumberField(TEXT("grid_cell_size"), TmpGCS))
+			D.GridCellSize = static_cast<float>(TmpGCS);
 
 		const TSharedPtr<FJsonObject>* WallObj = nullptr;
 		if (Json->TryGetObjectField(TEXT("wall_thickness"), WallObj) && WallObj && (*WallObj).IsValid())
 		{
-			if ((*WallObj)->HasField(TEXT("exterior")))
-				D.ExteriorWallThickness = static_cast<float>((*WallObj)->GetNumberField(TEXT("exterior")));
-			if ((*WallObj)->HasField(TEXT("interior")))
-				D.InteriorWallThickness = static_cast<float>((*WallObj)->GetNumberField(TEXT("interior")));
+			double TmpExt;
+			if ((*WallObj)->TryGetNumberField(TEXT("exterior"), TmpExt))
+				D.ExteriorWallThickness = static_cast<float>(TmpExt);
+			double TmpInt;
+			if ((*WallObj)->TryGetNumberField(TEXT("interior"), TmpInt))
+				D.InteriorWallThickness = static_cast<float>(TmpInt);
 		}
 
 		return D;
