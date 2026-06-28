@@ -8,6 +8,7 @@
 #include "MonolithLogicDriverScaffoldActions.h"
 #include "MonolithLogicDriverSpecActions.h"
 #include "MonolithLogicDriverGraphActions.h"
+#include "MonolithLogicDriverRuntimeActions.h"
 
 #if WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
 
@@ -940,6 +941,107 @@ bool FMonolithParamGuardLogicDriverGetNodeConnectionsRejectsMalformedParamsTest:
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("get_node_connections"), MissingGuidParams);
 		TestTrue(TEXT("get_node_connections rejects missing node_guid"), !Result.bSuccess);
 		TestTrue(TEXT("get_node_connections reports missing node_guid"), Result.ErrorMessage.Contains(TEXT("Missing required param 'node_guid'")));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.RuntimeGetStateHistoryRejectsMalformedParams
+// Validates that runtime_get_state_history rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRuntimeGetStateHistoryRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RuntimeGetStateHistoryRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRuntimeGetStateHistoryRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("runtime_get_state_history")))
+	{
+		FMonolithLogicDriverRuntimeActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_get_state_history"), EmptyParams);
+		TestTrue(TEXT("runtime_get_state_history rejects missing actor param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_get_state_history reports missing actor"), Result.ErrorMessage.Contains(TEXT("Missing required param 'actor'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedLimitParams = MakeShared<FJsonObject>();
+		MalformedLimitParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedLimitParams->SetStringField(TEXT("limit"), TEXT("invalid_limit"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_get_state_history"), MalformedLimitParams);
+		TestTrue(TEXT("runtime_get_state_history rejects malformed limit param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_get_state_history reports malformed limit"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'limit' must be a number")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedComponentNameParams = MakeShared<FJsonObject>();
+		MalformedComponentNameParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedComponentNameParams->SetNumberField(TEXT("component_name"), 12345.0);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_get_state_history"), MalformedComponentNameParams);
+		TestTrue(TEXT("runtime_get_state_history rejects malformed component_name param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_get_state_history reports malformed component_name"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'component_name' must be a string")));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.RuntimeStartSMRejectsMalformedParams
+// Validates that runtime_start_sm rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRuntimeStartSMRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RuntimeStartSMRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRuntimeStartSMRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("runtime_start_sm")))
+	{
+		FMonolithLogicDriverRuntimeActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_start_sm"), EmptyParams);
+		TestTrue(TEXT("runtime_start_sm rejects missing actor param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_start_sm reports missing actor"), Result.ErrorMessage.Contains(TEXT("Missing required param 'actor'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedComponentNameParams = MakeShared<FJsonObject>();
+		MalformedComponentNameParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedComponentNameParams->SetNumberField(TEXT("component_name"), 12345.0);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_start_sm"), MalformedComponentNameParams);
+		TestTrue(TEXT("runtime_start_sm rejects malformed component_name param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_start_sm reports malformed component_name"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'component_name' must be a string")));
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.RuntimeStopSMRejectsMalformedParams
+// Validates that runtime_stop_sm rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverRuntimeStopSMRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.RuntimeStopSMRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverRuntimeStopSMRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("runtime_stop_sm")))
+	{
+		FMonolithLogicDriverRuntimeActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_stop_sm"), EmptyParams);
+		TestTrue(TEXT("runtime_stop_sm rejects missing actor param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_stop_sm reports missing actor"), Result.ErrorMessage.Contains(TEXT("Missing required param 'actor'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MalformedComponentNameParams = MakeShared<FJsonObject>();
+		MalformedComponentNameParams->SetStringField(TEXT("actor"), TEXT("BP_SMInstance_C_0"));
+		MalformedComponentNameParams->SetNumberField(TEXT("component_name"), 12345.0);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("runtime_stop_sm"), MalformedComponentNameParams);
+		TestTrue(TEXT("runtime_stop_sm rejects malformed component_name param"), !Result.bSuccess);
+		TestTrue(TEXT("runtime_stop_sm reports malformed component_name"), Result.ErrorMessage.Contains(TEXT("Invalid param: 'component_name' must be a string")));
 	}
 
 	return true;
