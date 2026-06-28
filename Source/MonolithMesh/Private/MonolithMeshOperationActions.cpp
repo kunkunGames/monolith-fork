@@ -754,6 +754,7 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 
 	int32 BaseTris = SourceMesh->GetTriangleCount();
 	TArray<TSharedPtr<FJsonValue>> LodArray;
+	LodArray.Reserve(LodCount);
 
 	for (int32 Lod = 1; Lod <= LodCount; ++Lod)
 	{
