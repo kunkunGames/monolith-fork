@@ -45,7 +45,7 @@ namespace
 		return Names;
 	}
 
-	TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	TArray<TSharedPtr<FJsonValue>> GraphStringsToJsonValues(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
 		Out.Reserve(Values.Num());
@@ -593,7 +593,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
 		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_parent_function_parameter"));
 		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
 		ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
 		ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
@@ -617,7 +617,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 		ErrorData->SetStringField(TEXT("blueprint"), BP->GetName());
 		ErrorData->SetStringField(TEXT("parent_class"), BP->ParentClass ? BP->ParentClass->GetName() : FString());
 		ErrorData->SetStringField(TEXT("offending_function"), ParentFuncName);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(OverrideParentFunctionAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
 		ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
 		ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
@@ -642,7 +642,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleOverrideParentFuncti
 			ErrorData->SetStringField(TEXT("offending_function"), ParentFuncName);
 			ErrorData->SetStringField(TEXT("existing_graph"), Existing->GetName());
 			ErrorData->SetStringField(TEXT("graph_kind"), BlueprintGraphKind(BP, Existing));
-			ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+			ErrorData->SetArrayField(TEXT("available_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 			ErrorData->SetArrayField(TEXT("available_override_functions"), OverrideableParentFunctionJsonValues(BP, bTruncated));
 			ErrorData->SetBoolField(TEXT("available_override_functions_truncated"), bTruncated);
 			ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
@@ -853,9 +853,9 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
 		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_old_name"));
 		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(RenameFunctionAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
-		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name"), FMonolithJsonUtils::ErrInvalidParams)
 			.WithErrorData(ErrorData)
@@ -867,9 +867,9 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_new_name"));
 		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
 		ErrorData->SetStringField(TEXT("offending_function"), OldName);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(RenameFunctionAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
-		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"), FMonolithJsonUtils::ErrInvalidParams)
 			.WithErrorData(ErrorData)
@@ -884,9 +884,9 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
 		ErrorData->SetStringField(TEXT("offending_function"), OldName);
 		ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RenameFunctionAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(RenameFunctionAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
-		ErrorData->SetArrayField(TEXT("candidate_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("candidate_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_functions"));
 		ErrorData->SetStringField(TEXT("graph_read_action"), TEXT("blueprint.list_graphs"));
@@ -911,7 +911,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 			ErrorData->SetStringField(TEXT("interface"), InterfaceName);
 		}
 		ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
-		ErrorData->SetArrayField(TEXT("candidate_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("candidate_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
 		ErrorData->SetStringField(TEXT("recovery"), TEXT("Use rename_function only for function graphs; use rename_macro for macro graphs. Event graphs and delegate signatures are not renamed by this action."));
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Graph '%s' is a %s graph, not a function graph"), *OldName, *GraphKind))
@@ -932,7 +932,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRenameFunction(const
 			ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
 			ErrorData->SetStringField(TEXT("conflicting_graph"), Existing->GetName());
 			ErrorData->SetStringField(TEXT("conflicting_graph_kind"), BlueprintGraphKind(BP, Existing));
-			ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
+			ErrorData->SetArrayField(TEXT("available_functions"), GraphStringsToJsonValues(FunctionGraphNames(BP)));
 			ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
 			ErrorData->SetStringField(TEXT("recovery"), TEXT("Choose a new_name that does not already name a function graph."));
 			return FMonolithActionResult::Error(FString::Printf(TEXT("A function named '%s' already exists"), *NewName))
@@ -1572,8 +1572,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	{
 		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
 		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("missing_dispatcher_parameter"));
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
-		ErrorData->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(EventDispatcherNames(BP)));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("available_dispatchers"), GraphStringsToJsonValues(EventDispatcherNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: dispatcher_name (or name)"), -32602)
 			.WithErrorData(ErrorData)
@@ -1600,8 +1600,8 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
 		ErrorData->SetStringField(TEXT("failure_cause"), TEXT("dispatcher_not_found"));
 		ErrorData->SetStringField(TEXT("dispatcher_name"), DispatcherName);
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
-		ErrorData->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(AvailableDispatchers));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphStringsToJsonValues(RemoveEventDispatcherAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("available_dispatchers"), GraphStringsToJsonValues(AvailableDispatchers));
 		ErrorData->SetBoolField(TEXT("missing_ok_allowed"), true);
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
 
@@ -1612,7 +1612,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 			Root->SetStringField(TEXT("requested_dispatcher"), DispatcherName);
 			Root->SetBoolField(TEXT("removed"), false);
 			Root->SetBoolField(TEXT("no_op"), true);
-			Root->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(AvailableDispatchers));
+			Root->SetArrayField(TEXT("available_dispatchers"), GraphStringsToJsonValues(AvailableDispatchers));
 			Root->SetStringField(TEXT("read_action"), TEXT("blueprint.get_event_dispatchers"));
 			return FMonolithActionResult::Success(Root);
 		}
@@ -1662,7 +1662,7 @@ FMonolithActionResult FMonolithBlueprintGraphActions::HandleRemoveEventDispatche
 	Root->SetStringField(TEXT("removed_dispatcher"), DispatcherName);
 	Root->SetBoolField(TEXT("removed"), true);
 	Root->SetBoolField(TEXT("no_op"), false);
-	Root->SetArrayField(TEXT("available_dispatchers"), StringsToJsonValues(EventDispatcherNames(BP)));
+	Root->SetArrayField(TEXT("available_dispatchers"), GraphStringsToJsonValues(EventDispatcherNames(BP)));
 
 	TArray<TSharedPtr<FJsonValue>> WarnArr;
 	for (const FString& W : Warnings)

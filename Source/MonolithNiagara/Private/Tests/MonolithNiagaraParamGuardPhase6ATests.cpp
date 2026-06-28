@@ -1,19 +1,26 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
-#include "MonolithActionRegistry.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithNiagaraActions.h"
+#include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardPhase6ATests, "Monolith.Niagara.ParamGuard.Phase6A", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardPhase6ATests::RunTest(const FString& Parameters)
 {
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("niagara"), TEXT("get_event_handlers")))
+	{
+		FMonolithNiagaraActions::RegisterActions(Registry);
+	}
+
     // Test get_event_handlers
     {
         TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
         Params->SetNumberField(TEXT("emitter"), 123);
 
-        FMonolithActionResult Result = FMonolithActionRegistry::Get().ExecuteAction(TEXT("niagara"), TEXT("get_event_handlers"), Params);
+        FMonolithActionResult Result = Registry.ExecuteAction(TEXT("niagara"), TEXT("get_event_handlers"), Params);
         TestFalse(TEXT("Should fail validation"), Result.bSuccess);
         TestEqual(TEXT("Should be invalid params error"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
     }
@@ -26,7 +33,7 @@ bool FMonolithNiagaraParamGuardPhase6ATests::RunTest(const FString& Parameters)
         Params->SetStringField(TEXT("value"), TEXT("Val"));
         Params->SetStringField(TEXT("handler_index"), TEXT("NotANumber"));
 
-        FMonolithActionResult Result = FMonolithActionRegistry::Get().ExecuteAction(TEXT("niagara"), TEXT("set_event_handler_property"), Params);
+        FMonolithActionResult Result = Registry.ExecuteAction(TEXT("niagara"), TEXT("set_event_handler_property"), Params);
         TestFalse(TEXT("Should fail validation"), Result.bSuccess);
         TestEqual(TEXT("Should be invalid params error"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
     }
@@ -37,7 +44,7 @@ bool FMonolithNiagaraParamGuardPhase6ATests::RunTest(const FString& Parameters)
         Params->SetStringField(TEXT("emitter"), TEXT("MyEmitter"));
         Params->SetBoolField(TEXT("module_node"), true);
 
-        FMonolithActionResult Result = FMonolithActionRegistry::Get().ExecuteAction(TEXT("niagara"), TEXT("get_module_output_parameters"), Params);
+        FMonolithActionResult Result = Registry.ExecuteAction(TEXT("niagara"), TEXT("get_module_output_parameters"), Params);
         TestFalse(TEXT("Should fail validation"), Result.bSuccess);
         TestEqual(TEXT("Should be invalid params error"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
     }

@@ -766,7 +766,7 @@ static void PopulateDataTableRowFromJson(const UScriptStruct* RowStruct, uint8* 
 	}
 }
 
-static TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+static TArray<TSharedPtr<FJsonValue>> DataTableStringsToJsonValues(const TArray<FString>& Values)
 {
 	TArray<TSharedPtr<FJsonValue>> Out;
 	for (const FString& Value : Values)
@@ -1232,10 +1232,10 @@ FMonolithActionResult FMonolithBlueprintStructActions::HandleUpdateDataTableRow(
 	Root->SetBoolField(TEXT("row_existed"), bHadRow);
 	Root->SetBoolField(TEXT("create_if_missing"), bCreateIfMissing);
 	Root->SetNumberField(TEXT("fields_set"), SetFields.Num());
-	Root->SetArrayField(TEXT("set_fields"), StringsToJsonValues(SetFields));
+	Root->SetArrayField(TEXT("set_fields"), DataTableStringsToJsonValues(SetFields));
 	if (SkippedFields.Num() > 0)
 	{
-		Root->SetArrayField(TEXT("skipped_fields"), StringsToJsonValues(SkippedFields));
+		Root->SetArrayField(TEXT("skipped_fields"), DataTableStringsToJsonValues(SkippedFields));
 	}
 	Root->SetObjectField(TEXT("preview_values"), SerializeRowToJson(RowStruct, RowData));
 

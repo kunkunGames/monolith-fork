@@ -16,6 +16,8 @@
 // MetaSound Frontend
 #include "MetasoundFrontendDocument.h"
 #include "MetasoundFrontendNodeClassRegistry.h"
+#include "MetasoundFrontendQuery.h"
+#include "MetasoundFrontendSearchEngine.h"
 
 // IMetaSoundDocumentInterface — used by TScriptInterface in Builder/Editor subsystem APIs
 // MetasoundSource.h typically pulls this in, but include explicitly for Cast<> usage
@@ -1344,74 +1346,78 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::ListAvailableMetaSoundNode
 	}
 	Limit = FMath::Clamp(Limit, 1, 1000);
 
-	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
-
 	TArray<TSharedPtr<FJsonValue>> NodesJson;
 	NodesJson.Reserve(Limit);
 	int32 MatchedCount = 0;
 
-	Registry.IterateRegistry(
-		[&](const FMetasoundFrontendClass& InClass)
+#if WITH_EDITORONLY_DATA
+	const TArray<Metasound::Frontend::FMetaSoundClassInfo> ClassInfos =
+		Metasound::Frontend::ISearchEngine::Get().FindAllClasses(Metasound::Frontend::ISearchEngine::EResultVersion::All, /*bIncludeUnloadedAssets=*/false);
+
+	for (const Metasound::Frontend::FMetaSoundClassInfo& ClassInfo : ClassInfos)
+	{
+		if (!ClassInfo.bIsValid)
 		{
-			const FMetasoundFrontendClassName& ClassName = InClass.Metadata.GetClassName();
-			const FString NameStr = ClassName.Name.ToString();
-			const FString NamespaceStr = ClassName.Namespace.ToString();
+			continue;
+		}
 
-			// Apply filters
-			if (!Filter.IsEmpty() && !NameStr.Contains(Filter, ESearchCase::IgnoreCase) &&
-				!NamespaceStr.Contains(Filter, ESearchCase::IgnoreCase))
+		const FMetasoundFrontendClassName& ClassName = ClassInfo.ClassName;
+		const FString NameStr = ClassName.Name.ToString();
+		const FString NamespaceStr = ClassName.Namespace.ToString();
+
+		if (!Filter.IsEmpty() && !NameStr.Contains(Filter, ESearchCase::IgnoreCase) &&
+			!NamespaceStr.Contains(Filter, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+		if (!Category.IsEmpty() && !NamespaceStr.Contains(Category, ESearchCase::IgnoreCase))
+		{
+			continue;
+		}
+
+		MatchedCount++;
+		if (NodesJson.Num() >= Limit)
+		{
+			continue;
+		}
+
+		auto NodeJson = MakeShared<FJsonObject>();
+		NodeJson->SetStringField(TEXT("namespace"), NamespaceStr);
+		NodeJson->SetStringField(TEXT("name"), NameStr);
+		NodeJson->SetStringField(TEXT("variant"), ClassName.Variant.ToString());
+		NodeJson->SetNumberField(TEXT("input_count"), ClassInfo.InterfaceInfo.Inputs.Num());
+		NodeJson->SetNumberField(TEXT("output_count"), ClassInfo.InterfaceInfo.Outputs.Num());
+
+		if (bIncludePins)
+		{
+			TArray<TSharedPtr<FJsonValue>> InputsJson;
+			InputsJson.Reserve(ClassInfo.InterfaceInfo.Inputs.Num());
+			for (const FMetaSoundClassVertexInfo& Vertex : ClassInfo.InterfaceInfo.Inputs)
 			{
-				return;
+				auto VJson = MakeShared<FJsonObject>();
+				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
+				VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
+				InputsJson.Add(MakeShared<FJsonValueObject>(VJson));
 			}
-			if (!Category.IsEmpty() && !NamespaceStr.Contains(Category, ESearchCase::IgnoreCase))
+			NodeJson->SetArrayField(TEXT("inputs"), InputsJson);
+
+			TArray<TSharedPtr<FJsonValue>> OutputsJson;
+			OutputsJson.Reserve(ClassInfo.InterfaceInfo.Outputs.Num());
+			for (const FMetaSoundClassVertexInfo& Vertex : ClassInfo.InterfaceInfo.Outputs)
 			{
-				return;
+				auto VJson = MakeShared<FJsonObject>();
+				VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
+				VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
+				OutputsJson.Add(MakeShared<FJsonValueObject>(VJson));
 			}
+			NodeJson->SetArrayField(TEXT("outputs"), OutputsJson);
+		}
 
-			MatchedCount++;
-			if (NodesJson.Num() >= Limit)
-			{
-				return;
-			}
-
-			auto NodeJson = MakeShared<FJsonObject>();
-			NodeJson->SetStringField(TEXT("namespace"), NamespaceStr);
-			NodeJson->SetStringField(TEXT("name"), NameStr);
-			NodeJson->SetStringField(TEXT("variant"), ClassName.Variant.ToString());
-
-			const FMetasoundFrontendClassInterface& ClassInterface = InClass.GetDefaultInterface();
-			NodeJson->SetNumberField(TEXT("input_count"), ClassInterface.Inputs.Num());
-			NodeJson->SetNumberField(TEXT("output_count"), ClassInterface.Outputs.Num());
-
-			if (bIncludePins)
-			{
-				TArray<TSharedPtr<FJsonValue>> InputsJson;
-				InputsJson.Reserve(ClassInterface.Inputs.Num());
-				for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Inputs)
-				{
-					auto VJson = MakeShared<FJsonObject>();
-					VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
-					VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
-					InputsJson.Add(MakeShared<FJsonValueObject>(VJson));
-				}
-				NodeJson->SetArrayField(TEXT("inputs"), InputsJson);
-
-				TArray<TSharedPtr<FJsonValue>> OutputsJson;
-				OutputsJson.Reserve(ClassInterface.Outputs.Num());
-				for (const FMetasoundFrontendClassVertex& Vertex : ClassInterface.Outputs)
-				{
-					auto VJson = MakeShared<FJsonObject>();
-					VJson->SetStringField(TEXT("name"), Vertex.Name.ToString());
-					VJson->SetStringField(TEXT("type"), Vertex.TypeName.ToString());
-					OutputsJson.Add(MakeShared<FJsonValueObject>(VJson));
-				}
-				NodeJson->SetArrayField(TEXT("outputs"), OutputsJson);
-			}
-
-			NodesJson.Add(MakeShared<FJsonValueObject>(NodeJson));
-		},
-		EMetasoundFrontendClassType::Invalid // Invalid = iterate ALL types
-	);
+		NodesJson.Add(MakeShared<FJsonValueObject>(NodeJson));
+	}
+#else
+	return FMonolithActionResult::Error(TEXT("MetaSound node discovery requires editor-only data"));
+#endif
 
 	auto ResultJson = MakeShared<FJsonObject>();
 	ResultJson->SetArrayField(TEXT("nodes"), NodesJson);
@@ -1439,19 +1445,27 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 		return FMonolithActionResult::Error(ParseError);
 	}
 
-	Metasound::Frontend::INodeClassRegistry& Registry = Metasound::Frontend::INodeClassRegistry::GetChecked();
-
 	TSharedPtr<FJsonObject> ResultJson;
 	bool bFound = false;
 
-	Registry.IterateRegistry(
-		[&](const FMetasoundFrontendClass& InClass)
-		{
-			if (bFound) return;
+#if WITH_EDITORONLY_DATA
+	const TArray<Metasound::Frontend::FMetaSoundClassInfo> ClassInfos =
+		Metasound::Frontend::ISearchEngine::Get().FindClassesWithName(ClassName, Metasound::Frontend::ISearchEngine::ESortByVersion::Yes);
+	Metasound::Frontend::INodeClassRegistry* Registry = Metasound::Frontend::INodeClassRegistry::Get();
 
-			const FMetasoundFrontendClassName& CN = InClass.Metadata.GetClassName();
-			if (CN.Namespace == ClassName.Namespace && CN.Name == ClassName.Name &&
-				(ClassName.Variant.IsNone() || CN.Variant == ClassName.Variant))
+	for (const Metasound::Frontend::FMetaSoundClassInfo& ClassInfo : ClassInfos)
+	{
+		if (!ClassInfo.bIsValid || !Registry || bFound)
+		{
+			continue;
+		}
+
+		const FMetasoundFrontendClassName& CN = ClassInfo.ClassName;
+		if (CN.Namespace == ClassName.Namespace && CN.Name == ClassName.Name &&
+			(ClassName.Variant.IsNone() || CN.Variant == ClassName.Variant))
+		{
+			FMetasoundFrontendClass FrontendClass;
+			if (Registry->FindFrontendClassFromRegistered(ClassInfo.ToRegistryKey(), FrontendClass))
 			{
 				bFound = true;
 				ResultJson = MakeShared<FJsonObject>();
@@ -1459,7 +1473,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 				ResultJson->SetStringField(TEXT("name"), CN.Name.ToString());
 				ResultJson->SetStringField(TEXT("variant"), CN.Variant.ToString());
 
-				const FMetasoundFrontendClassInterface& ClassInterface = InClass.GetDefaultInterface();
+				const FMetasoundFrontendClassInterface& ClassInterface = FrontendClass.GetDefaultInterface();
 				TArray<TSharedPtr<FJsonValue>> InputsJson;
 				InputsJson.Reserve(ClassInterface.Inputs.Num());
 				for (const FMetasoundFrontendClassVertex& V : ClassInterface.Inputs)
@@ -1482,9 +1496,11 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::GetMetaSoundNodeInfo(const
 				}
 				ResultJson->SetArrayField(TEXT("outputs"), OutputsJson);
 			}
-		},
-		EMetasoundFrontendClassType::Invalid
-	);
+		}
+	}
+#else
+	return FMonolithActionResult::Error(TEXT("MetaSound node discovery requires editor-only data"));
+#endif
 
 	if (!bFound)
 	{
@@ -2240,7 +2256,7 @@ FMonolithActionResult FMonolithAudioMetaSoundActions::BuildMetaSoundFromSpec(con
 	{
 		for (const auto& Pair : (*InterfaceConns)->Values)
 		{
-			const FString& InterfacePinName = Pair.Key;
+			const FString InterfacePinName(Pair.Key.Len(), *Pair.Key);
 			const TSharedPtr<FJsonObject>& ConnObj = Pair.Value->AsObject();
 			if (!ConnObj.IsValid())
 			{

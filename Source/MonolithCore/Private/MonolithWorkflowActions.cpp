@@ -312,7 +312,7 @@ namespace
 		}
 	}
 
-	void AddUniqueString(TArray<FString>& Values, const FString& Value)
+	void AddUniqueWorkflowString(TArray<FString>& Values, const FString& Value)
 	{
 		if (!Value.IsEmpty() && !Values.Contains(Value))
 		{
@@ -2012,9 +2012,9 @@ FMonolithActionResult FMonolithWorkflowActions::HandleShotRenderLevelSequence(co
 	TArray<TSharedPtr<FJsonValue>> ReadBack;
 
 	TArray<FString> TouchedAssets;
-	AddUniqueString(TouchedAssets, SequenceAssetPath);
-	AddUniqueString(TouchedAssets, QueueAssetPath);
-	AddUniqueString(TouchedAssets, MapPath);
+	AddUniqueWorkflowString(TouchedAssets, SequenceAssetPath);
+	AddUniqueWorkflowString(TouchedAssets, QueueAssetPath);
+	AddUniqueWorkflowString(TouchedAssets, MapPath);
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("sequence_asset_path"), SequenceAssetPath);

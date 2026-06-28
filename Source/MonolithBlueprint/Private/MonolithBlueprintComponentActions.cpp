@@ -135,7 +135,7 @@ namespace
 		bool bCandidatesTruncated = false;
 	};
 
-	static TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	static TArray<TSharedPtr<FJsonValue>> ComponentStringsToJsonValues(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
 		Out.Reserve(Values.Num());
@@ -633,13 +633,13 @@ namespace
 		{
 			ErrorData->SetStringField(TEXT("component_class_json_type"), ComponentClassJsonType);
 		}
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(AddComponentAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), ComponentStringsToJsonValues(AddComponentAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), AddComponentAcceptedAliases());
 		ErrorData->SetArrayField(TEXT("candidate_component_classes"), ComponentClassCandidatesToJsonValues(Candidates));
 		ErrorData->SetBoolField(TEXT("candidate_component_classes_truncated"), bCandidatesTruncated);
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("monolith.discover"));
 		ErrorData->SetObjectField(TEXT("read_args"), MakeAddComponentSchemaReadArgs());
-		ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(RecoveryHints));
+		ErrorData->SetArrayField(TEXT("recovery_hints"), ComponentStringsToJsonValues(RecoveryHints));
 		return ErrorData;
 	}
 
@@ -671,12 +671,12 @@ namespace
 			ErrorData->SetStringField(TEXT("parent"), ParentName);
 			ErrorData->SetStringField(TEXT("offending_parent"), ParentName);
 		}
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(AddComponentAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), ComponentStringsToJsonValues(AddComponentAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), AddComponentAcceptedAliases());
-		ErrorData->SetArrayField(TEXT("available_components"), StringsToJsonValues(AddComponentExistingComponentNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_components"), ComponentStringsToJsonValues(AddComponentExistingComponentNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.get_components"));
 		ErrorData->SetObjectField(TEXT("read_args"), MakeAddComponentReadArgs(AssetPath));
-		ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(RecoveryHints));
+		ErrorData->SetArrayField(TEXT("recovery_hints"), ComponentStringsToJsonValues(RecoveryHints));
 		return ErrorData;
 	}
 }

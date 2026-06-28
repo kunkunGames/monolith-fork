@@ -56,7 +56,7 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 
 namespace
 {
-	TArray<TSharedPtr<FJsonValue>> StringsToJsonValues(const TArray<FString>& Values)
+	TArray<TSharedPtr<FJsonValue>> GraphExportStringsToJsonValues(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
 		Out.Reserve(Values.Num());
@@ -230,13 +230,13 @@ namespace
 		{
 			ErrorData->SetStringField(TEXT("requested_new_name"), NewName);
 		}
-		ErrorData->SetArrayField(TEXT("accepted_parameters"), StringsToJsonValues(DuplicateGraphAcceptedParameters()));
+		ErrorData->SetArrayField(TEXT("accepted_parameters"), GraphExportStringsToJsonValues(DuplicateGraphAcceptedParameters()));
 		ErrorData->SetObjectField(TEXT("accepted_aliases"), MakeShared<FJsonObject>());
-		ErrorData->SetArrayField(TEXT("supported_graph_kinds"), StringsToJsonValues(DuplicateGraphSupportedGraphKinds()));
+		ErrorData->SetArrayField(TEXT("supported_graph_kinds"), GraphExportStringsToJsonValues(DuplicateGraphSupportedGraphKinds()));
 		ErrorData->SetArrayField(TEXT("candidate_graphs"), DuplicableGraphCatalogJsonValues(BP));
 		ErrorData->SetArrayField(TEXT("available_graphs"), BlueprintGraphCatalogJsonValues(BP));
-		ErrorData->SetArrayField(TEXT("available_functions"), StringsToJsonValues(FunctionGraphNames(BP)));
-		ErrorData->SetArrayField(TEXT("available_macros"), StringsToJsonValues(MacroGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_functions"), GraphExportStringsToJsonValues(FunctionGraphNames(BP)));
+		ErrorData->SetArrayField(TEXT("available_macros"), GraphExportStringsToJsonValues(MacroGraphNames(BP)));
 		ErrorData->SetStringField(TEXT("read_action"), TEXT("blueprint.list_graphs"));
 		ErrorData->SetObjectField(TEXT("read_args"), DuplicateGraphReadArgs(AssetPath));
 		return ErrorData;
@@ -246,7 +246,7 @@ namespace
 	{
 		if (ErrorData.IsValid())
 		{
-			ErrorData->SetArrayField(TEXT("recovery_hints"), StringsToJsonValues(Hints));
+			ErrorData->SetArrayField(TEXT("recovery_hints"), GraphExportStringsToJsonValues(Hints));
 		}
 	}
 

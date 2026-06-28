@@ -102,7 +102,7 @@ UClass* FMonolithAudioSoundCueActions::ResolveNodeType(const FString& TypeName)
 
 namespace
 {
-	FMonolithActionResult AudioInvalidParams(const FString& Message)
+	FMonolithActionResult SoundCueInvalidParams(const FString& Message)
 	{
 		return FMonolithActionResult::Error(Message, FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -1716,7 +1716,7 @@ FMonolithActionResult FMonolithAudioSoundCueActions::BuildSoundCueFromSpec(const
 	FString PreCreateError;
 	if (!ValidateSoundCueSpecBeforeCreate(Spec, PreCreateError))
 	{
-		return AudioInvalidParams(PreCreateError);
+		return SoundCueInvalidParams(PreCreateError);
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* NodesArray = nullptr;
@@ -2336,21 +2336,21 @@ FMonolithActionResult FMonolithAudioSoundCueActions::CreateDistanceCrossfadeCue(
 		const TSharedPtr<FJsonObject>* BandObjPtr = nullptr;
 		if (!BandVal.IsValid() || !BandVal->TryGetObject(BandObjPtr) || !BandObjPtr || !BandObjPtr->IsValid())
 		{
-			return AudioInvalidParams(TEXT("Each band must be an object"));
+			return SoundCueInvalidParams(TEXT("Each band must be an object"));
 		}
 		const TSharedPtr<FJsonObject>& BandObj = *BandObjPtr;
 
 		FString WavePath;
 		if (!BandObj->TryGetStringField(TEXT("sound_wave"), WavePath) || WavePath.IsEmpty())
 		{
-			return AudioInvalidParams(TEXT("Each band must have a 'sound_wave' path"));
+			return SoundCueInvalidParams(TEXT("Each band must have a 'sound_wave' path"));
 		}
 		for (const TCHAR* NumericField : NumericBandFields)
 		{
 			double IgnoredNumber = 0.0;
 			if (BandObj->HasField(NumericField) && !BandObj->TryGetNumberField(NumericField, IgnoredNumber))
 			{
-				return AudioInvalidParams(FString::Printf(TEXT("Malformed parameter: band field '%s' must be a number"), NumericField));
+				return SoundCueInvalidParams(FString::Printf(TEXT("Malformed parameter: band field '%s' must be a number"), NumericField));
 			}
 		}
 
