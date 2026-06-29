@@ -219,7 +219,6 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSh
 
 	// Scalar params
 	TArray<TSharedPtr<FJsonValue>> ScalarArr;
-	ScalarArr.Reserve(ScalarInfos.Num());
 	for (const FMaterialParameterInfo& Info : ScalarInfos)
 	{
 		float Value = 0.0f;
@@ -235,7 +234,6 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSh
 
 	// Vector params
 	TArray<TSharedPtr<FJsonValue>> VectorArr;
-	VectorArr.Reserve(VectorInfos.Num());
 	for (const FMaterialParameterInfo& Info : VectorInfos)
 	{
 		FLinearColor Value = FLinearColor::Black;
@@ -256,7 +254,6 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSh
 
 	// Texture params + classification
 	TArray<TSharedPtr<FJsonValue>> TextureArr;
-	TextureArr.Reserve(TextureInfos.Num());
 	UTexture* BaseColorTex   = nullptr;
 	UTexture* NormalTex      = nullptr;
 	UTexture* RoughnessTex   = nullptr;

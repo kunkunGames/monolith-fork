@@ -1056,8 +1056,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\PRD\" xcopy /s /e /i /q /h \"%s\\PRD\" \"%s\\PRD\\\"\r\n")
 		TEXT("if exist \"%s\\Plans\" xcopy /s /e /i /q /h \"%s\\Plans\" \"%s\\Plans\\\"\r\n")
 		TEXT("if exist \"%s\\Docs\\plans\" xcopy /s /e /i /q /h \"%s\\Docs\\plans\" \"%s\\Docs\\plans\\\"\r\n")
-		TEXT("if exist \"%s\\Docs\\testing\" xcopy /s /e /i /q /h \"%s\\Docs\\testing\" \"%s\\Docs\\testing\\\"\r\n")
-		TEXT("if exist \"%s\\Docs\\MISSING_FEATURES.md\" copy /y \"%s\\Docs\\MISSING_FEATURES.md\" \"%s\\Docs\\MISSING_FEATURES.md\" > nul\r\n")
 		TEXT("if exist \"%s\\Docs\\research\" xcopy /s /e /i /q /h \"%s\\Docs\\research\" \"%s\\Docs\\research\\\"\r\n")
 		TEXT("if exist \"%s\\TrainingMemory\" xcopy /s /e /i /q /h \"%s\\TrainingMemory\" \"%s\\TrainingMemory\\\"\r\n")
 		TEXT("if exist \"%s\\Logs\" xcopy /s /e /i /q /h \"%s\\Logs\" \"%s\\Logs\\\"\r\n")
@@ -1093,8 +1091,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*WinPluginDir,
 		// Preserve .git from backup
-		*WinBackupDir, *WinBackupDir, *WinPluginDir,
-		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
@@ -1161,8 +1157,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/PRD\" ] && cp -r \"%s/PRD\" \"%s/PRD\"\n")
 		TEXT("[ -d \"%s/Plans\" ] && cp -r \"%s/Plans\" \"%s/Plans\"\n")
 		TEXT("[ -d \"%s/Docs/plans\" ] && cp -r \"%s/Docs/plans\" \"%s/Docs/plans\"\n")
-		TEXT("[ -d \"%s/Docs/testing\" ] && cp -r \"%s/Docs/testing\" \"%s/Docs/testing\"\n")
-		TEXT("[ -f \"%s/Docs/MISSING_FEATURES.md\" ] && cp \"%s/Docs/MISSING_FEATURES.md\" \"%s/Docs/MISSING_FEATURES.md\"\n")
 		TEXT("[ -d \"%s/Docs/research\" ] && cp -r \"%s/Docs/research\" \"%s/Docs/research\"\n")
 		TEXT("[ -d \"%s/TrainingMemory\" ] && cp -r \"%s/TrainingMemory\" \"%s/TrainingMemory\"\n")
 		TEXT("[ -d \"%s/Logs\" ] && cp -r \"%s/Logs\" \"%s/Logs\"\n")
@@ -1177,10 +1171,6 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
-		*BackupDir, *BackupDir, *PluginDir,
-		*BackupDir, *BackupDir, *PluginDir,
-		*BackupDir, *BackupDir, *PluginDir,
-		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,

@@ -16382,6 +16382,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByParameter(const TSh
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Limit);
 	ForEachNiagaraSystem(Folder, [&ParamQuery, &TypeQuery, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
 		FNiagaraUserRedirectionParameterStore& US = Sys->GetExposedParameters();
@@ -16435,6 +16436,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByDataInterface(const
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Limit);
 	ForEachNiagaraSystem(Folder, [&DIQuery, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
 		bool bMatched = false;
@@ -16723,6 +16725,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchByMaterial(const TSha
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(Limit);
 	ForEachNiagaraSystem(Folder, [&TargetObjPath, &Limit, &Results](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
 		bool bMatched = false;

@@ -2598,14 +2598,6 @@ Both invoke the same SQLite indexes the live MCP uses.
 ---
 
 
-## scene
-
-Scene inspection and mutation actions (e.g., selecting actors, snapping to surface, placing decals).
-
---
-
----
-
 ## bridge
 
 Read-only RX-6 bridge integration. **5 actions**.
