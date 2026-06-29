@@ -15,7 +15,7 @@ public:
 
 	bool AddValue(
 		int64 AssetId,
-		const FString& SourceKind,
+		const FString& SearchSourceKind,
 		const FString& ObjectName,
 		const FString& ObjectPath,
 		const FString& ObjectClass,

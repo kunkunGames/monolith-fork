@@ -1014,13 +1014,13 @@ bool FMonolithIndexDatabase::DeleteAssetSearchValuesForAsset(int64 AssetId)
 	return Stmt.Execute();
 }
 
-bool FMonolithIndexDatabase::DeleteAssetSearchValuesBySourceKind(const FString& SourceKind)
+bool FMonolithIndexDatabase::DeleteAssetSearchValuesBySourceKind(const FString& SearchSourceKind)
 {
 	if (!IsOpen()) return false;
 
 	FSQLitePreparedStatement Stmt;
 	Stmt.Create(*Database, TEXT("DELETE FROM asset_search_values WHERE source_kind = ?;"));
-	Stmt.SetBindingValueByIndex(1, SourceKind);
+	Stmt.SetBindingValueByIndex(1, SearchSourceKind);
 	return Stmt.Execute();
 }
 

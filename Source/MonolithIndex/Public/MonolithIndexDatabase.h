@@ -282,7 +282,7 @@ public:
 	// --- Supplemental Search Values ---
 	int64 InsertAssetSearchValue(const FIndexedSearchValue& Value);
 	bool DeleteAssetSearchValuesForAsset(int64 AssetId);
-	bool DeleteAssetSearchValuesBySourceKind(const FString& SourceKind);
+	bool DeleteAssetSearchValuesBySourceKind(const FString& SearchSourceKind);
 
 	// --- FTS5 Search ---
 	// MinShouldMatchPct>0 builds an exact "at least ceil(N*pct/100) of N tokens" FTS5 expression

@@ -21,7 +21,7 @@ bool FMonolithSearchValueWriter::IsEnabled() const
 
 bool FMonolithSearchValueWriter::AddValue(
 	int64 AssetId,
-	const FString& SourceKind,
+	const FString& SearchSourceKind,
 	const FString& ObjectName,
 	const FString& ObjectPath,
 	const FString& ObjectClass,
@@ -62,7 +62,7 @@ bool FMonolithSearchValueWriter::AddValue(
 
 	FIndexedSearchValue SearchValue;
 	SearchValue.AssetId = AssetId;
-	SearchValue.SourceKind = SourceKind;
+	SearchValue.SourceKind = SearchSourceKind;
 	SearchValue.ObjectName = ObjectName;
 	SearchValue.ObjectPath = ObjectPath;
 	SearchValue.ObjectClass = ObjectClass;
