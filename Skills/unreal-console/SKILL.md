@@ -44,7 +44,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_object` | Read one captured console object by exact name. | `name*` |
 | `health` | Report console snapshot schema, row count, FTS parity, and snapshot metadata. | `include_counts=false` |
 | `resolve_command` | Resolve a command line against the live registry and target-world route without executing it. | `command*` `target_world=auto/pie/editor` `include_values=true` `include_defaults=true` |
-| `execute` `[w]` | Execute a console command through the editor world/PIE context with dry-run, optional registry existence guard, and optional target-world constraint. | `command*` `dry_run=true` `require_known_object=false` `target_world=auto/pie/editor` |
+| `execute` `[w]` | Execute a console command through the editor world/PIE context with dry-run, optional registry existence guard, and optional target-world constraint. | `command*` `dry_run=false` `require_known_object=false` `target_world=auto/pie/editor` |
 | `get_log_cursor` | Return the live Monolith log-capture cursor for isolating future command output. | none |
 | `search_logs_since` | Search only logs emitted after a cursor. | `cursor*` `pattern?` `category?` `verbosity=very_verbose` `limit=200` |
 | `wait_for_log` | Wait over live post-cursor logs until expected patterns pass, a rejected pattern appears, or timeout expires. Reject-only absence checks require `mode=assert_absent`. | `cursor*` `pattern?` `expect_log?` `expect_logs?` `reject_log?` `reject_logs?` `mode=expect/assert_absent` `category?` `verbosity=very_verbose` `timeout_ms=3000` `poll_interval_ms=100` `log_limit=200` |
@@ -53,7 +53,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `execute_and_capture` `[w]` | Execute a command, run a screenshot console command such as `HighResShot`, and report the newly created or modified PNG path. Deferred viewport screenshots return `capture_pending` plus `capture_id`. | `command*` `capture_command="HighResShot 1920x1080"` `output_path?` `target_world=auto/pie/editor` `settle_ms=250` `capture_wait_ms=120000` |
 | `poll_capture` | Poll a pending command-driven screenshot by `capture_id`; use after `execute_and_capture` or a capture step returns `capture_pending`. | `capture_id*` `consume=false` |
 | `diagnose_failure` | Classify a failed console result and suggest concrete next actions. | `result*` |
-| `set_cvar_scoped` `[w]` | Temporarily set live CVars, run a sequence, then restore original values before returning. | `cvars*` `commands*` `target_world=auto/pie/editor` `artifact_dir?` |
+| `set_cvar_scoped` `[w]` | Temporarily set live CVars, run a sequence, then restore original values before returning. | `cvars*` `commands*` `dry_run=false` `require_known_object=false` `target_world=auto/pie/editor` `abort_on_failure=true` `settle_ms=100` `log_limit=200` `artifact_dir?` |
 
 ## Workflows
 
