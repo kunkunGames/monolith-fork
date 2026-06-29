@@ -16541,6 +16541,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleQueryNiagara(const TSharedP
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Matches;
+	Matches.Reserve(Limit);
 	ForEachNiagaraSystem(Folder, [&Conds, &Limit, &Matches](const FString& PackagePath, UNiagaraSystem* Sys) -> bool
 	{
 		const int32 EmitterCount = Sys->GetEmitterHandles().Num();
