@@ -415,4 +415,18 @@ bool FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest::Ru
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioUnbindSoundFromPerceptionRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.UnbindSoundFromPerceptionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioUnbindSoundFromPerceptionRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("asset_path"), 12345); // Should be string
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("unbind_sound_from_perception"), Params);
+	TestTrue(TEXT("UnbindSoundFromPerception with malformed asset_path should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("UnbindSoundFromPerception reports malformed asset_path"), Result.ErrorMessage.Contains(TEXT("asset_path must be a string")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
