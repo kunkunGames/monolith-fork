@@ -64,6 +64,35 @@ bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString&
 }
 #endif
 
+#if WITH_GEOMETRYSCRIPT
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshSimplifyMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.SimplifyRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardMeshSimplifyMalformedParamsTest::RunTest(const FString& Parameters)
+{
+    FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry::Get());
+    TestTrue(TEXT("mesh_simplify action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("mesh"), TEXT("mesh_simplify")));
+
+    // Parameter validation should happen before pool lookups for malformed requests.
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("handle"), TEXT("mesh_123")); // Fails pool lookup if param parsing succeeds, but parsing should fail first
+        Params->SetStringField(TEXT("target_percentage"), TEXT("half")); // Malformed
+
+        FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("mesh_simplify"), Params);
+        TestFalse(TEXT("MeshSimplify rejects malformed target_percentage parameter"), Result.bSuccess);
+        TestTrue(TEXT("MeshSimplify reports the validation error"), Result.ErrorMessage.Contains(TEXT("Parameter 'target_percentage' must be a number")));
+
+        Params->RemoveField(TEXT("target_percentage"));
+        Params->SetStringField(TEXT("target_triangles"), TEXT("half")); // Malformed
+        Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("mesh"), TEXT("mesh_simplify"), Params);
+        TestFalse(TEXT("MeshSimplify rejects malformed target_triangles parameter"), Result.bSuccess);
+        TestTrue(TEXT("MeshSimplify reports the validation error"), Result.ErrorMessage.Contains(TEXT("Parameter 'target_triangles' must be a number")));
+    }
+
+    return true;
+}
+#endif
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshTechArtMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.TechArtRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardMeshTechArtMalformedParamsTest::RunTest(const FString& Parameters)
