@@ -915,7 +915,7 @@ function handleInitialize(message) {
       "available actions and params for that namespace.\n" +
       "\n" +
       "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n" +
-      "Offline: Binaries/monolith_query.exe covers source/project/bridge reads.",
+      "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge reads.",
   });
 }
 
