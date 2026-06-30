@@ -8267,6 +8267,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListModuleScripts(const TSh
 					if (ValidStages.Num() > 0)
 					{
 						TArray<TSharedPtr<FJsonValue>> StagesArr;
+						StagesArr.Reserve(ValidStages.Num());
 						for (const FString& S : ValidStages) StagesArr.Add(MakeShared<FJsonValueString>(S));
 						Entry->SetArrayField(TEXT("valid_stages"), StagesArr);
 					}
@@ -9880,6 +9881,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleExportSystemSpec(const TSha
 			TArray<UNiagaraNodeFunctionCall*> Mods;
 			MonolithNiagaraHelpers::GetOrderedModuleNodes(*Out, Mods);
 
+			ModulesArr.Reserve(Mods.Num());
 			int32 ExportEmitterIdx = FindEmitterHandleIndex(System, HandleId);
 
 			for (UNiagaraNodeFunctionCall* MN : Mods)
@@ -13373,6 +13375,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetEventHandlers(const TSha
 	const TArray<FNiagaraEventScriptProperties>& Handlers = ED->GetEventHandlers();
 
 	TArray<TSharedPtr<FJsonValue>> HandlersArr;
+	HandlersArr.Reserve(Handlers.Num());
 	for (int32 i = 0; i < Handlers.Num(); ++i)
 	{
 		const FNiagaraEventScriptProperties& ESP = Handlers[i];
@@ -13655,6 +13658,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetSimulationStages(const T
 	const TArray<UNiagaraSimulationStageBase*>& Stages = ED->GetSimulationStages();
 
 	TArray<TSharedPtr<FJsonValue>> StagesArr;
+	StagesArr.Reserve(Stages.Num());
 	for (int32 i = 0; i < Stages.Num(); ++i)
 	{
 		UNiagaraSimulationStageBase* StageBase = Stages[i];

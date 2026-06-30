@@ -289,6 +289,7 @@ namespace
 	{
 		if (const FBoolColumn* BoolC = Col.GetPtr<FBoolColumn>())
 		{
+			OutCells.Reserve(OutCells.Num() + BoolC->RowValuesWithAny.Num());
 			for (int32 r = 0; r < BoolC->RowValuesWithAny.Num(); ++r)
 			{
 				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
@@ -300,6 +301,7 @@ namespace
 		}
 		if (const FFloatRangeColumn* RangeC = Col.GetPtr<FFloatRangeColumn>())
 		{
+			OutCells.Reserve(OutCells.Num() + RangeC->RowValues.Num());
 			for (int32 r = 0; r < RangeC->RowValues.Num(); ++r)
 			{
 				const FChooserFloatRangeRowData& Row = RangeC->RowValues[r];
@@ -315,11 +317,13 @@ namespace
 		}
 		if (const FGameplayTagColumn* TagC = Col.GetPtr<FGameplayTagColumn>())
 		{
+			OutCells.Reserve(OutCells.Num() + TagC->RowValues.Num());
 			for (int32 r = 0; r < TagC->RowValues.Num(); ++r)
 			{
 				TSharedPtr<FJsonObject> Cell = MakeShared<FJsonObject>();
 				Cell->SetNumberField(TEXT("row"), r);
 				TArray<TSharedPtr<FJsonValue>> TagArr;
+				TagArr.Reserve(TagC->RowValues[r].Num());
 				for (const FGameplayTag& Tag : TagC->RowValues[r])
 				{
 					TagArr.Add(MakeShared<FJsonValueString>(Tag.ToString()));
@@ -331,6 +335,7 @@ namespace
 		}
 		if (const FEnumColumn* EnumC = Col.GetPtr<FEnumColumn>())
 		{
+			OutCells.Reserve(OutCells.Num() + EnumC->RowValues.Num());
 			for (int32 r = 0; r < EnumC->RowValues.Num(); ++r)
 			{
 				const FChooserEnumRowData& Row = EnumC->RowValues[r];
