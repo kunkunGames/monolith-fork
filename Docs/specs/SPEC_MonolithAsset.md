@@ -39,6 +39,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | `validate_typed_asset` | `FMonolithAssetInspectionActions` | Validate a typed asset and report warnings without mutation. |
 | `batch_rename_assets` | `FMonolithAssetHygieneActions` | Preview or apply batch asset renames through `IAssetTools::RenameAssets`. |
 | `find_assets` | `FMonolithAssetFindActions` | Fuzzy, scored, typo-tolerant search over the live `AssetRegistry`; ranks by asset name/path/class (and optional tags) via the shared MonolithCore `FMonolithFuzzyMatch` engine, with `allow_transposition` controlling Damerau adjacent-swap tolerance. |
+| `register_content_mount_points` | `FMonolithAssetPackageGraphActions` | Guarded process-local content mount registration through `FPackageName::RegisterMountPoint`; defaults to `dry_run=true`, requires `confirm=true` for mutation, and resolves exactly one of explicit `content_dir`, loaded `plugin_name`, or `project_plugin_dir` specs. |
 | `plan_package_graph_copy` | `FMonolithAssetPackageGraphActions` | Read-only AssetRegistry traversal that emits a source-to-destination package plan, dependency edges, external dependencies, and destination collisions from explicit root remaps. |
 | `copy_package_graph_with_remap` | `FMonolithAssetPackageGraphActions` | Guarded package graph duplication through `IAssetTools::DuplicateAsset`; requires `dry_run=true` or `confirm=true`, never overwrites existing destinations, and can save duplicated packages. |
 | `copy_package_graph_with_strategy` | `FMonolithAssetPackageGraphActions` | Guarded package graph workflow orchestrator. It emits `strategy_plan[]` before mutation, executes only supported `duplicate_asset` rows in this slice, and reports AdvancedCopy/raw/manual strategy rows as explicit unsupported/deferred blockers rather than silently falling back. |
@@ -50,7 +51,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Scope | Modules |
 |-------|---------|
 | Public | `Core`, `CoreUObject`, `Engine`, `MonolithCore` |
-| Private | `UnrealEd`, `Json`, `JsonUtilities`, `AssetRegistry`, `AssetTools`, `EditorScriptingUtilities`, `ImageWrapper`, `ImageCore`, `RenderCore`, `RHI`, `SlateCore` |
+| Private | `UnrealEd`, `Json`, `JsonUtilities`, `AssetRegistry`, `AssetTools`, `EditorScriptingUtilities`, `ImageWrapper`, `ImageCore`, `Projects`, `RenderCore`, `RHI`, `SourceControl`, `Slate`, `SlateCore` |
 
 ## 5. Lifecycle Delete Contract
 
@@ -72,9 +73,11 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |
 | Inspection | `Public/MonolithAssetInspectionActions.h`, `Private/MonolithAssetInspectionActions.cpp` | Former typed asset inspection surface, now independent from `MonolithMaterial`. |
 | Find | `Public/MonolithAssetFindActions.h`, `Private/MonolithAssetFindActions.cpp` | Fuzzy live-`AssetRegistry` search (`asset.find_assets`); thin consumer of MonolithCore `FMonolithFuzzyMatch`, owns its own corpus/fields/weights and the `allow_transposition` option. Distinct from exact-name `FMonolithAssetUtils::FindAssetCandidates` and offline `project` FTS search. |
-| Package graph | `Public/MonolithAssetPackageGraphActions.h`, `Private/MonolithAssetPackageGraphActions.cpp` | Copy/remap planning (`asset.plan_package_graph_copy`), guarded duplication (`asset.copy_package_graph_with_remap`), strategy planning/orchestration (`asset.copy_package_graph_with_strategy`), reflected hard/soft reference rewrite (`asset.fixup_copied_references`), and dependency closure validation (`asset.validate_dependency_closure`). |
+| Package graph | `Public/MonolithAssetPackageGraphActions.h`, `Private/MonolithAssetPackageGraphActions.cpp` | Safe content mount registration (`asset.register_content_mount_points`), copy/remap planning (`asset.plan_package_graph_copy`), guarded duplication (`asset.copy_package_graph_with_remap`), strategy planning/orchestration (`asset.copy_package_graph_with_strategy`), reflected hard/soft reference rewrite (`asset.fixup_copied_references`), and dependency closure validation (`asset.validate_dependency_closure`). |
 
 ## 8. Package Graph Copy/Remap Pipeline
+
+`asset.register_content_mount_points` is a guarded preflight action for package graph workflows that need to read packages from content roots not already mounted in the editor process. Inputs are explicit `mount_points[]` specs. Each spec can provide `root`/`mount_point` plus exactly one resolver: explicit `content_dir`, loaded `plugin_name`, or `project_plugin_dir` relative to `FPaths::ProjectPluginsDir()`. `project_plugin_dir` must stay relative and cannot contain `.` or `..` path segments. `plugin_name` rows require `IPlugin::CanContainContent()` and must match the plugin mounted asset path when a root is provided. The action defaults to `dry_run=true`, refuses `/Game/`, `/Engine/`, and `/Script/` unless `allow_core_mount_points=true`, refuses conflicting existing root mappings unless `allow_override=true`, rejects duplicate/conflicting root specs within the same request before mutation, validates that resolved content directories exist, optionally `scan_asset_registry=true` after confirmed registration, and supports `probe_packages[]` existence checks. The response returns `mount_points[]`, `preflight_errors[]`, `probe_packages[]`, `would_register_count`, `registered_count`, `already_registered_count`, `conflict_count`, `missing_dir_count`, and `next_recommended_action="asset.plan_package_graph_copy"`.
 
 `asset.plan_package_graph_copy` is a no-mutation planner for workflows that need to copy a related package graph from one content root to another. Inputs are explicit:
 
@@ -113,7 +116,7 @@ The action always runs the planner and returns `strategy_plan[]` before mutation
 
 `asset.validate_dependency_closure` validates destination packages after or before a copy/remap operation. It accepts `destination_roots`, optional explicit `package_paths`, `allowed_external_roots`, `legacy_source_roots`, `dependency_kinds`, and `max_packages`. The response returns `ok=false` with `violations[]` for packages outside destination roots, disallowed external dependencies, and legacy source-root dependencies.
 
-`asset.plan_package_graph_copy` and `asset.validate_dependency_closure` are read-only. `asset.copy_package_graph_with_remap`, `asset.copy_package_graph_with_strategy`, and `asset.fixup_copied_references` are guarded mutating actions using `transaction_optional` policy and explicit `dry_run=true` or `confirm=true`. Content mount registration, raw package file copy execution, redirector cleanup, material graph repair, widget subtree repair, and Blueprint graph clone repair are still outside this module's implemented slice.
+`asset.plan_package_graph_copy` and `asset.validate_dependency_closure` are read-only. `asset.register_content_mount_points` uses `track_dirty_packages` because it mutates process mount state rather than package contents. `asset.copy_package_graph_with_remap`, `asset.copy_package_graph_with_strategy`, and `asset.fixup_copied_references` use `transaction_optional` policy and explicit `dry_run=true` or `confirm=true` (`register_content_mount_points` defaults to dry-run). Raw package file copy execution, redirector cleanup, material graph repair, widget subtree repair, and Blueprint graph clone repair are still outside this module's implemented slice.
 
 ## 9. Texture Role Pipeline
 
@@ -140,6 +143,6 @@ The action result includes `texture_role`, `settings_applied`, and `validation`.
 |------|-------------|
 | Source stale scan | No old UI ingest action names, old UI ingest classes, or old typed-asset inspection class names remain in source. |
 | Build | Run the primary `<Project>Editor` UBT command after closing any editor process that locks Monolith DLLs. |
-| Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 17 actions owned by `MonolithAsset`. |
+| Runtime discovery | `monolith_discover({ "namespace": "asset" })` should list 18 actions owned by `MonolithAsset`. |
 | Find engine reuse | `asset.find_assets` consumes `FMonolithFuzzyMatch` (MonolithCore); it must not duplicate edit-distance/tokenization, `allow_transposition` must flow into `ScoreCandidate`, and `FMonolithAssetUtils::FindAssetCandidates` stays exact-name. |
-| Package graph automation | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` must cover registration, read/write policy, mutation guard rejection, and dry-run report shape for package graph actions. |
+| Package graph automation | `Monolith.Asset.PackageGraph.RegistryAndParamGuards` must cover registration, read/write policy, mutation guard rejection, duplicate resolver rejection, same-request root conflict rejection, dry-run report shape/non-mutation, project-plugin-dir resolver dry-run with a temporary generic test folder, confirmed mount idempotency, conflicting existing mount rejection, and package graph strategy report shape. |

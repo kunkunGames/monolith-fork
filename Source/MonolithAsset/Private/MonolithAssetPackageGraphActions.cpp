@@ -12,7 +12,9 @@
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
 #include "IAssetTools.h"
+#include "Interfaces/IPluginManager.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
@@ -46,6 +48,18 @@ namespace
 		bool bSourceExists = false;
 		bool bDestinationExists = false;
 		FAssetData SourceAsset;
+	};
+
+	struct FContentMountSpec
+	{
+		FString MountPoint;
+		FString ContentDir;
+		FString PluginName;
+		FString RelativePluginDir;
+		FString ResolutionSource;
+		bool bExistingSame = false;
+		bool bExistingDifferent = false;
+		bool bDirectoryExists = false;
 	};
 
 	struct FReferenceFixupOptions
@@ -250,6 +264,297 @@ namespace
 			return false;
 		}
 		InOutValue = FMath::Clamp(static_cast<int32>(Number), 1, 10000);
+		return true;
+	}
+
+	static FString NormalizeMountPoint(FString MountPoint)
+	{
+		MountPoint.TrimStartAndEndInline();
+		MountPoint.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (MountPoint.Contains(TEXT("//")))
+		{
+			MountPoint.ReplaceInline(TEXT("//"), TEXT("/"));
+		}
+		if (!MountPoint.EndsWith(TEXT("/")))
+		{
+			MountPoint += TEXT("/");
+		}
+		return MountPoint;
+	}
+
+	static bool ValidateMountPoint(const FString& MountPoint, bool bAllowCoreMountPoints, FString& OutError)
+	{
+		if (!MountPoint.StartsWith(TEXT("/")) || !MountPoint.EndsWith(TEXT("/")) || MountPoint.Len() <= 2)
+		{
+			OutError = FString::Printf(TEXT("Mount point must use rooted package syntax with leading and trailing slashes, e.g. /ShooterMaps/: %s"), *MountPoint);
+			return false;
+		}
+		if (MountPoint.Contains(TEXT("//")))
+		{
+			OutError = FString::Printf(TEXT("Mount point must not contain duplicate slashes: %s"), *MountPoint);
+			return false;
+		}
+		if (!bAllowCoreMountPoints
+			&& (MountPoint.Equals(TEXT("/Game/"), ESearchCase::IgnoreCase)
+				|| MountPoint.Equals(TEXT("/Engine/"), ESearchCase::IgnoreCase)
+				|| MountPoint.Equals(TEXT("/Script/"), ESearchCase::IgnoreCase)))
+		{
+			OutError = FString::Printf(TEXT("Refusing to override core mount point %s; pass allow_core_mount_points=true only for explicit diagnostics"), *MountPoint);
+			return false;
+		}
+		return true;
+	}
+
+	static FString NormalizeContentDir(FString ContentDir)
+	{
+		ContentDir.TrimStartAndEndInline();
+		ContentDir.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (FPaths::IsRelative(ContentDir))
+		{
+			ContentDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), ContentDir);
+		}
+		else
+		{
+			ContentDir = FPaths::ConvertRelativePathToFull(ContentDir);
+		}
+		FPaths::NormalizeDirectoryName(ContentDir);
+		if (!ContentDir.EndsWith(TEXT("/")))
+		{
+			ContentDir += TEXT("/");
+		}
+		return ContentDir;
+	}
+
+	static bool NormalizeRelativePluginDir(FString& InOutRelativePluginDir, FString& OutError)
+	{
+		InOutRelativePluginDir.TrimStartAndEndInline();
+		InOutRelativePluginDir.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (InOutRelativePluginDir.IsEmpty())
+		{
+			OutError = TEXT("project_plugin_dir must not be empty");
+			return false;
+		}
+		if (!FPaths::IsRelative(InOutRelativePluginDir) || InOutRelativePluginDir.StartsWith(TEXT("/")))
+		{
+			OutError = FString::Printf(TEXT("project_plugin_dir must be relative to the project Plugins directory: %s"), *InOutRelativePluginDir);
+			return false;
+		}
+
+		TArray<FString> Segments;
+		InOutRelativePluginDir.ParseIntoArray(Segments, TEXT("/"), true);
+		for (const FString& Segment : Segments)
+		{
+			if (Segment == TEXT(".") || Segment == TEXT(".."))
+			{
+				OutError = FString::Printf(TEXT("project_plugin_dir must not contain '.' or '..' path segments: %s"), *InOutRelativePluginDir);
+				return false;
+			}
+		}
+		while (InOutRelativePluginDir.EndsWith(TEXT("/")))
+		{
+			InOutRelativePluginDir.LeftChopInline(1);
+		}
+		return true;
+	}
+
+	static FString ResolveRelativePluginContentDir(FString RelativePluginDir)
+	{
+		RelativePluginDir.TrimStartAndEndInline();
+		RelativePluginDir.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (RelativePluginDir.StartsWith(TEXT("/")))
+		{
+			RelativePluginDir.RightChopInline(1);
+		}
+		while (RelativePluginDir.EndsWith(TEXT("/")))
+		{
+			RelativePluginDir.LeftChopInline(1);
+		}
+		const FString PluginDir = RelativePluginDir.EndsWith(TEXT("/Content"), ESearchCase::IgnoreCase)
+			? RelativePluginDir
+			: RelativePluginDir / TEXT("Content");
+		return NormalizeContentDir(FPaths::ProjectPluginsDir() / PluginDir);
+	}
+
+	static bool ResolveContentMountSpec(
+		const TSharedPtr<FJsonObject>& Object,
+		bool bAllowCoreMountPoints,
+		FContentMountSpec& OutSpec,
+		FString& OutError)
+	{
+		if (!Object.IsValid())
+		{
+			OutError = TEXT("Each mount_points entry must be an object");
+			return false;
+		}
+
+		Object->TryGetStringField(TEXT("plugin_name"), OutSpec.PluginName);
+		Object->TryGetStringField(TEXT("relative_plugin_dir"), OutSpec.RelativePluginDir);
+		Object->TryGetStringField(TEXT("mount_point"), OutSpec.MountPoint);
+		if (OutSpec.MountPoint.IsEmpty())
+		{
+			Object->TryGetStringField(TEXT("root"), OutSpec.MountPoint);
+		}
+		FString ProjectPluginDir;
+		Object->TryGetStringField(TEXT("project_plugin_dir"), ProjectPluginDir);
+		if (!ProjectPluginDir.IsEmpty())
+		{
+			if (!OutSpec.RelativePluginDir.IsEmpty() && !OutSpec.RelativePluginDir.Equals(ProjectPluginDir, ESearchCase::IgnoreCase))
+			{
+				OutError = TEXT("Mount spec must not set both relative_plugin_dir and project_plugin_dir to different values");
+				return false;
+			}
+			OutSpec.RelativePluginDir = ProjectPluginDir;
+		}
+		Object->TryGetStringField(TEXT("content_dir"), OutSpec.ContentDir);
+		OutSpec.PluginName.TrimStartAndEndInline();
+		OutSpec.RelativePluginDir.TrimStartAndEndInline();
+		if (!OutSpec.RelativePluginDir.IsEmpty() && !NormalizeRelativePluginDir(OutSpec.RelativePluginDir, OutError))
+		{
+			return false;
+		}
+
+		const int32 ResolverCount = (OutSpec.ContentDir.IsEmpty() ? 0 : 1)
+			+ (OutSpec.PluginName.IsEmpty() ? 0 : 1)
+			+ (OutSpec.RelativePluginDir.IsEmpty() ? 0 : 1);
+		if (ResolverCount != 1)
+		{
+			OutError = TEXT("Each mount_points entry must set exactly one resolver: content_dir, plugin_name, or project_plugin_dir");
+			return false;
+		}
+
+		if (!OutSpec.ContentDir.IsEmpty())
+		{
+			OutSpec.ContentDir = NormalizeContentDir(OutSpec.ContentDir);
+			OutSpec.ResolutionSource = TEXT("content_dir");
+		}
+		else if (!OutSpec.PluginName.IsEmpty())
+		{
+			const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(OutSpec.PluginName);
+			if (Plugin.IsValid())
+			{
+				if (!Plugin->CanContainContent())
+				{
+					OutError = FString::Printf(TEXT("Plugin '%s' cannot contain content"), *OutSpec.PluginName);
+					return false;
+				}
+				const FString PluginMountedPath = NormalizeMountPoint(Plugin->GetMountedAssetPath().IsEmpty()
+					? FString::Printf(TEXT("/%s/"), *OutSpec.PluginName)
+					: Plugin->GetMountedAssetPath());
+				if (OutSpec.MountPoint.IsEmpty())
+				{
+					OutSpec.MountPoint = PluginMountedPath;
+				}
+				else if (!NormalizeMountPoint(OutSpec.MountPoint).Equals(PluginMountedPath, ESearchCase::IgnoreCase))
+				{
+					OutError = FString::Printf(TEXT("Mount point for plugin '%s' must match plugin mounted asset path %s"), *OutSpec.PluginName, *PluginMountedPath);
+					return false;
+				}
+				OutSpec.ContentDir = NormalizeContentDir(Plugin->GetContentDir());
+				OutSpec.ResolutionSource = TEXT("plugin_manager");
+			}
+			else
+			{
+				OutError = FString::Printf(TEXT("Plugin '%s' is not loaded; use project_plugin_dir or content_dir for an explicit filesystem fallback"), *OutSpec.PluginName);
+				return false;
+			}
+		}
+		else if (!OutSpec.RelativePluginDir.IsEmpty())
+		{
+			OutSpec.ContentDir = ResolveRelativePluginContentDir(OutSpec.RelativePluginDir);
+			OutSpec.ResolutionSource = TEXT("project_plugin_dir");
+		}
+
+		if (OutSpec.MountPoint.IsEmpty())
+		{
+			OutError = TEXT("Each mount_points entry requires root/mount_point unless plugin_name provides the mounted asset path");
+			return false;
+		}
+		OutSpec.MountPoint = NormalizeMountPoint(OutSpec.MountPoint);
+		if (!ValidateMountPoint(OutSpec.MountPoint, bAllowCoreMountPoints, OutError))
+		{
+			return false;
+		}
+
+		OutSpec.bDirectoryExists = FPaths::DirectoryExists(OutSpec.ContentDir);
+		const TRefCountPtr<UE::PackageName::IMountPoint> ExistingSame = FPackageName::FindMountPoint(OutSpec.MountPoint, OutSpec.ContentDir);
+		const TRefCountPtr<UE::PackageName::IMountPoint> ExistingForRoot = FPackageName::FindMountPointByRootPackageName(OutSpec.MountPoint);
+		OutSpec.bExistingSame = ExistingSame.IsValid() && ExistingSame->IsMounted();
+		OutSpec.bExistingDifferent = ExistingForRoot.IsValid()
+			&& ExistingForRoot->IsMounted()
+			&& !FString(ExistingForRoot->GetLocalPathAbsolute()).Equals(OutSpec.ContentDir, ESearchCase::IgnoreCase);
+		return true;
+	}
+
+	static TSharedPtr<FJsonObject> MakeMountPointRow(
+		const FContentMountSpec& Spec,
+		const FString& Status,
+		const FString& Reason = FString())
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("mount_point"), Spec.MountPoint);
+		Row->SetStringField(TEXT("content_dir"), Spec.ContentDir);
+		Row->SetStringField(TEXT("resolution_source"), Spec.ResolutionSource);
+		if (!Spec.PluginName.IsEmpty())
+		{
+			Row->SetStringField(TEXT("plugin_name"), Spec.PluginName);
+		}
+		if (!Spec.RelativePluginDir.IsEmpty())
+		{
+			Row->SetStringField(TEXT("project_plugin_dir"), Spec.RelativePluginDir);
+		}
+		Row->SetBoolField(TEXT("directory_exists"), Spec.bDirectoryExists);
+		Row->SetBoolField(TEXT("existing_same"), Spec.bExistingSame);
+		Row->SetBoolField(TEXT("existing_different"), Spec.bExistingDifferent);
+		Row->SetStringField(TEXT("status"), Status);
+		if (!Reason.IsEmpty())
+		{
+			Row->SetStringField(TEXT("reason"), Reason);
+		}
+		return Row;
+	}
+
+	static bool ReadContentMountSpecs(
+		const TSharedPtr<FJsonObject>& Params,
+		bool bAllowCoreMountPoints,
+		TArray<FContentMountSpec>& OutSpecs,
+		FString& OutError)
+	{
+		OutSpecs.Reset();
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("mount_points"), Values) || !Values)
+		{
+			OutError = TEXT("Missing required array param 'mount_points'");
+			return false;
+		}
+		if (Values->Num() == 0)
+		{
+			OutError = TEXT("Param 'mount_points' must contain at least one mount point spec");
+			return false;
+		}
+
+		TMap<FString, FString> SeenRoots;
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FContentMountSpec Spec;
+			if (!ResolveContentMountSpec(Value.IsValid() ? Value->AsObject() : nullptr, bAllowCoreMountPoints, Spec, OutError))
+			{
+				return false;
+			}
+			if (const FString* SeenContentDir = SeenRoots.Find(Spec.MountPoint))
+			{
+				if (SeenContentDir->Equals(Spec.ContentDir, ESearchCase::IgnoreCase))
+				{
+					OutError = FString::Printf(TEXT("Duplicate mount point spec for %s -> %s"), *Spec.MountPoint, *Spec.ContentDir);
+				}
+				else
+				{
+					OutError = FString::Printf(TEXT("Conflicting mount point specs for %s: %s vs %s"), *Spec.MountPoint, **SeenContentDir, *Spec.ContentDir);
+				}
+				return false;
+			}
+			SeenRoots.Add(Spec.MountPoint, Spec.ContentDir);
+			OutSpecs.Add(MoveTemp(Spec));
+		}
 		return true;
 	}
 
@@ -653,6 +958,18 @@ namespace
 		Policy.bDefaulted = false;
 		Policy.bDirtyPackageTracking = true;
 		Policy.bTransactionWrapping = true;
+		Policy.bPostEditValidation = false;
+		Policy.bEnforced = true;
+		return Policy;
+	}
+
+	static FMonolithActionExecutionPolicy TrackDirtyPackagesPolicy()
+	{
+		FMonolithActionExecutionPolicy Policy;
+		Policy.PolicyId = TEXT("track_dirty_packages");
+		Policy.bDefaulted = false;
+		Policy.bDirtyPackageTracking = true;
+		Policy.bTransactionWrapping = false;
 		Policy.bPostEditValidation = false;
 		Policy.bEnforced = true;
 		return Policy;
@@ -1379,6 +1696,23 @@ namespace
 
 void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
+	Registry.RegisterAction(TEXT("asset"), TEXT("register_content_mount_points"),
+		TEXT("Safely register explicit Unreal content mount points before package graph planning/copying. Defaults to dry-run; requires confirm=true for process mount-table mutation."),
+		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::RegisterContentMountPoints),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("mount_points"), TEXT("array"), TEXT("Mount point specs with root/mount_point plus exactly one resolver: content_dir, plugin_name, or project_plugin_dir"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview mount registrations without mutating the process mount table"), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required when dry_run=false"), TEXT("false"))
+			.Optional(TEXT("allow_override"), TEXT("bool"), TEXT("Allow mounting a root that already resolves to a different local content directory"), TEXT("false"))
+			.Optional(TEXT("allow_core_mount_points"), TEXT("bool"), TEXT("Allow /Game/, /Engine/, or /Script/ mount-point specs; normally refused"), TEXT("false"))
+			.Optional(TEXT("scan_asset_registry"), TEXT("bool"), TEXT("After confirmed registration, synchronously scan the mounted roots in AssetRegistry"), TEXT("true"))
+			.Optional(TEXT("force_rescan"), TEXT("bool"), TEXT("Force AssetRegistry rescan when scan_asset_registry=true"), TEXT("false"))
+			.Optional(TEXT("probe_packages"), TEXT("array"), TEXT("Optional packages to test with FPackageName::DoesPackageExist after preflight/registration"))
+			.Build(),
+		TEXT("PackageGraph"),
+		TrackDirtyPackagesPolicy());
+
 	Registry.RegisterAction(TEXT("asset"), TEXT("plan_package_graph_copy"),
 		TEXT("Plan a package graph copy/remap from AssetRegistry dependencies without loading, copying, or fixing up assets"),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::PlanPackageGraphCopy),
@@ -1480,6 +1814,10 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Build(),
 		TEXT("PackageGraph"));
 
+	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("register_content_mount_points"),
+		{ TEXT("content mount point"), TEXT("package graph copy preflight"), TEXT("plugin content dir"), TEXT("RegisterMountPoint") },
+		{ TEXT("register content mount"), TEXT("mount plugin content root"), TEXT("prepare legacy package root") },
+		{ TEXT("dry-run registering /ShooterMaps/ to a GameFeature plugin Content directory before package copy") });
 	Registry.SetActionSearchMetadata(TEXT("asset"), TEXT("plan_package_graph_copy"),
 		{ TEXT("package graph copy"), TEXT("root remap"), TEXT("dependency closure"), TEXT("dry-run copy plan") },
 		{ TEXT("plan asset copy"), TEXT("plan package remap"), TEXT("copy dependency graph") },
@@ -1501,6 +1839,11 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 		{ TEXT("validate copied dependencies"), TEXT("find source-root dependencies") },
 		{ TEXT("validate that /SpeedMaps copied assets no longer depend on /ShooterMaps") });
 
+	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("register_content_mount_points"),
+		TEXT("unreal-asset"),
+		{ TEXT("mount_points specs are required; dry_run=true is the default and confirm=true is required for registration") },
+		{ TEXT("Mount preflight report with registered, already_registered, missing_directory, and conflict rows") },
+		{ TEXT("asset.plan_package_graph_copy") });
 	Registry.SetActionPlanningMetadata(TEXT("asset"), TEXT("plan_package_graph_copy"),
 		TEXT("unreal-asset"),
 		{ TEXT("Root source packages and explicit source->destination root_remaps are required") },
@@ -1526,6 +1869,165 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 		{ TEXT("Destination roots or explicit destination packages are required") },
 		{ TEXT("ok flag, violation rows, checked package count, and dependency edge count") },
 		{ TEXT("asset.plan_package_graph_copy") });
+}
+
+FMonolithActionResult FMonolithAssetPackageGraphActions::RegisterContentMountPoints(const TSharedPtr<FJsonObject>& Params)
+{
+	FMutationOptions Mutation;
+	Mutation.bDryRun = true;
+
+	FString Error;
+	if (!ReadMutationOptions(Params, Mutation, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("mutation_guard"), Error));
+	}
+
+	bool bAllowOverride = false;
+	bool bAllowCoreMountPoints = false;
+	bool bScanAssetRegistry = true;
+	bool bForceRescan = false;
+	if (!ReadBoolParam(Params, TEXT("allow_override"), bAllowOverride, Error)
+		|| !ReadBoolParam(Params, TEXT("allow_core_mount_points"), bAllowCoreMountPoints, Error)
+		|| !ReadBoolParam(Params, TEXT("scan_asset_registry"), bScanAssetRegistry, Error)
+		|| !ReadBoolParam(Params, TEXT("force_rescan"), bForceRescan, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("params"), Error));
+	}
+
+	TArray<FString> ProbePackages;
+	if (!ReadStringArrayParam(Params, TEXT("probe_packages"), false, ProbePackages, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("probe_packages"), Error));
+	}
+
+	TArray<FContentMountSpec> Specs;
+	if (!ReadContentMountSpecs(Params, bAllowCoreMountPoints, Specs, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("mount_points"), Error));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	TArray<TSharedPtr<FJsonValue>> PreflightErrors;
+	TArray<FString> RootsToScan;
+	int32 WouldRegisterCount = 0;
+	int32 RegisteredCount = 0;
+	int32 AlreadyRegisteredCount = 0;
+	int32 ConflictCount = 0;
+	int32 MissingDirCount = 0;
+	TArray<int32> RegisterIndices;
+
+	for (int32 Index = 0; Index < Specs.Num(); ++Index)
+	{
+		FContentMountSpec& Spec = Specs[Index];
+		if (!Spec.bDirectoryExists)
+		{
+			++MissingDirCount;
+			TSharedPtr<FJsonObject> Row = MakeMountPointRow(Spec, TEXT("blocked"), TEXT("content_dir_missing"));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+			PreflightErrors.Add(MakeShared<FJsonValueObject>(Row));
+			continue;
+		}
+		if (Spec.bExistingDifferent && !bAllowOverride)
+		{
+			++ConflictCount;
+			TSharedPtr<FJsonObject> Row = MakeMountPointRow(Spec, TEXT("blocked"), TEXT("mount_point_conflicts_with_existing_root"));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+			PreflightErrors.Add(MakeShared<FJsonValueObject>(Row));
+			continue;
+		}
+		if (Spec.bExistingSame)
+		{
+			++AlreadyRegisteredCount;
+			Rows.Add(MakeShared<FJsonValueObject>(MakeMountPointRow(Spec, TEXT("already_registered"))));
+			continue;
+		}
+
+		++WouldRegisterCount;
+		RegisterIndices.Add(Index);
+		if (Mutation.bDryRun)
+		{
+			Rows.Add(MakeShared<FJsonValueObject>(MakeMountPointRow(Spec, TEXT("would_register"))));
+		}
+	}
+
+	if (PreflightErrors.Num() > 0 && !Mutation.bDryRun)
+	{
+		TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
+		ErrorResult->SetStringField(TEXT("namespace"), TEXT("asset"));
+		ErrorResult->SetStringField(TEXT("action"), TEXT("register_content_mount_points"));
+		ErrorResult->SetStringField(TEXT("status"), TEXT("preflight_failed"));
+		ErrorResult->SetArrayField(TEXT("mount_points"), Rows);
+		ErrorResult->SetArrayField(TEXT("preflight_errors"), PreflightErrors);
+		ErrorResult->SetNumberField(TEXT("preflight_error_count"), PreflightErrors.Num());
+		return FMonolithActionResult::Error(TEXT("register_content_mount_points preflight failed"), ErrInvalidParams)
+			.WithErrorData(ErrorResult);
+	}
+
+	if (!Mutation.bDryRun)
+	{
+		for (const int32 Index : RegisterIndices)
+		{
+			FContentMountSpec& Spec = Specs[Index];
+			const TRefCountPtr<UE::PackageName::IMountPoint> MountPoint = FPackageName::RegisterMountPoint(Spec.MountPoint, Spec.ContentDir);
+			if (!MountPoint.IsValid() || !MountPoint->IsMounted())
+			{
+				TSharedPtr<FJsonObject> Row = MakeMountPointRow(Spec, TEXT("failed"), TEXT("register_mount_point_failed"));
+				Rows.Add(MakeShared<FJsonValueObject>(Row));
+				PreflightErrors.Add(MakeShared<FJsonValueObject>(Row));
+				continue;
+			}
+
+			++RegisteredCount;
+			RootsToScan.AddUnique(Spec.MountPoint);
+			Rows.Add(MakeShared<FJsonValueObject>(MakeMountPointRow(Spec, TEXT("registered"))));
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ScannedRoots;
+	if (!Mutation.bDryRun && bScanAssetRegistry && RootsToScan.Num() > 0)
+	{
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		AssetRegistry.ScanPathsSynchronous(RootsToScan, bForceRescan);
+		ScannedRoots = StringsToJson(RootsToScan);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ProbeRows;
+	for (const FString& ProbePackage : ProbePackages)
+	{
+		FString ExistingFilename;
+		TSharedPtr<FJsonObject> Probe = MakeShared<FJsonObject>();
+		Probe->SetStringField(TEXT("package"), ProbePackage);
+		Probe->SetBoolField(TEXT("exists"), FPackageName::DoesPackageExist(ProbePackage, &ExistingFilename));
+		if (!ExistingFilename.IsEmpty())
+		{
+			Probe->SetStringField(TEXT("filename"), ExistingFilename);
+		}
+		ProbeRows.Add(MakeShared<FJsonValueObject>(Probe));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("asset"));
+	Result->SetStringField(TEXT("action"), TEXT("register_content_mount_points"));
+	Result->SetBoolField(TEXT("dry_run"), Mutation.bDryRun);
+	Result->SetBoolField(TEXT("confirm"), Mutation.bConfirm);
+	Result->SetBoolField(TEXT("ok"), PreflightErrors.Num() == 0);
+	Result->SetStringField(TEXT("status"), PreflightErrors.Num() > 0 ? TEXT("preflight_failed") : (Mutation.bDryRun ? TEXT("dry_run") : TEXT("success")));
+	Result->SetBoolField(TEXT("allow_override"), bAllowOverride);
+	Result->SetBoolField(TEXT("allow_core_mount_points"), bAllowCoreMountPoints);
+	Result->SetBoolField(TEXT("scan_asset_registry"), bScanAssetRegistry);
+	Result->SetBoolField(TEXT("force_rescan"), bForceRescan);
+	Result->SetArrayField(TEXT("mount_points"), Rows);
+	Result->SetArrayField(TEXT("preflight_errors"), PreflightErrors);
+	Result->SetArrayField(TEXT("scanned_roots"), ScannedRoots);
+	Result->SetArrayField(TEXT("probe_packages"), ProbeRows);
+	Result->SetNumberField(TEXT("mount_point_count"), Specs.Num());
+	Result->SetNumberField(TEXT("would_register_count"), WouldRegisterCount);
+	Result->SetNumberField(TEXT("registered_count"), RegisteredCount);
+	Result->SetNumberField(TEXT("already_registered_count"), AlreadyRegisteredCount);
+	Result->SetNumberField(TEXT("conflict_count"), ConflictCount);
+	Result->SetNumberField(TEXT("missing_dir_count"), MissingDirCount);
+	Result->SetStringField(TEXT("next_recommended_action"), TEXT("asset.plan_package_graph_copy"));
+	return FMonolithActionResult::Success(Result);
 }
 
 FMonolithActionResult FMonolithAssetPackageGraphActions::PlanPackageGraphCopy(const TSharedPtr<FJsonObject>& Params)

@@ -37,7 +37,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-project-search` | `project` | ~20 | Asset search, references, type filter, gameplay tags, review/snapshots |
 | `unreal-bridge` | `bridge` | 5 | Map assets/Blueprint nodes to their backing C++ symbols |
 | `unreal-console` | `console` | 6 | Console object registry snapshots, cvars, console commands, hints, and guarded execution |
-| `unreal-asset` | `asset` | 17 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename, guarded package graph copy/remap and dependency validation |
+| `unreal-asset` | `asset` | 18 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename, guarded content mount registration, package graph copy/remap, and dependency validation |
 | `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
 | `unreal-build` | `editor` | 59* | Build, hot reload, compile errors, changeset validation planning |
 | `unreal-debugging` | `editor` | 59* | Logs, crash context, output log |
@@ -80,7 +80,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-niagara` | `niagara` | 123 | Niagara VFX systems, emitters, modules |
 | `unreal-animation` | `animation` | 135 | AnimBP, montages, sequences, blendspaces, layout |
 | `unreal-audio` | `audio` | 98 | Sound assets, cues, MetaSounds, attenuation, mixing |
-| `unreal-materials` | `material`/`asset` | 66 / 17 | Material graphs, instances, functions; asset ingest/inspect/validate |
+| `unreal-materials` | `material`/`asset` | 66 / 18 | Material graphs, instances, functions; asset ingest/inspect/validate |
 | `unreal-metahuman` | `metahuman` | 2 | MetaHuman setup & layout |
 | `unreal-slate` | `slate` | 6 | Editor Slate / Editor Utility Widgets |
 | `unreal-paper2d` | `paper2d` | 3 | Sprites, flipbooks, tile maps |

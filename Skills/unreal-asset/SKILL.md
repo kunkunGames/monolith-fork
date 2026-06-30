@@ -1,6 +1,6 @@
 ---
 name: unreal-asset
-description: Use for generic, cross-domain Unreal asset lifecycle work via the Monolith MCP asset namespace - Texture2D and TTF/OTF font ingest, file import, create/duplicate/move/save/delete asset, asset metadata/tags/thumbnail edits, naming validation, batch rename, fuzzy live asset find, asset-exists checks, generic untyped asset inspection, and guarded package graph copy/remap planning, duplication, reference fixup, or dependency closure validation. For pipeline-stack imports (glTF/FBX/USD/reimport) use unreal-interchange; for AI-generated textures use unreal-imagegen; for sprite-sheet ingest use unreal-sprite; for project-wide FTS asset search use unreal-project-search; for material or material-instance assets use unreal-materials. Triggers on asset, import texture, Texture2D, font import, TTF/OTF font, create asset, duplicate asset, move asset, save asset, delete asset, asset exists, asset metadata, asset tags, thumbnail, rename assets, batch rename, find asset by name, inspect asset, package graph copy, dependency closure, root remap, copied references, reference fixup.
+description: Use for generic, cross-domain Unreal asset lifecycle work via the Monolith MCP asset namespace - Texture2D and TTF/OTF font ingest, file import, create/duplicate/move/save/delete asset, asset metadata/tags/thumbnail edits, naming validation, batch rename, fuzzy live asset find, asset-exists checks, generic untyped asset inspection, and guarded package graph mount registration, copy/remap planning, duplication, reference fixup, or dependency closure validation. For pipeline-stack imports (glTF/FBX/USD/reimport) use unreal-interchange; for AI-generated textures use unreal-imagegen; for sprite-sheet ingest use unreal-sprite; for project-wide FTS asset search use unreal-project-search; for material or material-instance assets use unreal-materials. Triggers on asset, import texture, Texture2D, font import, TTF/OTF font, create asset, duplicate asset, move asset, save asset, delete asset, asset exists, asset metadata, asset tags, thumbnail, rename assets, batch rename, find asset by name, inspect asset, content mount, mount point, package graph copy, dependency closure, root remap, copied references, reference fixup.
 ---
 
 # Unreal Asset Skill
@@ -55,6 +55,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `inspect_assets_batch` | `asset_paths*` (array), `include_references=false`, `array_limit=16` | Inspect many assets with per-row success/error. |
 | `validate_typed_asset` | `asset_path*`, `array_limit=32` | Validate a typed asset; report warnings without mutation. |
 | `list_supported_asset_enrichers` | (none) | List read-only typed asset enrichers Monolith supports. |
+| `[w] register_content_mount_points` | `mount_points*` (array of objects), `dry_run=true`, `confirm=false`, `allow_override=false`, `allow_core_mount_points=false`, `scan_asset_registry=true`, `force_rescan=false`, `probe_packages?` | Safely register process-local Unreal content mount points before package graph planning/copying. Each row uses `root`/`mount_point` plus exactly one resolver: `content_dir`, `plugin_name`, or `project_plugin_dir`; dry-run is the default. |
 | `plan_package_graph_copy` | `root_packages*` (array), `root_remaps*` (object), `dependency_kinds?` (hard/soft), `max_packages=512`, `strategy=registry_only_plan`, `check_collisions=true` | Read-only copy/remap plan with package map, dependency edges, external deps, and destination collisions. |
 | `[w] copy_package_graph_with_remap` | `root_packages*` (array), `root_remaps*` (object), `dependency_kinds?` (hard/soft), `max_packages=512`, `check_collisions=true`, `collision_policy=fail_if_exists` (fail_if_exists/skip_existing), `dry_run=false`, `confirm=false`, `save=true` | Guarded package graph duplication using the plan contract. Requires `dry_run=true` or `confirm=true`; never overwrites existing destination packages. |
 | `[w] copy_package_graph_with_strategy` | `root_packages*`, `root_remaps*`, `workflow=copy_fixup_validate`, `copy_strategy=auto`, selector arrays, `run_fixup_on_dry_run=false`, `run_closure_on_dry_run=false`, `dry_run=false`, `confirm=false`, `save=true` | Orchestrate plan, `strategy_plan[]`, supported duplicate copy, optional fixup, and optional closure; unsupported AdvancedCopy/raw/manual strategies are reported instead of silently falling back. |
@@ -77,7 +78,14 @@ asset_query("delete_assets", { "asset_paths": ["/Game/UI/Icons/IconOld"], "dry_r
 # Preview a batch rename (add a prefix), then apply by dropping dry_run.
 asset_query("batch_rename_assets", { "asset_paths": ["/Game/UI/Icons/IconSkill"], "add_prefix": "T_", "dry_run": true })
 
-# Plan a package graph copy without copying or loading assets.
+# Prepare optional content mounts, then plan a package graph copy without copying or loading assets.
+asset_query("register_content_mount_points", {
+  "mount_points": [
+    { "root": "/ShooterMaps/", "project_plugin_dir": "GameFeatures/ShooterMaps" }
+  ],
+  "dry_run": true
+})
+
 asset_query("plan_package_graph_copy", { "root_packages": ["/ShooterMaps/System/FrontEnd/Maps/L_FrontEnd"], "root_remaps": { "/ShooterMaps": "/SpeedMaps" }, "strategy": "registry_only_plan" })
 
 # Preview and then execute a guarded package graph copy.
@@ -128,7 +136,8 @@ asset_query("save_asset", { "asset_path": "/Game/UI/Icons/T_icon_skill" })
 
 - Asset paths are UE object paths such as `/Game/Folder/Asset`, not `.uasset` filesystem paths.
 - Prefer exact schema discovery over examples; import and delete actions are high-impact - use `dry_run`/guarded options when deleting or batch-renaming.
-- `plan_package_graph_copy` and `validate_dependency_closure` are read-only. `copy_package_graph_with_remap`, `copy_package_graph_with_strategy`, and `fixup_copied_references` are guarded mutating actions and must be previewed with `dry_run=true` before running with `confirm=true`.
+- `plan_package_graph_copy` and `validate_dependency_closure` are read-only. `register_content_mount_points`, `copy_package_graph_with_remap`, `copy_package_graph_with_strategy`, and `fixup_copied_references` are guarded mutating actions and must be previewed with `dry_run=true` before running with `confirm=true`. `register_content_mount_points` defaults to dry-run.
+- `register_content_mount_points` changes only the current editor process mount table; it does not edit plugin descriptors or assets. It uses `track_dirty_packages`, not a transaction wrapper, because mount registration is not a package edit. It refuses `/Game/`, `/Engine/`, and `/Script/` by default, rejects duplicate/conflicting roots inside one request, rejects `project_plugin_dir` values with absolute or `.`/`..` path segments, and blocks conflicting existing root mappings unless `allow_override=true`.
 - `copy_package_graph_with_remap` never overwrites existing destination packages. Use `collision_policy=skip_existing` only when existing destinations should remain untouched.
 - `copy_package_graph_with_strategy` separates `workflow` from `copy_strategy`. It executes only `duplicate_asset` rows in the current slice; `advanced_copy`, `header_patched_advanced_copy`, `raw_package_file_copy`, and manual-copy selectors are explicit unsupported/deferred rows, not fallback paths.
 - In `copy_package_graph_with_strategy`, `dry_run=true` does not create destination packages. Fixup/closure phases are skipped by default unless `run_fixup_on_dry_run=true` or `run_closure_on_dry_run=true` asks to scan existing destinations.

@@ -2,7 +2,7 @@
 
 **Version:** v0.20.3 · **Last updated:** 2026-06-30
 
-**In-tree action total is approximate: current source contains roughly 1,978 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: current source contains roughly 1,979 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -49,7 +49,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
-| [asset](#asset) | 17 | Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap |
+| [asset](#asset) | 18 | Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
@@ -2074,7 +2074,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLoading.md`.
 
 ## asset
 
-Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap. **17 actions.**
+Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap. **18 actions.**
 
 ### `asset.import_texture_from_file`
 
@@ -2208,6 +2208,21 @@ Rename assets with find/replace, prefix add/remove, or suffix add/remove. Uses I
 | `add_suffix` | string | optional | Suffix to add |
 | `remove_suffix` | string | optional | Suffix to remove |
 | `dry_run` | boolean | optional | Preview renames without applying. Default: `false` |
+
+### `asset.register_content_mount_points`
+
+Safely register Unreal content mount points before package graph planning/copying. The action defaults to `dry_run=true`; process mount-table mutation requires `dry_run=false` and `confirm=true`. Each row uses `root`/`mount_point` plus exactly one resolver: direct `content_dir`, loaded `plugin_name`, or explicit `project_plugin_dir` under `ProjectPlugins`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `mount_points` | object[] | **required** | Mount specs. Each entry accepts `root`/`mount_point` plus exactly one resolver: `content_dir`, `plugin_name`, or `project_plugin_dir`. `plugin_name` may derive `root` from the plugin mounted asset path |
+| `dry_run` | boolean | optional | Preview without calling `FPackageName::RegisterMountPoint`. Default: `true` |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false` |
+| `allow_override` | boolean | optional | Allow mounting a root that already resolves to a different local content directory. Default: `false` |
+| `allow_core_mount_points` | boolean | optional | Allow `/Game/`, `/Engine/`, or `/Script/` specs. Default: `false` |
+| `scan_asset_registry` | boolean | optional | After confirmed registration, scan registered roots in the live AssetRegistry. Default: `true` |
+| `force_rescan` | boolean | optional | Force AssetRegistry rescan when `scan_asset_registry=true`. Default: `false` |
+| `probe_packages` | string[] | optional | Check package existence after preflight/registration |
 
 ### `asset.plan_package_graph_copy`
 

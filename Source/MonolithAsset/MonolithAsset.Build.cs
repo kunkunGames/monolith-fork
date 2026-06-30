@@ -24,6 +24,7 @@ public class MonolithAsset : ModuleRules
 			"EditorScriptingUtilities",
 			"ImageWrapper",
 			"ImageCore",
+			"Projects",
 			"RenderCore",
 			"RHI",
 			"SourceControl",
