@@ -6507,6 +6507,7 @@ FMonolithActionResult FMonolithMaterialActions::ListMaterialInstances(const TSha
 	});
 
 	TArray<TSharedPtr<FJsonValue>> InstancesArray;
+	InstancesArray.Reserve(AllInstances.Num());
 	for (const FInstanceInfo& Info : AllInstances)
 	{
 		auto InstJson = MakeShared<FJsonObject>();
