@@ -4523,7 +4523,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputs(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleGraph(const TSharedPtr<FJsonObject>& Params)
 {
 	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
-	UNiagaraScript* Script = LoadObject<UNiagaraScript>(nullptr, *ScriptPath);
+	UNiagaraScript* Script = FMonolithAssetUtils::LoadAssetByPath<UNiagaraScript>(ScriptPath);
 	if (!Script) return FMonolithActionResult::Error(TEXT("Failed to load script"));
 
 	UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
