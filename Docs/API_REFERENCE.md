@@ -1454,7 +1454,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` / `validate_frontend_menu_flow` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal/frontend reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
+UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `apply_common_menu_transform_spec` for guarded menu-level transform application, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` / `validate_frontend_menu_flow` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal/frontend reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
 > For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
@@ -1477,9 +1477,36 @@ UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v
 | Inspection | 3 | `list_widget_events`, `list_widget_properties`, `get_widget_bindings` |
 | Design import | 4 | `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `create_gradient_mid_from_spec` |
 | EffectSurface (provider-gated, `-32010` when absent) | 13 | `apply_box_shadow`, `set_effect_surface_corners`, `set_effect_surface_fill`, `set_effect_surface_border`, `set_effect_surface_dropShadow`, `set_effect_surface_innerShadow`, `set_effect_surface_glow`, `set_effect_surface_filter`, `set_effect_surface_backdropBlur`, `set_effect_surface_insetHighlight`, `apply_effect_surface_preset` |
-| Spec round-trip | 4 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0) |
+| Spec round-trip / menu transform | 5 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0), `apply_common_menu_transform_spec` |
 | Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
 | Allowlist / diagnostics | 2 | `dump_property_allowlist`, `dump_style_cache_stats` |
+
+### `ui.apply_common_menu_transform_spec`
+
+Apply the guarded counterpart to `ui.build_menu_from_spec` deferred aggregation and copied-menu repair. `dry_run=true` is the default. Writes require `dry_run=false` and `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `spec` | object | optional | Nested transform object. When omitted, the payload itself is the spec. |
+| `screens` | array | optional | Screen map entries `{id, asset_path}` used to resolve `focus_table` and `nav_overrides` screen ids. |
+| `layout_asset_path` | string | optional | Default PrimaryGameLayout WBP path for `layout_layers` or `layers`. |
+| `layout_layers` / `layers` | array | optional | `ui.add_primary_game_layout_layer` specs. `layers[].layer_tag` falls back to `tag` or `id`. |
+| `extension_points` | array | optional | `ui.add_extension_point_widget` specs. |
+| `widget_properties` | array | optional | `ui.set_widget_property` specs. Accepts `widget`/`name` and `property` aliases. |
+| `remove_widgets` | array | optional | `ui.remove_widget` specs. Each entry accepts `widget_name` or `widget_names[]`. |
+| `variable_defaults` | array | optional | `blueprint.set_variable_defaults` specs. Accepts `variable_name` and `value` aliases. |
+| `focus_table` / `initial_focus` / `desired_focus` | array | optional | Entries routed to `ui.set_initial_focus_target`. |
+| `nav_overrides` / `navigation_bulk` | array | optional | Navigation entries grouped into `ui.set_widget_navigation_bulk`. |
+| `widget_subtrees` | array | optional | `ui.copy_widget_subtree_with_class_remap` child specs. |
+| `blueprint_graphs` | array | optional | `blueprint.clone_graphs_with_reference_remap` child specs. |
+| `font_repairs` | array | optional | `ui.repair_slate_font_references` child specs. |
+| `frontend_validation` | object | optional | `ui.validate_frontend_menu_flow` spec run after transform planning/apply. |
+| `class_remaps`, `object_remaps`, `root_remaps`, `source_root`, `dest_root` | mixed | optional | Shared remap defaults merged into child repair steps when omitted. |
+| `dry_run` | boolean | optional | Plan mutating child steps. Default: `true`. |
+| `confirm` | boolean | optional | Required for mutation. Default: `false`. |
+| `compile`, `save`, `continue_on_error`, `request_id` | mixed | optional | Defaults forwarded to child writers when supported and echoed in the result. |
+
+Returns `{ ok, status, dry_run, confirm, step_count, executed_step_count, planned_only_step_count, failed_step_count, changed, changed_known, changed_unknown_step_count, compiled, saved, planned_counts, applied_counts, steps[], errors[] }`. During dry-run, child writers without native dry-run are returned as planned rows and are not executed.
 
 ### `ui.validate_frontend_menu_flow`
 

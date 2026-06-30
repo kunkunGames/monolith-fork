@@ -31,6 +31,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/ARFilter.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "Containers/Map.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Modules/ModuleManager.h"
@@ -1678,6 +1679,836 @@ namespace MonolithUI::SpecActionsInternal
         }
         return FMonolithActionResult::Success(Out);
     }
+
+    // ------------------------------------------------------------------
+    // ui::apply_common_menu_transform_spec
+    //
+    // Applies the menu-level aggregation work that build_menu_from_spec
+    // intentionally left as deferred: layers, focus targets, navigation, plus
+    // post-copy repair steps for copied Lyra/CommonUI menu assets. The handler
+    // composes existing, narrower actions instead of reimplementing their asset
+    // mutation logic here.
+
+    enum class EMenuTransformDryRunMode : uint8
+    {
+        PlanOnly,
+        ExecuteChildDryRun,
+        ExecuteReadOnly
+    };
+
+    struct FMenuTransformStep
+    {
+        FString Type;
+        FString Namespace;
+        FString Action;
+        int32 SourceIndex = INDEX_NONE;
+        bool bMutating = true;
+        EMenuTransformDryRunMode DryRunMode = EMenuTransformDryRunMode::PlanOnly;
+        TSharedPtr<FJsonObject> Params;
+    };
+
+    static TSharedPtr<FJsonObject> CloneJsonObject(const TSharedPtr<FJsonObject>& Source)
+    {
+        TSharedPtr<FJsonObject> Copy = MakeShared<FJsonObject>();
+        if (Source.IsValid())
+        {
+            Copy->Values = Source->Values;
+        }
+        return Copy;
+    }
+
+    static bool ResolveCommonMenuSpecObject(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonObject>& OutSpec, FString& OutError)
+    {
+        if (!Params.IsValid())
+        {
+            OutError = TEXT("apply_common_menu_transform_spec requires an object payload.");
+            return false;
+        }
+
+        if (!Params->HasField(TEXT("spec")))
+        {
+            OutSpec = Params;
+            return true;
+        }
+
+        const TSharedPtr<FJsonObject>* SpecObject = nullptr;
+        if (!Params->TryGetObjectField(TEXT("spec"), SpecObject) || !SpecObject || !SpecObject->IsValid())
+        {
+            OutError = TEXT("spec must be an object when provided.");
+            return false;
+        }
+        OutSpec = *SpecObject;
+        return true;
+    }
+
+    static bool GetOptionalBoolFromRootOrSpec(
+        const TSharedPtr<FJsonObject>& Params,
+        const TSharedPtr<FJsonObject>& Spec,
+        const FString& FieldName,
+        bool& OutValue,
+        FString& OutError,
+        bool DefaultValue)
+    {
+        const TSharedPtr<FJsonObject>& Source = Params.IsValid() && Params->HasField(FieldName) ? Params : Spec;
+        OutValue = DefaultValue;
+        if (!Source.IsValid() || !Source->HasField(FieldName))
+        {
+            return true;
+        }
+        if (!Source->TryGetBoolField(FieldName, OutValue))
+        {
+            OutError = FString::Printf(TEXT("%s must be a boolean."), *FieldName);
+            return false;
+        }
+        return true;
+    }
+
+    static FString GetFirstStringField(
+        const TSharedPtr<FJsonObject>& Obj,
+        const TCHAR* FieldA,
+        const TCHAR* FieldB = nullptr,
+        const TCHAR* FieldC = nullptr)
+    {
+        FString Value;
+        if (Obj.IsValid() && FieldA && Obj->TryGetStringField(FieldA, Value) && !Value.IsEmpty())
+        {
+            return Value;
+        }
+        if (Obj.IsValid() && FieldB && Obj->TryGetStringField(FieldB, Value) && !Value.IsEmpty())
+        {
+            return Value;
+        }
+        if (Obj.IsValid() && FieldC && Obj->TryGetStringField(FieldC, Value) && !Value.IsEmpty())
+        {
+            return Value;
+        }
+        return FString();
+    }
+
+    static bool TryGetObjectArray(
+        const TSharedPtr<FJsonObject>& Spec,
+        const FString& FieldName,
+        TArray<TSharedPtr<FJsonObject>>& OutObjects,
+        FString& OutError)
+    {
+        if (!Spec.IsValid() || !Spec->HasField(FieldName))
+        {
+            return true;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Spec->TryGetArrayField(FieldName, Values) || !Values)
+        {
+            OutError = FString::Printf(TEXT("%s must be an array of objects."), *FieldName);
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Values->Num(); ++Index)
+        {
+            const TSharedPtr<FJsonObject>* Entry = nullptr;
+            if (!(*Values)[Index].IsValid() || !(*Values)[Index]->TryGetObject(Entry) || !Entry || !Entry->IsValid())
+            {
+                OutError = FString::Printf(TEXT("%s[%d] must be an object."), *FieldName, Index);
+                return false;
+            }
+            OutObjects.Add(*Entry);
+        }
+        return true;
+    }
+
+    static void CopyFieldIfMissing(
+        const TSharedPtr<FJsonObject>& Source,
+        const TSharedPtr<FJsonObject>& Destination,
+        const FString& FieldName)
+    {
+        if (!Source.IsValid() || !Destination.IsValid() || Destination->HasField(FieldName))
+        {
+            return;
+        }
+
+        TSharedPtr<FJsonValue> Value = Source->TryGetField(FieldName);
+        if (Value.IsValid())
+        {
+            Destination->SetField(FieldName, Value);
+        }
+    }
+
+    static void CopySharedRemapDefaults(
+        const TSharedPtr<FJsonObject>& Spec,
+        const TSharedPtr<FJsonObject>& StepParams)
+    {
+        CopyFieldIfMissing(Spec, StepParams, TEXT("class_remaps"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("object_remaps"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("root_remaps"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("source_root"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("dest_root"));
+    }
+
+    static void CopyFontRemapDefaults(
+        const TSharedPtr<FJsonObject>& Spec,
+        const TSharedPtr<FJsonObject>& StepParams)
+    {
+        CopyFieldIfMissing(Spec, StepParams, TEXT("root_remaps"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("source_root"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("dest_root"));
+        CopyFieldIfMissing(Spec, StepParams, TEXT("font_asset_remaps"));
+    }
+
+    static void SetBoolIfMissing(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, bool Value)
+    {
+        if (Obj.IsValid() && !Obj->HasField(FieldName))
+        {
+            Obj->SetBoolField(FieldName, Value);
+        }
+    }
+
+    static void SetStringIfMissing(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, const FString& Value)
+    {
+        if (Obj.IsValid() && !Obj->HasField(FieldName) && !Value.IsEmpty())
+        {
+            Obj->SetStringField(FieldName, Value);
+        }
+    }
+
+    static FMenuTransformStep MakeStep(
+        const FString& Type,
+        const FString& Namespace,
+        const FString& Action,
+        int32 SourceIndex,
+        const TSharedPtr<FJsonObject>& Params,
+        EMenuTransformDryRunMode DryRunMode,
+        bool bMutating = true)
+    {
+        FMenuTransformStep Step;
+        Step.Type = Type;
+        Step.Namespace = Namespace;
+        Step.Action = Action;
+        Step.SourceIndex = SourceIndex;
+        Step.Params = Params;
+        Step.DryRunMode = DryRunMode;
+        Step.bMutating = bMutating;
+        return Step;
+    }
+
+    static void IncrementCount(TMap<FString, int32>& Counts, const FString& Key)
+    {
+        Counts.FindOrAdd(Key) += 1;
+    }
+
+    static TSharedPtr<FJsonObject> MakeCountsObject(const TMap<FString, int32>& Counts)
+    {
+        TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+        for (const TPair<FString, int32>& Pair : Counts)
+        {
+            Obj->SetNumberField(Pair.Key, Pair.Value);
+        }
+        return Obj;
+    }
+
+    static void BuildScreenAssetMap(const TSharedPtr<FJsonObject>& Spec, TMap<FString, FString>& OutScreenToAsset)
+    {
+        const TArray<TSharedPtr<FJsonValue>>* Screens = nullptr;
+        if (!Spec.IsValid() || !Spec->TryGetArrayField(TEXT("screens"), Screens) || !Screens)
+        {
+            return;
+        }
+
+        for (const TSharedPtr<FJsonValue>& Value : *Screens)
+        {
+            const TSharedPtr<FJsonObject>* ScreenObj = nullptr;
+            if (!Value.IsValid() || !Value->TryGetObject(ScreenObj) || !ScreenObj || !ScreenObj->IsValid())
+            {
+                continue;
+            }
+
+            const FString ScreenId = GetFirstStringField(*ScreenObj, TEXT("id"), TEXT("screen"));
+            const FString AssetPath = GetFirstStringField(*ScreenObj, TEXT("asset_path"), TEXT("wbp_path"));
+            if (!ScreenId.IsEmpty() && !AssetPath.IsEmpty())
+            {
+                OutScreenToAsset.Add(ScreenId, AssetPath);
+            }
+        }
+    }
+
+    static FString ResolveScreenBoundAssetPath(const TSharedPtr<FJsonObject>& Entry, const TMap<FString, FString>& ScreenToAsset)
+    {
+        const FString ExplicitPath = GetFirstStringField(Entry, TEXT("asset_path"), TEXT("wbp_path"), TEXT("layout_asset_path"));
+        if (!ExplicitPath.IsEmpty())
+        {
+            return ExplicitPath;
+        }
+
+        const FString ScreenId = GetFirstStringField(Entry, TEXT("screen"), TEXT("screen_id"));
+        if (const FString* Found = ScreenToAsset.Find(ScreenId))
+        {
+            return *Found;
+        }
+        return FString();
+    }
+
+    static bool AddObjectArraySteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        const FString& FieldName,
+        const FString& Type,
+        const FString& Namespace,
+        const FString& Action,
+        EMenuTransformDryRunMode DryRunMode,
+        bool bDryRun,
+        bool bConfirm,
+        bool bCompile,
+        bool bSave,
+        bool bCopySharedRemaps,
+        bool bCopyFontRemaps,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, FieldName, Entries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
+            if (bCopySharedRemaps)
+            {
+                CopySharedRemapDefaults(Spec, ChildParams);
+            }
+            if (bCopyFontRemaps)
+            {
+                CopyFontRemapDefaults(Spec, ChildParams);
+            }
+            if (DryRunMode == EMenuTransformDryRunMode::ExecuteChildDryRun)
+            {
+                ChildParams->SetBoolField(TEXT("dry_run"), bDryRun);
+                ChildParams->SetBoolField(TEXT("confirm"), bConfirm);
+            }
+            SetBoolIfMissing(ChildParams, TEXT("compile"), bCompile);
+            SetBoolIfMissing(ChildParams, TEXT("save"), bSave);
+            OutSteps.Add(MakeStep(Type, Namespace, Action, Index, ChildParams, DryRunMode));
+        }
+        return true;
+    }
+
+    static bool AddLayoutLayerSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        bool bCompile,
+        bool bSave,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, TEXT("layout_layers"), Entries, OutError))
+        {
+            return false;
+        }
+
+        TArray<TSharedPtr<FJsonObject>> MenuLayers;
+        if (!TryGetObjectArray(Spec, TEXT("layers"), MenuLayers, OutError))
+        {
+            return false;
+        }
+        Entries.Append(MenuLayers);
+
+        const FString DefaultLayoutPath = GetFirstStringField(Spec, TEXT("layout_asset_path"), TEXT("asset_path"));
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
+            SetStringIfMissing(ChildParams, TEXT("asset_path"), DefaultLayoutPath);
+            SetStringIfMissing(ChildParams, TEXT("layer_tag"), GetFirstStringField(Entries[Index], TEXT("tag"), TEXT("id")));
+            SetBoolIfMissing(ChildParams, TEXT("compile"), bCompile);
+            SetBoolIfMissing(ChildParams, TEXT("save"), bSave);
+            OutSteps.Add(MakeStep(TEXT("layout_layer"), TEXT("ui"), TEXT("add_primary_game_layout_layer"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+        return true;
+    }
+
+    static bool AddWidgetPropertySteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        bool bCompile,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, TEXT("widget_properties"), Entries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
+            SetStringIfMissing(ChildParams, TEXT("widget_name"), GetFirstStringField(Entries[Index], TEXT("widget"), TEXT("name")));
+            SetStringIfMissing(ChildParams, TEXT("property_name"), GetFirstStringField(Entries[Index], TEXT("property")));
+            if (!ChildParams->HasField(TEXT("value")) && ChildParams->HasField(TEXT("property_value")))
+            {
+                TSharedPtr<FJsonValue> Value = ChildParams->TryGetField(TEXT("property_value"));
+                if (Value.IsValid())
+                {
+                    ChildParams->SetField(TEXT("value"), Value);
+                }
+            }
+            CopyFieldIfMissing(Spec, ChildParams, TEXT("raw_mode"));
+            SetBoolIfMissing(ChildParams, TEXT("compile"), bCompile);
+            OutSteps.Add(MakeStep(TEXT("widget_property"), TEXT("ui"), TEXT("set_widget_property"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+        return true;
+    }
+
+    static bool AddRemoveWidgetSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        bool bCompile,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, TEXT("remove_widgets"), Entries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TArray<FString> WidgetNames;
+            const FString SingleName = GetFirstStringField(Entries[Index], TEXT("widget_name"), TEXT("widget"), TEXT("name"));
+            if (!SingleName.IsEmpty())
+            {
+                WidgetNames.Add(SingleName);
+            }
+
+            const TArray<TSharedPtr<FJsonValue>>* NameValues = nullptr;
+            if (Entries[Index]->TryGetArrayField(TEXT("widget_names"), NameValues) ||
+                Entries[Index]->TryGetArrayField(TEXT("names"), NameValues))
+            {
+                if (!NameValues)
+                {
+                    OutError = FString::Printf(TEXT("remove_widgets[%d].widget_names must be an array of strings."), Index);
+                    return false;
+                }
+                for (const TSharedPtr<FJsonValue>& NameValue : *NameValues)
+                {
+                    FString Name;
+                    if (!NameValue.IsValid() || !NameValue->TryGetString(Name) || Name.IsEmpty())
+                    {
+                        OutError = FString::Printf(TEXT("remove_widgets[%d].widget_names entries must be non-empty strings."), Index);
+                        return false;
+                    }
+                    WidgetNames.Add(Name);
+                }
+            }
+
+            for (const FString& WidgetName : WidgetNames)
+            {
+                TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
+                ChildParams->RemoveField(TEXT("widget_names"));
+                ChildParams->RemoveField(TEXT("names"));
+                ChildParams->SetStringField(TEXT("widget_name"), WidgetName);
+                SetBoolIfMissing(ChildParams, TEXT("compile"), bCompile);
+                OutSteps.Add(MakeStep(TEXT("remove_widget"), TEXT("ui"), TEXT("remove_widget"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+            }
+        }
+        return true;
+    }
+
+    static bool AddVariableDefaultSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, TEXT("variable_defaults"), Entries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
+            SetStringIfMissing(ChildParams, TEXT("name"), GetFirstStringField(Entries[Index], TEXT("variable_name"), TEXT("variable")));
+            if (!ChildParams->HasField(TEXT("default_value")) && ChildParams->HasField(TEXT("value")))
+            {
+                FString ValueString;
+                TSharedPtr<FJsonValue> Value = ChildParams->TryGetField(TEXT("value"));
+                if (Value.IsValid() && Value->TryGetString(ValueString))
+                {
+                    ChildParams->SetStringField(TEXT("default_value"), ValueString);
+                }
+            }
+            OutSteps.Add(MakeStep(TEXT("variable_default"), TEXT("blueprint"), TEXT("set_variable_defaults"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+        return true;
+    }
+
+    static bool AddFocusSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        const TMap<FString, FString>& ScreenToAsset,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> Entries;
+        if (!TryGetObjectArray(Spec, TEXT("focus_table"), Entries, OutError) ||
+            !TryGetObjectArray(Spec, TEXT("initial_focus"), Entries, OutError) ||
+            !TryGetObjectArray(Spec, TEXT("desired_focus"), Entries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Entries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = MakeShared<FJsonObject>();
+            SetStringIfMissing(ChildParams, TEXT("wbp_path"), ResolveScreenBoundAssetPath(Entries[Index], ScreenToAsset));
+            SetStringIfMissing(ChildParams, TEXT("target_widget"), GetFirstStringField(Entries[Index], TEXT("target_widget"), TEXT("target"), TEXT("widget")));
+            OutSteps.Add(MakeStep(TEXT("initial_focus"), TEXT("ui"), TEXT("set_initial_focus_target"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+        return true;
+    }
+
+    static bool AddNavigationSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        const TMap<FString, FString>& ScreenToAsset,
+        bool bSave,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        TArray<TSharedPtr<FJsonObject>> DirectEntries;
+        if (!TryGetObjectArray(Spec, TEXT("navigation_bulk"), DirectEntries, OutError))
+        {
+            return false;
+        }
+
+        for (int32 Index = 0; Index < DirectEntries.Num(); ++Index)
+        {
+            TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(DirectEntries[Index]);
+            SetBoolIfMissing(ChildParams, TEXT("save"), bSave);
+            OutSteps.Add(MakeStep(TEXT("navigation_bulk"), TEXT("ui"), TEXT("set_widget_navigation_bulk"), Index, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+
+        TArray<TSharedPtr<FJsonObject>> Overrides;
+        if (!TryGetObjectArray(Spec, TEXT("nav_overrides"), Overrides, OutError))
+        {
+            return false;
+        }
+
+        TMap<FString, TArray<TSharedPtr<FJsonValue>>> EntriesByAsset;
+        for (int32 Index = 0; Index < Overrides.Num(); ++Index)
+        {
+            const FString AssetPath = ResolveScreenBoundAssetPath(Overrides[Index], ScreenToAsset);
+            if (AssetPath.IsEmpty())
+            {
+                OutError = FString::Printf(TEXT("nav_overrides[%d] requires asset_path/wbp_path or a screen that exists in screens[]."), Index);
+                return false;
+            }
+
+            TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+            SetStringIfMissing(Entry, TEXT("widget_name"), GetFirstStringField(Overrides[Index], TEXT("widget_name"), TEXT("widget")));
+            SetStringIfMissing(Entry, TEXT("direction"), GetFirstStringField(Overrides[Index], TEXT("direction")));
+            SetStringIfMissing(Entry, TEXT("rule"), GetFirstStringField(Overrides[Index], TEXT("rule")));
+            SetStringIfMissing(Entry, TEXT("explicit_target"), GetFirstStringField(Overrides[Index], TEXT("explicit_target"), TEXT("target"), TEXT("target_widget")));
+            if (!Entry->HasField(TEXT("rule")) && Entry->HasField(TEXT("explicit_target")))
+            {
+                Entry->SetStringField(TEXT("rule"), TEXT("Explicit"));
+            }
+            EntriesByAsset.FindOrAdd(AssetPath).Add(MakeShared<FJsonValueObject>(Entry));
+        }
+
+        int32 GroupIndex = 0;
+        for (TPair<FString, TArray<TSharedPtr<FJsonValue>>>& Pair : EntriesByAsset)
+        {
+            TSharedPtr<FJsonObject> ChildParams = MakeShared<FJsonObject>();
+            ChildParams->SetStringField(TEXT("wbp_path"), Pair.Key);
+            ChildParams->SetArrayField(TEXT("entries"), Pair.Value);
+            SetBoolIfMissing(ChildParams, TEXT("save"), bSave);
+            OutSteps.Add(MakeStep(TEXT("navigation_bulk"), TEXT("ui"), TEXT("set_widget_navigation_bulk"), GroupIndex++, ChildParams, EMenuTransformDryRunMode::PlanOnly));
+        }
+        return true;
+    }
+
+    static bool BuildCommonMenuTransformSteps(
+        const TSharedPtr<FJsonObject>& Spec,
+        bool bDryRun,
+        bool bConfirm,
+        bool bCompile,
+        bool bSave,
+        TArray<FMenuTransformStep>& OutSteps,
+        FString& OutError)
+    {
+        if (!AddObjectArraySteps(Spec, TEXT("widget_subtrees"), TEXT("widget_subtree"), TEXT("ui"), TEXT("copy_widget_subtree_with_class_remap"), EMenuTransformDryRunMode::ExecuteChildDryRun, bDryRun, bConfirm, bCompile, bSave, true, false, OutSteps, OutError) ||
+            !AddObjectArraySteps(Spec, TEXT("blueprint_graphs"), TEXT("blueprint_graph"), TEXT("blueprint"), TEXT("clone_graphs_with_reference_remap"), EMenuTransformDryRunMode::ExecuteChildDryRun, bDryRun, bConfirm, bCompile, bSave, true, false, OutSteps, OutError) ||
+            !AddObjectArraySteps(Spec, TEXT("font_repairs"), TEXT("font_repair"), TEXT("ui"), TEXT("repair_slate_font_references"), EMenuTransformDryRunMode::ExecuteChildDryRun, bDryRun, bConfirm, bCompile, bSave, false, true, OutSteps, OutError) ||
+            !AddObjectArraySteps(Spec, TEXT("extension_points"), TEXT("extension_point"), TEXT("ui"), TEXT("add_extension_point_widget"), EMenuTransformDryRunMode::PlanOnly, bDryRun, bConfirm, bCompile, bSave, false, false, OutSteps, OutError) ||
+            !AddLayoutLayerSteps(Spec, bCompile, bSave, OutSteps, OutError) ||
+            !AddWidgetPropertySteps(Spec, bCompile, OutSteps, OutError) ||
+            !AddRemoveWidgetSteps(Spec, bCompile, OutSteps, OutError) ||
+            !AddVariableDefaultSteps(Spec, OutSteps, OutError))
+        {
+            return false;
+        }
+
+        TMap<FString, FString> ScreenToAsset;
+        BuildScreenAssetMap(Spec, ScreenToAsset);
+        if (!AddFocusSteps(Spec, ScreenToAsset, OutSteps, OutError) ||
+            !AddNavigationSteps(Spec, ScreenToAsset, bSave, OutSteps, OutError))
+        {
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* FrontendValidation = nullptr;
+        if (Spec->TryGetObjectField(TEXT("frontend_validation"), FrontendValidation) && FrontendValidation && FrontendValidation->IsValid())
+        {
+            OutSteps.Add(MakeStep(TEXT("frontend_validation"), TEXT("ui"), TEXT("validate_frontend_menu_flow"), 0, CloneJsonObject(*FrontendValidation), EMenuTransformDryRunMode::ExecuteReadOnly, false));
+        }
+        else if (Spec->HasField(TEXT("frontend_validation")))
+        {
+            OutError = TEXT("frontend_validation must be an object when provided.");
+            return false;
+        }
+
+        if (OutSteps.IsEmpty())
+        {
+            OutError = TEXT("apply_common_menu_transform_spec requires at least one transform field: widget_subtrees, blueprint_graphs, font_repairs, extension_points, layout_layers/layers, widget_properties, remove_widgets, variable_defaults, focus_table/initial_focus/desired_focus, nav_overrides/navigation_bulk, or frontend_validation.");
+            return false;
+        }
+        return true;
+    }
+
+    static bool TryGetResultBool(const FMonolithActionResult& ChildResult, const FString& FieldName, bool& OutValue)
+    {
+        OutValue = false;
+        return ChildResult.Result.IsValid() && ChildResult.Result->TryGetBoolField(FieldName, OutValue);
+    }
+
+    static bool ChildPayloadReportsOk(const FMonolithActionResult& ChildResult)
+    {
+        bool bPayloadOk = true;
+        bool bField = true;
+        if (ChildResult.Result.IsValid() && ChildResult.Result->TryGetBoolField(TEXT("ok"), bField))
+        {
+            bPayloadOk = bPayloadOk && bField;
+        }
+        if (ChildResult.Result.IsValid() && ChildResult.Result->TryGetBoolField(TEXT("bSuccess"), bField))
+        {
+            bPayloadOk = bPayloadOk && bField;
+        }
+        return bPayloadOk;
+    }
+
+    static TSharedPtr<FJsonObject> MakePlannedStepRow(const FMenuTransformStep& Step, int32 StepIndex)
+    {
+        TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+        Row->SetNumberField(TEXT("step_index"), StepIndex);
+        Row->SetNumberField(TEXT("source_index"), Step.SourceIndex);
+        Row->SetStringField(TEXT("type"), Step.Type);
+        Row->SetStringField(TEXT("namespace"), Step.Namespace);
+        Row->SetStringField(TEXT("action"), Step.Action);
+        Row->SetStringField(TEXT("status"), TEXT("planned"));
+        Row->SetBoolField(TEXT("success"), true);
+        Row->SetBoolField(TEXT("ok"), true);
+        Row->SetBoolField(TEXT("executed"), false);
+        if (Step.Params.IsValid())
+        {
+            Row->SetObjectField(TEXT("params"), Step.Params);
+        }
+        return Row;
+    }
+
+    static TSharedPtr<FJsonObject> MakeExecutedStepRow(
+        const FMenuTransformStep& Step,
+        int32 StepIndex,
+        const FMonolithActionResult& ChildResult,
+        bool& bOutStepOk)
+    {
+        bOutStepOk = ChildResult.bSuccess && ChildPayloadReportsOk(ChildResult);
+
+        TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+        Row->SetNumberField(TEXT("step_index"), StepIndex);
+        Row->SetNumberField(TEXT("source_index"), Step.SourceIndex);
+        Row->SetStringField(TEXT("type"), Step.Type);
+        Row->SetStringField(TEXT("namespace"), Step.Namespace);
+        Row->SetStringField(TEXT("action"), Step.Action);
+        Row->SetStringField(TEXT("status"), bOutStepOk ? TEXT("ok") : TEXT("failed"));
+        Row->SetBoolField(TEXT("success"), ChildResult.bSuccess);
+        Row->SetBoolField(TEXT("ok"), bOutStepOk);
+        Row->SetBoolField(TEXT("executed"), true);
+        if (ChildResult.Result.IsValid())
+        {
+            Row->SetObjectField(TEXT("result"), ChildResult.Result);
+        }
+        if (!ChildResult.bSuccess)
+        {
+            Row->SetStringField(TEXT("error"), ChildResult.ErrorMessage);
+            Row->SetNumberField(TEXT("error_code"), ChildResult.ErrorCode);
+        }
+        return Row;
+    }
+
+    static TSharedPtr<FJsonObject> MakeTransformErrorRow(const FMenuTransformStep& Step, int32 StepIndex, const FString& Message)
+    {
+        TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+        Row->SetNumberField(TEXT("step_index"), StepIndex);
+        Row->SetStringField(TEXT("type"), Step.Type);
+        Row->SetStringField(TEXT("namespace"), Step.Namespace);
+        Row->SetStringField(TEXT("action"), Step.Action);
+        Row->SetStringField(TEXT("message"), Message);
+        return Row;
+    }
+
+    static FMonolithActionResult HandleApplyCommonMenuTransformSpec(const TSharedPtr<FJsonObject>& Params)
+    {
+        TSharedPtr<FJsonObject> Spec;
+        FString ErrorMsg;
+        if (!ResolveCommonMenuSpecObject(Params, Spec, ErrorMsg))
+        {
+            return FMonolithActionResult::Error(ErrorMsg, -32602);
+        }
+
+        FString RequestId;
+        if (Params.IsValid())
+        {
+            Params->TryGetStringField(TEXT("request_id"), RequestId);
+        }
+        if (RequestId.IsEmpty() && Spec.IsValid())
+        {
+            Spec->TryGetStringField(TEXT("request_id"), RequestId);
+        }
+
+        bool bDryRun = true;
+        bool bConfirm = false;
+        bool bCompile = true;
+        bool bSave = false;
+        bool bContinueOnError = false;
+        if (!GetOptionalBoolFromRootOrSpec(Params, Spec, TEXT("dry_run"), bDryRun, ErrorMsg, true) ||
+            !GetOptionalBoolFromRootOrSpec(Params, Spec, TEXT("confirm"), bConfirm, ErrorMsg, false) ||
+            !GetOptionalBoolFromRootOrSpec(Params, Spec, TEXT("compile"), bCompile, ErrorMsg, true) ||
+            !GetOptionalBoolFromRootOrSpec(Params, Spec, TEXT("save"), bSave, ErrorMsg, false) ||
+            !GetOptionalBoolFromRootOrSpec(Params, Spec, TEXT("continue_on_error"), bContinueOnError, ErrorMsg, false))
+        {
+            return FMonolithActionResult::Error(ErrorMsg, -32602);
+        }
+
+        if (!bDryRun && !bConfirm)
+        {
+            return FMonolithActionResult::Error(
+                TEXT("apply_common_menu_transform_spec is mutating; pass dry_run=true to inspect the plan or confirm=true with dry_run=false to apply."),
+                -32602);
+        }
+
+        TArray<FMenuTransformStep> Steps;
+        if (!BuildCommonMenuTransformSteps(Spec, bDryRun, bConfirm, bCompile, bSave, Steps, ErrorMsg))
+        {
+            return FMonolithActionResult::Error(ErrorMsg, -32602);
+        }
+
+        TArray<TSharedPtr<FJsonValue>> StepRows;
+        TArray<TSharedPtr<FJsonValue>> ErrorRows;
+        TMap<FString, int32> PlannedCounts;
+        TMap<FString, int32> AppliedCounts;
+        bool bOverallOk = true;
+        bool bReportedChanged = false;
+        bool bChangedKnown = true;
+        bool bCompiled = false;
+        bool bSaved = false;
+        int32 ExecutedStepCount = 0;
+        int32 PlannedOnlyStepCount = 0;
+        int32 FailedStepCount = 0;
+        int32 ChangedUnknownStepCount = 0;
+
+        for (int32 StepIndex = 0; StepIndex < Steps.Num(); ++StepIndex)
+        {
+            const FMenuTransformStep& Step = Steps[StepIndex];
+            IncrementCount(PlannedCounts, Step.Type);
+
+            const bool bExecute =
+                !bDryRun ||
+                Step.DryRunMode == EMenuTransformDryRunMode::ExecuteChildDryRun ||
+                Step.DryRunMode == EMenuTransformDryRunMode::ExecuteReadOnly;
+
+            if (!bExecute)
+            {
+                ++PlannedOnlyStepCount;
+                StepRows.Add(MakeShared<FJsonValueObject>(MakePlannedStepRow(Step, StepIndex)));
+                continue;
+            }
+
+            const FMonolithActionResult ChildResult = FMonolithToolRegistry::Get().ExecuteAction(Step.Namespace, Step.Action, Step.Params);
+            ++ExecutedStepCount;
+
+            bool bStepOk = false;
+            StepRows.Add(MakeShared<FJsonValueObject>(MakeExecutedStepRow(Step, StepIndex, ChildResult, bStepOk)));
+
+            bool bChildBool = false;
+            if (TryGetResultBool(ChildResult, TEXT("changed"), bChildBool))
+            {
+                bReportedChanged = bReportedChanged || bChildBool;
+            }
+            else if (!bDryRun && Step.bMutating && bStepOk)
+            {
+                bChangedKnown = false;
+                ++ChangedUnknownStepCount;
+            }
+
+            if (TryGetResultBool(ChildResult, TEXT("compiled"), bChildBool))
+            {
+                bCompiled = bCompiled || bChildBool;
+            }
+            if (TryGetResultBool(ChildResult, TEXT("compiled_once"), bChildBool))
+            {
+                bCompiled = bCompiled || bChildBool;
+            }
+            if (TryGetResultBool(ChildResult, TEXT("saved"), bChildBool))
+            {
+                bSaved = bSaved || bChildBool;
+            }
+
+            if (bStepOk && !bDryRun && Step.bMutating)
+            {
+                IncrementCount(AppliedCounts, Step.Type);
+            }
+
+            if (!bStepOk)
+            {
+                bOverallOk = false;
+                ++FailedStepCount;
+                const FString Message = ChildResult.bSuccess
+                    ? FString::Printf(TEXT("%s.%s reported an unsuccessful payload."), *Step.Namespace, *Step.Action)
+                    : ChildResult.ErrorMessage;
+                ErrorRows.Add(MakeShared<FJsonValueObject>(MakeTransformErrorRow(Step, StepIndex, Message)));
+                if (!bContinueOnError)
+                {
+                    break;
+                }
+            }
+        }
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetStringField(TEXT("namespace"), TEXT("ui"));
+        Result->SetStringField(TEXT("action"), TEXT("apply_common_menu_transform_spec"));
+        if (!RequestId.IsEmpty())
+        {
+            Result->SetStringField(TEXT("request_id"), RequestId);
+        }
+        Result->SetBoolField(TEXT("ok"), bOverallOk);
+        Result->SetBoolField(TEXT("dry_run"), bDryRun);
+        Result->SetBoolField(TEXT("confirm"), bConfirm);
+        Result->SetBoolField(TEXT("compile"), bCompile);
+        Result->SetBoolField(TEXT("save"), bSave);
+        Result->SetBoolField(TEXT("continue_on_error"), bContinueOnError);
+        Result->SetStringField(TEXT("status"), bDryRun ? TEXT("planned") : (bOverallOk ? TEXT("applied") : TEXT("partial_or_failed")));
+        Result->SetNumberField(TEXT("step_count"), Steps.Num());
+        Result->SetNumberField(TEXT("executed_step_count"), ExecutedStepCount);
+        Result->SetNumberField(TEXT("planned_only_step_count"), PlannedOnlyStepCount);
+        Result->SetNumberField(TEXT("failed_step_count"), FailedStepCount);
+        Result->SetBoolField(TEXT("changed"), bReportedChanged);
+        Result->SetBoolField(TEXT("changed_known"), bChangedKnown);
+        Result->SetNumberField(TEXT("changed_unknown_step_count"), ChangedUnknownStepCount);
+        Result->SetBoolField(TEXT("compiled"), bCompiled);
+        Result->SetBoolField(TEXT("saved"), bSaved);
+        Result->SetObjectField(TEXT("planned_counts"), MakeCountsObject(PlannedCounts));
+        Result->SetObjectField(TEXT("applied_counts"), MakeCountsObject(AppliedCounts));
+        Result->SetArrayField(TEXT("steps"), StepRows);
+        Result->SetArrayField(TEXT("errors"), ErrorRows);
+        return FMonolithActionResult::Success(Result);
+    }
 } // namespace MonolithUI::SpecActionsInternal
 
 
@@ -1758,6 +2589,51 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
             .Optional(TEXT("treat_warnings_as_errors"), TEXT("boolean"),
                 TEXT("Fail bSuccess when warning findings exist. Default false."), TEXT("false"))
             .Build());
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("apply_common_menu_transform_spec"),
+        TEXT("Apply a high-level CommonUI/Lyra menu transform spec. Composes existing actions for PrimaryGameLayout layer widgets, UIExtension points, widget properties/removal, Blueprint variable defaults, initial focus, navigation bulk writes, WBP subtree copy repair, Blueprint function/macro graph clone, Slate font repair, and frontend menu validation. Dry-run is the default; mutating calls require confirm=true."),
+        FMonolithActionHandler::CreateStatic(&HandleApplyCommonMenuTransformSpec),
+        FParamSchemaBuilder()
+            .Optional(TEXT("spec"), TEXT("object"), TEXT("Nested transform spec object; when omitted, the payload itself is the spec"))
+            .Optional(TEXT("screens"), TEXT("array"), TEXT("Screen map entries [{id, asset_path}] used by focus_table and nav_overrides"))
+            .Optional(TEXT("layout_asset_path"), TEXT("string"), TEXT("Default PrimaryGameLayout WBP path used by layout_layers/layers"))
+            .Optional(TEXT("layout_layers"), TEXT("array"), TEXT("Array of ui.add_primary_game_layout_layer child specs"))
+            .Optional(TEXT("layers"), TEXT("array"), TEXT("Menu layer entries from build_menu_from_spec deferred_aggregation; layer_tag falls back to tag/id and asset_path falls back to layout_asset_path"))
+            .Optional(TEXT("extension_points"), TEXT("array"), TEXT("Array of ui.add_extension_point_widget child specs"))
+            .Optional(TEXT("widget_properties"), TEXT("array"), TEXT("Array of ui.set_widget_property child specs; widget/property aliases normalize to widget_name/property_name"))
+            .Optional(TEXT("remove_widgets"), TEXT("array"), TEXT("Array of ui.remove_widget child specs; each entry accepts widget_name or widget_names[]"))
+            .Optional(TEXT("variable_defaults"), TEXT("array"), TEXT("Array of blueprint.set_variable_defaults child specs; variable_name/value aliases normalize to name/default_value"))
+            .Optional(TEXT("focus_table"), TEXT("array"), TEXT("[{screen|asset_path, target}] entries routed to ui.set_initial_focus_target"))
+            .Optional(TEXT("initial_focus"), TEXT("array"), TEXT("Array of ui.set_initial_focus_target child specs; accepts asset_path/wbp_path plus target_widget/target"))
+            .Optional(TEXT("desired_focus"), TEXT("array"), TEXT("Alias array for initial_focus"))
+            .Optional(TEXT("nav_overrides"), TEXT("array"), TEXT("[{screen|asset_path, widget, direction, rule?, target?}] grouped into ui.set_widget_navigation_bulk"))
+            .Optional(TEXT("navigation_bulk"), TEXT("array"), TEXT("Array of direct ui.set_widget_navigation_bulk child specs"))
+            .Optional(TEXT("widget_subtrees"), TEXT("array"), TEXT("Array of ui.copy_widget_subtree_with_class_remap child specs"))
+            .Optional(TEXT("blueprint_graphs"), TEXT("array"), TEXT("Array of blueprint.clone_graphs_with_reference_remap child specs"))
+            .Optional(TEXT("font_repairs"), TEXT("array"), TEXT("Array of ui.repair_slate_font_references child specs"))
+            .Optional(TEXT("frontend_validation"), TEXT("object"), TEXT("ui.validate_frontend_menu_flow validation spec run after transform steps"))
+            .Optional(TEXT("class_remaps"), TEXT("object"), TEXT("Shared class remaps merged into widget_subtrees and blueprint_graphs when a child omits them"))
+            .Optional(TEXT("object_remaps"), TEXT("object"), TEXT("Shared exact object remaps merged into widget_subtrees and blueprint_graphs when a child omits them"))
+            .Optional(TEXT("root_remaps"), TEXT("object"), TEXT("Shared root remaps merged into child repair steps when a child omits them"))
+            .Optional(TEXT("source_root"), TEXT("string"), TEXT("Shared source root shorthand; must be supplied with dest_root"))
+            .Optional(TEXT("dest_root"), TEXT("string"), TEXT("Shared destination root shorthand; must be supplied with source_root"))
+            .Optional(TEXT("raw_mode"), TEXT("boolean"), TEXT("Default raw_mode forwarded to widget_properties children when omitted"), TEXT("false"))
+            .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Default compile flag for child writers that expose compile"), TEXT("true"))
+            .Optional(TEXT("save"), TEXT("boolean"), TEXT("Default save flag for child writers that expose save"), TEXT("false"))
+            .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan mutating child steps; child actions with native dry-run are executed in dry-run mode"), TEXT("true"))
+            .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false"), TEXT("false"))
+            .Optional(TEXT("continue_on_error"), TEXT("boolean"), TEXT("Continue running remaining child steps after a child error"), TEXT("false"))
+            .Optional(TEXT("request_id"), TEXT("string"), TEXT("Caller-supplied identifier echoed in the response"))
+            .Build(),
+        TEXT("Spec Builder"));
+
+    FMonolithToolRegistry::Get().SetActionSearchMetadata(
+        TEXT("ui"),
+        TEXT("apply_common_menu_transform_spec"),
+        { TEXT("CommonUI menu transform"), TEXT("Lyra frontend copy repair"), TEXT("build_menu deferred aggregation"), TEXT("PrimaryGameLayout layer focus navigation"), TEXT("post-copy UI repair orchestration") },
+        { TEXT("apply_common_menu_spec"), TEXT("repair_copied_frontend_menu"), TEXT("apply_menu_deferred_aggregation"), TEXT("orchestrate_ui_copy_repair") },
+        { TEXT("dry-run layers, focus_table, and nav_overrides emitted by build_menu_from_spec"), TEXT("apply a copied Lyra frontend menu transform with widget subtree repair, focus, navigation, and frontend validation") });
 
     // Phase 3 Item #18 (2026-05-16 UI Gap Audit) — build_menu_from_spec.
     // Always-on (not WITH_COMMONUI-gated): the spec system is the source

@@ -34,9 +34,9 @@
 | Accessibility (non-CommonUI) | 4 | `MonolithUIAccessibilityActions.cpp` | always |
 | Hoisted Design Import | 5 | `Actions/Hoisted/{TextureIngest,FontIngest,RoundedCorner,Shadow,Gradient}Actions.cpp` | always — `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
-| Spec Builder + Serializer | 5 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
+| Spec Builder + Serializer | 6 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, `apply_common_menu_transform_spec` for guarded menu-level transform application, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
 | Type Registry diagnostic | 4 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
-| **Always-on subtotal** | **80+** | | Registry-derived; exact count varies with compatibility registrations |
+| **Always-on subtotal** | **81+** | | Registry-derived; exact count varies with compatibility registrations |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 14 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` — Phase 2 (2026-05-16) added `apply_token_binding`, `convert_textblock_to_common`, `set_action_bar_button_class`; Phase 3 (2026-05-23) added `convert_border_to_common`, `reparent_widget_root` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -49,10 +49,10 @@
 | CommonUI Scaffolders | 3 | `CommonUI/MonolithCommonUITemplateActions.cpp` | `WITH_COMMONUI` — Phase 3 (2026-05-16) `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **62** | | conditional |
-| **MonolithUI total** | **147** | | current Speed full configuration; registry-derived |
+| **MonolithUI total** | **148** | | current Speed full configuration; registry-derived |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
-Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. The 2026-07-01 frontend menu flow pass added `validate_frontend_menu_flow` for read-only PrimaryGameLayout/layer/screen/dialog composition validation. Production registration sites only — Tests/ excluded.
+Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. The 2026-07-01 frontend menu flow pass added `validate_frontend_menu_flow` for read-only PrimaryGameLayout/layer/screen/dialog composition validation and `apply_common_menu_transform_spec` as the guarded apply-side counterpart for `build_menu_from_spec` deferred menu aggregation. Production registration sites only — Tests/ excluded.
 
 ### Classes
 
@@ -72,7 +72,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `FMonolithUIRegistryActions` | Registers `dump_property_allowlist` (Phase B diagnostic) |
 | `MonolithUI::FTextureIngestActions` / `FFontIngestActions` / `FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Hoisted Design Import + Animation v2 verbs (Phase D, 2026-04-26) |
 | `MonolithUI::FEffectSurfaceActions` | EffectSurface sub-bag setters + preset (Phase F, 2026-04-26) |
-| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) + `audit_widget_layout` (2026-06-24 structural UMG anchor audit) |
+| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) + `apply_common_menu_transform_spec` (guarded apply-side orchestration for menu layers, focus, navigation, UIExtension, widget properties/removal, variable defaults, subtree/font/graph repair, and frontend validation) + `audit_widget_layout` (2026-06-24 structural UMG anchor audit) |
 | `MonolithCommonUITemplate::Register` | CommonUI headline scaffolders: `scaffold_main_menu` / `scaffold_settings_panel_with_tabs` / `scaffold_pause_menu` (Phase 3 of the 2026-05-16 UI Gap Audit). File-static handlers in `CommonUI/MonolithCommonUITemplateActions.cpp` — `WITH_COMMONUI` only |
 | `UMonolithUIRegistrySubsystem` (UEditorSubsystem) | Live type registry + per-type property allowlist (Phase B) |
 | `FUITypeRegistry` / `FUIPropertyAllowlist` / `FUIPropertyPathCache` / `FUIReflectionHelper` | Registry data model + safe reflection write surface (Phases B + C) |
@@ -138,6 +138,11 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `batch_style` | `asset_path`, `style_operations` | Apply multiple styling operations in a single transaction |
 | `set_text` | `asset_path`, `widget_name`, `text` | Set display text on a text widget |
 | `set_image` | `asset_path`, `widget_name`, `texture_path` | Set the texture on an image widget |
+
+**Spec Builder + Menu Transform (6)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `apply_common_menu_transform_spec` | optional `spec`, `screens`, `layout_asset_path`, `layout_layers`/`layers`, `extension_points`, `widget_properties`, `remove_widgets`, `variable_defaults`, `focus_table`/`initial_focus`/`desired_focus`, `nav_overrides`/`navigation_bulk`, `widget_subtrees`, `blueprint_graphs`, `font_repairs`, `frontend_validation`, shared remaps, `compile`, `save`, `dry_run`, `confirm`, `continue_on_error`, `request_id` | Apply the menu-level transform counterpart to `build_menu_from_spec`. `dry_run=true` is default; plan-only child writers are not executed during dry-run, while native dry-run child repair actions and read-only validation can run. Writes require `dry_run=false` and `confirm=true`. |
 
 **Post-Copy Repair (3)**
 | Action | Params | Description |
@@ -469,9 +474,9 @@ ui::build_ui_from_spec({
 
 ### Menu Spec Builder (M5 — Phase 3 of the 2026-05-16 UI Gap Audit)
 
-**Status:** Landed 2026-05-16, compacted 2026-05-26. Per-screen `spec` builds run **FULL** via `FUISpecBuilder`. Cross-screen aggregation (`layers[]` activatable-stack hierarchy, `focus_table[]` CDO writes, `nav_overrides[]` propagation) is **DEFERRED** to issue #3-18b — captured entries echo back in the response under `deferred_aggregation`, and the aggregate status is non-mutating (`partial_non_mutating` / `incomplete`) rather than committed success.
+**Status:** Landed 2026-05-16, compacted 2026-05-26, apply-side companion added 2026-07-01. Per-screen `spec` builds run **FULL** via `FUISpecBuilder`. `build_menu_from_spec` remains a non-mutating aggregate builder when `layers[]`, `focus_table[]`, or `nav_overrides[]` are supplied: captured entries echo back in `deferred_aggregation`, and the aggregate status is non-mutating (`partial_non_mutating` / `incomplete`) rather than committed success. The committed counterpart is `ui::apply_common_menu_transform_spec`, which consumes those aggregation fields plus copied-menu repair fields and routes them through existing scoped actions.
 
-**Action surface:** `ui::build_menu_from_spec` (always-on — registered from `Actions/MonolithUISpecActions.cpp`, not WITH_COMMONUI-gated; per-screen builders may construct CommonUI widgets but the dispatch surface itself is engine-side).
+**Action surfaces:** `ui::build_menu_from_spec` and `ui::apply_common_menu_transform_spec` (always-on — registered from `Actions/MonolithUISpecActions.cpp`, not WITH_COMMONUI-gated; per-screen builders and apply steps may target CommonUI widgets, but the dispatch surface itself is engine-side).
 
 **Document shape:**
 
@@ -484,9 +489,11 @@ ui::build_ui_from_spec({
 }
 ```
 
-**Modes preserved from `build_ui_from_spec`:** `dry_run`, `treat_warnings_as_errors`, `raw_mode`, `overwrite`, `request_id`. Per-screen builds receive `<request_id>:<screen.id>` so consumers can correlate aggregate vs per-screen calls.
+**Modes preserved from `build_ui_from_spec`:** `dry_run`, `treat_warnings_as_errors`, `raw_mode`, `overwrite`, `request_id`. Per-screen builds receive `<request_id>:<screen.id>` so consumers can correlate aggregate vs per-screen calls. `apply_common_menu_transform_spec` uses a stricter writer contract: `dry_run=true` by default, and mutation requires `dry_run=false` plus `confirm=true`.
 
-**Response shape:** `{ bSuccess, status, request_id?, screens[], aggregate_node_counts, errors?, warnings?, deferred_aggregation? }` where each `screens[N]` entry includes a full `build_result` object (same shape as `build_ui_from_spec`'s response). `status` is `ok` only when all screens commit and no deferred `layers/focus_table/nav_overrides` entries were supplied; `partial_non_mutating` marks deferred aggregation surfaces that were acknowledged but not committed; `incomplete` marks screen specs that cannot commit; `validation_failed` covers structural errors. Non-mutating placeholder paths do not return committed-success status.
+**Response shape:** `build_menu_from_spec` returns `{ bSuccess, status, request_id?, screens[], aggregate_node_counts, errors?, warnings?, deferred_aggregation? }` where each `screens[N]` entry includes a full `build_result` object (same shape as `build_ui_from_spec`'s response). `status` is `ok` only when all screens commit and no deferred `layers/focus_table/nav_overrides` entries were supplied; `partial_non_mutating` marks deferred aggregation surfaces that were acknowledged but not committed; `incomplete` marks screen specs that cannot commit; `validation_failed` covers structural errors. Non-mutating placeholder paths do not return committed-success status.
+
+**Apply transform shape:** `apply_common_menu_transform_spec` accepts the same `screens`, `layers`, `focus_table`, and `nav_overrides` aggregation shape plus explicit `layout_layers`, `extension_points`, `widget_properties`, `remove_widgets`, `variable_defaults`, `widget_subtrees`, `blueprint_graphs`, `font_repairs`, and `frontend_validation`. It returns `{ ok, status, dry_run, confirm, step_count, executed_step_count, planned_only_step_count, failed_step_count, changed, changed_known, changed_unknown_step_count, compiled, saved, planned_counts, applied_counts, steps[], errors[] }`. During dry-run, child writers that lack native dry-run support are represented as `status:"planned"` rows and are not executed; child repair actions with native dry-run support are executed in dry-run mode; frontend validation is read-only and may execute.
 
 ### Spec Serializer (M5 — Phase J, landed 2026-04-26)
 
