@@ -1191,7 +1191,7 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 	bool bSaveConfig = false;
 	if (Params->HasField(TEXT("save_config")) && !Params->TryGetBoolField(TEXT("save_config"), bSaveConfig))
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: save_config must be a boolean"));
+		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'save_config' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// 1) Resolve class. Try full-path first (works for '/Script/Module.Class'),
