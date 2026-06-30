@@ -1428,7 +1428,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, UI font post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
+UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
 > For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
@@ -1443,7 +1443,7 @@ UMG widget Blueprint CRUD, templates, styling, UI font post-copy repair, animati
 | Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
 | Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
 | Styling | 6 | `set_font`, `set_color_scheme`, `batch_style`, `set_text`, `set_image`, `setup_list_view` |
-| Post-copy font repair | 2 | `clone_composite_font_with_remapped_faces` clones a composite `UFont` into a new destination asset and remaps asset-backed `UFontFace` entries across default, fallback, and sub-typefaces; `repair_slate_font_references` scans a copied UI asset package for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references |
+| Post-copy repair | 3 | `copy_widget_subtree_with_class_remap` copies WBP widget subtrees into a destination WBP with class/object/root remaps and collision policy; `clone_composite_font_with_remapped_faces` clones a composite `UFont` into a new destination asset and remaps asset-backed `UFontFace` entries; `repair_slate_font_references` scans a copied UI asset package for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references |
 | Templates / scaffolds | 13 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list`, `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
 | Headline scaffolders (v0.15.0) | 3 | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Animation v1 | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
@@ -1454,6 +1454,31 @@ UMG widget Blueprint CRUD, templates, styling, UI font post-copy repair, animati
 | Spec round-trip | 4 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0) |
 | Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
 | Allowlist / diagnostics | 2 | `dump_property_allowlist`, `dump_style_cache_stats` |
+
+### `ui.copy_widget_subtree_with_class_remap`
+
+Copy one or more source Widget Blueprint widget subtrees into a destination Widget Blueprint while remapping widget classes and copied object/package references. The action preflights source widgets, destination parents, remapped classes, subtree child compatibility, and destination name collisions before mutation. `dry_run=true` returns the plan without calling `Modify`, compile, or save; writes require `dry_run=false` and `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_asset_path` | string | **required** | Source Widget Blueprint asset path. |
+| `destination_asset_path` | string | **required** | Destination Widget Blueprint asset path. |
+| `source_widget_name` | string | optional | Single source widget name to copy. Supply this or `source_widget_names`. |
+| `source_widget_names` | array | optional | Multiple source widget names to copy. |
+| `destination_widget_name` | string | optional | Destination name override. Only valid with one source widget. |
+| `destination_parent_name` | string | optional | Destination panel widget name. Defaults to the source-equivalent parent or destination root. |
+| `class_remaps` | object | optional | Source widget class path/token to destination widget class path/token map, e.g. `{ "VerticalBox": "HorizontalBox" }`. |
+| `object_remaps` | object | optional | Exact hard/soft object path remaps. |
+| `root_remaps` | object | optional | Source-root to destination-root map for copied object paths, e.g. `{"/Game/Old":"/Game/New"}`. |
+| `source_root` | string | optional | Single source-root shorthand; must be supplied with `dest_root`. |
+| `dest_root` | string | optional | Single destination-root shorthand; must be supplied with `source_root`. |
+| `existing_policy` | enum | optional | `fail`, `replace`, or `skip` when destination names already exist. Default: `fail`. |
+| `insert_policy` | enum | optional | `source_index` or `append` for copied root placement. Default: `source_index`. |
+| `require_remapped_classes` | boolean | optional | Require every copied widget class to match `class_remaps`. Default: `false`. |
+| `compile` | boolean | optional | Compile destination WBP after applying. Default: `true`. |
+| `dry_run` | boolean | optional | Plan without mutating the destination WBP. Default: `true`. |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false`. |
+| `save` | boolean | optional | Save the destination package after applying. Default: `false`. |
 
 ### `ui.clone_composite_font_with_remapped_faces`
 

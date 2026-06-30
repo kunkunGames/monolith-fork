@@ -9,6 +9,7 @@
 #include "MonolithUIAccessibilityActions.h"
 #include "MonolithUIRegistryActions.h"
 #include "MonolithUIFontRepairActions.h"
+#include "MonolithUIWidgetCopyActions.h"
 #include "MonolithSettings.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
@@ -86,6 +87,7 @@ void FMonolithUIModule::StartupModule()
         FMonolithUIAccessibilityActions::RegisterActions(OwnedRegistry);
         FMonolithUIRegistryActions::RegisterActions(OwnedRegistry);
         FMonolithUIFontRepairActions::RegisterActions(OwnedRegistry);
+        FMonolithUIWidgetCopyActions::RegisterActions(OwnedRegistry);
 
         // Hoisted action set -- generic verbs registered under the ui:: namespace.
         MonolithUI::FAnimationCoreActions::Register(OwnedRegistry);

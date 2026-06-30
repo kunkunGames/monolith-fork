@@ -1,8 +1,17 @@
 #include "MonolithGameFeatureActions.h"
 
-#include "AssetRegistry/AssetRegistryModule.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Modules/ModuleManager.h"
+#include "MonolithParamSchema.h"
+
+#ifndef WITH_MONOLITH_GAMEFEATURES
+#define WITH_MONOLITH_GAMEFEATURES 0
+#endif
+
+#if WITH_MONOLITH_GAMEFEATURES
+
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Engine/AssetManagerTypes.h"
 #include "GameFeatureData.h"
 #include "GameplayTagContainer.h"
@@ -10,8 +19,6 @@
 #include "Interfaces/IPluginManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
-#include "Modules/ModuleManager.h"
-#include "MonolithParamSchema.h"
 #include "MonolithSettings.h"
 #include "PluginReferenceDescriptor.h"
 #include "Serialization/JsonSerializer.h"
@@ -4678,3 +4685,219 @@ TSharedPtr<FJsonObject> FMonolithGameFeatureActions::ValidatePluginSchema()
 		.Required(TEXT("plugin_name"), TEXT("string"), TEXT("GameFeature plugin name to validate"))
 		.Build();
 }
+
+#else
+
+namespace
+{
+	TArray<TSharedPtr<FJsonValue>> StringArrayToJson(std::initializer_list<const TCHAR*> Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Result;
+		for (const TCHAR* Value : Values)
+		{
+			Result.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Result;
+	}
+
+	FMonolithActionResult GameFeaturesUnavailable()
+	{
+		return FMonolithActionResult::Error(
+			TEXT("GameFeatures optional dependency is not compiled into this Monolith build."),
+			-32011);
+	}
+}
+
+void FMonolithGameFeatureActions::Register(FMonolithToolRegistry& Registry, bool bEnableInspectionActions)
+{
+	const FString Namespace = TEXT("gamefeatures");
+	const FString Action = TEXT("get_status");
+	Registry.RegisterAction(Namespace, Action,
+		TEXT("Report GameFeatures namespace availability and optional dependency state."),
+		FMonolithActionHandler::CreateStatic(&FMonolithGameFeatureActions::GetStatus),
+		EmptySchema());
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::GetStatus(const TSharedPtr<FJsonObject>& Params)
+{
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("gamefeatures"));
+	Result->SetStringField(TEXT("mode"), TEXT("unavailable"));
+	Result->SetBoolField(TEXT("enabled"), false);
+	Result->SetBoolField(TEXT("inspection_enabled"), false);
+	Result->SetBoolField(TEXT("write_actions_registered"), false);
+	Result->SetBoolField(TEXT("creation_allowed"), false);
+	Result->SetBoolField(TEXT("hard_toolsetregistry_dependency"), false);
+	Result->SetBoolField(TEXT("with_gamefeatures"), false);
+	Result->SetBoolField(TEXT("gamefeatures_module_exists"), FModuleManager::Get().ModuleExists(TEXT("GameFeatures")));
+	Result->SetBoolField(TEXT("gamefeatures_module_loaded"), FModuleManager::Get().IsModuleLoaded(TEXT("GameFeatures")));
+	Result->SetStringField(TEXT("dependency_state"), TEXT("unavailable"));
+	Result->SetStringField(TEXT("reason"), TEXT("GameFeatures optional dependency is not compiled into this Monolith build."));
+	Result->SetArrayField(TEXT("actions"), StringArrayToJson({ TEXT("get_status") }));
+	Result->SetArrayField(TEXT("registered_actions"), StringArrayToJson({ TEXT("get_status") }));
+	Result->SetArrayField(TEXT("write_actions"), StringArrayToJson({}));
+	Result->SetArrayField(TEXT("available_when_compiled"), StringArrayToJson({
+		TEXT("add_action_set_input_mapping"),
+		TEXT("set_primary_asset_scan"),
+		TEXT("add_game_feature_data_input_mapping"),
+		TEXT("add_game_feature_data_widgets"),
+		TEXT("add_game_feature_data_components"),
+		TEXT("add_game_feature_data_gameplay_cue_paths"),
+		TEXT("add_game_feature_data_abilities"),
+		TEXT("remove_game_feature_data_action"),
+		TEXT("list_plugins"),
+		TEXT("find_game_feature_data"),
+		TEXT("describe_game_feature_data"),
+		TEXT("list_action_classes"),
+		TEXT("describe_action_set"),
+		TEXT("validate_plugin")
+	}));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::ListPlugins(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::FindGameFeatureData(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::DescribeGameFeatureData(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::ListActionClasses(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::DescribeActionSet(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddActionSetInputMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::SetPrimaryAssetScan(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataInputMapping(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataWidgets(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataComponents(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataGameplayCuePaths(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::AddGameFeatureDataAbilities(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::RemoveGameFeatureDataAction(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+FMonolithActionResult FMonolithGameFeatureActions::ValidatePlugin(const TSharedPtr<FJsonObject>& Params)
+{
+	return GameFeaturesUnavailable();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::EmptySchema()
+{
+	return FParamSchemaBuilder().Build();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::ListPluginsSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::FindGameFeatureDataSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::DescribeGameFeatureDataSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::ListActionClassesSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::DescribeActionSetSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddActionSetInputMappingSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::SetPrimaryAssetScanSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddGameFeatureDataInputMappingSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddGameFeatureDataWidgetsSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddGameFeatureDataComponentsSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddGameFeatureDataGameplayCuePathsSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::AddGameFeatureDataAbilitiesSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::RemoveGameFeatureDataActionSchema()
+{
+	return EmptySchema();
+}
+
+TSharedPtr<FJsonObject> FMonolithGameFeatureActions::ValidatePluginSchema()
+{
+	return EmptySchema();
+}
+
+#endif

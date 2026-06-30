@@ -4,6 +4,12 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
+#ifndef WITH_MONOLITH_GAMEFEATURES
+#define WITH_MONOLITH_GAMEFEATURES 0
+#endif
+
+#if WITH_MONOLITH_GAMEFEATURES
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGameFeaturesStatusTest,
 	"Monolith.GameFeatures.StatusAndReadOnlyGuards",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -158,3 +164,24 @@ bool FMonolithGameFeaturesStatusTest::RunTest(const FString& Parameters)
 	Settings->bAllowGameFeaturePluginCreation = bOriginalCreation;
 	return true;
 }
+
+#else
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithGameFeaturesStatusTest,
+	"Monolith.GameFeatures.StatusUnavailable",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithGameFeaturesStatusTest::RunTest(const FString& Parameters)
+{
+	FMonolithActionResult Result = FMonolithGameFeatureActions::GetStatus(MakeShared<FJsonObject>());
+	TestTrue(TEXT("GetStatus succeeds when optional dependency is not compiled"), Result.bSuccess);
+	TestTrue(TEXT("GetStatus returns json"), Result.Result.IsValid());
+	if (Result.Result.IsValid())
+	{
+		TestFalse(TEXT("GameFeatures not compiled"), Result.Result->GetBoolField(TEXT("with_gamefeatures")));
+		TestEqual(TEXT("Dependency state"), Result.Result->GetStringField(TEXT("dependency_state")), FString(TEXT("unavailable")));
+	}
+	return true;
+}
+
+#endif

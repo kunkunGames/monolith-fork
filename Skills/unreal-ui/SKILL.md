@@ -19,7 +19,7 @@ monolith_discover({ namespace: "ui", action: "add_widget", mode: "schema" })  //
 monolith_find("make a health bar HUD")                                  // jump straight to the right action
 ```
 
-The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A–L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`), Slot, Templates, Styling, UI font post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder, and Type Registry diagnostics.
+The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A–L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`), Slot, Templates, Styling, UI post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder, and Type Registry diagnostics.
 
 **CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, the `WITH_COMMONUI` action pack unregisters; detect the live surface via `monolith_discover`.
 
@@ -102,7 +102,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] set_text` | `asset_path*`, `widget_name*`, `text?`, `text_color?`, `font_size?`, `justification?` (Left/Center/Right), `compile=false` | Convenience text setter |
 | `[w] set_image` | `asset_path*`, `widget_name*`, `texture_path?`, `material_path?`, `tint_color?`, `size?`, `compile=false` | Convenience image setter |
 | `[w] set_rounded_corners` | `asset_path*`, `widget_name*`, `corner_radii?` [TL,TR,BR,BL], `outline_color?`, `outline_width?`, `fill_color?`, `compile=true` | Reflection writer for corner/outline/fill (≥1 optional required) |
-| **Post-Copy Repair (2)** | | |
+| **Post-Copy Repair (3)** | | |
+| `[w] copy_widget_subtree_with_class_remap` | `source_asset_path*`, `destination_asset_path*`, `source_widget_name?`, `source_widget_names?`, `destination_widget_name?`, `destination_parent_name?`, `class_remaps?`, `object_remaps?`, `root_remaps?`, `source_root?`, `dest_root?`, `existing_policy=fail/replace/skip`, `insert_policy=source_index/append`, `require_remapped_classes=false`, `compile=true`, `dry_run=true`, `confirm=false`, `save=false` | Copy one or more WBP widget subtrees into another WBP while remapping widget classes plus hard/soft object references. Dry-run plans by default; writes require `dry_run=false` and `confirm=true`; collisions default to fail. |
 | `[w] clone_composite_font_with_remapped_faces` | `source_font_path*`, `destination_font_path*`, `root_remaps?`, `source_root?`, `dest_root?`, `font_face_remaps?`, `dry_run=true`, `confirm=false`, `save=false` | Clone a composite `UFont` to a new destination asset while remapping `UFontFace` references. Fails on destination collision or missing remapped faces; writes require `dry_run=false` and `confirm=true`. |
 | `[w] repair_slate_font_references` | `asset_path*`, `root_remaps?`, `source_root?`, `dest_root?`, `font_asset_remaps?`, `include_unchanged=false`, `dry_run=true`, `confirm=false`, `save=false` | Scan a copied UI asset package for serialized `FSlateFontInfo` values and remap their `FontObject` `UFont` references. Dry-run preflights by default; writes require `dry_run=false` and `confirm=true`. |
 | **Animation v1 (5)** | | |
@@ -184,6 +185,37 @@ Build the tabbed settings panel and save-slot selector WBPs, then scaffold the b
 ```
 
 The `scaffold_*` actions emit C++ subclasses (UGameUserSettings / ULocalPlayerSaveGame / subsystem); the panel widgets bind their UI through a ViewModel adapter per the architecture rules, not by reaching into the settings object directly.
+
+### 3. Repair a copied Widget Blueprint subtree
+
+After an asset package copy, use the post-copy repair actions to restore or replace a WBP subtree with explicit remaps. Start with dry-run and only apply after the plan shows the intended class/object rewrites.
+
+```
+1. ui_query("copy_widget_subtree_with_class_remap", {
+     "source_asset_path": "/Game/UI/Old/WBP_Source",
+     "destination_asset_path": "/Game/UI/New/WBP_Destination",
+     "source_widget_name": "HostPanel",
+     "destination_widget_name": "HostPanel",
+     "class_remaps": { "VerticalBox": "HorizontalBox" },
+     "root_remaps": { "/Game/UI/Old": "/Game/UI/New" },
+     "dry_run": true
+   })
+2. ui_query("copy_widget_subtree_with_class_remap", {
+     "source_asset_path": "/Game/UI/Old/WBP_Source",
+     "destination_asset_path": "/Game/UI/New/WBP_Destination",
+     "source_widget_name": "HostPanel",
+     "destination_widget_name": "HostPanel",
+     "class_remaps": { "VerticalBox": "HorizontalBox" },
+     "root_remaps": { "/Game/UI/Old": "/Game/UI/New" },
+     "existing_policy": "replace",
+     "dry_run": false,
+     "confirm": true,
+     "compile": true
+   })
+3. ui_query("repair_slate_font_references", {"asset_path": "/Game/UI/New/WBP_Destination", "root_remaps": {"/Game/UI/Old": "/Game/UI/New"}, "dry_run": true})
+```
+
+This action owns WBP tree repair only. Actor/component Blueprint graph cloning still belongs to **unreal-blueprints**.
 
 ## Capturing UMG Widgets to PNG (editor:: action)
 

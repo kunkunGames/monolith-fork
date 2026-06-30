@@ -22,7 +22,7 @@
 |----------|-------|----------------|--------------|
 | Widget CRUD | 10 | `MonolithUIActions.cpp` | always — Phase 2 (2026-05-16) added `rename_widget`, `dump_blueprint_compile_log`; 2026-06-30 added `add_extension_point_widget` for UIExtensionPointWidget + GameplayTag + slot layout |
 | CommonFramework diagnostics/authoring | 6 | `MonolithUIActions.cpp` | always — `get_common_framework_status` reflects the Lyra Common plugin family without hard-linking optional plugins; `describe_common_widget_blueprint` inspects CommonGame/UIExtension/CommonUI WBP semantics; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs without changing CommonGame runtime code; `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract` validate CommonGame messaging/modal contracts read-only |
-| Post-copy font repair | 2 | `MonolithUIFontRepairActions.cpp` | always — `clone_composite_font_with_remapped_faces` clones a composite `UFont` to a new asset and remaps `UFontFace` entries across default, fallback, and sub-typefaces; `repair_slate_font_references` scans copied UI asset packages for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references. Both actions use dry-run/confirm guards. |
+| Post-copy repair | 3 | `MonolithUIWidgetCopyActions.cpp`, `MonolithUIFontRepairActions.cpp` | always — `copy_widget_subtree_with_class_remap` copies WBP widget subtrees into another WBP while remapping widget classes and object/package references; `clone_composite_font_with_remapped_faces` clones a composite `UFont` to a new asset and remaps `UFontFace` entries; `repair_slate_font_references` scans copied UI asset packages for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references. All three actions use dry-run/confirm guards. |
 | Slot | 3 | `MonolithUISlotActions.cpp` | always |
 | Templates | 8 | `MonolithUITemplateActions.cpp` | always |
 | Styling | 6 | `MonolithUIStylingActions.cpp` | always |
@@ -36,7 +36,7 @@
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
 | Spec Builder + Serializer | 5 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
 | Type Registry diagnostic | 4 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
-| **Always-on subtotal** | **79+** | | Registry-derived; exact count varies with compatibility registrations |
+| **Always-on subtotal** | **80+** | | Registry-derived; exact count varies with compatibility registrations |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 14 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` — Phase 2 (2026-05-16) added `apply_token_binding`, `convert_textblock_to_common`, `set_action_bar_button_class`; Phase 3 (2026-05-23) added `convert_border_to_common`, `reparent_widget_root` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -49,7 +49,7 @@
 | CommonUI Scaffolders | 3 | `CommonUI/MonolithCommonUITemplateActions.cpp` | `WITH_COMMONUI` — Phase 3 (2026-05-16) `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **62** | | conditional |
-| **MonolithUI total** | **146** | | current Speed full configuration; registry-derived |
+| **MonolithUI total** | **147** | | current Speed full configuration; registry-derived |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
 Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. Production registration sites only — Tests/ excluded.
@@ -63,6 +63,7 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `FMonolithUISlotActions` | Layout slot operations: slot properties, anchor presets, widget movement |
 | `FMonolithUITemplateActions` | High-level HUD/menu/panel scaffold templates (8 templates) |
 | `FMonolithUIStylingActions` | Visual styling: brush, font, color scheme, text, image, batch style |
+| `FMonolithUIWidgetCopyActions` | Post-copy WBP subtree repair: guarded `copy_widget_subtree_with_class_remap` dry-runs and applies widget subtree copies across Widget Blueprints with explicit widget class remaps, hard/soft object reference remaps, collision policy, compile/save options, and no Speed/CommonGame runtime edits |
 | `FMonolithUIFontRepairActions` | Post-copy UI font repair: guarded composite `UFont` clone with `UFontFace` root/exact remap preflight, destination collision refusal, optional save, plus copied asset-package `FSlateFontInfo.FontObject` `UFont` remap with package-local reflection scan, dry-run/confirm guards, optional save, and Slate-safe `PostEditChange` |
 | `FMonolithUIAnimationActions` | UMG widget animation v1 CRUD: list, inspect, create, add/remove keyframes (the latter two are Phase L `[DEPRECATED]` — prefer the hoisted v2 surface in `AnimationCoreActions`) |
 | `FMonolithUIBindingActions` | Event/property binding inspection, list view setup, widget binding queries |
@@ -137,10 +138,12 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `set_text` | `asset_path`, `widget_name`, `text` | Set display text on a text widget |
 | `set_image` | `asset_path`, `widget_name`, `texture_path` | Set the texture on an image widget |
 
-**Post-Copy Font Repair (1)**
+**Post-Copy Repair (3)**
 | Action | Params | Description |
 |--------|--------|-------------|
+| `copy_widget_subtree_with_class_remap` | `source_asset_path`, `destination_asset_path`, `source_widget_name` or `source_widget_names`, optional `destination_widget_name`, `destination_parent_name`, `class_remaps`, `object_remaps`, `root_remaps`, `source_root`, `dest_root`, `existing_policy`, `insert_policy`, `require_remapped_classes`, `compile`, `dry_run`, `confirm`, `save` | Copy one or more source WBP widget subtrees into a destination WBP while remapping root and descendant widget classes plus hard/soft object references. `dry_run=true` is default; writes require `dry_run=false` and `confirm=true`; collisions default to fail and can be replaced or skipped explicitly. |
 | `clone_composite_font_with_remapped_faces` | `source_font_path`, `destination_font_path`, optional `root_remaps`, `source_root`, `dest_root`, `font_face_remaps`, `dry_run`, `confirm`, `save` | Clone a source composite `UFont` into a new destination asset and remap asset-backed `UFontFace` entries across `DefaultTypeface`, `FallbackTypeface.Typeface`, and `SubTypefaces[].Typeface`. `dry_run=true` is default; writes require `dry_run=false` and `confirm=true`; the action fails on destination collision or missing remapped target face before creating anything. |
+| `repair_slate_font_references` | `asset_path`, optional `root_remaps`, `source_root`, `dest_root`, `font_asset_remaps`, `include_unchanged`, `dry_run`, `confirm`, `save` | Scan a copied UI asset package for serialized `FSlateFontInfo` values and remap their `FontObject` `UFont` references. `dry_run=true` is default; writes require `dry_run=false` and `confirm=true`; `save=true` is optional. |
 
 **Animation v1 (5 — `create_animation` and `add_animation_keyframe` `[DEPRECATED]` Phase L; prefer the hoisted `create_animation_v2` / `add_bezier_eased_segment` / `bake_spring_animation` surface documented under "Design Import Actions")**
 

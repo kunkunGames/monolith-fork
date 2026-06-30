@@ -93,8 +93,10 @@
     "set_metasound_node_location"
   ],
   "unreal-gamefeatures": [
+    "describe_action_set",
     "describe_game_feature_data",
     "find_game_feature_data",
+    "list_action_classes",
     "validate_plugin"
   ],
   "unreal-mesh": [

@@ -76,7 +76,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 ### Content
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
-| `unreal-ui` | `ui` | 146 | UMG widgets, Lyra Common plugin diagnostics, bindings, slots, styling, templates, accessibility |
+| `unreal-ui` | `ui` | 147 | UMG widgets, Lyra Common plugin diagnostics, post-copy WBP/font repair, bindings, slots, styling, templates, accessibility |
 | `unreal-niagara` | `niagara` | 123 | Niagara VFX systems, emitters, modules |
 | `unreal-animation` | `animation` | 135 | AnimBP, montages, sequences, blendspaces, layout |
 | `unreal-audio` | `audio` | 98 | Sound assets, cues, MetaSounds, attenuation, mixing |
