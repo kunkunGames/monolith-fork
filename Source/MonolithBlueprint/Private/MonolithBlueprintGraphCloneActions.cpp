@@ -1192,7 +1192,8 @@ FMonolithActionResult FMonolithBlueprintGraphExportActions::HandleCloneGraphsWit
 		}
 		if (Row.IsValid())
 		{
-			if (Row->GetStringField(TEXT("status")) == TEXT("cloned"))
+			FString StatusString;
+			if (Row->TryGetStringField(TEXT("status"), StatusString) && StatusString == TEXT("cloned"))
 			{
 				bChanged = true;
 			}
