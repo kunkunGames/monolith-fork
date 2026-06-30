@@ -318,4 +318,22 @@ bool FMonolithParamGuardWorldGenBlockoutBPMalformedParamsTest::RunTest(const FSt
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorldGenTerrainGridResClampTest, "Monolith.WorldGen.ParamGuard.TerrainGridResClamp", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorldGenTerrainGridResClampTest::RunTest(const FString& Parameters)
+{
+	auto Payload = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> CenterArr; CenterArr.Add(MakeShared<FJsonValueNumber>(0)); CenterArr.Add(MakeShared<FJsonValueNumber>(0)); CenterArr.Add(MakeShared<FJsonValueNumber>(0));
+	Payload->SetArrayField(TEXT("center"), CenterArr);
+	TArray<TSharedPtr<FJsonValue>> SizeArr; SizeArr.Add(MakeShared<FJsonValueNumber>(1000)); SizeArr.Add(MakeShared<FJsonValueNumber>(1000));
+	Payload->SetArrayField(TEXT("size"), SizeArr);
+	Payload->SetNumberField(TEXT("grid_resolution"), 129.0);
+
+	FMonolithActionResult Result = FMonolithMeshTerrainActions::SampleTerrainGrid(Payload);
+
+	TestTrue(TEXT("SampleTerrainGrid with grid_resolution > 128 should fail"), !Result.bSuccess);
+	TestTrue(TEXT("SampleTerrainGrid failure should mention 'exceeds the maximum allowed (128)'"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed (128)")));
+
+	return true;
+}
 #endif // WITH_GEOMETRYSCRIPT

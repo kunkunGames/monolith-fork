@@ -1319,6 +1319,10 @@ FMonolithActionResult FMonolithMeshTerrainActions::SampleTerrainGrid(
       return FMonolithActionResult::Error(
           TEXT("Parameter 'grid_resolution' must be a number"));
     }
+    if (TempVal > 128.0) {
+      return FMonolithActionResult::Error(FString::Printf(
+          TEXT("grid_resolution %g exceeds the maximum allowed (128)"), TempVal));
+    }
     Res = static_cast<int32>(TempVal);
   }
 
