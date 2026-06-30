@@ -193,6 +193,13 @@ namespace MonolithSourceSchema
 		TEXT("CREATE TRIGGER IF NOT EXISTS symbols_ad AFTER DELETE ON symbols BEGIN")
 		TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring)")
 		TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring);")
+			TEXT("END;")
+
+			TEXT("CREATE TRIGGER IF NOT EXISTS symbols_au AFTER UPDATE ON symbols BEGIN")
+			TEXT("    INSERT INTO symbols_fts(symbols_fts, rowid, name, qualified_name, docstring)")
+			TEXT("    VALUES ('delete', old.id, old.name, old.qualified_name, old.docstring);")
+			TEXT("    INSERT INTO symbols_fts(rowid, name, qualified_name, docstring)")
+			TEXT("    VALUES (new.id, new.name, new.qualified_name, new.docstring);")
 		TEXT("END;");
 
 	// ----------------------------------------------------------------
@@ -205,6 +212,7 @@ namespace MonolithSourceSchema
 		TEXT("DROP TABLE IF EXISTS console_objects_fts;")
 		TEXT("DROP TABLE IF EXISTS console_snapshot_meta;")
 		TEXT("DROP TABLE IF EXISTS console_objects;")
+			TEXT("DROP TRIGGER IF EXISTS symbols_au;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ad;")
 		TEXT("DROP TRIGGER IF EXISTS symbols_ai;")
 		TEXT("DROP TABLE IF EXISTS symbols_fts;")
