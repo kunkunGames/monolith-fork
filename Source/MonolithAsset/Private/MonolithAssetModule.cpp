@@ -5,6 +5,7 @@
 #include "MonolithAssetHygieneActions.h"
 #include "MonolithAssetInspectionActions.h"
 #include "MonolithAssetLifecycleActions.h"
+#include "MonolithAssetPackageGraphActions.h"
 #include "MonolithAssetTextureIngestActions.h"
 #include "MonolithSettings.h"
 #include "MonolithToolRegistry.h"
@@ -29,6 +30,7 @@ void FMonolithAssetModule::StartupModule()
 		FMonolithAssetHygieneActions::RegisterValidateNamingConventions(OwnedRegistry);
 		FMonolithAssetInspectionActions::RegisterActions(OwnedRegistry);
 		FMonolithAssetFindActions::RegisterActions(OwnedRegistry);
+		FMonolithAssetPackageGraphActions::RegisterActions(OwnedRegistry);
 		FMonolithAssetHygieneActions::RegisterBatchRenameAssets(OwnedRegistry);
 	});
 

@@ -3,7 +3,7 @@
 	"Version": 2,
 	"VersionName": "0.20.3",
 	"FriendlyName": "Monolith",
-	"Description": "Unified Unreal Engine MCP server — ~1,925 actions across 63 in-tree namespaces (Blueprint, Material, Animation, Niagara, Mesh, Editor, Config, Console, Source, Project, UI, GAS, ChaosFracture, ComboGraph, AI, LogicDriver, Audio, LevelSequence, plus monolith meta / bulk_fill / describe and the Reflection Intelligence set: decision / risk / cppreflect / network / pipeline / reflect). Query `monolith_discover()` for the live count. Experimental town-gen actions register when `bEnableProceduralTownGen=true`. Framework-level `bulk_fill_query` and `describe_query` route to 12 per-namespace adapters for transacted JSON-tree writes and rich schema introspection. Reflection Intelligence layers deterministic decision-record, git-risk, and UE reflection queries on top of the source index. AI-powered asset creation, inspection, and modification.",
+	"Description": "Unified Unreal Engine MCP server — roughly 1,978 in-tree action registrations across Blueprint, Material, Animation, Niagara, Mesh, Editor, Config, Console, Source, Project, UI, GAS, ChaosFracture, ComboGraph, AI, LogicDriver, Audio, LevelSequence, Lyra, Online, Modular, GameplayMessage, GameSettings, Loading, plus monolith meta / bulk_fill / describe and the Reflection Intelligence set: decision / risk / cppreflect / network / pipeline / reflect. Query `monolith_discover()` for the exact live count. Experimental town-gen actions register when `bEnableProceduralTownGen=true`. Framework-level `bulk_fill_query` and `describe_query` route to 12 per-namespace adapters for transacted JSON-tree writes and rich schema introspection. Reflection Intelligence layers deterministic decision-record, git-risk, and UE reflection queries on top of the source index. AI-powered asset creation, inspection, and modification.",
 	"Category": "Editor",
 	"CreatedBy": "tumourlove",
 	"CreatedByURL": "https://github.com/tumourlove/monolith",
@@ -307,6 +307,36 @@
 		},
 		{
 			"Name": "MonolithGameFeatures",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithLyra",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithOnline",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithModular",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithGameplayMessage",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithGameSettings",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithLoading",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},

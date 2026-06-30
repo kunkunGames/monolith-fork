@@ -8,7 +8,7 @@
 
 ## MonolithGAS
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, GameplayAbilities, GameplayTags, EnhancedInput
 **Namespace:** `gas` (142 actions) + 4 cross-namespace aliases into `ui` | **Tool:** `gas_query(action, params)` | **Actions:** 142 (Phase J F8: +`grant_ability_to_pawn`; 2026-05-31 DataAsset GAS workflow P0/P3/P4: +DataAsset profile describe/validate/set and runtime event/cue probes)
 **Conditional:** GBA (Blueprint Attributes) features wrapped in `#if WITH_GBA`. Core GAS engine modules (GameplayAbilities, GameplayTags, GameplayTasks) are always available. When GBA is absent, Blueprint AttributeSet creation is disabled but all 142 actions still register and compile cleanly. When `bEnableGAS` is disabled in settings, 0 `gas` actions registered.
 **Settings toggle:** `bEnableGAS` (default: True)
@@ -57,6 +57,14 @@ See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipp
 > **UI Binding cooked-build caveat.** `UMonolithGASAttributeBindingClassExtension` is an editor-only class — content WBPs that reference it will fail to apply bindings in cooked Steam builds. See [COOKED_BUILD_TODO.md](../COOKED_BUILD_TODO.md) for the resolution path (Option A/B/C deferred to pre-Steam-launch checkpoint).
 >
 > **Unity-safe file-local helpers (#68).** Internal-linkage helpers (anonymous-namespace functions/types, file-`static`s) must carry file-unique names or live in per-file named namespaces — matching the MonolithUI model — so they don't collide when adaptive/full unity concatenates same-module `.cpp`s into one translation unit.
+
+---
+
+### Enhanced Input Asset Namespace (`input`)
+
+`MonolithGASInputAssetActions.cpp` registers ten Enhanced Input asset-authoring actions under the standalone `input` namespace: `list_input_actions`, `get_input_action`, `create_input_action`, `set_input_action_properties`, `list_input_mapping_contexts`, `get_input_mapping_context`, `create_input_mapping_context`, `add_input_mapping`, `remove_input_mapping`, and `validate_input_mappings`.
+
+`input.add_input_mapping` is not a bare append helper. By default it searches the target `UInputMappingContext` for an existing action+key row and updates that row instead of duplicating it. It can clone `Modifiers` and `Triggers` from a source mapping (`source_context_path`, `source_action_path`, `source_key`) or replace them with explicit `modifier_classes` / `trigger_classes`; empty explicit arrays clear that side. The handler deep-compares the desired modifier/trigger objects against the current mapping before marking the context dirty, supports `dry_run`, and requires `allow_duplicate=true` before intentionally adding a second identical action+key row.
 
 ---
 

@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-`MonolithSourceControl` owns the `source_control` namespace for Unreal SourceControl-provider status and guarded file prepare/delete/revert operations. `MonolithCore` owns the shared `FMonolithSourceControlUtils` helper so explicit source-control actions and automatic asset mutation prepare use the same path normalization and checkout/add decisioning.
+`MonolithSourceControl` owns the `source_control` namespace for Unreal SourceControl-provider status, guarded file prepare/delete/revert operations, and read-only Perforce opened/path mapping. `MonolithCore` owns the shared `FMonolithSourceControlUtils` helper so explicit source-control mutation actions and automatic asset mutation prepare use the same path normalization and checkout/add decisioning.
 
 ---
 
@@ -19,7 +19,7 @@
 |-------|----------------|
 | `FMonolithSourceControlUtils` (`MonolithCore`) | Shared provider availability, package/filesystem path normalization, and checkout-or-add decision/execution helper. |
 | `FMonolithSourceControlModule` | Registers and unregisters the `source_control` namespace. |
-| `FMonolithSourceControlActions` | Exposes explicit source-control actions and delegates `checkout_or_add` to the shared core helper. |
+| `FMonolithSourceControlActions` | Exposes explicit source-control actions, delegates `checkout_or_add` to the shared core helper, and provides read-only `p4 -ztag opened/where` mapping helpers for changelist-to-package workflows. |
 
 | Dependency | Purpose |
 |------------|---------|
@@ -27,6 +27,7 @@
 | `SourceControl` | Active Unreal source-control provider, state, and operations. |
 | `Engine`, `UnrealEd` | Project path/package path resolution in editor builds. |
 | `Json`, `JsonUtilities` | Action response payloads. |
+| External `p4` command | Read-only opened-file and depot/client/local path mapping for `list_opened` and `map_depot_paths`; unavailable CLI returns structured errors. |
 
 ---
 
@@ -43,6 +44,8 @@
 | `source_control.mark_for_delete` | `paths`, `dry_run`?, `confirm`? | Explicit alias for provider mark-for-delete. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert` | `paths`, `dry_run`?, `confirm`? | Reverts files. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert_unchanged` | `paths`, `dry_run`?, `confirm`? | Reverts unchanged files. Requires `confirm=true` unless `dry_run=true`. |
+| `source_control.list_opened` | `changelist`?, `resolve_packages`?, `limit`? | Runs `p4 -ztag opened`, optionally scoped to one changelist, and maps opened depot paths back to local and Unreal package paths when `resolve_packages=true`. |
+| `source_control.map_depot_paths` | `paths` | Maps Perforce depot/client/local paths and `/Game` paths to local filesystem paths plus Unreal long package paths using `p4 -ztag where` and project mount points. |
 
 `source_control.checkout_or_add` and the central action execution guard both use `FMonolithSourceControlUtils::CheckoutOrAddFiles`. Existing source-controlled files are checked out; local files are marked for add; already checked-out or added files are skipped. Explicit `source_control.checkout_or_add` allows add planning for missing package filenames to preserve its manual prepare behavior. Automatic asset mutation prepare skips missing files before the handler runs, then retries after the handler succeeds so newly saved `.uasset` and `.umap` files can be marked for add. Automatic prepare is scoped to asset-mutation namespaces/actions and project-owned package files; read-only project/source/bridge/context/catalog calls are excluded even if legacy policy inference marks them as mutating.
 
@@ -50,7 +53,7 @@
 
 ## 4. Routing Validation Contract
 
-All nine `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, and `confirm` types before provider state queries or source-control operations run.
+All eleven `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, `confirm`, `changelist`, `resolve_packages`, and `limit` types before provider state queries, source-control operations, or P4 mapping commands run.
 
 | Action | Registry-owned validation | Handler-owned validation |
 |--------|---------------------------|--------------------------|
@@ -63,6 +66,8 @@ All nine `source_control` actions opt into registry-level top-level parameter va
 | `mark_for_delete` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, provider delete execution/state rows. |
 | `revert` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert execution/state rows. |
 | `revert_unchanged` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert-unchanged execution/state rows. |
+| `list_opened` | `changelist` string; `resolve_packages` bool; `limit` integer. | Executes bounded `p4 -ztag opened`, parses tagged records, optionally resolves local/package paths through `p4 where` and `FPackageName`. |
+| `map_depot_paths` | `paths` array. | Validates non-empty path strings, maps depot/client paths through `p4 where`, and converts local/package paths through Unreal mount points. |
 
 Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 
@@ -72,7 +77,8 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 
 | Gate | Requirement |
 |------|-------------|
-| Provider boundary | Actions use Unreal's active `ISourceControlProvider`; they do not shell out to P4, git, or external CLIs. |
+| Provider boundary | Mutation actions use Unreal's active `ISourceControlProvider`; they do not shell out to P4, git, or external CLIs. |
+| Perforce mapping boundary | `list_opened` and `map_depot_paths` are read-only Perforce CLI wrappers. They only run bounded `p4 -ztag opened/where`, never print credentials, and return structured command errors when `p4` is unavailable or the workspace is unmapped. |
 | Path boundary | Handlers normalize filesystem and `/Game` package/object paths before provider calls and report invalid entries per row. |
 | Mutation preview | `checkout`, `add`, `checkout_or_add`, `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` support `dry_run=true`; delete/revert operations require either `confirm=true` or dry-run. |
 | Result shape | Actions return provider metadata, normalized path rows, operation booleans/results, messages/errors, and state rows only; no file contents or credential material are returned. |
@@ -86,5 +92,6 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 |------|----------|
 | Registration | `FMonolithSourceControlModule::StartupModule` registers the `source_control` namespace. |
 | Parameter guard | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests are rejected by the registry. |
+| P4 mapping | Manual or automation smoke should verify `source_control.list_opened(changelist)` maps opened `.uasset`/`.umap` files to `/Game` package paths and that `source_control.map_depot_paths(paths)` handles depot, local, and package inputs without mutation. |
 | UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Optional-off build | Full plugin UBT build must also pass with `MONOLITH_RELEASE_BUILD=1`, even though SourceControl itself has no optional compile guard. |

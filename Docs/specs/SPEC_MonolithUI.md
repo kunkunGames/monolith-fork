@@ -8,10 +8,10 @@
 
 ## MonolithUI
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, GameplayTags, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
 
 **The optional EffectSurface provider is NOT a build-system dependency** (decoupled 2026-04-27). EffectSurface support is delivered via UClass-by-name reflection through `MonolithUI::GetEffectSurfaceClass()` — see § "Optional Dep Probe API" and § "Error Contract — Optional EffectSurface Provider Absence (-32010)". External providers may depend on MonolithUI for registry/spec structs, but MonolithUI must not depend on them.
-**MonolithUI-owned actions in `ui::` namespace:** **135** when `WITH_COMMONUI=1` (73 always-on owned by this module + 62 CommonUI owned by this module conditional on `WITH_COMMONUI`, including the inline diagnostic `dump_style_cache_stats` registered from `MonolithUIModule.cpp` under the same gate). Without `WITH_COMMONUI`, the namespace registers **73** MonolithUI-owned actions. **4 GAS UI binding aliases owned by `MonolithGAS`** may also register into `ui::` when `WITH_GBA` is enabled.
+**MonolithUI-owned actions in `ui::` namespace:** large and registry-derived; use `monolith_discover({ namespace: "ui" })` for the exact live count in the running editor. The current CommonFramework surface contributes **6** always-on MonolithUI actions. **4 GAS UI binding aliases owned by `MonolithGAS`** may also register into `ui::` when `WITH_GBA` is enabled.
 **Settings toggle:** `bEnableUI` (default: True)
 **MCP tool:** `ui_query`
 **Namespace:** `ui`
@@ -20,7 +20,9 @@
 
 | Category | Count | Source file(s) | Conditional? |
 |----------|-------|----------------|--------------|
-| Widget CRUD | 9 | `MonolithUIActions.cpp` | always — Phase 2 (2026-05-16) added `rename_widget`, `dump_blueprint_compile_log` |
+| Widget CRUD | 10 | `MonolithUIActions.cpp` | always — Phase 2 (2026-05-16) added `rename_widget`, `dump_blueprint_compile_log`; 2026-06-30 added `add_extension_point_widget` for UIExtensionPointWidget + GameplayTag + slot layout |
+| CommonFramework diagnostics/authoring | 6 | `MonolithUIActions.cpp` | always — `get_common_framework_status` reflects the Lyra Common plugin family without hard-linking optional plugins; `describe_common_widget_blueprint` inspects CommonGame/UIExtension/CommonUI WBP semantics; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs without changing CommonGame runtime code; `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract` validate CommonGame messaging/modal contracts read-only |
+| Post-copy font repair | 2 | `MonolithUIFontRepairActions.cpp` | always — `clone_composite_font_with_remapped_faces` clones a composite `UFont` to a new asset and remaps `UFontFace` entries across default, fallback, and sub-typefaces; `repair_slate_font_references` scans copied UI asset packages for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references. Both actions use dry-run/confirm guards. |
 | Slot | 3 | `MonolithUISlotActions.cpp` | always |
 | Templates | 8 | `MonolithUITemplateActions.cpp` | always |
 | Styling | 6 | `MonolithUIStylingActions.cpp` | always |
@@ -34,7 +36,7 @@
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
 | Spec Builder + Serializer | 5 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
 | Type Registry diagnostic | 4 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
-| **Always-on subtotal** | **73** | | |
+| **Always-on subtotal** | **79+** | | Registry-derived; exact count varies with compatibility registrations |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 14 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` — Phase 2 (2026-05-16) added `apply_token_binding`, `convert_textblock_to_common`, `set_action_bar_button_class`; Phase 3 (2026-05-23) added `convert_border_to_common`, `reparent_widget_root` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -47,20 +49,21 @@
 | CommonUI Scaffolders | 3 | `CommonUI/MonolithCommonUITemplateActions.cpp` | `WITH_COMMONUI` — Phase 3 (2026-05-16) `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **62** | | conditional |
-| **MonolithUI total** | **135** | | full configuration |
+| **MonolithUI total** | **146** | | current Speed full configuration; registry-derived |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
-Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-04-26 (Phase L). Phase 2 of the 2026-05-16 UI Gap Audit landed 8 additional actions (4 always-on + 4 CommonUI-gated) bringing the totals to 70 / 55 / 125. Phase 3 of the 2026-05-16 UI Gap Audit landed 4 more (1 always-on `build_menu_from_spec` + 3 CommonUI-gated scaffolders) bringing the totals to 71 / 58 / 129. Phase 3 of the 2026-05-22 UI Blueprint Gap Audit landed 4 more CommonUI-gated actions (`set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`) bringing the totals to 71 / 62 / 133. Phase 4 of the 2026-05-22 UI Blueprint Gap Audit (2026-05-23) landed 1 always-on action (`set_widget_is_variable`) bringing the totals to 72 / 62 / 134 (CommonUI subtotal unchanged). The 2026-06-24 UMG anchor audit landed 1 always-on action (`audit_widget_layout`) bringing the totals to 73 / 62 / 135. Production registration sites only — Tests/ excluded.
+Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. Production registration sites only — Tests/ excluded.
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithUIModule` | Registers the 66 always-on actions owned by this module + 51 CommonUI actions when `WITH_COMMONUI`. Logs the live `ui` namespace action count at startup. Owns the `OnPostEngineInit` re-scan delegate that catches late-loading marketplace widget UClasses |
-| `FMonolithUIActions` | Widget blueprint CRUD: create, inspect, add/remove widgets, property writes, compile |
+| `FMonolithUIModule` | Registers the module-owned always-on and `WITH_COMMONUI` action surfaces. Logs the live `ui` namespace action count at startup. Owns the `OnPostEngineInit` re-scan delegate that catches late-loading marketplace widget UClasses |
+| `FMonolithUIActions` | Widget blueprint CRUD: create, inspect, add/remove widgets, ensure UIExtensionPointWidget-compatible extension points, add PrimaryGameLayout activatable layer container widgets, inspect Lyra Common framework state, property writes, compile |
 | `FMonolithUISlotActions` | Layout slot operations: slot properties, anchor presets, widget movement |
 | `FMonolithUITemplateActions` | High-level HUD/menu/panel scaffold templates (8 templates) |
 | `FMonolithUIStylingActions` | Visual styling: brush, font, color scheme, text, image, batch style |
+| `FMonolithUIFontRepairActions` | Post-copy UI font repair: guarded composite `UFont` clone with `UFontFace` root/exact remap preflight, destination collision refusal, optional save, plus copied asset-package `FSlateFontInfo.FontObject` `UFont` remap with package-local reflection scan, dry-run/confirm guards, optional save, and Slate-safe `PostEditChange` |
 | `FMonolithUIAnimationActions` | UMG widget animation v1 CRUD: list, inspect, create, add/remove keyframes (the latter two are Phase L `[DEPRECATED]` — prefer the hoisted v2 surface in `AnimationCoreActions`) |
 | `FMonolithUIBindingActions` | Event/property binding inspection, list view setup, widget binding queries |
 | `FMonolithUISettingsActions` | Settings/save/audio/input remapping subsystem scaffolding (5 scaffolds) |
@@ -79,20 +82,31 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 
 ---
 
-## Actions — UMG Baseline (44 — namespace: "ui")
+## Actions — UMG Baseline (49 — namespace: "ui")
 
-**Widget CRUD (9)**
+**Widget CRUD (10)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `create_widget_blueprint` | `save_path`, `parent_class` | Create a new Widget Blueprint asset |
 | `get_widget_tree` | `asset_path` | Get the full widget hierarchy tree. An empty/missing `asset_path` now returns a clear `missing required asset_path parameter` error instead of a confusing downstream "not found" (2026-05-23). |
 | `add_widget` | `asset_path`, `widget_class`, `parent_slot` | Add a widget to the widget tree |
+| `add_extension_point_widget` | `asset_path`, `widget_name`, `extension_point_tag`, optional layout params | Create or update a `UUIExtensionPointWidget`-compatible widget, assign a registered `GameplayTag` to `ExtensionPointTag`, and keep CanvasPanel/VerticalBox/HorizontalBox/Overlay slot layout idempotent. Defaults `widget_class` to `/Script/UIExtension.UIExtensionPointWidget` and resolves it by reflection so MonolithUI does not hard-link the optional UIExtension plugin. |
 | `remove_widget` | `asset_path`, `widget_name` | Remove a widget from the widget tree |
 | `set_widget_property` | `asset_path`, `widget_name`, `property_name`, `value` (alias: `property_value`) | Set a property on a widget via reflection. Allowlist-gated unless `raw_mode=true`. `value` and `property_value` are accepted as aliases since the 2026-05-16 Bug #6 fix. `property_name=IsVariable` or `bIsVariable` routes to the first-class `set_widget_is_variable` path so callers do not need `raw_mode=true` for variable exposure. |
 | `compile_widget` | `asset_path` | Compile the Widget Blueprint. Returns `errors[]`, `warnings[]`, `notes[]`, `error_count`, `warning_count` on success — shape mirrors `blueprint_query::compile_blueprint`. On BS_Error, the diagnostic list is packed into `valid_options[]` of the structured error (Bug #5 fix, 2026-05-16). |
 | `list_widget_types` | none | List all available widget classes that can be instantiated |
 | `rename_widget` | `wbp_path`, `old_name`, `new_name` | Rename a UWidget's FName in a WBP's tree. Uniqueness check runs against the full WidgetTree before the rename. Recompiles via `FKismetEditorUtilities::CompileBlueprint`. If `bIsVariable=true`, also walks `FBlueprintEditorUtils::RenameMemberVariable` so the BPVAR entry stays consistent with the new FName. Phase 2 Item #7 (2026-05-16 UI Gap Audit). |
 | `dump_blueprint_compile_log` | `asset_path` | Re-drive a compile and return `last_compile_status` (EBlueprintStatus → string) + `errors[]` / `warnings[]` / `notes[]`. Accepts both `UWidgetBlueprint` and plain `UBlueprint` paths so the action serves as a general-purpose "last status + messages" probe. Shape mirrors `compile_widget` on success. Phase 2 Item #14 (2026-05-16 UI Gap Audit). |
+
+**CommonFramework Diagnostics/Authoring (6)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_common_framework_status` | optional `include_properties`, `include_functions`, `property_limit`, `function_limit` | Report CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles plugin/module availability plus bounded reflected summaries for high-value classes and structs such as `UGameUIPolicy`, `UPrimaryGameLayout`, `ULoadingScreenManager`, `UGameSettingRegistry`, `UGameplayMessageSubsystem`, `AModularCharacter`, `USubtitleDisplaySubsystem`, `FGameplayMessageListenerHandle`, and `FGameSettingFilterState`. Uses `StaticLoadClass`, `LoadObject<UScriptStruct>`, and reflection only; MonolithUI does not hard-link those optional plugins. |
+| `add_primary_game_layout_layer` | `asset_path`, `layer_tag`, optional `widget_name`, `widget_class`, layout params | Add or update a `UCommonActivatableWidgetContainerBase`-compatible layer container widget inside a `UPrimaryGameLayout` Widget Blueprint. Edits only the WBP tree and slot layout, then returns `register_layer_tag` and `register_layer_widget_name` for the layout's existing `RegisterLayer` graph/code path. |
+| `describe_common_widget_blueprint` | `asset_path`, optional `include_extension_points`, `include_layer_candidates`, `include_widget_tree` | Inspect a Widget Blueprint for Lyra Common UI semantics: parentage from `UPrimaryGameLayout`, reflected `ExtensionPointTag` values on UIExtensionPointWidget-compatible widgets, and `UCommonActivatableWidgetContainerBase` layer candidates. |
+| `describe_common_messaging_flow` | optional `messaging_class`, `config_section`, `modal_layer_tag`, `include_subclasses`, `subclass_limit` | Describe the CommonGame messaging flow by reflection/config only: selected `UCommonMessagingSubsystem` subclass, configured confirmation/error `UCommonGameDialog` classes, modal layer tag registration, `DefaultUIPolicyClass`, and loaded messaging subclasses. |
+| `validate_common_dialog_contract` | optional `messaging_class`, `config_section`, `confirmation_dialog_class`, `error_dialog_class` | Validate that CommonGame messaging dialog classes are configured, loadable, concrete, non-deprecated, and subclasses of `UCommonGameDialog`. Returns structured `ok`, `checks`, `dialogs`, and `issues` fields rather than editing runtime code. |
+| `validate_common_layer_push_contract` | optional `layout_asset_path`, `layer_tag`, `layer_widget_name`, `dialog_class`, `require_layout_asset` | Validate modal-layer push readiness without modifying `PrimaryGameLayout`: registered layer GameplayTag, optional PrimaryGameLayout WBP parentage, CommonActivatable container candidates, dialog class compatibility, and explicit `register_layer_proof_status` when graph wiring cannot be proven read-only. |
 
 **Slot Operations (3)**
 | Action | Params | Description |
@@ -122,6 +136,11 @@ Counts re-verified against `RegisterAction(TEXT("ui"), ...)` call sites on 2026-
 | `batch_style` | `asset_path`, `style_operations` | Apply multiple styling operations in a single transaction |
 | `set_text` | `asset_path`, `widget_name`, `text` | Set display text on a text widget |
 | `set_image` | `asset_path`, `widget_name`, `texture_path` | Set the texture on an image widget |
+
+**Post-Copy Font Repair (1)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `clone_composite_font_with_remapped_faces` | `source_font_path`, `destination_font_path`, optional `root_remaps`, `source_root`, `dest_root`, `font_face_remaps`, `dry_run`, `confirm`, `save` | Clone a source composite `UFont` into a new destination asset and remap asset-backed `UFontFace` entries across `DefaultTypeface`, `FallbackTypeface.Typeface`, and `SubTypefaces[].Typeface`. `dry_run=true` is default; writes require `dry_run=false` and `confirm=true`; the action fails on destination collision or missing remapped target face before creating anything. |
 
 **Animation v1 (5 — `create_animation` and `add_animation_keyframe` `[DEPRECATED]` Phase L; prefer the hoisted `create_animation_v2` / `add_bezier_eased_segment` / `bake_spring_animation` surface documented under "Design Import Actions")**
 

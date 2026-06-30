@@ -56,7 +56,7 @@ Each namespace has a dedicated skill in this folder. Invoke a namespace with `{n
 | Domain | Namespaces → skills |
 |--------|---------------------|
 | Code / project | `source`→unreal-cpp, `project`→unreal-project-search, `bridge`→unreal-bridge, `console`→unreal-console, `editor`→unreal-build / unreal-debugging / unreal-performance |
-| Gameplay | `ai`→unreal-ai, `gas`→unreal-gas, `blueprint`→unreal-blueprints, `logicdriver`→unreal-logicdriver, `combograph`→unreal-combograph, `input`→unreal-input, `world_conditions`→unreal-world-conditions, `gamefeatures`→unreal-gamefeatures |
+| Gameplay | `ai`→unreal-ai, `gas`→unreal-gas, `blueprint`→unreal-blueprints, `logicdriver`→unreal-logicdriver, `combograph`→unreal-combograph, `input`→unreal-input, `world_conditions`→unreal-world-conditions, `gamefeatures`→unreal-gamefeatures, `lyra`→unreal-lyra, `online`→unreal-online, `modular`→unreal-modular, `gameplay_message`→unreal-gameplay-message, `settings`→unreal-game-settings, `loading`→unreal-loading |
 | Spatial / level | `scene`→unreal-scene, `leveldesign`→unreal-leveldesign, `worldgen`→unreal-worldgen, `mesh`→unreal-mesh, `level_instance`→unreal-level-instance, `hlod`→unreal-hlod, `pcg`→unreal-pcg, `water`→unreal-water |
 | Content | `material`/`asset`→unreal-materials, `niagara`→unreal-niagara, `animation`→unreal-animation, `metahuman`→unreal-metahuman, `audio`→unreal-audio, `ui`→unreal-ui, `slate`→unreal-slate, `paper2d`→unreal-paper2d, `chaos_fracture`→unreal-chaos-fracture, `cloth`→unreal-cloth, `dataflow`→unreal-dataflow, `chooser`→unreal-chooser, `interchange`→unreal-interchange, `modelgen`→unreal-modelgen, `imagegen`→unreal-imagegen, `ndisplay`→unreal-ndisplay |
 | Sequencing | `level_sequence`→unreal-level-sequences |

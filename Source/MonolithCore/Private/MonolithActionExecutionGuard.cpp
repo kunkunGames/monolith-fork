@@ -48,6 +48,14 @@ namespace
 		return false;
 	}
 
+	bool IsExplicitDryRun(const TSharedPtr<FJsonObject>& Object)
+	{
+		bool bDryRun = false;
+		return Object.IsValid()
+			&& Object->TryGetBoolField(TEXT("dry_run"), bDryRun)
+			&& bDryRun;
+	}
+
 	bool IsSourceControlTargetStringField(const FString& FieldName)
 	{
 		static const TSet<FString> FieldNames =
@@ -386,9 +394,11 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	Scope.ResultKind = TEXT("unknown");
 	Scope.ExecutionPolicy = FMonolithToolRegistry::Get().GetActionExecutionPolicy(Namespace, Action);
 	Scope.bDirtyPackageTrackingActive = Scope.ExecutionPolicy.bDirtyPackageTracking;
+	const bool bExplicitDryRun = IsExplicitDryRun(Params);
 	Scope.bSourceControlPrepareActive = Scope.bDirtyPackageTrackingActive
 		&& IsAutomaticSourceControlPrepareNamespace(Namespace)
-		&& IsAutomaticSourceControlPrepareAction(Action);
+		&& IsAutomaticSourceControlPrepareAction(Action)
+		&& !bExplicitDryRun;
 	Scope.DirtyPackageTrackingStatus = Scope.bDirtyPackageTrackingActive
 		? TEXT("tracked_by_policy")
 		: TEXT("skipped_by_policy");
@@ -404,7 +414,9 @@ FMonolithActionExecutionGuard::FExecutionScope FMonolithActionExecutionGuard::Be
 	}
 	else if (Scope.bDirtyPackageTrackingActive)
 	{
-		Scope.SourceControlPrepareStatus = TEXT("skipped_by_namespace_or_action");
+		Scope.SourceControlPrepareStatus = bExplicitDryRun
+			? TEXT("skipped_by_dry_run")
+			: TEXT("skipped_by_namespace_or_action");
 	}
 	else
 	{
@@ -516,7 +528,8 @@ void FMonolithActionExecutionGuard::SetActionOutcome(
 
 	if (bSuccess
 		&& ResultObject.IsValid()
-		&& Scope.bSourceControlPrepareActive)
+		&& Scope.bSourceControlPrepareActive
+		&& !IsExplicitDryRun(ResultObject))
 	{
 		TArray<FString> Targets = Scope.SourceControlTargetPathsBefore;
 		AppendUniqueSourceControlTargets(Targets, CollectSourceControlTargetPaths(ResultObject));
@@ -539,6 +552,13 @@ void FMonolithActionExecutionGuard::SetActionOutcome(
 			PrepareObject->SetStringField(TEXT("status"), Scope.SourceControlPrepareStatus);
 			ResultObject->SetObjectField(TEXT("source_control_prepare"), PrepareObject);
 		}
+	}
+	else if (bSuccess
+		&& ResultObject.IsValid()
+		&& Scope.bSourceControlPrepareActive
+		&& IsExplicitDryRun(ResultObject))
+	{
+		Scope.SourceControlPrepareStatus = TEXT("skipped_after_action_by_dry_run");
 	}
 
 	if (!IsAdvancedToolCallRecordsEnabled())

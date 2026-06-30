@@ -18,6 +18,8 @@ public class MonolithGameFeatures : ModuleRules
 			"MonolithCore",
 			"UnrealEd",
 			"AssetRegistry",
+			"GameFeatures",
+			"GameplayTags",
 			"Projects",
 			"Json",
 			"JsonUtilities"

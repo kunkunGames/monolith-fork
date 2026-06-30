@@ -5,6 +5,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "ISourceControlModule.h"
 #include "ISourceControlOperation.h"
 #include "ISourceControlProvider.h"
@@ -237,6 +238,153 @@ namespace
 		Result->SetArrayField(TEXT("states"), GetStateRows(Provider, Files));
 		return FMonolithActionResult::Success(Result);
 	}
+
+	FString QuoteP4Arg(const FString& Arg)
+	{
+		FString Escaped = Arg;
+		Escaped.ReplaceInline(TEXT("\""), TEXT("\\\""));
+		return TEXT("\"") + Escaped + TEXT("\"");
+	}
+
+	bool RunP4(const FString& Args, FString& OutStdOut, FString& OutStdErr, int32& OutReturnCode)
+	{
+		OutStdOut.Reset();
+		OutStdErr.Reset();
+		OutReturnCode = INDEX_NONE;
+		return FPlatformProcess::ExecProcess(TEXT("p4"), *Args, &OutReturnCode, &OutStdOut, &OutStdErr);
+	}
+
+	TArray<TMap<FString, FString>> ParseTaggedRecords(const FString& Output)
+	{
+		TArray<TMap<FString, FString>> Records;
+		TMap<FString, FString> Current;
+		TArray<FString> Lines;
+		Output.ParseIntoArrayLines(Lines, false);
+		for (const FString& RawLine : Lines)
+		{
+			FString Line = RawLine;
+			Line.TrimStartAndEndInline();
+			if (Line.IsEmpty())
+			{
+				if (Current.Num() > 0)
+				{
+					Records.Add(MoveTemp(Current));
+					Current.Reset();
+				}
+				continue;
+			}
+			if (!Line.StartsWith(TEXT("... ")))
+			{
+				continue;
+			}
+
+			FString Remainder = Line.RightChop(4);
+			FString Key;
+			FString Value;
+			if (!Remainder.Split(TEXT(" "), &Key, &Value))
+			{
+				continue;
+			}
+			if (Key == TEXT("depotFile") && Current.Contains(TEXT("depotFile")))
+			{
+				Records.Add(MoveTemp(Current));
+				Current.Reset();
+			}
+			Current.Add(Key, Value);
+		}
+		if (Current.Num() > 0)
+		{
+			Records.Add(MoveTemp(Current));
+		}
+		return Records;
+	}
+
+	FString RecordValue(const TMap<FString, FString>& Record, const TCHAR* Key)
+	{
+		if (const FString* Value = Record.Find(Key))
+		{
+			return *Value;
+		}
+		return FString();
+	}
+
+	bool DepotPathToLocalPath(const FString& DepotPath, FString& OutLocalPath, FString& OutError)
+	{
+		FString StdOut;
+		FString StdErr;
+		int32 ReturnCode = 0;
+		if (!RunP4(TEXT("-ztag where ") + QuoteP4Arg(DepotPath), StdOut, StdErr, ReturnCode))
+		{
+			OutError = TEXT("Failed to execute p4 where.");
+			return false;
+		}
+		if (ReturnCode != 0)
+		{
+			OutError = StdErr.IsEmpty() ? StdOut : StdErr;
+			return false;
+		}
+		const TArray<TMap<FString, FString>> Records = ParseTaggedRecords(StdOut);
+		if (Records.Num() == 0)
+		{
+			OutError = FString::Printf(TEXT("p4 where returned no records for '%s'."), *DepotPath);
+			return false;
+		}
+		OutLocalPath = RecordValue(Records[0], TEXT("path"));
+		if (OutLocalPath.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("p4 where returned no local path for '%s'."), *DepotPath);
+			return false;
+		}
+		FPaths::NormalizeFilename(OutLocalPath);
+		return true;
+	}
+
+	FString LocalPathToPackagePath(FString LocalPath)
+	{
+		FPaths::NormalizeFilename(LocalPath);
+		FString PackageName;
+		if (FPackageName::TryConvertFilenameToLongPackageName(LocalPath, PackageName))
+		{
+			return PackageName;
+		}
+		return FString();
+	}
+
+	TSharedPtr<FJsonObject> OpenedRecordToJson(const TMap<FString, FString>& Record, bool bResolvePackages)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		const FString DepotFile = RecordValue(Record, TEXT("depotFile"));
+		const FString ClientFile = RecordValue(Record, TEXT("clientFile"));
+		Row->SetStringField(TEXT("depot_file"), DepotFile);
+		Row->SetStringField(TEXT("client_file"), ClientFile);
+		Row->SetStringField(TEXT("action"), RecordValue(Record, TEXT("action")));
+		Row->SetStringField(TEXT("change"), RecordValue(Record, TEXT("change")));
+		Row->SetStringField(TEXT("type"), RecordValue(Record, TEXT("type")));
+		Row->SetStringField(TEXT("user"), RecordValue(Record, TEXT("user")));
+		Row->SetStringField(TEXT("client"), RecordValue(Record, TEXT("client")));
+		Row->SetStringField(TEXT("rev"), RecordValue(Record, TEXT("rev")));
+		Row->SetStringField(TEXT("have_rev"), RecordValue(Record, TEXT("haveRev")));
+
+		if (bResolvePackages && !DepotFile.IsEmpty())
+		{
+			FString LocalPath;
+			FString Error;
+			if (DepotPathToLocalPath(DepotFile, LocalPath, Error))
+			{
+				Row->SetStringField(TEXT("local_path"), LocalPath);
+				const FString PackagePath = LocalPathToPackagePath(LocalPath);
+				Row->SetStringField(TEXT("package_path"), PackagePath);
+				Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
+			}
+			else
+			{
+				Row->SetStringField(TEXT("where_error"), Error);
+				Row->SetBoolField(TEXT("is_package"), false);
+			}
+		}
+
+		return Row;
+	}
 }
 
 void FMonolithSourceControlActions::RegisterActions()
@@ -325,6 +473,24 @@ void FMonolithSourceControlActions::RegisterActions()
 			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert unchanged"), TEXT("false"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("source_control"), TEXT("list_opened"),
+		TEXT("List Perforce opened files through `p4 -ztag opened`, optionally scoped to a changelist, and map opened depot files back to local and Unreal package paths."),
+		FMonolithActionHandler::CreateStatic(&HandleListOpened),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Perforce changelist number or 'default'. Omit for all opened files."))
+			.Optional(TEXT("resolve_packages"), TEXT("bool"), TEXT("Run p4 where for each opened file and emit local_path/package_path. Default true."), TEXT("true"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened records to return. Default 200, max 2000."), TEXT("200"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("source_control"), TEXT("map_depot_paths"),
+		TEXT("Map Perforce depot/client/local paths to local filesystem and Unreal long package paths. Depot paths are resolved with `p4 -ztag where`; local paths are converted with FPackageName mount points."),
+		FMonolithActionHandler::CreateStatic(&HandleMapDepotPaths),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Required(TEXT("paths"), TEXT("array"), TEXT("Depot, client, local filesystem, or /Game package/object paths to map"))
+			.Build());
+
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("get_status"),
 		{ TEXT("perforce"), TEXT("p4"), TEXT("checked out by"), TEXT("depot revision"), TEXT("changelist"), TEXT("pending changes") },
 		{ TEXT("file_status"), TEXT("p4_status"), TEXT("sc_status"), TEXT("who_has_checked_out") },
@@ -354,6 +520,16 @@ void FMonolithSourceControlActions::RegisterActions()
 		{ TEXT("perforce"), TEXT("p4 revert"), TEXT("discard changes"), TEXT("undo checkout"), TEXT("restore file"), TEXT("roll back edits") },
 		{ TEXT("discard"), TEXT("p4_revert"), TEXT("undo_changes"), TEXT("restore_file") },
 		{ TEXT("revert my changes to this file"), TEXT("discard the checkout on these assets"), TEXT("undo edits and restore from depot") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("list_opened"),
+		{ TEXT("perforce opened"), TEXT("p4 opened"), TEXT("changelist"), TEXT("opened packages"), TEXT("package path") },
+		{ TEXT("p4_opened"), TEXT("opened_files"), TEXT("opened_changelist") },
+		{ TEXT("list opened files in changelist 1001"), TEXT("map opened uassets to package paths") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("map_depot_paths"),
+		{ TEXT("p4 where"), TEXT("depot path"), TEXT("client path"), TEXT("local path"), TEXT("package path") },
+		{ TEXT("p4_where"), TEXT("map_to_package_path"), TEXT("depot_to_package") },
+		{ TEXT("map //depot file paths to /Game package names"), TEXT("convert opened depot files to Unreal package paths") });
 }
 
 FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const TSharedPtr<FJsonObject>& /*Params*/)
@@ -379,7 +555,9 @@ FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const
 		TEXT("delete"),
 		TEXT("mark_for_delete"),
 		TEXT("revert"),
-		TEXT("revert_unchanged") })
+		TEXT("revert_unchanged"),
+		TEXT("list_opened"),
+		TEXT("map_depot_paths") })
 	{
 		ActionsJson.Add(MakeShared<FJsonValueString>(Name));
 	}
@@ -389,9 +567,9 @@ FMonolithActionResult FMonolithSourceControlActions::HandleGetCapabilities(const
 	Result->SetBoolField(TEXT("enabled"), Module.IsEnabled());
 	Result->SetArrayField(TEXT("available_providers"), ProvidersJson);
 	Result->SetArrayField(TEXT("phase1_actions"), ActionsJson);
-	Result->SetBoolField(TEXT("supports_changelists"), false);
+	Result->SetBoolField(TEXT("supports_changelists"), true);
 	Result->SetBoolField(TEXT("supports_shelving"), false);
-	Result->SetStringField(TEXT("note"), TEXT("Phase 1 covers provider status and safe file prepare/delete/revert actions only."));
+	Result->SetStringField(TEXT("note"), TEXT("Provider actions cover safe file prepare/delete/revert. P4 opened/changelist inspection is exposed through read-only p4 -ztag wrappers."));
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -419,6 +597,142 @@ FMonolithActionResult FMonolithSourceControlActions::HandleGetStatus(const TShar
 	{
 		Result->SetStringField(TEXT("message"), TEXT("Source control provider is disabled or unavailable."));
 	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Changelist;
+	bool bResolvePackages = true;
+	double LimitValue = 200.0;
+	if (Params.IsValid())
+	{
+		Params->TryGetStringField(TEXT("changelist"), Changelist);
+		Params->TryGetBoolField(TEXT("resolve_packages"), bResolvePackages);
+		Params->TryGetNumberField(TEXT("limit"), LimitValue);
+	}
+	Changelist.TrimStartAndEndInline();
+	const int32 Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 2000);
+
+	FString Args = TEXT("-ztag opened");
+	if (!Changelist.IsEmpty())
+	{
+		Args += TEXT(" -c ") + QuoteP4Arg(Changelist);
+	}
+
+	FString StdOut;
+	FString StdErr;
+	int32 ReturnCode = 0;
+	if (!RunP4(Args, StdOut, StdErr, ReturnCode))
+	{
+		return FMonolithActionResult::Error(TEXT("Failed to execute p4 opened."), -32603);
+	}
+
+	const bool bNoOpenedFiles = ReturnCode != 0
+		&& (StdOut.Contains(TEXT("file(s) not opened"), ESearchCase::IgnoreCase)
+			|| StdErr.Contains(TEXT("file(s) not opened"), ESearchCase::IgnoreCase));
+	if (ReturnCode != 0 && !bNoOpenedFiles)
+	{
+		return FMonolithActionResult::Error(StdErr.IsEmpty() ? StdOut : StdErr, -32603);
+	}
+
+	const TArray<TMap<FString, FString>> Records = bNoOpenedFiles
+		? TArray<TMap<FString, FString>>()
+		: ParseTaggedRecords(StdOut);
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (int32 Index = 0; Index < Records.Num() && Rows.Num() < Limit; ++Index)
+	{
+		Rows.Add(MakeShared<FJsonValueObject>(OpenedRecordToJson(Records[Index], bResolvePackages)));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), true);
+	Result->SetStringField(TEXT("changelist"), Changelist);
+	Result->SetBoolField(TEXT("resolve_packages"), bResolvePackages);
+	Result->SetNumberField(TEXT("count"), Records.Num());
+	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("limit"), Limit);
+	Result->SetBoolField(TEXT("truncated"), Records.Num() > Rows.Num());
+	Result->SetArrayField(TEXT("opened"), Rows);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const TSharedPtr<FJsonObject>& Params)
+{
+	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+	if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("paths"), Values) || !Values || Values->Num() == 0)
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: paths (non-empty string array)"), -32602);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Rows;
+	for (const TSharedPtr<FJsonValue>& Value : *Values)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		FString Input;
+		if (!Value.IsValid() || !Value->TryGetString(Input) || Input.IsEmpty())
+		{
+			Row->SetBoolField(TEXT("valid"), false);
+			Row->SetStringField(TEXT("error"), TEXT("path entry is not a non-empty string"));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+			continue;
+		}
+		Input.TrimStartAndEndInline();
+		Row->SetStringField(TEXT("input"), Input);
+
+		FString LocalPath;
+		FString PackagePath;
+		if (Input.StartsWith(TEXT("//")))
+		{
+			FString Error;
+			if (DepotPathToLocalPath(Input, LocalPath, Error))
+			{
+				PackagePath = LocalPathToPackagePath(LocalPath);
+				Row->SetBoolField(TEXT("valid"), true);
+				Row->SetStringField(TEXT("local_path"), LocalPath);
+				Row->SetStringField(TEXT("package_path"), PackagePath);
+				Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
+			}
+			else
+			{
+				Row->SetBoolField(TEXT("valid"), false);
+				Row->SetStringField(TEXT("error"), Error);
+			}
+		}
+		else if (Input.StartsWith(TEXT("/")))
+		{
+			FString PackageName = Input.Contains(TEXT("."))
+				? FPackageName::ObjectPathToPackageName(Input)
+				: Input;
+			Row->SetBoolField(TEXT("valid"), true);
+			Row->SetStringField(TEXT("package_path"), PackageName);
+			FString Filename;
+			if (FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename))
+			{
+				FPaths::NormalizeFilename(Filename);
+				Row->SetStringField(TEXT("local_path_no_extension"), Filename);
+			}
+			Row->SetBoolField(TEXT("is_package"), true);
+		}
+		else
+		{
+			LocalPath = FPaths::ConvertRelativePathToFull(Input);
+			FPaths::NormalizeFilename(LocalPath);
+			PackagePath = LocalPathToPackagePath(LocalPath);
+			Row->SetBoolField(TEXT("valid"), true);
+			Row->SetStringField(TEXT("local_path"), LocalPath);
+			Row->SetStringField(TEXT("package_path"), PackagePath);
+			Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
+		}
+
+		Rows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), true);
+	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetArrayField(TEXT("paths"), Rows);
 	return FMonolithActionResult::Success(Result);
 }
 

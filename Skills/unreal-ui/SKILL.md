@@ -14,13 +14,14 @@ Always confirm the live action set and an action's exact parameter schema before
 ```
 monolith_discover({ namespace: "ui" })                                  // list live actions
 monolith_discover({ namespace: "ui", category: "CommonUI" })            // filter to CommonUI-conditional actions
+monolith_discover({ namespace: "ui", category: "CommonFramework" })     // Lyra Common plugin diagnostics
 monolith_discover({ namespace: "ui", action: "add_widget", mode: "schema" })  // exact params for one action
 monolith_find("make a health bar HUD")                                  // jump straight to the right action
 ```
 
-**136 UI actions** in the live catalog (snapshot — confirm via `monolith_discover`): always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases (post Phase A–L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface: Widget CRUD (7), Slot (3), Templates (8), Styling (6), v1 Animation (5 — `create_animation` + `add_animation_keyframe` `[DEPRECATED]` Phase L; prefer `create_animation_v2`), v2 Animation hoisted (5), Bindings (4), Settings scaffolds (5), Accessibility (4), Hoisted Design Import effects (3), EffectSurface (10), **Spec Builder (3 — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`)**, Type Registry diagnostic (1).
+The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A–L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`), Slot, Templates, Styling, UI font post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder, and Type Registry diagnostics.
 
-**CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, 51 actions silently unregister (50 in `Source/MonolithUI/Private/CommonUI/*.cpp` + 1 inline `dump_style_cache_stats` lambda). Detect via `monolith_discover`.
+**CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, the `WITH_COMMONUI` action pack unregisters; detect the live surface via `monolith_discover`.
 
 ## When to use / Use a different skill for
 
@@ -71,6 +72,15 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] set_widget_is_variable` | `wbp_path*` (alias `asset_path`), `widget_name*`, `is_variable*` | Toggle widget's bIsVariable flag |
 | `list_widget_property_enums` | `wbp_path?`, `widget_class?`, `property_name?` | Enum-typed props + valid values |
 | `[w] dump_property_allowlist` | `widget_type*` | Allowed property paths for a widget type |
+| **UIExtension Points (1)** | | |
+| `[w] add_extension_point_widget` | `asset_path*`, `widget_name*`, `extension_point_tag*`, `widget_class?=/Script/UIExtension.UIExtensionPointWidget`, layout params, `compile=true`, `save=false` | Add/update a `UUIExtensionPointWidget`-compatible widget, assign a registered GameplayTag, and keep Canvas/box/overlay slot layout idempotent without hard-linking UIExtension. |
+| **CommonFramework (6)** | | |
+| `get_common_framework_status` | `include_properties?=false`, `include_functions?=false`, `property_limit?=40`, `function_limit?=80` | Reflected availability/status for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles. |
+| `[w] add_primary_game_layout_layer` | `asset_path*`, `layer_tag*`, `widget_name?`, `widget_class?=/Script/CommonUI.CommonActivatableWidgetStack`, layout params, `compile=true`, `save=false` | Add/update a CommonActivatable layer container widget inside a PrimaryGameLayout WBP. Returns the `RegisterLayer` tag/widget pair; it does not modify CommonGame runtime code. |
+| `describe_common_widget_blueprint` | `asset_path*`, `include_extension_points?=true`, `include_layer_candidates?=true`, `include_widget_tree?=false` | Inspect PrimaryGameLayout parentage, UIExtension point tags, and CommonActivatable layer candidates. |
+| `describe_common_messaging_flow` | `messaging_class?`, `config_section?`, `modal_layer_tag?=UI.Layer.Modal`, `include_subclasses?=true`, `subclass_limit?=40` | Describe CommonGame messaging wiring by reflection/config only: selected CommonMessagingSubsystem subclass, dialog classes, modal layer tag, DefaultUIPolicyClass, and loaded subclasses. |
+| `validate_common_dialog_contract` | `messaging_class?`, `config_section?`, `confirmation_dialog_class?`, `error_dialog_class?` | Validate configured or explicit confirmation/error dialog classes are loadable concrete CommonGameDialog subclasses. |
+| `validate_common_layer_push_contract` | `layout_asset_path?`, `layer_tag?=UI.Layer.Modal`, `layer_widget_name?`, `dialog_class?`, `require_layout_asset?=false` | Validate modal-layer push readiness without editing PrimaryGameLayout: tag registration, optional layout WBP layer candidates, dialog class compatibility, and proof limits for RegisterLayer graph wiring. |
 | **Slot & Layout (3)** | | |
 | `[w] set_slot_property` | `asset_path*`, `widget_name*`, `anchors?`, `offsets?`, `position?`, `size?`, `alignment?`, `z_order?`, `auto_size?`, `h_align?`, `v_align?`, `padding?`, `compile=false` | Any slot property |
 | `[w] set_anchor_preset` | `asset_path*`, `widget_name*`, `preset*` (top_left/top_center/top_right/center_left/center/center_right/bottom_left/bottom_center/bottom_right/stretch_horizontal/stretch_vertical/stretch_fill/stretch_top/stretch_bottom/stretch_left/stretch_right), `compile=false` | Named anchor preset |
@@ -92,6 +102,9 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] set_text` | `asset_path*`, `widget_name*`, `text?`, `text_color?`, `font_size?`, `justification?` (Left/Center/Right), `compile=false` | Convenience text setter |
 | `[w] set_image` | `asset_path*`, `widget_name*`, `texture_path?`, `material_path?`, `tint_color?`, `size?`, `compile=false` | Convenience image setter |
 | `[w] set_rounded_corners` | `asset_path*`, `widget_name*`, `corner_radii?` [TL,TR,BR,BL], `outline_color?`, `outline_width?`, `fill_color?`, `compile=true` | Reflection writer for corner/outline/fill (≥1 optional required) |
+| **Post-Copy Repair (2)** | | |
+| `[w] clone_composite_font_with_remapped_faces` | `source_font_path*`, `destination_font_path*`, `root_remaps?`, `source_root?`, `dest_root?`, `font_face_remaps?`, `dry_run=true`, `confirm=false`, `save=false` | Clone a composite `UFont` to a new destination asset while remapping `UFontFace` references. Fails on destination collision or missing remapped faces; writes require `dry_run=false` and `confirm=true`. |
+| `[w] repair_slate_font_references` | `asset_path*`, `root_remaps?`, `source_root?`, `dest_root?`, `font_asset_remaps?`, `include_unchanged=false`, `dry_run=true`, `confirm=false`, `save=false` | Scan a copied UI asset package for serialized `FSlateFontInfo` values and remap their `FontObject` `UFont` references. Dry-run preflights by default; writes require `dry_run=false` and `confirm=true`. |
 | **Animation v1 (5)** | | |
 | `list_animations` | `asset_path*` | List UWidgetAnimations |
 | `get_animation_details` | `asset_path*`, `animation_name*` | Tracks, sections, keyframes |
@@ -195,8 +208,21 @@ The `scaffold_*` actions emit C++ subclasses (UGameUserSettings / ULocalPlayerSa
 
 ---
 
-## CommonUI Actions (50, v0.14.0, conditional)
+## CommonFramework Diagnostics/Authoring (6, always-on)
 
-Require the CommonUI engine plugin. Stock in UE 5.7 at `Engine/Plugins/Runtime/CommonUI/`. Build.cs detects via 3-location scan; when the plugin is absent the 50 actions silently unregister. Runtime-phase actions marked `[RUNTIME]` require a PIE session. Filter the listing via `monolith_discover({ namespace: "ui", category: "CommonUI" })`.
+Use these before editing Lyra/CommonGame layouts or debugging CommonUI policy setup:
+
+- `get_common_framework_status` — reports CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles plugin/module availability plus bounded reflected class and struct summaries for high-value types such as `GameUIPolicy`, `PrimaryGameLayout`, `UIExtensionPointWidget`, `CommonUserSubsystem`, `LoadingScreenManager`, `GameSettingRegistry`, `GameplayMessageSubsystem`, `ModularCharacter`, `SubtitleDisplaySubsystem`, and `GameplayMessageListenerHandle`.
+- `add_primary_game_layout_layer` — adds or updates a `CommonActivatableWidgetContainerBase` layer widget in a `PrimaryGameLayout` WBP and returns the `RegisterLayer` `layer_tag` / `widget_name` pair. It edits only the WBP tree/slot layout; it does not patch CommonGame or generate layout graph code.
+- `describe_common_widget_blueprint` — inspects a WBP for `PrimaryGameLayout` parentage, UIExtension point tags, `UIExtensionPointTagMatch` / `DataClasses`, and `CommonActivatableWidgetContainerBase` layer candidates.
+- `describe_common_messaging_flow` — reports selected `CommonMessagingSubsystem` subclass/config section, confirmation/error `CommonGameDialog` classes, modal layer tag registration, `DefaultUIPolicyClass`, and loaded messaging subclasses without modifying runtime code.
+- `validate_common_dialog_contract` — returns `ok=false` with structured issues when configured confirmation/error classes are missing, unloaded, abstract, deprecated, or not `CommonGameDialog` subclasses.
+- `validate_common_layer_push_contract` — checks the modal layer tag, optional `PrimaryGameLayout` WBP layer container candidates, dialog class compatibility, and explicitly reports when RegisterLayer graph wiring is not proven by read-only inspection.
+
+These actions use reflection, config reads, and `StaticLoadClass`; they do not hard-link CommonGame, UIExtension, CommonUser, or modify PrimaryGameLayout/CommonGame runtime code.
+
+## CommonUI Actions (62, v0.14.0+, conditional)
+
+Require the CommonUI engine plugin. Stock in UE 5.7 at `Engine/Plugins/Runtime/CommonUI/`. Build.cs detects via 3-location scan; when the plugin is absent the CommonUI action pack silently unregisters. Runtime-phase actions marked `[RUNTIME]` require a PIE session. Filter the listing via `monolith_discover({ namespace: "ui", category: "CommonUI" })`.
 
 Full per-action parameter signatures — grouped into subsections A–I (Activatable Lifecycle, Buttons + Styling, Input/Actions/Glyphs, Navigation/Focus, Lists/Tabs/Groups/Switchers/Carousel/HW Visibility, Content, Dialog/Modal, Audit + Lint, Accessibility Bridge) plus CommonUI Known Limitations — live in [references/commonui-actions.md](references/commonui-actions.md). The discover-first block above stays the authority; do not call from that snapshot alone if param names, aliases, or ranges are load-bearing.

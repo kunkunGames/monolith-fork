@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Unreal Engine material as
 
 # Unreal Material Workflows
 
-Drives the **material** namespace (material assets, graphs, instances, functions) plus the generic **asset** namespace for texture ingest used by PBR builds. **64 material actions** via `material_query()`; the `asset` namespace adds workflows via `asset_query()` for texture/font ingest, file texture import, asset save/delete, typed asset inspection, naming validation, and batch rename hygiene.
+Drives the **material** namespace (material assets, graphs, instances, functions) plus the generic **asset** namespace for texture ingest used by PBR builds. **66 material actions** via `material_query()` in the current live catalog; the `asset` namespace adds workflows via `asset_query()` for texture/font ingest, file texture import, asset save/delete, typed asset inspection, naming validation, and batch rename hygiene.
 
 Discover first (action names below are a snapshot; the live catalog is authoritative):
 
@@ -33,7 +33,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 
 Material actions live in the **material** namespace; the asset-ingest/lifecycle actions in the final table live in the **asset** namespace.
 
-### Read (21)
+### Read (17)
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
@@ -51,13 +51,9 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `get_function_info` | `asset_path*` | Function inputs, outputs, expressions |
 | `[w] export_material_graph` | `asset_path*` `include_properties=true` `include_positions=true` | Serialize to JSON. `include_properties:false` reduces ~70% |
 | `[w] export_function_graph` | `asset_path*` `include_properties=true` `include_positions=true` | Serialize MaterialFunction to JSON |
-| `get_function_instance_info` | `asset_path*` | MFI parent chain, 11 override types |
 | `get_thumbnail` | `asset_path*` `resolution=256` `save_to_file?` | Use `save_to_file:<path>` (base64 wastes context) |
 | `validate_material` | `asset_path*` `fix_issues=false` | Broken connections, unused nodes |
 | `[w] render_preview` | `asset_path*` `resolution=256` `uv_tiling=1.0` `preview_mesh=sphere` | Compile + preview. `preview_mesh`: plane/sphere/cube; tiling check at `uv_tiling` 3 or 5 |
-| `get_texture_properties` | `asset_path*` | sRGB, dims, compression, recommended_sampler_type |
-| `check_tiling_quality` | `asset_path*` | Detect tiling issues, missing anti-tiling/macro variation |
-| `preview_texture` | `asset_path*` `resolution=256` `output_path?` | Texture preview + full metadata (default out: Saved/Monolith/previews/) |
 
 ### Instance (5)
 
@@ -69,7 +65,14 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `[w] clear_instance_parameter` | `asset_path*` `parameter_name?` `parameter_type=all` | Remove override. `parameter_type`: scalar/vector/texture/switch/all; omit `parameter_name` for all |
 | `[w] save_material` | `asset_path*` `only_if_dirty=true` | Save to disk |
 
-### Function (9)
+### Post-Copy Repair (2)
+
+| Action | Signature | Purpose |
+|--------|-----------|---------|
+| `[w] repair_copied_material_instance_parameters` | `asset_path*` `root_remaps?` `source_root?` `dest_root?` `path_remaps?` `dry_run=true` `confirm=false` `save=false` | Post-copy MIC repair. Remaps parent and texture parameter object references after package duplication; requires `confirm=true` when `dry_run=false` and preflights targets before mutating |
+| `[w] refresh_copied_material_graphs` | `asset_path?` `asset_paths?` `package_paths?` `package_map?` `preserved_destination_packages?` `dry_run=true` `confirm=false` `save=false` `strict=true` | Post-copy material graph refresh. Loads copied destination `UMaterialInterface`/`UMaterialFunctionInterface` assets, skips caller-preserved packages, calls `PostEditChange` only when confirmed, marks dirty, and optionally saves |
+
+### Function (5)
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
@@ -78,12 +81,8 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `[w] set_function_metadata` | `asset_path*` `description?` `expose_to_library?` `library_categories?` | Update metadata |
 | `[w] delete_function_expression` | `asset_path*` `expression_name*` | Remove expression(s); `expression_name` accepts comma-separated names |
 | `[w] update_material_function` | `asset_path*` | Recompile + cascade to referencing materials (MaterialFunction or MFI) |
-| `[w] create_function_instance` | `asset_path*` `parent*` `scalar_overrides?` `vector_overrides?` `texture_overrides?` `static_switch_overrides?` | Create MFI. Overrides: scalar `{name:value}`, vector `{name:{r,g,b,a}}`, texture `{name:path}`, switch `{name:bool}` |
-| `[w] set_function_instance_parameter` | `asset_path*` `parameter_name*` `scalar_value?` `vector_value?` `texture_value?` `switch_value?` | Set MFI override. `vector_value`=`{r,g,b,a}` |
-| `[w] layout_function_expressions` | `asset_path*` | Auto-arrange function graph |
-| `[w] rename_function_parameter_group` | `asset_path*` `old_group*` `new_group*` | Rename param group |
 
-### Write (23)
+### Write (21)
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
@@ -101,8 +100,6 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `[w] connect_expressions` | `asset_path*` `from_expression*` `from_output?` `to_expression?` `to_input?` `to_property?` | Wire nodes or to output. `from_output` alias `from_pin`; `to_input` alias `to_pin`; `to_property`=material property (BaseColor, Roughness, ...) |
 | `[w] disconnect_expression` | `asset_path*` `expression_name*` `input_name?` `disconnect_outputs=false` `target_expression?` `output_index?` | Remove connections. `target_expression`/`output_index` require `disconnect_outputs=true` |
 | `[w] delete_expression` | `asset_path*` `expression_name*` | Delete node |
-| `[w] delete_expressions` | `asset_path*` `expression_names*` | Batch delete; `expression_names`=array of name strings |
-| `[w] clear_graph` | `asset_path*` `preserve_parameters=false` | Remove all expressions (`preserve_parameters` keeps Scalar/Vector/etc. params) |
 | `[w] create_material_instance` | `asset_path*` `parent_material*` `scalar_parameters?` `vector_parameters?` `texture_parameters?` `static_switch_parameters?` | Create MIC. `vector_parameters`=`{name:{R,G,B,A}}`, `texture_parameters`=`{name:path}` |
 | `[w] set_instance_parameter` | `asset_path*` `parameter_name*` `scalar_value?` `vector_value?` `texture_value?` `switch_value?` | Set one instance param. `vector_value`=`{R,G,B,A}` |
 | `[w] duplicate_material` | `source_path*` `dest_path*` | Duplicate |
@@ -111,20 +108,11 @@ Material actions live in the **material** namespace; the asset-ingest/lifecycle 
 | `[w] begin_transaction` | `transaction_name*` | Open undo group |
 | `[w] end_transaction` | (none) | Close undo group |
 
-### Batch (4)
+### Batch (1)
 
 | Action | Signature | Purpose |
 |--------|-----------|---------|
 | `[w] batch_set_material_property` | `asset_paths*` `blend_mode?` `shading_model?` `material_domain?` `two_sided?` `opacity_mask_clip_value?` `dithered_lod_transition?` `fully_rough?` `cast_shadow_as_masked?` `used_with_*?` | Same props to multiple materials (same enum/usage flags as `set_material_property`) |
-| `[w] batch_recompile` | `asset_paths*` | Recompile multiple (Max: 200), returns instruction counts |
-| `[w] import_texture` | `source_file*` `dest_path*` `dest_name?` `compression=Default` `srgb=true` `lod_group?` `max_size?` `replace_existing=false` | Import from disk (material namespace). `compression`: Default/Normalmap/NormalmapBC5/NormalmapLA/Grayscale/Alpha/Masks/HDR/...; `max_size` 0=no limit |
-| `preview_textures` | `asset_paths*` `per_texture_size=128` `output_path?` | Contact sheet of multiple textures (Max: 100) |
-
-### Compound (1)
-
-| Action | Signature | Purpose |
-|--------|-----------|---------|
-| `[w] create_pbr_material_from_disk` | `material_path*` `texture_folder*` `maps*` `blend_mode=Opaque` `shading_model=DefaultLit` `material_domain=Surface` `two_sided=false` `max_texture_size=2048` `opacity_from_alpha=false` `replace_existing=false` | Import PBR textures + create material + build graph + compile. `maps` keys: basecolor/albedo, normal, roughness, metallic/metalness, ao, height, emissive, opacity |
 
 ### asset namespace — texture/font ingest & lifecycle (12)
 
@@ -180,17 +168,9 @@ material_query({ action: "build_material_graph", params: {
 
 `clear_existing: true` clears expressions but preserves material properties. Blend mode warnings are informational (connection made but inactive until mode matches).
 
-### One-Shot PBR from Disk
-```
-material_query({ action: "create_pbr_material_from_disk", params: {
-  material_path: "/Game/Materials/SIGIL/M_BloodConcrete",
-  texture_folder: "/Game/Textures/SIGIL/BloodConcrete",
-  maps: { basecolor: "D:/output/basecolor.png", normal: "D:/output/normal.png", roughness: "D:/output/roughness.png" },
-  max_texture_size: 2048
-}})
-```
+### PBR from Disk
 
-For decals: add `blend_mode: "Translucent"`, `material_domain: "DeferredDecal"`, `opacity_from_alpha: true`.
+Import source textures through `asset.import_texture_from_file`, then create the material and wire the graph through `material.create_material` + `material.build_material_graph`. For decals, set `blend_mode: "Translucent"` and `material_domain: "DeferredDecal"` on the material before wiring opacity.
 
 ## Editing Existing Materials
 
@@ -198,7 +178,7 @@ Inspect first: `get_all_expressions` + `get_full_connection_graph`. Wrap in `beg
 
 ## Tiling Quality
 
-Action side: call `check_tiling_quality` to auto-flag missing anti-tiling / macro variation, and `render_preview` with `uv_tiling: 3` (or `5`) to inspect repetition before finalizing. For the full anti-tiling checklist, technique selection, macro-variation values, and FluidNinja texture recommendations, see the **material-reference** skill (anti-tiling reference).
+Action side: use `render_preview` with `uv_tiling: 3` (or `5`) to inspect repetition before finalizing. For the full anti-tiling checklist, technique selection, macro-variation values, and FluidNinja texture recommendations, see the **material-reference** skill (anti-tiling reference).
 
 ## AI Introspection (editor:: actions)
 

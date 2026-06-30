@@ -1,8 +1,8 @@
-﻿# Monolith API Reference
+# Monolith API Reference
 
-**Version:** v0.20.3 · **Last updated:** 2026-06-20
+**Version:** v0.20.3 · **Last updated:** 2026-06-30
 
-**In-tree action total is approximate: ~1,925 actions across 63 in-tree namespaces** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
+**In-tree action total is approximate: current source contains roughly 1,978 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
 The per-namespace numbers in the Table of Contents and body sections below are kept for structure, not precision — they drift with every action added and are no longer maintained to the unit. Treat them as ballpark; the live figure always comes from `monolith_discover()`.
 
@@ -20,30 +20,36 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 |-----------|---------|-------------|
 | [monolith](#monolith) | 5 | Core server tools (discover, status, update, reindex, guide) |
 | [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
-| [material](#material) | 63 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
+| [material](#material) | 49 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
-| [editor](#editor) | 29 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map creation, module status, automation test list/run, Python escape-hatch, persistent-level swap |
+| [editor](#editor) | 33 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map/world-settings authoring, DataValidation, changelist validation planning, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [config](#config) | 11 | INI config inspection and search |
 | [console](#console) | 15 | Live console object registry, EngineSource.db snapshot refresh, FTS5 search, exact lookup, health, command resolution/execution, log expectations/waits, sequences with artifacts, capture, failure diagnosis, scoped CVar runs |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [collection](#collection) | 13 | Content Browser collection CRUD and manipulation |
 | [source](#source) | 12 | Unreal Engine C++ source code navigation |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
-| [ui](#ui) | 138 | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
+| [ui](#ui) | live | UMG widget CRUD, templates, styling, animation v1+v2, EffectSurface, UIExtension points, CommonFramework diagnostics/authoring, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
+| [input](#input) | 10 | Enhanced Input asset authoring for UInputAction and UInputMappingContext assets |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
 | [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
 | [dataflow](#dataflow) | 8 | Optional read-only Dataflow/Chaos graph discovery, bounded graph/node-schema reads, and validation (graph readers under `WITH_MONOLITH_DATAFLOW`) |
-| [source_control](#source_control) | 9 | Unreal SourceControl-provider status and file prepare/delete/revert operations |
+| [source_control](#source_control) | 11 | Unreal SourceControl-provider status, file prepare/delete/revert operations, and Perforce opened/path mapping |
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
 | [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
-| [gamefeatures](#gamefeatures) | 5 | Optional GameFeature plugin discovery, inspection, and validation |
+| [gamefeatures](#gamefeatures) | 15 | Optional GameFeature plugin discovery, inspection, validation, and guarded instanced-action authoring |
+| [lyra](#lyra) | 18 | Reflection-based Lyra Experience, UserFacingExperience, GamePhase, PawnData, inventory, equipment, weapon, team, and cosmetic semantic diagnostics plus guarded writes |
+| [online](#online) | 6 | EOS/OSSv2/CommonSession/CommonUser readiness diagnostics with credential redaction |
+| [modular](#modular) | 4 | ModularGameplay receiver lifecycle, AddComponentRequest target, and static extension-event source diagnostics |
+| [settings](#settings) | 6 | GameSettings registry/screen/setting, dynamic path, visual-data, and player-mappable input diagnostics |
+| [loading](#loading) | 4 | CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra handoff diagnostics |
 | [interchange](#interchange) | | Optional Interchange framework discovery, validation, and asset import/export operations |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
-| [asset](#asset) | 12 | Asset lifecycle, hygiene, inspection, and enrichment |
+| [asset](#asset) | 17 | Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap |
 | [audio](#audio) | 98 | Sound Cue + MetaSound graph CRUD + document introspection, attenuation/class/mix/submix/concurrency, batch ops, Sound Cue templates, perception bindings |
 | [level_sequence](#level_sequence) | 8 | Level Sequence inspection: binding inventory (legacy + UE 5.7 custom bindings), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup |
 | [bulk_fill](#bulk_fill) | 2 | Reflection-walker bulk property fill across 12 per-namespace adapters (`apply`, `list_namespaces`) |
@@ -396,7 +402,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithBlueprint.md` for the deep dive.
 
 ## material
 
-Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **63 actions.**
+Material graph editing, inspection, CRUD, material functions, instances, custom HLSL nodes, PBR pipeline. **66 actions in the current default live catalog.** The category table below lists the documented primary surface; call live discovery for the full action list.
 
 > For full param schemas, call `describe_query("action_schema", target_namespace="material", target_action="<name>")` (or `monolith_discover("material", detail=true)`). Plain `monolith_discover("material")` is terse — names + one-line descriptions only.
 
@@ -405,16 +411,15 @@ Material graph editing, inspection, CRUD, material functions, instances, custom 
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Graph inspection | 7 | `get_all_expressions`, `get_expression_details`, `get_full_connection_graph`, `get_expression_pin_info`, `get_expression_connections`, `list_expression_classes`, `get_compilation_stats` |
-| Graph CRUD | 12 | `build_material_graph`, `connect_expressions`, `disconnect_expression`, `delete_expression`, `delete_expressions`, `clear_graph`, `move_expression`, `duplicate_expression`, `replace_expression`, `rename_expression`, `set_expression_property`, `auto_layout` |
-| Material assets | 7 | `create_material`, `create_material_instance`, `duplicate_material`, `save_material`, `set_material_property`, `get_material_properties`, `recompile_material` |
-| Material instances | 6 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `clear_instance_parameter`, `list_material_instances` |
-| Material functions | 12 | `create_material_function`, `build_function_graph`, `get_function_info`, `export_function_graph`, `set_function_metadata`, `update_material_function`, `delete_function_expression`, `create_function_instance`, `set_function_instance_parameter`, `get_function_instance_info`, `layout_function_expressions`, `rename_function_parameter_group` |
+| Graph CRUD | 10 | `build_material_graph`, `connect_expressions`, `disconnect_expression`, `delete_expression`, `move_expression`, `duplicate_expression`, `replace_expression`, `rename_expression`, `set_expression_property`, `auto_layout` |
+| Material assets | 8 | `create_material`, `create_material_instance`, `duplicate_material`, `save_material`, `set_material_property`, `get_material_properties`, `recompile_material`, `refresh_copied_material_graphs` |
+| Material instances | 8 | `get_material_parameters`, `get_instance_parameters`, `set_instance_parameter`, `set_instance_parameters`, `set_instance_parent`, `repair_copied_material_instance_parameters`, `clear_instance_parameter`, `list_material_instances` |
+| Material functions | 7 | `create_material_function`, `build_function_graph`, `get_function_info`, `export_function_graph`, `set_function_metadata`, `update_material_function`, `delete_function_expression` |
 | Custom HLSL | 2 | `create_custom_hlsl_node`, `update_custom_hlsl_node` |
 | Spec / templates | 3 | `export_material_graph`, `import_material_graph`, `validate_material` |
 | Preview / capture | 2 | `render_preview`, `get_thumbnail` |
-| Textures | 5 | `import_texture`, `create_pbr_material_from_disk`, `get_texture_properties`, `preview_texture`, `preview_textures`, `check_tiling_quality` |
 | Layers | 1 | `get_layer_info` |
-| Batch | 2 | `batch_set_material_property`, `batch_recompile` |
+| Batch | 1 | `batch_set_material_property` |
 | Transactions | 2 | `begin_transaction`, `end_transaction` |
 
 ### `build_material_graph` gotcha
@@ -540,7 +545,8 @@ Live Coding builds, compile output capture, editor log capture, scene capture, t
 **New in v0.18.1 (PIE / profiling harness):**
 - **PIE smoke + capture:** `run_pie_smoke` / `poll_pie_smoke` / `stop_pie_smoke` (async session model), `capture_pie_movement_clip` (with `discard_first_frames` warm-up, label-aware `view_target_actor`, staged hooks, runtime-identity report + `expected_anim_class` assert), `capture_anim_frames` (preview AnimSequence / BlendSpace / AnimBlueprint to PNG), `list_dirty_packages`, `save_packages`, `list_errored_blueprints`.
 - **Profiling / actor setup:** a declarative `actor_setup` block (spawn N actors, copy a DataAsset's reflected fields, AIController MoveToLocation) plus `csv_profile` / `trace_channels` brackets scoped to the PIE window. `get_build_errors` gained `since_marker` / `since_iso` / `clear_baseline` + compile-vs-other buckets.
-- **Map authoring:** `author_map_settings` (WorldSettings GameMode override + PlayerStarts + actor instances), `create_nav_harness_map` (now with `game_mode_override` + `player_starts`).
+- **Map authoring:** `author_map_settings` (WorldSettings GameMode override + PlayerStarts + actor instances), `set_world_settings_property` (generic reflected `AWorldSettings` property writer, including Lyra-style `DefaultGameplayExperience`), `create_nav_harness_map` (now with `game_mode_override` + `player_starts`).
+- **Validation:** `validate_assets` wraps `UEditorValidatorSubsystem::ValidateAssetsWithSettings` for explicit assets/packages or recursive package-path validation; `plan_content_validation_changeset` and `validate_changeset_assets` map Perforce opened/changelist or explicit depot/local/package paths into validation packages before running the same wrapper.
 
 ### `editor.trigger_build` / `editor.live_compile`
 
@@ -1422,7 +1428,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. **138 curated actions** — 79 module-owned always-on actions + 55 CommonUI actions (registered when `WITH_COMMONUI=1`) + 4 GAS UI binding aliases. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
+UMG widget Blueprint CRUD, templates, styling, UI font post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
 > For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
@@ -1431,10 +1437,13 @@ UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-d
 | Category | Actions | Examples |
 |----------|---------|----------|
 | Widget CRUD | 9 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property` (accepts `value` alias and routes `IsVariable`/`bIsVariable`), `compile_widget` (returns `errors[]`/`warnings[]`), `list_widget_types`, `rename_widget`, `dump_blueprint_compile_log` |
+| UIExtension points | 1 | `add_extension_point_widget` creates or updates a `UUIExtensionPointWidget`-compatible widget, assigns a registered GameplayTag, and keeps Canvas/box/overlay slot layout idempotent |
+| CommonFramework diagnostics/authoring | 6 | `get_common_framework_status` reports CommonUI/CommonGame/UIExtension/CommonUser/CommonLoadingScreen/GameSettings/GameplayMessageRouter/ModularGameplayActors/GameSubtitles plugin, module, reflected class, and reflected struct availability; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs; `describe_common_widget_blueprint` reports PrimaryGameLayout parentage, extension point tags, and CommonActivatableWidgetContainerBase layer candidates; `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract` report CommonGame messaging/dialog/modal-layer contract readiness without runtime edits |
 | Variable flags (v0.15.0) | 3 | `add_widget_variable`, `set_widget_is_variable`, `list_widget_property_enums` |
 | Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
 | Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
 | Styling | 6 | `set_font`, `set_color_scheme`, `batch_style`, `set_text`, `set_image`, `setup_list_view` |
+| Post-copy font repair | 2 | `clone_composite_font_with_remapped_faces` clones a composite `UFont` into a new destination asset and remaps asset-backed `UFontFace` entries across default, fallback, and sub-typefaces; `repair_slate_font_references` scans a copied UI asset package for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references |
 | Templates / scaffolds | 13 | `create_hud_element`, `create_menu`, `create_settings_panel`, `create_dialog`, `create_notification_toast`, `create_loading_screen`, `create_inventory_grid`, `create_save_slot_list`, `scaffold_game_user_settings`, `scaffold_save_game`, `scaffold_save_subsystem`, `scaffold_audio_settings`, `scaffold_input_remapping` |
 | Headline scaffolders (v0.15.0) | 3 | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Animation v1 | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
@@ -1445,6 +1454,38 @@ UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-d
 | Spec round-trip | 4 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0) |
 | Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
 | Allowlist / diagnostics | 2 | `dump_property_allowlist`, `dump_style_cache_stats` |
+
+### `ui.clone_composite_font_with_remapped_faces`
+
+Clone a source composite `UFont` to a new destination asset and remap `UFontFace` references using exact face-path remaps and/or package-root remaps. The action preflights every default, fallback, and sub-typeface entry before any mutation; destination assets are never overwritten.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_font_path` | string | **required** | Source composite `UFont` asset path. |
+| `destination_font_path` | string | **required** | New destination `UFont` asset path to create. Existing assets fail. |
+| `root_remaps` | object | optional | Source-root to destination-root map, e.g. `{"/Game/Old":"/Game/New"}`. |
+| `source_root` | string | optional | Single source-root shorthand; must be supplied with `dest_root`. |
+| `dest_root` | string | optional | Single destination-root shorthand; must be supplied with `source_root`. |
+| `font_face_remaps` | object | optional | Exact source `UFontFace` path to destination `UFontFace` path map. |
+| `dry_run` | boolean | optional | Plan without creating the destination asset. Default: `true`. |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false`. |
+| `save` | boolean | optional | Save the new font package after creation. Default: `false`. |
+
+### `ui.repair_slate_font_references`
+
+Scan a copied UI asset package for serialized `FSlateFontInfo` values and remap their `FontObject` `UFont` references using exact font-path remaps and/or package-root remaps. The action scans package-local objects only, skips generated classes/CDOs/world packages, preflights every remapped target as a loadable `UFont`, and only mutates when `dry_run=false` and `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Asset package to scan, such as a Widget Blueprint or UI style asset. |
+| `root_remaps` | object | optional | Source-root to destination-root map, e.g. `{"/Game/Old":"/Game/New"}`. |
+| `source_root` | string | optional | Single source-root shorthand; must be supplied with `dest_root`. |
+| `dest_root` | string | optional | Single destination-root shorthand; must be supplied with `source_root`. |
+| `font_asset_remaps` | object | optional | Exact source `UFont` path to destination `UFont` path map. |
+| `include_unchanged` | boolean | optional | Include unchanged `FSlateFontInfo` entries in the changes array. Default: `false`. |
+| `dry_run` | boolean | optional | Plan without mutating the asset package. Default: `true`. |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false`. |
+| `save` | boolean | optional | Save the package after applying changes. Default: `false`. |
 
 **Action categories (CommonUI, registered when `WITH_COMMONUI=1`):**
 
@@ -1474,6 +1515,27 @@ UMG widget Blueprint CRUD, templates, styling, animation (v1 + v2), the schema-d
 > **Phase J F5:** the response shape is `{ bindings: [...], count: N }`, not a bare array. Wrap your client parsers.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithUI.md` for the deep dive including style-creator-as-data Blueprint pattern and conditional CommonUI gating.
+
+---
+
+## input
+
+Enhanced Input asset authoring for `UInputAction` and `UInputMappingContext` assets. These actions are implemented by `MonolithGAS` but register under the standalone `input` namespace. **10 actions.**
+
+| Action | Params |
+|--------|--------|
+| `list_input_actions` | `path` (optional string), `include_details` (optional boolean) |
+| `get_input_action` | `asset_path` |
+| `create_input_action` | `asset_path`, `value_type`, `description`, `consume_input`, `trigger_when_paused`, `accumulation`, `overwrite`, `save` |
+| `set_input_action_properties` | `asset_path`, `value_type`, `description`, `consume_input`, `consume_legacy_mappings`, `trigger_when_paused`, `reserve_all_mappings`, `accumulation`, `save` |
+| `list_input_mapping_contexts` | `path` (optional string), `include_details` (optional boolean) |
+| `get_input_mapping_context` | `asset_path` |
+| `create_input_mapping_context` | `asset_path`, `description`, `overwrite`, `save` |
+| `add_input_mapping` | `context_path`, `action_path`, `key`, optional `source_context_path`/`source_action_path`/`source_key`, optional `modifier_classes`, optional `trigger_classes`, `allow_duplicate`, `dry_run`, `save` |
+| `remove_input_mapping` | `context_path`, `action_path`, `key`, `save` |
+| `validate_input_mappings` | `context_paths` |
+
+`input.add_input_mapping` is idempotent by default: it reuses an existing action+key mapping, deep-compares modifier/trigger object values, can clone modifiers/triggers from another mapping, and only writes when the desired mapping differs. Set `allow_duplicate=true` to intentionally add a second identical action+key row.
 
 ---
 
@@ -1589,7 +1651,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md` for the deep dive.
 
 ## source_control
 
-Unreal SourceControl-provider status and guarded file prepare/delete/revert operations. **9 actions.**
+Unreal SourceControl-provider status, guarded file prepare/delete/revert operations, and Perforce opened/path mapping. **11 actions.**
 
 | Action | Params |
 |--------|--------|
@@ -1602,6 +1664,8 @@ Unreal SourceControl-provider status and guarded file prepare/delete/revert oper
 | `mark_for_delete` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
 | `revert` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
 | `revert_unchanged` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
+| `list_opened` | `changelist` (optional string), `resolve_packages` (optional boolean), `limit` (optional integer) |
+| `map_depot_paths` | `paths` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithSourceControl.md` for the deep dive.
 
@@ -1637,14 +1701,24 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithWorldConditions.md` for the deep d
 
 ## gamefeatures
 
-Optional GameFeature plugin discovery, inspection, and validation. **5 actions.**
+Optional GameFeature plugin discovery, inspection, validation, and guarded ActionSet/GameFeatureData instanced-action authoring. **15 actions.**
 
 | Action | Params |
 |--------|--------|
 | `get_status` | none |
 | `list_plugins` | `limit` (optional integer), `include_engine` (optional bool) |
 | `find_game_feature_data` | `plugin_name` (optional string), `asset_path` (optional string) |
-| `describe_game_feature_data` | `plugin_name` (optional string), `asset_path` (optional string) |
+| `describe_game_feature_data` | `plugin_name` (optional string), `asset_path` (optional string), `include_action_properties` (optional bool), `editable_only` (optional bool), `include_values` (optional bool), `property_limit` (optional integer), `max_value_chars` (optional integer) |
+| `list_action_classes` | `limit` (optional integer), `module` (optional string), `name_contains` (optional string), `include_abstract` (optional bool), `editable_only` (optional bool), `include_default_values` (optional bool), `property_limit` (optional integer), `max_value_chars` (optional integer) |
+| `describe_action_set` | `action_set_path` (required string), `action_limit` (optional integer), `include_action_properties` (optional bool), `editable_only` (optional bool), `include_values` (optional bool), `property_limit` (optional integer), `max_value_chars` (optional integer) |
+| `add_action_set_input_mapping` | `action_set_path` (required string), `mapping_context_path` (required string), `action_class_path` (optional string), `priority` (optional integer), `action_name` (optional string), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `set_primary_asset_scan` | `game_feature_data_path` (required string), `primary_asset_type` (required string), `asset_base_class` (optional string), `has_blueprint_classes` (optional bool), `is_editor_only` (optional bool), `directories` (optional array), `specific_assets` (optional array), `save` (optional bool), `dry_run` (optional bool) |
+| `add_game_feature_data_input_mapping` | `game_feature_data_path` (required string), `mapping_context_path` (required string), `action_class_path` (optional string), `priority` (optional integer), `action_name` (optional string), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `add_game_feature_data_widgets` | `game_feature_data_path` (required string), `layouts` (optional array), `widgets` (optional array), `action_class_path` (optional string), `action_name` (optional string), property-name overrides (optional strings), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `add_game_feature_data_components` | `game_feature_data_path` (required string), `actor_class` (required string), `component_class` (required string), `action_class_path` (optional string), `action_name` (optional string), `client_component` (optional bool), `server_component` (optional bool), `addition_flags` (optional integer), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `add_game_feature_data_gameplay_cue_paths` | `game_feature_data_path` (required string), `directory_path` (optional string), `directory_paths` (optional array), `action_class_path` (optional string), `action_name` (optional string), `directory_array_property` (optional string), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `add_game_feature_data_abilities` | `game_feature_data_path` (required string), `actor_class` (required string), `ability_classes` (optional array), `attribute_sets` (optional array), `ability_sets` (optional array), `action_class_path` (optional string), `action_name` (optional string), `remove_null_actions` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
+| `remove_game_feature_data_action` | `game_feature_data_path` (required string), `action_index` (optional integer), `action_name` (optional string), `action_class_path` (optional string), `remove_all` (optional bool), `save` (optional bool), `dry_run` (optional bool) |
 | `validate_plugin` | `plugin_name` (required string) |
 
 ---
@@ -1734,6 +1808,55 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's 
 
 ---
 
+## lyra
+
+Reflection-based Lyra semantic inspection, validation, and guarded authoring. **18 actions.** The module resolves `/Script/LyraGame.*` classes reflectively and has no compile-time dependency on LyraGame, CommonGame, EOS, or Speed runtime modules.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `describe_experience_graph` | `experience_path` |
+| `validate_experience_bundle` | `experience_path`, optional expected members, `require_default_pawn_data`, `require_action_sets`, `validate_default_pawn_data`, `require_pawn_class`, `require_pawn_ability_sets`, `require_pawn_input_config`, `require_default_camera_mode`, `validate_action_sets`, `require_action_set_actions`, `disallow_null_actions`, `validate_action_classes`, `require_action_set_game_features`, `validate_game_feature_plugins` |
+| `describe_user_facing_experience` | `user_facing_experience_path` |
+| `validate_user_facing_experience` | `user_facing_experience_path`, optional `require_resolved_primary_assets` |
+| `describe_gameplay_tag_domain` | optional `root_tag`, `include_children`, `max_tags` |
+| `validate_game_phase_flow` | optional `root_tag`, `path_filter`, `phase_ability_paths`, `expected_phase_tags`, `disallow_duplicate_tags`, `max_assets` |
+| `describe_team_setup` | optional `team_creation_component_class` |
+| `describe_inventory_item` | `item_definition_path` |
+| `describe_equipment_definition` | `equipment_definition_path` |
+| `describe_weapon_definition` | `item_definition_path`, optional `require_equippable_fragment` |
+| `describe_pawn_initialization_graph` | `pawn_data_path` |
+| `validate_pawn_data_contract` | `pawn_data_path`, optional `require_pawn_class`, `require_ability_sets`, `require_input_config`, `require_default_camera_mode`, `expected_pawn_class` |
+| `describe_character_part_graph` | optional `part_classes` |
+| `validate_character_part_assets` | optional `part_classes`, `require_non_empty` |
+| `set_experience_defaults` | `experience_path`, optional `default_pawn_data`, `action_sets`, `game_features_to_enable`, `dry_run`, `confirm`, `save`, `strict` |
+| `remove_experience_component_entry` | optional `experience_path`, `action_set_path`, `action_index`, `action_name`, `actor_class`, `component_class`, `component_index`, plus `dry_run`, `confirm`, `save` |
+| `set_user_facing_experience` | `user_facing_experience_path`, optional `map_id`, `experience_id`, `extra_args`, tile fields, loading widget, session flags, `dry_run`, `confirm`, `save`, `strict` |
+
+### `lyra.validate_experience_bundle`
+
+Validate a Lyra Experience bundle as a semantic graph. In shallow mode it checks `DefaultPawnData`, composed `ActionSets`, and `GameFeaturesToEnable` against optional expected members. Deep flags inspect referenced PawnData fields, ActionSet action arrays, null entries, action class derivation from `UGameFeatureAction`, and optional GameFeature plugin descriptor presence/enabled state. The action is read-only and does not activate GameFeatures or mutate packages.
+
+### `lyra.describe_gameplay_tag_domain`
+
+Describe a GameplayTag root such as `GamePhase`: root registration, source metadata, comments, child tags, child count, and truncation status. This is read-only and does not mutate tag dictionaries or assets.
+
+### `lyra.validate_game_phase_flow`
+
+Validate reflected `ULyraGamePhaseAbility` classes and their `GamePhaseTag` values against a root tag domain. The action inspects loaded native phase ability classes, Blueprint CDOs under a caller-provided `path_filter`, and explicit class/asset paths from `phase_ability_paths`; without `path_filter`, Blueprint asset discovery is skipped to avoid broad project loads. It reports invalid/missing tags, tags outside the root domain, duplicate exact tags, missing expected tags, and structured path errors. Duplicate exact phase tags are warnings by default because Lyra permits multiple phase abilities to share a phase tag; pass `disallow_duplicate_tags=true` to make them errors.
+
+### Lyra static graph inspectors
+
+`describe_team_setup`, `describe_inventory_item`, `describe_equipment_definition`, `describe_weapon_definition`, `describe_pawn_initialization_graph`, `validate_pawn_data_contract`, `describe_character_part_graph`, and `validate_character_part_assets` are read-only CDO/reflection diagnostics. They report exact missing fields and class incompatibilities without spawning teams, equipping items, initializing pawns, applying character parts, or mutating assets.
+
+### Guarded write actions
+
+`set_experience_defaults`, `remove_experience_component_entry`, and `set_user_facing_experience` require `dry_run=true` or `confirm=true`; `save=true` persists packages only after a confirmed clean mutation. Missing assets/properties are returned as explicit errors or check rows, never hidden behind fallback assets.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLyra.md`.
+
+---
+
 ## logicdriver
 
 Logic Driver Pro state machines: graph CRUD, node configuration, runtime PIE control, scaffolds, dialogue, text graph extraction. **66 actions.** **Conditional on `#if WITH_LOGICDRIVER`** — requires the Logic Driver Pro marketplace plugin. Reflection-only (precompiled marketplace plugin).
@@ -1764,12 +1887,194 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithLogicDriver.md`.
 
 ---
 
+## online
+
+EOS/OSSv2/CommonSession/CommonUser readiness diagnostics. **8 read-only actions.** Credential-bearing values are never returned; fields are reported as absent, empty, present, or `present_redacted`.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `validate_eos_ossv2_config` | `platform_config_name` (optional string) |
+| `describe_common_session_flow` | `user_facing_experience_path` (optional string) |
+| `validate_common_session_schema` | `user_facing_experience_path` (optional string) |
+| `validate_user_facing_session` | `user_facing_experience_path` (required string), `require_online_session`, `require_lobbies_for_online`, `require_lobby_schema`, `require_frontend_visible`, `require_resolved_primary_assets` (optional booleans) |
+| `validate_common_user_initialization_contract` | none |
+| `validate_common_user_privilege_matrix` | none |
+| `diagnose_eos_accountportal_logs` | `log_root` (optional string), `max_results` (optional integer), `since_days` (optional integer) |
+
+### `online.get_status`
+
+Report OnlineSubsystem, OnlineServices, EOS, CommonUser, CommonGame, and Lyra online-facing plugin/module/reflection availability. Does not load assets, run PIE, or call EOS services.
+
+### `online.validate_eos_ossv2_config`
+
+Validate `OnlineServices`, `OnlineServices.EOS`, `EOSSDK`, `EOSSDK.Platform.<name>`, `OnlineSubsystemEOS.EOSSettings`, and SocketSubsystemEOS P2P settings across effective/project/custom config layers. Sensitive values such as ProductId, SandboxId, DeploymentId, ClientId, ClientSecret, and ClientEncryptionKey are redacted.
+
+### `online.describe_common_session_flow`
+
+Describe the CommonSession host and quick-play flow without creating a session. The action reports CommonSession classes/functions, host request defaults, OSSv1/OSSv2 branch rules, advertised `GameLobby` attributes, and optional Lyra UserFacingExperience host-request projection.
+
+### `online.validate_common_session_schema`
+
+Validate `OnlineServices.Lobbies` schema rows for expected Lyra/CommonSession attributes (`GAMEMODE`, `MAPNAME`, `MATCHTIMEOUT`, `SESSIONTEMPLATENAME`, `OSSv2`). When `user_facing_experience_path` is provided, also reports reflected UserFacingExperience session fields such as `MapID`, `ExperienceID`, `MaxPlayerCount`, `SessionMode`, lobby, voice, presence, and front-end flags.
+
+### `online.validate_user_facing_session`
+
+Validate a Lyra UserFacingExperience asset as a CommonSession hosting contract without creating a session. The action loads the asset read-only, reports the projected `UCommonSession_HostSessionRequest` fields (`OnlineMode`, effective lobby/voice/presence flags, `MapID`, `MaxPlayerCount`, advertised mode name, and injected `Experience` extra arg), checks CommonUser/CommonSession class availability, and optionally requires online mode, lobbies, lobby schema rows, front-end visibility, and AssetManager-resolved `MapID`/`ExperienceID`.
+
+### `online.validate_common_user_initialization_contract`
+
+Validate CommonUser/CommonGame plugin and module availability, reflected CommonUser/CommonSession/Lyra initialization classes, and Lyra local-player/game-instance config fields.
+
+### `online.validate_common_user_privilege_matrix`
+
+Validate the reflected CommonUser privilege, context, result, availability, and initialization-state enums plus Blueprint/CommonGame login entry points. The action reports the static CommonUser privilege-to-OSSv1/OSSv2 mapping for `CanPlay`, `CanPlayOnline`, text/voice communication, UGC, and cross-play without logging in or querying live privileges.
+
+### `online.diagnose_eos_accountportal_logs`
+
+Scan local `.log` files under `Saved/Logs` or a caller-supplied `log_root` for AccountPortal/auth patterns such as `client_has_no_application`, `invalid_client`, `EOS_Auth`, and `EOS_Invalid`. Returned message text is bounded and redacted.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithOnline.md`.
+
+---
+
+## modular
+
+Read-only ModularGameplay / ModularGameplayActors receiver lifecycle, AddComponentRequest target, and static extension-event source diagnostics. **4 actions.** The module uses reflection and lexical source scanning only and has no compile-time dependency on `ModularGameplay` or `ModularGameplayActors`.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `describe_extension_receiver_lifecycle` | `actor_class` (optional string) |
+| `validate_add_component_targets` | `actor_class`, `component_class`, optional `require_modular_receiver=true` |
+| `trace_game_framework_extension_events` | optional `actor_class`, `source_root`, `source_roots`, `include_engine_modular_sources=false`, `include_monolith_source=false`, `max_results=200`, `max_files=2000`, `include_line_text=true` |
+
+### `modular.get_status`
+
+Report `ModularGameplay` and `ModularGameplayActors` plugin/module availability, reflected `UGameFrameworkComponentManager` and known ModularGameplayActors receiver classes, canonical extension events, and expected receiver lifecycle phases.
+
+### `modular.describe_extension_receiver_lifecycle`
+
+List known receiver classes and optionally classify an actor class as a known ModularGameplayActors receiver or `not_proven_by_reflection`. Arbitrary actor classes are not treated as ready unless they inherit from source-proven receiver types; use `modular.trace_game_framework_extension_events` to inspect project source call sites.
+
+### `modular.validate_add_component_targets`
+
+Validate an AddComponentRequest target pair: `actor_class` must be an `AActor`, `component_class` must be a `UActorComponent`, both must be concrete/non-deprecated, and by default the actor must be a known ModularGameplayActors receiver subclass. Pass `require_modular_receiver=false` to downgrade unproven receiver lifecycle to a warning.
+
+### `modular.trace_game_framework_extension_events`
+
+Perform a bounded lexical source trace for `UGameFrameworkComponentManager` receiver lifecycle calls, `AddExtensionHandler`, `AddComponentRequest`, extension-event sends, canonical event-name constants, and Lyra project event names such as `BindInputsNow` and `LyraAbilitiesReady`. Returns source roots, counts by code/role, candidate call-site rows, receiver classification, known lifecycle rows, checks, limitations, and an explicit static-trace contract. Does not run PIE, activate GameFeatures, register handlers, create component requests, or prove runtime reachability.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithModular.md`.
+
+---
+
+## gameplay_message
+
+Read-only GameplayMessageRouter channel, match-type, and payload UScriptStruct diagnostics. **4 actions.** The module uses reflection only and has no compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `describe_listener_contract` | none |
+| `validate_message_struct` | `message_struct`, optional `require_blueprint_type=false`, optional `require_no_object_references=false` |
+| `validate_channel_contract` | `channel_tag`, optional `message_struct`, optional `match_type=ExactMatch`, optional `require_registered_tag=true`, optional `require_blueprint_type=false` |
+
+### `gameplay_message.get_status`
+
+Report `GameplayMessageRouter`, `GameplayMessageRuntime`, `GameplayMessageNodes`, `UGameplayMessageSubsystem`, async listener action, listener handle struct, and match enum availability.
+
+### `gameplay_message.describe_listener_contract`
+
+Describe the reflected listener/broadcast functions and the shared contract: broadcaster and listener must agree on the same payload `UScriptStruct`; `ExactMatch` receives the exact channel and `PartialMatch` includes child channels.
+
+### `gameplay_message.validate_message_struct`
+
+Validate a payload `UScriptStruct` path, optional `BlueprintType` metadata requirement, and optional no-object-reference requirement. Returns structured `ok`, `checks`, and `issues`.
+
+### `gameplay_message.validate_channel_contract`
+
+Validate a gameplay message channel tag, optional payload `UScriptStruct`, and match type. Missing tags are errors by default; pass `require_registered_tag=false` for preflight planning of tags that have not been added yet.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
+
+---
+
+## settings
+
+Read-only GameSettings registry/screen/setting, dynamic path, visual-data, and Enhanced Input player-mappable diagnostics. **6 actions.** The module has no compile-time dependency on `GameSettings`, `CommonUI`, `CommonInput`, or `LyraGame`; those contracts are inspected by reflection. The player-mappable validator uses public `EnhancedInput` asset APIs.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `describe_registry_tree` | optional `screen_class`, optional `registry_class`, optional `setting_class` |
+| `validate_setting_class_contract` | `setting_class`, optional `require_concrete=false`, optional `require_value_setting=false`, optional `require_collection=false` |
+| `validate_data_source_bindings` | optional `getter_path`, optional `setter_path`, optional `dynamic_paths`, optional `require_getter=true`, optional `require_setter=false` |
+| `validate_visual_data` | `asset_path`, optional `require_entry_widgets=false`, optional `require_detail_extensions=false` |
+| `validate_player_mappable_input_settings` | optional `config_path`, optional `config_paths`, optional `context_path`, optional `context_paths`, optional semantic requirement toggles |
+
+### `settings.get_status`
+
+Report `GameSettings` plugin/module availability, known core classes, registry contract rows, and static data-source limitation notes.
+
+### `settings.describe_registry_tree`
+
+Describe reflected `UGameSettingScreen`, `UGameSettingRegistry`, `UGameSetting`, and `UGameSettingCollection` contracts. The action does not instantiate a runtime registry or local player.
+
+### `settings.validate_setting_class_contract`
+
+Validate a class path as a `UGameSetting` subclass, with optional concrete, value-setting, and collection-role requirements. Returns structured `ok`, `checks`, and `issues`.
+
+### `settings.validate_data_source_bindings`
+
+Validate supplied dotted dynamic getter/setter path shapes. `FGameSettingDataSourceDynamic` resolves against a `ULocalPlayer` at runtime, so this first slice reports static shape and runtime-resolution limits rather than reading private native data-source internals.
+
+### `settings.validate_visual_data`
+
+Load a `UGameSettingVisualData` object/asset read-only and report `EntryWidgetForClass`, `EntryWidgetForName`, `ExtensionsForClasses`, and `ExtensionsForName` map counts. Wrong object types return `ok=false` with structured issues.
+
+### `settings.validate_player_mappable_input_settings`
+
+Validate `UPlayerMappableInputConfig` and/or `UInputMappingContext` assets for GameSettings/Lyra-style key-binding screens. Reports context rows, default/profile mappings, mappable row counts, missing actions or keys, missing mapping/display names, and duplicate mapping names without registering configs, instantiating a local player, or reading live custom user bindings.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameSettings.md`.
+
+---
+
+## loading
+
+Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics. **4 actions.** The module uses reflection only and has no compile-time dependency on `CommonLoadingScreen` or `LyraGame`.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | optional `include_settings=true`, optional `include_cvars=true`, optional `include_lyra_handoff=false` |
+| `describe_loading_processors` | optional `include_all_implementers=false`, optional `class_filter`, optional `max_objects=100` |
+| `validate_loading_reason_contract` | optional `include_known_lyra=true`, optional `strict=false` |
+| `trace_loading_screen_blockers` | optional `world_context=pie`, optional `include_settings=true`, optional `include_cvars=true`, optional `include_processor_candidates=true`, optional `include_lyra_handoff=true`, optional `max_candidates=64` |
+
+### `loading.get_status`
+
+Report CommonLoadingScreen plugin/module/classes, reflected settings CDO values, known CVars, config provenance, and optional Lyra handoff classes.
+
+### `loading.describe_loading_processors`
+
+Describe `ULoadingProcessInterface` and `ULoadingProcessTask`, and optionally list loaded implementer classes. Per-processor private reasons are not claimed because `ILoadingProcessInterface::ShouldShowLoadingScreen(FString&)` is native-only and not a UFUNCTION.
+
+### `loading.validate_loading_reason_contract`
+
+Validate manager reason getter reflection, processor interface availability, settings class, known CVars, and optional Lyra loading handoff classes. `strict=true` promotes optional Lyra absence to errors.
+
+### `loading.trace_loading_screen_blockers`
+
+Find a PIE/game world, ask the live `ULoadingScreenManager` for `GetDebugReasonForShowingOrHidingLoadingScreen()` when present, and return `pie_not_running` or `world_not_running` cleanly when no runtime world exists.
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithLoading.md`.
 
 ---
 
 ## asset
 
-Asset lifecycle, hygiene, inspection, and enrichment. **12 actions.**
+Asset lifecycle, hygiene, inspection, enrichment, and guarded package graph copy/remap. **17 actions.**
 
 ### `asset.import_texture_from_file`
 
@@ -1903,6 +2208,84 @@ Rename assets with find/replace, prefix add/remove, or suffix add/remove. Uses I
 | `add_suffix` | string | optional | Suffix to add |
 | `remove_suffix` | string | optional | Suffix to remove |
 | `dry_run` | boolean | optional | Preview renames without applying. Default: `false` |
+
+### `asset.plan_package_graph_copy`
+
+Plan a root-remapped package graph copy from AssetRegistry dependencies without loading, copying, or saving assets.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `root_packages` | string[] | **required** | Source package paths that seed traversal |
+| `root_remaps` | object | **required** | Source-root to destination-root map, e.g. `{"/ShooterMaps": "/SpeedMaps"}` |
+| `dependency_kinds` | string[] | optional | Dependency kinds to follow: `hard`, `soft`. Default: both |
+| `max_packages` | integer | optional | Traversal cap. Default: `512` |
+| `strategy` | string | optional | Planning strategy. Only `registry_only_plan` is supported |
+| `check_collisions` | boolean | optional | Report existing destination packages. Default: `true` |
+
+### `asset.copy_package_graph_with_remap`
+
+Guarded package graph duplication using the same root-remap plan contract. Requires `dry_run=true` or `confirm=true`; existing destination packages are never overwritten.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `root_packages` | string[] | **required** | Source package paths that seed traversal |
+| `root_remaps` | object | **required** | Source-root to destination-root map |
+| `dependency_kinds` | string[] | optional | Dependency kinds to follow: `hard`, `soft`. Default: both |
+| `max_packages` | integer | optional | Traversal cap. Default: `512` |
+| `check_collisions` | boolean | optional | Report existing destination packages. Default: `true` |
+| `collision_policy` | string | optional | `fail_if_exists` or `skip_existing`; overwrite is unsupported. Default: `fail_if_exists` |
+| `dry_run` | boolean | optional | Return copy report without duplicating assets. Default: `false` |
+| `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
+| `save` | boolean | optional | Save duplicated packages. Default: `true` |
+
+### `asset.copy_package_graph_with_strategy`
+
+Orchestrate a guarded package graph copy workflow with explicit copy strategy classification. The action always builds a read-only plan and `strategy_plan[]` first; only `duplicate_asset` rows execute in this slice. `advanced_copy`, `header_patched_advanced_copy`, `raw_package_file_copy`, and manual-copy selectors are reported as unsupported/deferred instead of silently falling back. Workflows are `plan_only`, `copy_only`, `copy_fixup`, and `copy_fixup_validate`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `root_packages` | string[] | **required** | Source package paths that seed traversal |
+| `root_remaps` | object | **required** | Source-root to destination-root map |
+| `workflow` | string | optional | `plan_only`, `copy_only`, `copy_fixup`, or `copy_fixup_validate`. Default: `copy_fixup_validate` |
+| `strategy` | string | optional | Compatibility alias for either `workflow` or `copy_strategy` values |
+| `copy_strategy` | string | optional | `auto`, `duplicate_asset`, `advanced_copy`, `raw_package_file_copy`, or `header_patched_advanced_copy`. Default: `auto` |
+| `header_patched_roots` / `header_patched_packages` | string[] | optional | Select packages that should use `header_patched_advanced_copy` when `copy_strategy=auto` |
+| `raw_package_roots` / `raw_package_packages` | string[] | optional | Select packages that should use `raw_package_file_copy` when `copy_strategy=auto` |
+| `manual_copy_roots` / `manual_copy_packages` | string[] | optional | Select packages known to require manual single-object duplication |
+| `allow_raw_package_copy` | boolean | optional | Reserved opt-in for raw package execution; current slice still reports raw copy as deferred. Default: `false` |
+| `run_fixup_on_dry_run` / `run_closure_on_dry_run` | boolean | optional | Scan existing destination packages during dry-run; otherwise post-copy phases are only planned. Default: `false` |
+| `dry_run` | boolean | optional | Return strategy/copy/fixup/closure plan without mutation. Default: `false` |
+| `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
+| `save` | boolean | optional | Save duplicated or changed packages. Default: `true` |
+
+### `asset.fixup_copied_references`
+
+Guarded reflected hard/soft reference rewrite inside copied destination packages, remapping references from source roots to destination roots. Requires `dry_run=true` or `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `root_remaps` | object | **required** | Source-root to destination-root map |
+| `destination_roots` | string[] | optional | Destination roots to scan; defaults to `root_remaps` destinations |
+| `package_paths` | string[] | optional | Explicit destination packages to scan instead of scanning roots |
+| `max_packages` | integer | optional | Scan cap. Default: `1000` |
+| `require_targets` | boolean | optional | Treat missing remapped target packages as blockers. Default: `true` |
+| `dry_run` | boolean | optional | Return reference rewrite report without mutating assets. Default: `false` |
+| `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
+| `save` | boolean | optional | Save changed packages. Default: `true` |
+| `strict` | boolean | optional | Treat load/fixup blockers as errors. Default: `true` |
+
+### `asset.validate_dependency_closure`
+
+Validate that destination packages do not depend on disallowed external roots or legacy source roots after a package graph copy/remap.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `destination_roots` | string[] | **required** | Destination roots whose package closure should be validated |
+| `package_paths` | string[] | optional | Specific destination packages to validate; omitted scans `destination_roots` |
+| `allowed_external_roots` | string[] | optional | External roots allowed in dependencies, e.g. `/Script`, `/Engine` |
+| `legacy_source_roots` | string[] | optional | Source roots that should not remain referenced |
+| `dependency_kinds` | string[] | optional | Dependency kinds to validate: `hard`, `soft`. Default: both |
+| `max_packages` | integer | optional | Validation cap. Default: `1000` |
 
 ---
 
@@ -2476,7 +2859,7 @@ If you're building a sibling plugin yourself, read `Plugins/Monolith/Docs/SIBLIN
 |---|---|---|---|---|
 | External sibling plugin | Custom | Varies | Registers its own namespace at startup and ships through its own repo/channel. | Outside `Plugins/Monolith/` |
 
-**Why these aren't in the in-tree count:** the in-tree count (the approximate `~1,920 / 63` figure) counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
+**Why these aren't in the in-tree count:** the in-tree count counts only modules shipped inside the public `Monolith-vX.Y.Z.zip` release. Sibling plugins live in their own folders, ship via their own channels (or stay private), and may or may not be installed in any given consumer's project. Their absence is not a degraded state — Monolith is fully functional without them.
 
 Private sibling bridges are intentionally omitted from the public API reference. Their action rosters, namespaces, and release notes belong in their own repos/channels; Monolith must not publish them as part of the public API surface.
 

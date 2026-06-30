@@ -174,6 +174,10 @@ public:
 	// Set WorldSettings GameMode override + spawn APlayerStart actors (+ optional generic
 	// actor instances with reflective UPROPERTY defaults) on the open / specified map.
 	static FMonolithActionResult HandleAuthorMapSettings(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetWorldSettingsProperty(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleValidateAssets(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandlePlanContentValidationChangeset(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleValidateChangesetAssets(const TSharedPtr<FJsonObject>& Params);
 
 	static void OnLiveCodingPatchComplete();
 

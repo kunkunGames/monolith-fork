@@ -44,6 +44,7 @@ public class MonolithUI : ModuleRules
         {
             "MonolithCore", "UnrealEd", "UMG", "UMGEditor",
             "Slate", "SlateCore", "Json", "JsonUtilities",
+            "GameplayTags",
             "KismetCompiler", "MovieScene", "MovieSceneTracks",
             // Hoisted action requirements (Phase D — design effects and gradient MID factory):
             //   AssetTools                      -- CreateUniqueAssetName for new assets on disk

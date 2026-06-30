@@ -5,6 +5,7 @@
 
 #if WITH_GEOMETRYSCRIPT
 #include "MonolithMeshTerrainActions.h"
+#include "MonolithMeshBlockoutActions.h"
 #include "MonolithMeshRoofActions.h"
 #include "MonolithMeshBuildingActions.h"
 #include "MonolithMeshContextPropActions.h"
@@ -329,7 +330,8 @@ bool FMonolithWorldGenTerrainGridResClampTest::RunTest(const FString& Parameters
 	Payload->SetArrayField(TEXT("size"), SizeArr);
 	Payload->SetNumberField(TEXT("grid_resolution"), 129.0);
 
-	FMonolithActionResult Result = FMonolithMeshTerrainActions::SampleTerrainGrid(Payload);
+	FMonolithMeshTerrainActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("sample_terrain_grid"), Payload);
 
 	TestTrue(TEXT("SampleTerrainGrid with grid_resolution > 128 should fail"), !Result.bSuccess);
 	TestTrue(TEXT("SampleTerrainGrid failure should mention 'exceeds the maximum allowed (128)'"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed (128)")));

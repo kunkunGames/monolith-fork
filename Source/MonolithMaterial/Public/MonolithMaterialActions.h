@@ -61,6 +61,8 @@ public:
 	static FMonolithActionResult GetInstanceParameters(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetInstanceParameters(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetInstanceParent(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult RepairCopiedMaterialInstanceParameters(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult RefreshCopiedMaterialGraphs(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ClearInstanceParameter(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SaveMaterial(const TSharedPtr<FJsonObject>& Params);
 

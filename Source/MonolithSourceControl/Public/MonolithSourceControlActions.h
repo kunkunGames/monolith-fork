@@ -18,4 +18,6 @@ private:
 	static FMonolithActionResult HandleMarkForDelete(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRevert(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRevertUnchanged(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleListOpened(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleMapDepotPaths(const TSharedPtr<FJsonObject>& Params);
 };

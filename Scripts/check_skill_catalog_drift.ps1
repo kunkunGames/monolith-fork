@@ -75,17 +75,28 @@ Exit codes:
 #>
 [CmdletBinding()]
 param(
-    [string]$SkillsRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) 'Skills'),
+    [string]$SkillsRoot,
     [string]$McpUrl = $(if ($env:MONOLITH_URL) { $env:MONOLITH_URL } else { 'http://localhost:9316/mcp' }),
     [switch]$Offline,
     [string]$DumpDir,
     [string[]]$Skill,
     [switch]$ShowUndocumented,
     [switch]$ReportOnly,
-    [string]$GatedAllowlist = (Join-Path $PSScriptRoot 'skill_drift_gated_actions.json')
+    [string]$GatedAllowlist
 )
 
 $ErrorActionPreference = 'Stop'
+
+$ScriptRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+    $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+}
+if ([string]::IsNullOrWhiteSpace($SkillsRoot)) {
+    $SkillsRoot = Join-Path (Split-Path -Parent $ScriptRoot) 'Skills'
+}
+if ([string]::IsNullOrWhiteSpace($GatedAllowlist)) {
+    $GatedAllowlist = Join-Path $ScriptRoot 'skill_drift_gated_actions.json'
+}
 
 # --- Feature-gated action allowlist -------------------------------------------
 # Actions that exist in source but only register in the live catalog when a
@@ -142,6 +153,12 @@ $SkillNamespaceMap = [ordered]@{
     'unreal-level-sequences' = @('level_sequence')
     'unreal-leveldesign'     = @('leveldesign')
     'unreal-localization'    = @('localization')
+    'unreal-lyra'            = @('lyra')
+    'unreal-online'          = @('online')
+    'unreal-modular'         = @('modular')
+    'unreal-gameplay-message' = @('gameplay_message')
+    'unreal-game-settings'   = @('settings')
+    'unreal-loading'         = @('loading')
     # logicdriver is an optional-plugin namespace; when Logic Driver Pro is not
     # loaded the live catalog answers "Unknown namespace: logicdriver", which
     # this tool reports as "skipped: plugin not loaded" (not drift). Mapping it
@@ -220,33 +237,88 @@ function ConvertTo-Catalog {
 
 function Get-LiveCatalog {
     param([string]$Namespace)
-    $argsJson = @{
+    $allActions = @()
+    $offset = 0
+    $limit = 1000
+    $pageCount = 0
+
+    while ($true) {
+        $argsJson = @{
+            namespace = $Namespace
+            mode      = 'actions'
+            detail    = $true
+            limit     = $limit
+            offset    = $offset
+        } | ConvertTo-Json -Compress
+        $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"monolith_discover","arguments":' + $argsJson + '}}'
+        try {
+            $resp = Invoke-RestMethod -Uri $McpUrl -Method Post -ContentType 'application/json' `
+                -Headers @{ Accept = 'application/json, text/event-stream' } -Body $body -TimeoutSec 30
+        }
+        catch {
+            return @{ Status = 'error'; Actions = @{} }
+        }
+
+        $json = $null
+        if ($resp.result -and $resp.result.structuredContent) {
+            $json = $resp.result.structuredContent
+        }
+        else {
+            $text = $null
+            if ($resp.result -and $resp.result.content -and $resp.result.content.Count -gt 0) {
+                $text = [string]$resp.result.content[0].text
+            }
+            if ($resp.result -and $resp.result.isError) {
+                # "Unknown namespace: <ns>" => plugin not loaded / not registered.
+                if ($text -match '(?i)unknown namespace') { return @{ Status = 'unknown'; Actions = @{} } }
+                return @{ Status = 'error'; Actions = @{} }
+            }
+            if (-not $text) { return @{ Status = 'error'; Actions = @{} } }
+            try { $json = $text | ConvertFrom-Json } catch { return @{ Status = 'error'; Actions = @{} } }
+        }
+
+        if ($json.PSObject.Properties['status'] -and $json.status -eq 'not_installed') {
+            return ConvertTo-Catalog -Json $json
+        }
+        if (-not ($json.PSObject.Properties['actions'])) { return @{ Status = 'error'; Actions = @{} } }
+        if ($json.actions -isnot [System.Array]) { return ConvertTo-Catalog -Json $json }
+
+        $pageActions = @($json.actions)
+        foreach ($action in $pageActions) {
+            $allActions += $action
+        }
+
+        $truncated = $false
+        if ($json.PSObject.Properties['truncated']) {
+            $truncated = [bool]$json.truncated
+        }
+        if (-not $truncated) { break }
+
+        $nextOffset = $null
+        if ($json.PSObject.Properties['next_offset']) {
+            $nextOffset = [int]$json.next_offset
+        }
+        elseif ($json.PSObject.Properties['next_cursor'] -and ([string]$json.next_cursor) -match '^\d+$') {
+            $nextOffset = [int]([string]$json.next_cursor)
+        }
+        elseif ($pageActions.Count -gt 0) {
+            $nextOffset = $offset + $pageActions.Count
+        }
+        else {
+            return @{ Status = 'error'; Actions = @{} }
+        }
+
+        if ($nextOffset -le $offset) { return @{ Status = 'error'; Actions = @{} } }
+        $offset = $nextOffset
+        $pageCount++
+        if ($pageCount -gt 1000) { return @{ Status = 'error'; Actions = @{} } }
+    }
+
+    $merged = [PSCustomObject]@{
         namespace = $Namespace
-        mode      = 'actions'
-        detail    = $true
-        limit     = 0
-    } | ConvertTo-Json -Compress
-    $body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"monolith_discover","arguments":' + $argsJson + '}}'
-    try {
-        $resp = Invoke-RestMethod -Uri $McpUrl -Method Post -ContentType 'application/json' `
-            -Headers @{ Accept = 'application/json, text/event-stream' } -Body $body -TimeoutSec 30
+        actions   = @($allActions)
     }
-    catch {
-        return @{ Status = 'error'; Actions = @{} }
-    }
-    $text = $null
-    if ($resp.result -and $resp.result.content -and $resp.result.content.Count -gt 0) {
-        $text = [string]$resp.result.content[0].text
-    }
-    if ($resp.result -and $resp.result.isError) {
-        # "Unknown namespace: <ns>" => plugin not loaded / not registered.
-        if ($text -match '(?i)unknown namespace') { return @{ Status = 'unknown'; Actions = @{} } }
-        return @{ Status = 'error'; Actions = @{} }
-    }
-    if (-not $text) { return @{ Status = 'error'; Actions = @{} } }
-    $json = $null
-    try { $json = $text | ConvertFrom-Json } catch { return @{ Status = 'error'; Actions = @{} } }
-    return ConvertTo-Catalog -Json $json
+    return ConvertTo-Catalog -Json $merged
 }
 
 function Get-OfflineCatalog {

@@ -40,8 +40,12 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 			{ TEXT("delete"), true, TEXT("source_control.delete registers") },
 			{ TEXT("mark_for_delete"), true, TEXT("source_control.mark_for_delete registers") },
 			{ TEXT("revert"), true, TEXT("source_control.revert registers") },
-			{ TEXT("revert_unchanged"), true, TEXT("source_control.revert_unchanged registers") }
+			{ TEXT("revert_unchanged"), true, TEXT("source_control.revert_unchanged registers") },
+			{ TEXT("list_opened"), true, TEXT("source_control.list_opened registers") },
+			{ TEXT("map_depot_paths"), true, TEXT("source_control.map_depot_paths registers") }
 		});
+
+	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source_control"));
 
 	bOk &= FMonolithTestSupport::RunParamGuardCases(
 		*this,
@@ -129,6 +133,24 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				},
 				TEXT("dry_run"),
 				TEXT("source_control.revert_unchanged rejects non-bool dry_run")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("resolve_packages"), TEXT("true"));
+				},
+				TEXT("resolve_packages"),
+				TEXT("source_control.list_opened rejects non-bool resolve_packages")
+			},
+			{
+				TEXT("map_depot_paths"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
+				},
+				TEXT("paths"),
+				TEXT("source_control.map_depot_paths rejects non-array paths")
 			}
 		});
 

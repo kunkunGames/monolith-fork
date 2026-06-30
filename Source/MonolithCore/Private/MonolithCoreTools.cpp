@@ -2079,10 +2079,9 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	FString FilterAction;
 	FString FilterCategory;
 	FString Mode;
+	FString ErrMsg;
 	if (Params.IsValid())
 	{
-		FString ErrMsg;
-
 		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("namespace"), FilterNamespace, ErrMsg, TEXT(""), true))
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);

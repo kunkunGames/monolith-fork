@@ -98,14 +98,20 @@ are all skipped is itself `skipped` — never drift.
 | `-ReportOnly` | off | Print the full report but always exit 0 (do not fail on hard drift). |
 | `-GatedAllowlist` | `<script dir>/skill_drift_gated_actions.json` | Sidecar JSON (skill → [action names]) of feature-gated actions reported as `GATED` (informational), not hard drift. Pass `''` to disable the allowlist. |
 
-LIVE mode (default) lists each namespace's actions + full param schemas in one
-`monolith_discover` call per namespace (`$resp.result.content[0].text` →
-`ConvertFrom-Json` → `.actions[]`, each with `.action` and a `.params` map of
-`name → {type, required, default, description}`). Offline mode reads one
-`<namespace>.json` per namespace; each dump holds either the raw catalog object
-(`{ namespace, actions:[…] }`) or the not_installed sentinel (`{ namespace,
-actions:0, status:"not_installed" }`). Offline namespaces with no dump file are
-skipped (`no_dump`), never treated as drift. The offline
+LIVE mode (default) lists each namespace's actions + full param schemas through
+paginated `monolith_discover` calls (`mode=actions`, `detail=true`,
+`limit=1000`, `offset=<next_offset>`). The script consumes
+`$resp.result.structuredContent` when present, falls back to
+`$resp.result.content[0].text` for older clients, and merges every page's
+`.actions[]` rows before comparing documented tables. Each action row carries
+`.action` and a `.params` map of `name → {type, required, default,
+description}`. Pagination is required because live discovery normalizes
+`limit <= 0` to its bounded default page size instead of returning the whole
+namespace. Offline mode reads one `<namespace>.json` per namespace; each dump
+holds either the raw catalog object (`{ namespace, actions:[…] }`) or the
+not_installed sentinel (`{ namespace, actions:0, status:"not_installed" }`).
+Offline namespaces with no dump file are skipped (`no_dump`), never treated as
+drift. The offline
 `Binaries/monolith_query.exe` only covers source/project/bridge/cppreflect/
 network/decision/risk and its per-action `--help` shows a SUBSET, so it is
 NEVER used to assert an action is absent; `-Offline` relies on full
@@ -218,6 +224,12 @@ allowlist once its feature ships enabled by default.
 | Gate | Result |
 |---|---|
 | LIVE full sweep | 51 skills checked against the live v0.18.1 catalog (1722 tools). `combograph`/`logicdriver` reported `skipped: plugin not loaded`; `material-reference`/`niagara-reference` reported `no_namespace`; `unreal-cpp` reported 6 XREF (cppreflect) with zero hard drift. |
+
+## 10. Verification Record (2026-06-30)
+
+| Gate | Result |
+|---|---|
+| LIVE paginated namespace fetch | `Scripts\check_skill_catalog_drift.ps1 -Skill unreal-ui` checked the full paginated `ui` catalog instead of only the first 50 rows and returned `RESULT=OK`, `hard_drift=0`, `documented_actions=120`, `undocumented=25` against Monolith v0.20.3. |
 | (a) detection | `unreal-worldgen` (27), `unreal-scene` (20), `unreal-slate` (5), `unreal-gamefeatures` (3) flagged actions absent from the whole catalog (experimental/flag-gated surfaces); `RESULT=DRIFT`, exit 2. |
 | XREF (not drift) | `unreal-cpp`'s six `cppreflect` actions (`get_uclass`, `list_uproperties`, `list_ufunctions`, `find_interface_impls`, `find_class_specifier`, `list_class_specifiers`) resolved as cross-references, keeping the skill `ok`. |
 | (b) detection | Offline dump with trimmed `find_assets` params flagged `path`/`recursive`/`class_names` as documented-but-absent params. |

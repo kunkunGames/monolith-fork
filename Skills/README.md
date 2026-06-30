@@ -37,10 +37,10 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-project-search` | `project` | ~20 | Asset search, references, type filter, gameplay tags, review/snapshots |
 | `unreal-bridge` | `bridge` | 5 | Map assets/Blueprint nodes to their backing C++ symbols |
 | `unreal-console` | `console` | 6 | Console object registry snapshots, cvars, console commands, hints, and guarded execution |
-| `unreal-asset` | `asset` | 12 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename |
+| `unreal-asset` | `asset` | 17 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename, guarded package graph copy/remap and dependency validation |
 | `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
-| `unreal-build` | `editor` | 57* | Build, hot reload, compile errors |
-| `unreal-debugging` | `editor` | 57* | Logs, crash context, output log |
+| `unreal-build` | `editor` | 59* | Build, hot reload, compile errors, changeset validation planning |
+| `unreal-debugging` | `editor` | 59* | Logs, crash context, output log |
 | `unreal-performance` | `config`/`material`/`niagara` | — | Cross-domain perf analysis — INI/CVar tuning, material shader stats, Niagara complexity |
 
 ### Gameplay
@@ -52,7 +52,13 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-logicdriver` | `logicdriver` | 66 | LogicDriver state machines |
 | `unreal-combograph` | `combograph` | 13 | ComboGraph combo/attack authoring |
 | `unreal-input` | `input` | 10 | Enhanced Input: actions, mapping contexts, modifiers, triggers |
-| `unreal-gamefeatures` | `gamefeatures` | 5 | Game Feature plugins, modular gameplay |
+| `unreal-gamefeatures` | `gamefeatures` | 14 | Game Feature plugins, modular gameplay, instanced action authoring |
+| `unreal-lyra` | `lyra` | 10 | Lyra Experience graphs/defaults, component-entry cleanup, bundle validation, UserFacingExperience hosting metadata, gameplay tag domains, and GamePhase flow diagnostics |
+| `unreal-online` | `online` | 8 | EOS/OSSv2, CommonSession flow/schema, UserFacingSession, CommonUser initialization/privilege, and AccountPortal log diagnostics with credential redaction |
+| `unreal-modular` | `modular` | 4 | ModularGameplay receiver lifecycle, AddComponentRequest actor/component target, and static extension-event source diagnostics |
+| `unreal-gameplay-message` | `gameplay_message` | 4 | GameplayMessageRouter channel, match-type, and payload UScriptStruct diagnostics |
+| `unreal-game-settings` | `settings` | 6 | GameSettings registry/screen/setting, dynamic path, visual-data, and player-mappable input diagnostics |
+| `unreal-loading` | `loading` | 4 | CommonLoadingScreen manager reason, processor candidate, settings/CVar, and Lyra handoff diagnostics |
 | `unreal-world-conditions` | `world_conditions` | 4 | World Conditions / world state |
 
 ### Spatial & level
@@ -70,11 +76,11 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 ### Content
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
-| `unreal-ui` | `ui` | 119 | UMG widgets, bindings, slots, styling, templates, accessibility |
+| `unreal-ui` | `ui` | 146 | UMG widgets, Lyra Common plugin diagnostics, bindings, slots, styling, templates, accessibility |
 | `unreal-niagara` | `niagara` | 123 | Niagara VFX systems, emitters, modules |
 | `unreal-animation` | `animation` | 135 | AnimBP, montages, sequences, blendspaces, layout |
 | `unreal-audio` | `audio` | 98 | Sound assets, cues, MetaSounds, attenuation, mixing |
-| `unreal-materials` | `material`/`asset` | 63 / 8 | Material graphs, instances, functions; asset ingest/inspect/validate |
+| `unreal-materials` | `material`/`asset` | 66 / 17 | Material graphs, instances, functions; asset ingest/inspect/validate |
 | `unreal-metahuman` | `metahuman` | 2 | MetaHuman setup & layout |
 | `unreal-slate` | `slate` | 6 | Editor Slate / Editor Utility Widgets |
 | `unreal-paper2d` | `paper2d` | 3 | Sprites, flipbooks, tile maps |
@@ -97,7 +103,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | Skill | Namespace | ~Actions | Use for |
 |-------|-----------|---------:|---------|
 | `unreal-config` | `config` | 10 | `.ini` config, sections, focused console-variable lookup |
-| `unreal-source-control` | `source_control` | 9 | Perforce/Git status, checkout/add/delete, revert |
+| `unreal-source-control` | `source_control` | 11 | Perforce/Git status, checkout/add/delete, revert, opened/path mapping |
 | `unreal-collection` | `collection` | 13 | Editor asset Collections |
 | `unreal-localization` | `localization` | 10 | Localization targets, string tables, cultures |
 

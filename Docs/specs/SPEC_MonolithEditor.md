@@ -8,7 +8,7 @@
 
 ## MonolithEditor
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, Json, JsonUtilities, MessageLog, EnhancedInput, LiveCoding (Win64 only)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, Json, JsonUtilities, MessageLog, DataValidation, EnhancedInput, LiveCoding (Win64 only)
 
 > **`EnhancedInput` dep (Gap 4, 2026-06-10):** added for `pie_inject_input_action` (`UEnhancedInputLocalPlayerSubsystem::InjectInputForAction`). It is a stock, always-enabled engine plugin module — release-build safe, so it carries no `WITH_*` gate (same rationale as the existing `AIModule` dep).
 
@@ -16,7 +16,7 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 60 editor actions across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup plus the headless layout-save guard (below) |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers the editor action surface across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map/world-settings authoring, DataValidation, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup plus the headless layout-save guard (below) |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
@@ -32,7 +32,7 @@ Headless editors (`-NullRHI` / `FApp::CanEverRender()==false`, e.g. `RunHeadless
 
 The per-manager `bCanDoDeferredLayoutSave` switch would be the precise off-switch but sits behind `FTabManager::FPrivateApi` (protected), and the engine is an installed build, so the guard uses the two public surfaces above. Each clearing pass also enumerates open asset editors through `UAssetEditorSubsystem` and clears their host tab managers (`IAssetEditorInstance::GetAssociatedTabManager`), so asset editors opened headless are covered too. Verified 2026-06-12: guarded headless boot bound MCP at +9s and stayed alive 40 minutes serving actions until externally terminated (pre-guard boots died at 10-20s in the layout-save fatal); guard log line `HeadlessLayoutSaveGuard: CanEverRender=false ...` confirms activation. Rendering editors are untouched (`CanEverRender()==true` short-circuits registration).
 
-### Actions (60 — namespace: "editor")
+### Actions (64+ — namespace: "editor")
 
 **Base (23 — v0.14.7 baseline + Phase J F8 + temporal GIF encoding)**
 
@@ -146,11 +146,15 @@ Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0
 
 **`/Game` virtual-path output resolution (Wave 3).** `capture_anim_frames`' `output_dir` (and `capture_pie_movement_clip`'s `output_path`) accept a disk-relative, absolute, OR a virtual `/Game/...` path — a `/Game/...` value is resolved to `<project>/Content/...` and the resolved absolute directory is echoed back as `resolved_output_dir`. A virtual path that cannot be written is a **hard error** (no silent no-op).
 
-**Test/Profiling Harness — Gap-Closure Pass (1 — map authoring; 2026-06-07)**
+**Test/Profiling Harness — Gap-Closure Pass (3 — map/settings/validation authoring; 2026-06-07, expanded 2026-06-30)**
 
 | Action | Description |
 |--------|-------------|
 | `author_map_settings` | Apply WorldSettings + PlayerStart settings to ANY currently-open map (not locked to the nav-harness path). Params: `game_mode_override` (class path → `AWorldSettings::DefaultGameMode`, assigned after `WorldSettings->Modify()`), `player_starts[]` (array of transforms → spawn `APlayerStart`s, each `SetFolderPath`'d). Map mutation dirties the package by design; only dirties on an actual change, and never leaves the map half-authored on a mid-apply failure. |
+| `set_world_settings_property` | Generic reflected writer for one `AWorldSettings` property on the current or specified map. Params: optional `path`, required `property_name`, required JSON `value`, optional `save`, optional `dry_run`. It supports scalar values, object/soft-object refs, class/soft-class refs with `_C` normalization, and arrays of those leaf values; it first applies to a scratch buffer, compares exported before/after text, and only modifies/marks dirty when the value changes. Use this for Lyra's `ALyraWorldSettings::DefaultGameplayExperience` instead of adding GameMode-specific branches to `author_map_settings`. |
+| `validate_assets` | Generic DataValidation wrapper around `UEditorValidatorSubsystem::ValidateAssetsWithSettings`. Params include explicit `asset_paths`/`packages` or recursive `path`, `validation_usecase`, `load_assets`, `load_external_objects`, `capture_logs`, `warnings_as_errors`, `skip_excluded_directories`, `max_assets_to_validate`, and `silent`. `validate_project_settings=true` is reported as unsupported because UE 5.8 has no generic public `ValidateProjectSettings` API; project-specific wrappers should live in project adapters, not this common action. |
+| `plan_content_validation_changeset` | Read-only changeset planner for DataValidation. Params include optional `changelist`, `paths`, `packages`, `include_opened`, `resolve_packages`, `include_non_packages`, `limit`, and validation option passthrough. It composes the same path semantics as `source_control.list_opened` / `source_control.map_depot_paths`, classifies package targets, deleted packages, source files, non-package files, and unmapped rows, then emits `validation_packages[]` plus exact `validation_params` for `validate_assets`. It does not checkout, save, or validate assets. |
+| `validate_changeset_assets` | Read-only wrapper that runs `plan_content_validation_changeset`, then delegates to `validate_assets` for the resolved packages. Code-only or non-asset changesets return `{ validation_skipped: true, skip_reason: "no_packages_resolved" }` instead of failing. |
 
 **Live-PIE object read/call (Gap 8 — 2 — `MonolithPieObjectActions.cpp`)**
 

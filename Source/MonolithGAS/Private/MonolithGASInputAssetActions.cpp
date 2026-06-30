@@ -10,11 +10,14 @@
 #include "InputAction.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
+#include "InputModifiers.h"
+#include "InputTriggers.h"
 #include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -177,6 +180,170 @@ namespace
 			OutError = FString::Printf(TEXT("InputMappingContext asset not found: %s"), *Path);
 		}
 		return Context;
+	}
+
+	bool AreInstancedObjectsEquivalent(const UObject* A, const UObject* B)
+	{
+		if (A == B)
+		{
+			return true;
+		}
+		if (!A || !B || A->GetClass() != B->GetClass())
+		{
+			return false;
+		}
+		for (TFieldIterator<FProperty> It(A->GetClass(), EFieldIteratorFlags::IncludeSuper); It; ++It)
+		{
+			const FProperty* Property = *It;
+			if (!Property || Property->HasAnyPropertyFlags(CPF_Transient))
+			{
+				continue;
+			}
+			const void* AValue = Property->ContainerPtrToValuePtr<const void>(A);
+			const void* BValue = Property->ContainerPtrToValuePtr<const void>(B);
+			if (!Property->Identical(AValue, BValue, PPF_None))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	template <typename TObjectType>
+	bool AreInstancedObjectArraysEquivalent(const TArray<TObjectPtr<TObjectType>>& A, const TArray<TObjectPtr<TObjectType>>& B)
+	{
+		if (A.Num() != B.Num())
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < A.Num(); ++Index)
+		{
+			if (!AreInstancedObjectsEquivalent(A[Index].Get(), B[Index].Get()))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	template <typename TObjectType>
+	bool CloneInstancedObjectArray(
+		const TArray<TObjectPtr<TObjectType>>& Source,
+		UObject* Outer,
+		TArray<TObjectPtr<TObjectType>>& OutClones,
+		FString& OutError)
+	{
+		OutClones.Reset();
+		for (TObjectType* SourceObject : Source)
+		{
+			if (!SourceObject)
+			{
+				OutClones.Add(nullptr);
+				continue;
+			}
+			TObjectType* Clone = DuplicateObject<TObjectType>(SourceObject, Outer);
+			if (!Clone)
+			{
+				OutError = FString::Printf(TEXT("Failed to duplicate instanced input object '%s'"), *SourceObject->GetPathName());
+				return false;
+			}
+			OutClones.Add(Clone);
+		}
+		return true;
+	}
+
+	template <typename TObjectType>
+	bool NewInstancedObjectArrayFromClasses(
+		const TArray<UClass*>& Classes,
+		UObject* Outer,
+		TArray<TObjectPtr<TObjectType>>& OutObjects,
+		FString& OutError)
+	{
+		OutObjects.Reset();
+		for (UClass* Class : Classes)
+		{
+			if (!Class || !Class->IsChildOf(TObjectType::StaticClass()) || Class->HasAnyClassFlags(CLASS_Abstract))
+			{
+				OutError = FString::Printf(TEXT("Invalid input object class '%s'"), *GetPathNameSafe(Class));
+				return false;
+			}
+			TObjectType* Object = NewObject<TObjectType>(Outer, Class, NAME_None, RF_Transactional);
+			if (!Object)
+			{
+				OutError = FString::Printf(TEXT("Failed to create input object of class '%s'"), *Class->GetPathName());
+				return false;
+			}
+			OutObjects.Add(Object);
+		}
+		return true;
+	}
+
+	bool ReadInputObjectClassArray(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		UClass* RequiredBaseClass,
+		TArray<UClass*>& OutClasses,
+		FString& OutError)
+	{
+		OutClasses.Reset();
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return true;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must be an array of class paths"), FieldName);
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString ClassPath;
+			if (!Value.IsValid() || !Value->TryGetString(ClassPath))
+			{
+				OutError = FString::Printf(TEXT("Param '%s' must be an array of class paths"), FieldName);
+				return false;
+			}
+			ClassPath.TrimStartAndEndInline();
+			UClass* Class = StaticLoadClass(RequiredBaseClass, nullptr, *ClassPath);
+			if (!Class)
+			{
+				OutError = FString::Printf(TEXT("Could not load class '%s' for param '%s'"), *ClassPath, FieldName);
+				return false;
+			}
+			if (!Class->IsChildOf(RequiredBaseClass) || Class->HasAnyClassFlags(CLASS_Abstract))
+			{
+				OutError = FString::Printf(TEXT("Class '%s' must be a non-abstract child of '%s'"), *Class->GetPathName(), *RequiredBaseClass->GetPathName());
+				return false;
+			}
+			OutClasses.Add(Class);
+		}
+		return true;
+	}
+
+	int32 FindMappingIndexByActionAndKey(const UInputMappingContext* Context, const UInputAction* Action, const FKey& Key)
+	{
+		if (!Context || !Action)
+		{
+			return INDEX_NONE;
+		}
+		const TArray<FEnhancedActionKeyMapping>& Mappings = Context->GetMappings();
+		for (int32 Index = 0; Index < Mappings.Num(); ++Index)
+		{
+			if (Mappings[Index].Action == Action && Mappings[Index].Key == Key)
+			{
+				return Index;
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	bool AreMappingsEquivalentForAuthoring(const FEnhancedActionKeyMapping& A, const FEnhancedActionKeyMapping& B)
+	{
+		return A.Action == B.Action
+			&& A.Key == B.Key
+			&& AreInstancedObjectArraysEquivalent(A.Modifiers, B.Modifiers)
+			&& AreInstancedObjectArraysEquivalent(A.Triggers, B.Triggers);
 	}
 
 	template <typename AssetType>
@@ -434,12 +601,19 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Build());
 
 	Registry.RegisterAction(TEXT("input"), TEXT("add_input_mapping"),
-		TEXT("Add a key mapping to an Input Mapping Context"),
+		TEXT("Add or update a key mapping on an Input Mapping Context. Idempotently reuses an existing action+key mapping unless allow_duplicate=true, and can clone modifiers/triggers from another mapping or instantiate explicit modifier/trigger classes."),
 		FMonolithActionHandler::CreateStatic(&HandleAddInputMapping),
 		FParamSchemaBuilder()
 			.Required(TEXT("context_path"), TEXT("string"), TEXT("InputMappingContext asset path"))
 			.Required(TEXT("action_path"), TEXT("string"), TEXT("InputAction asset path"))
 			.Required(TEXT("key"), TEXT("string"), TEXT("FKey name, e.g. SpaceBar, LeftMouseButton, Gamepad_FaceButton_Bottom"))
+			.Optional(TEXT("source_context_path"), TEXT("string"), TEXT("Optional source InputMappingContext to clone modifiers/triggers from"))
+			.Optional(TEXT("source_action_path"), TEXT("string"), TEXT("Source InputAction for the mapping to clone"))
+			.Optional(TEXT("source_key"), TEXT("string"), TEXT("Source FKey for the mapping to clone"))
+			.Optional(TEXT("modifier_classes"), TEXT("array"), TEXT("Optional UInputModifier class paths. If present, replaces cloned/existing modifiers; empty array clears modifiers."))
+			.Optional(TEXT("trigger_classes"), TEXT("array"), TEXT("Optional UInputTrigger class paths. If present, replaces cloned/existing triggers; empty array clears triggers."))
+			.Optional(TEXT("allow_duplicate"), TEXT("boolean"), TEXT("Always add a new mapping instead of updating an existing action+key mapping"), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview the edit without modifying the asset"), TEXT("false"))
 			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save package immediately"), TEXT("true"))
 			.Build());
 
@@ -470,9 +644,9 @@ void FMonolithGASInputAssetActions::RegisterActions(FMonolithToolRegistry& Regis
 		{ TEXT("new_input_mapping_context"), TEXT("make_imc"), TEXT("create_imc") },
 		{ TEXT("create an Input Mapping Context IMC_Default"), TEXT("make a new IMC for the player") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("add_input_mapping"),
-		{ TEXT("bind key"), TEXT("key mapping"), TEXT("map key to action"), TEXT("FKey"), TEXT("spacebar gamepad"), TEXT("keybind") },
-		{ TEXT("map_key"), TEXT("bind_key"), TEXT("add_key_mapping"), TEXT("add_keybinding") },
-		{ TEXT("bind SpaceBar to IA_Jump in IMC_Default"), TEXT("map a gamepad key to an input action") });
+		{ TEXT("bind key"), TEXT("key mapping"), TEXT("map key to action"), TEXT("FKey"), TEXT("spacebar gamepad"), TEXT("keybind"), TEXT("modifiers"), TEXT("triggers"), TEXT("clone input mapping") },
+		{ TEXT("map_key"), TEXT("bind_key"), TEXT("add_key_mapping"), TEXT("add_keybinding"), TEXT("clone_key_mapping") },
+		{ TEXT("bind SpaceBar to IA_Jump in IMC_Default"), TEXT("clone modifiers and triggers from an existing input mapping") });
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("input"), TEXT("validate_input_mappings"),
 		{ TEXT("duplicate key"), TEXT("key conflict"), TEXT("missing action"), TEXT("unbound"), TEXT("lint input"), TEXT("check bindings") },
 		{ TEXT("check_input_mappings"), TEXT("lint_input"), TEXT("find_key_conflicts") },
@@ -956,12 +1130,27 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("action_path"), ActionPath, Err)) return Err;
 	if (!MonolithGAS::RequireStringParam(Params, TEXT("key"), KeyName, Err)) return Err;
 	bool bSave = true;
+	bool bAllowDuplicate = false;
+	bool bDryRun = false;
 
 	FString Error;
-	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("save"), bSave, Error))
+	if (!MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("save"), bSave, Error)
+		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("allow_duplicate"), bAllowDuplicate, Error)
+		|| !MonolithGAS::TryReadOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, Error))
 	{
 		return FMonolithActionResult::Error(Error);
 	}
+
+	TArray<UClass*> ModifierClasses;
+	TArray<UClass*> TriggerClasses;
+	if (!ReadInputObjectClassArray(Params, TEXT("modifier_classes"), UInputModifier::StaticClass(), ModifierClasses, Error)
+		|| !ReadInputObjectClassArray(Params, TEXT("trigger_classes"), UInputTrigger::StaticClass(), TriggerClasses, Error))
+	{
+		return FMonolithActionResult::Error(Error);
+	}
+	const bool bHasModifierClasses = Params.IsValid() && Params->HasField(TEXT("modifier_classes"));
+	const bool bHasTriggerClasses = Params.IsValid() && Params->HasField(TEXT("trigger_classes"));
+
 	UInputMappingContext* Context = LoadInputMappingContext(ContextPath, Error);
 	if (!Context)
 	{
@@ -980,18 +1169,125 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "AddInputMapping", "Add Input Mapping"));
-	Context->Modify();
-	const int32 Before = Context->GetMappings().Num();
-	FEnhancedActionKeyMapping& Mapping = Context->MapKey(Action, Key);
-	const int32 Index = Context->GetMappings().IndexOfByPredicate(
-		[&Mapping](const FEnhancedActionKeyMapping& Candidate)
+	const bool bHasAnySourceField = Params.IsValid()
+		&& (Params->HasField(TEXT("source_context_path"))
+			|| Params->HasField(TEXT("source_action_path"))
+			|| Params->HasField(TEXT("source_key")));
+	const FEnhancedActionKeyMapping* SourceMapping = nullptr;
+	if (bHasAnySourceField)
+	{
+		FString SourceContextPath;
+		FString SourceActionPath;
+		FString SourceKeyName;
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("source_context_path"), SourceContextPath, Err)) return Err;
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("source_action_path"), SourceActionPath, Err)) return Err;
+		if (!MonolithGAS::RequireStringParam(Params, TEXT("source_key"), SourceKeyName, Err)) return Err;
+
+		UInputMappingContext* SourceContext = LoadInputMappingContext(SourceContextPath, Error);
+		if (!SourceContext)
 		{
-			return &Candidate == &Mapping;
-		});
+			return FMonolithActionResult::Error(Error);
+		}
+		UInputAction* SourceAction = LoadInputAction(SourceActionPath, Error);
+		if (!SourceAction)
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+		FKey SourceKey;
+		if (!ParseKey(SourceKeyName, SourceKey, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+		const int32 SourceIndex = FindMappingIndexByActionAndKey(SourceContext, SourceAction, SourceKey);
+		if (SourceIndex == INDEX_NONE)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Source mapping not found for action '%s' and key '%s' in '%s'."),
+				*SourceAction->GetPathName(),
+				*SourceKey.ToString(),
+				*SourceContext->GetPathName()));
+		}
+		SourceMapping = &SourceContext->GetMappings()[SourceIndex];
+	}
+
+	const int32 Before = Context->GetMappings().Num();
+	int32 ExistingIndex = bAllowDuplicate ? INDEX_NONE : FindMappingIndexByActionAndKey(Context, Action, Key);
+
+	FEnhancedActionKeyMapping DesiredMapping(Action, Key);
+	const UObject* DesiredOuter = GetTransientPackage();
+	if (SourceMapping)
+	{
+		if (!CloneInstancedObjectArray(SourceMapping->Modifiers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error)
+			|| !CloneInstancedObjectArray(SourceMapping->Triggers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+	else if (ExistingIndex != INDEX_NONE)
+	{
+		const FEnhancedActionKeyMapping& ExistingMapping = Context->GetMappings()[ExistingIndex];
+		if (!CloneInstancedObjectArray(ExistingMapping.Modifiers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error)
+			|| !CloneInstancedObjectArray(ExistingMapping.Triggers, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	if (bHasModifierClasses)
+	{
+		if (!NewInstancedObjectArrayFromClasses(ModifierClasses, const_cast<UObject*>(DesiredOuter), DesiredMapping.Modifiers, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+	if (bHasTriggerClasses)
+	{
+		if (!NewInstancedObjectArrayFromClasses(TriggerClasses, const_cast<UObject*>(DesiredOuter), DesiredMapping.Triggers, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	bool bCreated = ExistingIndex == INDEX_NONE;
+	bool bUpdated = false;
+	int32 MappingIndex = ExistingIndex;
+	if (ExistingIndex != INDEX_NONE)
+	{
+		const FEnhancedActionKeyMapping& ExistingMapping = Context->GetMappings()[ExistingIndex];
+		bUpdated = !AreMappingsEquivalentForAuthoring(ExistingMapping, DesiredMapping);
+	}
+
+	const bool bChanged = bCreated || bUpdated;
+	if (bChanged && !bDryRun)
+	{
+		const FScopedTransaction Transaction(NSLOCTEXT("Monolith", "AddInputMapping", "Add Input Mapping"));
+		Context->Modify();
+		if (bCreated)
+		{
+			FEnhancedActionKeyMapping& NewMapping = Context->MapKey(Action, Key);
+			MappingIndex = Context->GetMappings().IndexOfByPredicate(
+				[&NewMapping](const FEnhancedActionKeyMapping& Candidate)
+				{
+					return &Candidate == &NewMapping;
+				});
+		}
+
+		FEnhancedActionKeyMapping& TargetMapping = Context->GetMapping(MappingIndex);
+		TargetMapping.Action = Action;
+		TargetMapping.Key = Key;
+		if (!CloneInstancedObjectArray(DesiredMapping.Modifiers, Context, TargetMapping.Modifiers, Error)
+			|| !CloneInstancedObjectArray(DesiredMapping.Triggers, Context, TargetMapping.Triggers, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+	else if (bCreated && bDryRun)
+	{
+		MappingIndex = Before;
+	}
 
 	bool bSaved = false;
-	if (!SaveAssetIfRequested(Context, bSave, bSaved, Error))
+	if (bChanged && !bDryRun && !SaveAssetIfRequested(Context, bSave, bSaved, Error))
 	{
 		return FMonolithActionResult::Error(Error);
 	}
@@ -1001,8 +1297,16 @@ FMonolithActionResult FMonolithGASInputAssetActions::HandleAddInputMapping(const
 	Result->SetStringField(TEXT("action_path"), Action->GetPathName());
 	Result->SetStringField(TEXT("key"), Key.ToString());
 	Result->SetNumberField(TEXT("before_count"), Before);
-	Result->SetNumberField(TEXT("after_count"), Context->GetMappings().Num());
-	Result->SetNumberField(TEXT("mapping_index"), Index);
+	Result->SetNumberField(TEXT("after_count"), bDryRun ? Before + (bCreated ? 1 : 0) : Context->GetMappings().Num());
+	Result->SetNumberField(TEXT("mapping_index"), MappingIndex);
+	Result->SetBoolField(TEXT("created"), bCreated);
+	Result->SetBoolField(TEXT("updated"), bUpdated);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("allow_duplicate"), bAllowDuplicate);
+	Result->SetBoolField(TEXT("cloned_from_source"), SourceMapping != nullptr);
+	Result->SetNumberField(TEXT("modifier_count"), DesiredMapping.Modifiers.Num());
+	Result->SetNumberField(TEXT("trigger_count"), DesiredMapping.Triggers.Num());
 	Result->SetBoolField(TEXT("saved"), bSaved);
 	return FMonolithActionResult::Success(Result);
 }

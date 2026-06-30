@@ -2,9 +2,13 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "EditorValidatorSubsystem.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Logging/TokenizedMessage.h"
+#include "Misc/DataValidation.h"
 #include "Misc/OutputDeviceRedirector.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -732,6 +736,93 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("actors"), TEXT("array"), TEXT("[{class:\"/Game/.../BP_Foo.BP_Foo_C\" or /Script/Engine.PointLight, location:[x,y,z], rotation:[p,y,r], folder:\"...\", properties:{...}}, ...] — native or Blueprint actor instances with reflective property defaults."))
 			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the authored map package after applying. Default false."), TEXT("false"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("set_world_settings_property"),
+		TEXT("Set one reflected property on the active or specified map's AWorldSettings object. Supports scalar values, object/soft-object refs, class/soft-class refs with `_C` normalization, and arrays of those leaf values. Intended for settings beyond GameMode Override, such as ALyraWorldSettings::DefaultGameplayExperience. Compares before dirtying and supports dry_run."),
+		FMonolithActionHandler::CreateStatic(&HandleSetWorldSettingsProperty),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.OptionalAssetPath(TEXT("path"), TEXT("UWorld to author. Omitted = the currently-open editor world. If provided, the map is loaded as the active editor world first."))
+			.Required(TEXT("property_name"), TEXT("string"), TEXT("Reflected AWorldSettings property name to set, e.g. DefaultGameplayExperience."))
+			.Required(TEXT("value"), TEXT("any"), TEXT("JSON value to assign. Strings can be asset/object/class paths; arrays set array properties."))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save the map package after applying a change. Default false."), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview the change without mutating the map. Default false."), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("validate_assets"),
+		TEXT("Run UEditorValidatorSubsystem::ValidateAssetsWithSettings for explicit package/object paths or a recursive package-path prefix. Returns aggregate counts plus optional per-asset details. This is the generic engine DataValidation wrapper; project-specific ValidateProjectSettings helpers are reported as unsupported unless implemented by a project-facing adapter."),
+		FMonolithActionHandler::CreateStatic(&HandleValidateAssets),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("asset_paths"), TEXT("array"), TEXT("Asset package or object paths to validate, e.g. [\"/Game/Foo/DA_Bar\"] or [\"/Game/Foo/DA_Bar.DA_Bar\"]."))
+			.Optional(TEXT("packages"), TEXT("array"), TEXT("Alias for asset_paths when callers already have package names."))
+			.OptionalAssetPath(TEXT("path"), TEXT("Recursive package path prefix to validate, e.g. /Game/UI."))
+			.Optional(TEXT("validation_usecase"), TEXT("string"), TEXT("none | manual | commandlet | save | pre_submit | script. Default commandlet."), TEXT("commandlet"))
+			.Optional(TEXT("collect_per_asset_details"), TEXT("bool"), TEXT("Collect result/errors/warnings per asset. Default true."), TEXT("true"))
+			.Optional(TEXT("load_assets"), TEXT("bool"), TEXT("Load unloaded assets for validation. Default true."), TEXT("true"))
+			.Optional(TEXT("load_external_objects"), TEXT("bool"), TEXT("Load external objects associated with assets such as maps. Default true."), TEXT("true"))
+			.Optional(TEXT("capture_logs"), TEXT("bool"), TEXT("Capture validation warnings/errors from load and validation operations. Default true."), TEXT("true"))
+			.Optional(TEXT("warnings_as_errors"), TEXT("bool"), TEXT("Treat captured validation warnings as errors. Default false."), TEXT("false"))
+			.Optional(TEXT("skip_excluded_directories"), TEXT("bool"), TEXT("Honor DataValidation excluded directories. Default true."), TEXT("true"))
+			.Optional(TEXT("max_assets_to_validate"), TEXT("integer"), TEXT("Maximum assets to validate. Default unlimited."))
+			.Optional(TEXT("silent"), TEXT("bool"), TEXT("Suppress progress UI/message log visibility. Default true."), TEXT("true"))
+			.Optional(TEXT("validate_project_settings"), TEXT("bool"), TEXT("Request project-settings validation. Unreal has no generic UEditorValidatorSubsystem API for this; response reports unsupported unless a project adapter exists. Default false."), TEXT("false"))
+			.Build());
+
+	FMonolithActionExecutionPolicy ExplicitReadOnly = FMonolithActionExecutionPolicy::DefaultReadOnly();
+	ExplicitReadOnly.bDefaulted = false;
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("plan_content_validation_changeset"),
+		TEXT("Plan editor DataValidation targets from a Perforce changelist, opened files, and/or explicit depot/local/package paths. Maps package files to Unreal long package names and returns the exact validation params without saving, checkout, or mutation."),
+		FMonolithActionHandler::CreateStatic(&HandlePlanContentValidationChangeset),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Perforce changelist number or 'default'. Omit for all opened files when include_opened=true."))
+			.Optional(TEXT("paths"), TEXT("array"), TEXT("Depot, client, local filesystem, /Game package, or object paths to include."))
+			.Optional(TEXT("packages"), TEXT("array"), TEXT("Alias for paths when callers already have package names."))
+			.Optional(TEXT("include_opened"), TEXT("bool"), TEXT("Include p4 opened rows. Default true when paths/packages is omitted or changelist is supplied; otherwise false."))
+			.Optional(TEXT("resolve_packages"), TEXT("bool"), TEXT("Resolve p4 depot paths to local/package paths. Default true."), TEXT("true"))
+			.Optional(TEXT("include_non_packages"), TEXT("bool"), TEXT("Return non-package rows alongside package targets. Default true."), TEXT("true"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened/path rows to inspect. Default 500, max 5000."), TEXT("500"))
+			.Optional(TEXT("validation_usecase"), TEXT("string"), TEXT("Suggested validate_assets usecase for validation_params. Default pre_submit."), TEXT("pre_submit"))
+			.Build(),
+		FString(),
+		ExplicitReadOnly);
+
+	Registry.RegisterAction(TEXT("editor"), TEXT("validate_changeset_assets"),
+		TEXT("Resolve a Perforce changelist/opened-file set or explicit paths with plan_content_validation_changeset, then run validate_assets on the resolved package targets. Code-only changesets return a skipped validation payload rather than an error."),
+		FMonolithActionHandler::CreateStatic(&HandleValidateChangesetAssets),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Perforce changelist number or 'default'. Omit for all opened files when include_opened=true."))
+			.Optional(TEXT("paths"), TEXT("array"), TEXT("Depot, client, local filesystem, /Game package, or object paths to include."))
+			.Optional(TEXT("packages"), TEXT("array"), TEXT("Alias for paths when callers already have package names."))
+			.Optional(TEXT("include_opened"), TEXT("bool"), TEXT("Include p4 opened rows. Default true when paths/packages is omitted or changelist is supplied; otherwise false."))
+			.Optional(TEXT("resolve_packages"), TEXT("bool"), TEXT("Resolve p4 depot paths to local/package paths. Default true."), TEXT("true"))
+			.Optional(TEXT("include_non_packages"), TEXT("bool"), TEXT("Return non-package rows alongside package targets. Default true."), TEXT("true"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened/path rows to inspect. Default 500, max 5000."), TEXT("500"))
+			.Optional(TEXT("validation_usecase"), TEXT("string"), TEXT("none | manual | commandlet | save | pre_submit | script. Default pre_submit."), TEXT("pre_submit"))
+			.Optional(TEXT("collect_per_asset_details"), TEXT("bool"), TEXT("Collect result/errors/warnings per asset. Default true."), TEXT("true"))
+			.Optional(TEXT("load_assets"), TEXT("bool"), TEXT("Load unloaded assets for validation. Default true."), TEXT("true"))
+			.Optional(TEXT("load_external_objects"), TEXT("bool"), TEXT("Load external objects associated with assets such as maps. Default true."), TEXT("true"))
+			.Optional(TEXT("capture_logs"), TEXT("bool"), TEXT("Capture validation warnings/errors from load and validation operations. Default true."), TEXT("true"))
+			.Optional(TEXT("warnings_as_errors"), TEXT("bool"), TEXT("Treat captured validation warnings as errors. Default false."), TEXT("false"))
+			.Optional(TEXT("skip_excluded_directories"), TEXT("bool"), TEXT("Honor DataValidation excluded directories. Default true."), TEXT("true"))
+			.Optional(TEXT("max_assets_to_validate"), TEXT("integer"), TEXT("Maximum assets to validate. Default unlimited."))
+			.Optional(TEXT("silent"), TEXT("bool"), TEXT("Suppress progress UI/message log visibility. Default true."), TEXT("true"))
+			.Build(),
+		FString(),
+		ExplicitReadOnly);
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("plan_content_validation_changeset"),
+		{ TEXT("data validation"), TEXT("p4 opened"), TEXT("changelist"), TEXT("package path"), TEXT("pre submit") },
+		{ TEXT("plan_validation_changeset"), TEXT("validation_plan"), TEXT("opened_assets_to_validate") },
+		{ TEXT("plan validation targets for changelist 1006"), TEXT("map opened p4 files to packages for validation") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("editor"), TEXT("validate_changeset_assets"),
+		{ TEXT("data validation"), TEXT("p4 opened"), TEXT("changelist"), TEXT("validate packages"), TEXT("pre submit") },
+		{ TEXT("validate_changelist"), TEXT("validate_opened_assets"), TEXT("pre_submit_validation") },
+		{ TEXT("validate assets opened in changelist 1006"), TEXT("run data validation for these depot paths") });
 
 	// --- Capture actions ---
 
@@ -8762,6 +8853,46 @@ namespace MonolithEditorNavHarness
 		return true;
 	}
 
+	static bool TryApplyJsonValueToProperty(FProperty* Prop, void* ValuePtr, const TSharedPtr<FJsonValue>& Value, UObject* Owner, FString& OutWhyUnsupported)
+	{
+		if (!Prop || !Value.IsValid())
+		{
+			OutWhyUnsupported = TEXT("property and value are required");
+			return false;
+		}
+
+		if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Prop))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* JsonArray = nullptr;
+			if (!Value->TryGetArray(JsonArray) || !JsonArray)
+			{
+				OutWhyUnsupported = TEXT("expected JSON array");
+				return false;
+			}
+
+			FScriptArrayHelper Helper(ArrayProp, ValuePtr);
+			Helper.EmptyValues(JsonArray->Num());
+			if (JsonArray->Num() > 0)
+			{
+				Helper.AddUninitializedValues(JsonArray->Num());
+			}
+
+			for (int32 Index = 0; Index < JsonArray->Num(); ++Index)
+			{
+				uint8* ElemPtr = Helper.GetRawPtr(Index);
+				ArrayProp->Inner->InitializeValue(ElemPtr);
+				if (!TryApplyLeaf(ArrayProp->Inner, ElemPtr, (*JsonArray)[Index], Owner, OutWhyUnsupported))
+				{
+					OutWhyUnsupported = FString::Printf(TEXT("array element %d: %s"), Index, *OutWhyUnsupported);
+					return false;
+				}
+			}
+			return true;
+		}
+
+		return TryApplyLeaf(Prop, ValuePtr, Value, Owner, OutWhyUnsupported);
+	}
+
 	// Apply a JSON "properties" object onto a spawned actor reflectively. Supports
 	// float/double, int, bool, string/name, FSoftObjectPath (string value), object /
 	// soft-object refs (asset path string), CLASS / SOFTCLASS refs (class path, `_C`
@@ -9518,5 +9649,403 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 	{
 		Result->SetArrayField(TEXT("actor_instances"), ActorReports);
 	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleSetWorldSettingsProperty(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MonolithEditorNavHarness;
+
+	if (!GEditor)
+	{
+		return FMonolithActionResult::Error(TEXT("set_world_settings_property requires editor context (GEditor)."));
+	}
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_world_settings_property requires a params object."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString PropertyName;
+	if (!Params->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'property_name'."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const TSharedPtr<FJsonValue> Value = Params->TryGetField(TEXT("value"));
+	if (!Value.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'value'."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bDryRun = false;
+	bool bSave = false;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	Params->TryGetBoolField(TEXT("save"), bSave);
+
+	FString MapPath;
+	const bool bHasPath = Params->TryGetStringField(TEXT("path"), MapPath) && !MapPath.IsEmpty();
+	if (bHasPath)
+	{
+		ULevelEditorSubsystem* LevelEd = GEditor->GetEditorSubsystem<ULevelEditorSubsystem>();
+		if (!LevelEd || !LevelEd->LoadLevel(MapPath))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Failed to load '%s' as the editor world."), *MapPath));
+		}
+	}
+
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	AWorldSettings* WorldSettings = World ? World->GetWorldSettings() : nullptr;
+	if (!WorldSettings)
+	{
+		return FMonolithActionResult::Error(TEXT("No editor world settings object is available."));
+	}
+
+	FProperty* Property = WorldSettings->GetClass()->FindPropertyByName(FName(*PropertyName));
+	if (!Property)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("WorldSettings class '%s' has no reflected property named '%s'."),
+				*WorldSettings->GetClass()->GetPathName(),
+				*PropertyName),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (Property->HasAnyPropertyFlags(CPF_Transient))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Property '%s' is transient and cannot be authored onto the map package."), *PropertyName),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	void* ValuePtr = Property->ContainerPtrToValuePtr<void>(WorldSettings);
+	FString BeforeExport;
+	Property->ExportTextItem_Direct(BeforeExport, ValuePtr, nullptr, WorldSettings, PPF_None);
+
+	void* ScratchPtr = FMemory::Malloc(Property->GetSize(), Property->GetMinAlignment());
+	Property->InitializeValue(ScratchPtr);
+	ON_SCOPE_EXIT
+	{
+		Property->DestroyValue(ScratchPtr);
+		FMemory::Free(ScratchPtr);
+	};
+	Property->CopyCompleteValue(ScratchPtr, ValuePtr);
+
+	FString WhyUnsupported;
+	if (!TryApplyJsonValueToProperty(Property, ScratchPtr, Value, WorldSettings, WhyUnsupported))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Could not apply value to '%s': %s"), *PropertyName, *WhyUnsupported),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString AfterExport;
+	Property->ExportTextItem_Direct(AfterExport, ScratchPtr, nullptr, WorldSettings, PPF_None);
+	const bool bChanged = !BeforeExport.Equals(AfterExport, ESearchCase::CaseSensitive);
+
+	bool bSaved = false;
+	if (bChanged && !bDryRun)
+	{
+		WorldSettings->Modify();
+		WhyUnsupported.Reset();
+		if (!TryApplyJsonValueToProperty(Property, ValuePtr, Value, WorldSettings, WhyUnsupported))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Could not apply value to '%s': %s"), *PropertyName, *WhyUnsupported),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		FPropertyChangedEvent ChangedEvent(Property, EPropertyChangeType::ValueSet);
+		WorldSettings->PostEditChangeProperty(ChangedEvent);
+		WorldSettings->MarkPackageDirty();
+		if (World)
+		{
+			World->MarkPackageDirty();
+		}
+
+		if (bSave)
+		{
+			const FString SavePath = World->GetOutermost()->GetName();
+			TSharedPtr<FJsonObject> SaveParams = MakeShared<FJsonObject>();
+			TArray<TSharedPtr<FJsonValue>> PkgArr;
+			PkgArr.Add(MakeShared<FJsonValueString>(SavePath));
+			SaveParams->SetArrayField(TEXT("packages"), PkgArr);
+			const FMonolithActionResult SaveRes =
+				FMonolithToolRegistry::Get().ExecuteAction(TEXT("editor"), TEXT("save_packages"), SaveParams);
+			bSaved = SaveRes.bSuccess;
+			if (!SaveRes.bSuccess)
+			{
+				return FMonolithActionResult::Error(SaveRes.ErrorMessage, -32603);
+			}
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), true);
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetStringField(TEXT("map"), World->GetOutermost()->GetName());
+	Result->SetStringField(TEXT("world_settings_class"), WorldSettings->GetClass()->GetPathName());
+	Result->SetStringField(TEXT("property_name"), PropertyName);
+	Result->SetStringField(TEXT("property_type"), Property->GetClass()->GetName());
+	Result->SetStringField(TEXT("before"), BeforeExport);
+	Result->SetStringField(TEXT("after"), AfterExport);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!GEditor)
+	{
+		return FMonolithActionResult::Error(TEXT("validate_assets requires editor context (GEditor)."));
+	}
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("validate_assets requires a params object."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	auto ResultToString = [](EDataValidationResult Result)
+	{
+		switch (Result)
+		{
+		case EDataValidationResult::Invalid: return FString(TEXT("invalid"));
+		case EDataValidationResult::Valid: return FString(TEXT("valid"));
+		case EDataValidationResult::NotValidated: return FString(TEXT("not_validated"));
+		default: return FString(TEXT("unknown"));
+		}
+	};
+
+	auto ParseUsecase = [](FString Usecase)
+	{
+		Usecase.TrimStartAndEndInline();
+		Usecase.ToLowerInline();
+		if (Usecase == TEXT("manual")) { return EDataValidationUsecase::Manual; }
+		if (Usecase == TEXT("save")) { return EDataValidationUsecase::Save; }
+		if (Usecase == TEXT("pre_submit") || Usecase == TEXT("presubmit")) { return EDataValidationUsecase::PreSubmit; }
+		if (Usecase == TEXT("script")) { return EDataValidationUsecase::Script; }
+		if (Usecase == TEXT("none")) { return EDataValidationUsecase::None; }
+		return EDataValidationUsecase::Commandlet;
+	};
+
+	auto AddStringArray = [](const TSharedPtr<FJsonObject>& Source, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError) -> bool
+	{
+		if (!Source->HasField(FieldName))
+		{
+			return true;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Source->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must be an array of strings."), FieldName);
+			return false;
+		}
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString StringValue;
+			if (!Value.IsValid() || !Value->TryGetString(StringValue))
+			{
+				OutError = FString::Printf(TEXT("Param '%s' must be an array of strings."), FieldName);
+				return false;
+			}
+			StringValue.TrimStartAndEndInline();
+			if (!StringValue.IsEmpty())
+			{
+				OutValues.AddUnique(StringValue);
+			}
+		}
+		return true;
+	};
+
+	bool bValidateProjectSettings = false;
+	Params->TryGetBoolField(TEXT("validate_project_settings"), bValidateProjectSettings);
+
+	FString Error;
+	TArray<FString> RequestedPaths;
+	if (!AddStringArray(Params, TEXT("asset_paths"), RequestedPaths, Error)
+		|| !AddStringArray(Params, TEXT("packages"), RequestedPaths, Error))
+	{
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	TArray<FAssetData> AssetsToValidate;
+	TSet<FString> SeenObjectPaths;
+	auto AddAssetData = [&AssetsToValidate, &SeenObjectPaths](const FAssetData& AssetData)
+	{
+		if (!AssetData.IsValid())
+		{
+			return;
+		}
+		const FString ObjectPath = AssetData.GetObjectPathString();
+		if (!SeenObjectPaths.Contains(ObjectPath))
+		{
+			SeenObjectPaths.Add(ObjectPath);
+			AssetsToValidate.Add(AssetData);
+		}
+	};
+
+	for (const FString& RequestedPath : RequestedPaths)
+	{
+		FString PackageName = RequestedPath.Contains(TEXT("."))
+			? FPackageName::ObjectPathToPackageName(RequestedPath)
+			: RequestedPath;
+		PackageName.TrimStartAndEndInline();
+		if (PackageName.IsEmpty())
+		{
+			continue;
+		}
+
+		TArray<FAssetData> PackageAssets;
+		AssetRegistry.GetAssetsByPackageName(FName(*PackageName), PackageAssets, true);
+		for (const FAssetData& AssetData : PackageAssets)
+		{
+			AddAssetData(AssetData);
+		}
+	}
+
+	FString PrefixPath;
+	if (Params->TryGetStringField(TEXT("path"), PrefixPath) && !PrefixPath.IsEmpty())
+	{
+		FARFilter Filter;
+		Filter.PackagePaths.Add(FName(*PrefixPath));
+		Filter.bRecursivePaths = true;
+		TArray<FAssetData> PrefixAssets;
+		AssetRegistry.GetAssets(Filter, PrefixAssets);
+		for (const FAssetData& AssetData : PrefixAssets)
+		{
+			AddAssetData(AssetData);
+		}
+	}
+
+	if (AssetsToValidate.Num() == 0 && !bValidateProjectSettings)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("No assets resolved for validation. Provide asset_paths, packages, path, or validate_project_settings=true."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FValidateAssetsSettings Settings;
+	Settings.ValidationUsecase = EDataValidationUsecase::Commandlet;
+	Settings.bCollectPerAssetDetails = true;
+	Settings.bLoadAssetsForValidation = true;
+	Settings.bUnloadAssetsLoadedForValidation = false;
+	Settings.bLoadExternalObjectsForValidation = true;
+	Settings.bCaptureAssetLoadLogs = true;
+	Settings.bCaptureLogsDuringValidation = true;
+	Settings.bCaptureWarningsDuringValidationAsErrors = false;
+	Settings.bSkipExcludedDirectories = true;
+	Settings.bSilent = true;
+	Settings.ShowMessageLogSeverity.Reset();
+
+	FString UsecaseString = TEXT("commandlet");
+	Params->TryGetStringField(TEXT("validation_usecase"), UsecaseString);
+	Settings.ValidationUsecase = ParseUsecase(UsecaseString);
+	Params->TryGetBoolField(TEXT("collect_per_asset_details"), Settings.bCollectPerAssetDetails);
+	Params->TryGetBoolField(TEXT("load_assets"), Settings.bLoadAssetsForValidation);
+	Params->TryGetBoolField(TEXT("load_external_objects"), Settings.bLoadExternalObjectsForValidation);
+	bool bCaptureLogs = Settings.bCaptureLogsDuringValidation;
+	if (Params->TryGetBoolField(TEXT("capture_logs"), bCaptureLogs))
+	{
+		Settings.bCaptureAssetLoadLogs = bCaptureLogs;
+		Settings.bCaptureLogsDuringValidation = bCaptureLogs;
+	}
+	Params->TryGetBoolField(TEXT("warnings_as_errors"), Settings.bCaptureWarningsDuringValidationAsErrors);
+	Params->TryGetBoolField(TEXT("skip_excluded_directories"), Settings.bSkipExcludedDirectories);
+	Params->TryGetBoolField(TEXT("silent"), Settings.bSilent);
+	double MaxAssetsValue = 0.0;
+	if (Params->TryGetNumberField(TEXT("max_assets_to_validate"), MaxAssetsValue))
+	{
+		Settings.MaxAssetsToValidate = FMath::Max(0, static_cast<int32>(MaxAssetsValue));
+	}
+
+	UEditorValidatorSubsystem* ValidatorSubsystem = GEditor->GetEditorSubsystem<UEditorValidatorSubsystem>();
+	if (!ValidatorSubsystem)
+	{
+		return FMonolithActionResult::Error(TEXT("UEditorValidatorSubsystem is unavailable."), -32603);
+	}
+
+	FValidateAssetsResults ValidationResults;
+	const int32 InvalidOrWarningCount = AssetsToValidate.Num() > 0
+		? ValidatorSubsystem->ValidateAssetsWithSettings(AssetsToValidate, Settings, ValidationResults)
+		: 0;
+
+	TArray<TSharedPtr<FJsonValue>> AssetRows;
+	for (const FAssetData& AssetData : AssetsToValidate)
+	{
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), AssetData.GetObjectPathString());
+		Row->SetStringField(TEXT("package_name"), AssetData.PackageName.ToString());
+		Row->SetStringField(TEXT("asset_name"), AssetData.AssetName.ToString());
+		Row->SetStringField(TEXT("asset_class_path"), AssetData.AssetClassPath.ToString());
+		AssetRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> DetailRows;
+	for (const TPair<FString, FValidateAssetsDetails>& Pair : ValidationResults.AssetsDetails)
+	{
+		const FValidateAssetsDetails& Details = Pair.Value;
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("object_path"), Pair.Key);
+		Row->SetStringField(TEXT("package_name"), Details.PackageName.ToString());
+		Row->SetStringField(TEXT("asset_name"), Details.AssetName.ToString());
+		Row->SetStringField(TEXT("result"), ResultToString(Details.Result));
+
+		TArray<TSharedPtr<FJsonValue>> Errors;
+		for (const FText& Text : Details.ValidationErrors)
+		{
+			Errors.Add(MakeShared<FJsonValueString>(Text.ToString()));
+		}
+		Row->SetArrayField(TEXT("errors"), Errors);
+
+		TArray<TSharedPtr<FJsonValue>> Warnings;
+		for (const FText& Text : Details.ValidationWarnings)
+		{
+			Warnings.Add(MakeShared<FJsonValueString>(Text.ToString()));
+		}
+		Row->SetArrayField(TEXT("warnings"), Warnings);
+
+		TArray<TSharedPtr<FJsonValue>> Messages;
+		for (const TSharedRef<FTokenizedMessage>& Message : Details.ValidationMessages)
+		{
+			Messages.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
+		}
+		Row->SetArrayField(TEXT("messages"), Messages);
+		DetailRows.Add(MakeShared<FJsonValueObject>(Row));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ValidatorMessages;
+	for (const TSharedRef<FTokenizedMessage>& Message : ValidationResults.ValidatorMessages)
+	{
+		ValidatorMessages.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
+	}
+
+	TSharedPtr<FJsonObject> ProjectSettings = MakeShared<FJsonObject>();
+	ProjectSettings->SetBoolField(TEXT("requested"), bValidateProjectSettings);
+	ProjectSettings->SetBoolField(TEXT("supported"), false);
+	if (bValidateProjectSettings)
+	{
+		ProjectSettings->SetStringField(TEXT("reason"),
+			TEXT("Unreal Engine 5.8 exposes UEditorValidatorSubsystem::ValidateAssetsWithSettings, but no generic ValidateProjectSettings API. Project-specific settings checks must be exposed through a project adapter."));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetBoolField(TEXT("ok"), InvalidOrWarningCount == 0 && (!bValidateProjectSettings || false));
+	Result->SetNumberField(TEXT("invalid_or_warning_count"), InvalidOrWarningCount);
+	Result->SetNumberField(TEXT("asset_count"), AssetsToValidate.Num());
+	Result->SetArrayField(TEXT("assets"), AssetRows);
+	Result->SetNumberField(TEXT("num_requested"), ValidationResults.NumRequested);
+	Result->SetNumberField(TEXT("num_external_objects"), ValidationResults.NumExternalObjects);
+	Result->SetNumberField(TEXT("num_checked"), ValidationResults.NumChecked);
+	Result->SetNumberField(TEXT("num_valid"), ValidationResults.NumValid);
+	Result->SetNumberField(TEXT("num_invalid"), ValidationResults.NumInvalid);
+	Result->SetNumberField(TEXT("num_skipped"), ValidationResults.NumSkipped);
+	Result->SetNumberField(TEXT("num_warnings"), ValidationResults.NumWarnings);
+	Result->SetNumberField(TEXT("num_unable_to_validate"), ValidationResults.NumUnableToValidate);
+	Result->SetBoolField(TEXT("asset_limit_reached"), ValidationResults.bAssetLimitReached);
+	Result->SetArrayField(TEXT("details"), DetailRows);
+	Result->SetArrayField(TEXT("validator_messages"), ValidatorMessages);
+	Result->SetObjectField(TEXT("project_settings"), ProjectSettings);
 	return FMonolithActionResult::Success(Result);
 }

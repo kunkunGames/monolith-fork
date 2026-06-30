@@ -1,6 +1,6 @@
 ﻿# Monolith — TODO
 
-Last updated: 2026-06-16 (Monolith CRG residual ROI follow-up verified: scoped project asset/source CRG refresh, project-source slice pruning, orphan source integrity, and CLI health parity)
+Last updated: 2026-06-30 (GameFeatures instanced action management and MonolithUI CommonFramework authoring added)
 
 ---
 
@@ -129,10 +129,11 @@ Plan spec: [specs/SPEC_MonolithRoutingCohesionRefactor.md](specs/SPEC_MonolithRo
 
 ---
 
-### MonolithGameFeatures — Read-Only Inspection COMPLETE (2026-05-19)
+### MonolithGameFeatures — Inspection + Instanced Action Authoring COMPLETE (2026-05-19, updated 2026-06-30)
 
 - [x] `MonolithGameFeatures` owns the `gamefeatures` namespace instead of mounting Game Feature inspection from `MonolithIndex` or `MonolithMesh`.
-- [x] `gamefeatures.get_status` is always registered; `list_plugins`, `find_game_feature_data`, `describe_game_feature_data`, and `validate_plugin` register only when `bEnableGameFeatureActions=true`.
+- [x] `gamefeatures.get_status`, `add_action_set_input_mapping`, `set_primary_asset_scan`, `add_game_feature_data_input_mapping`, `add_game_feature_data_widgets`, `add_game_feature_data_components`, `add_game_feature_data_gameplay_cue_paths`, `add_game_feature_data_abilities`, and `remove_game_feature_data_action` are always registered; `list_plugins`, `find_game_feature_data`, `describe_game_feature_data`, `list_action_classes`, `describe_action_set`, and `validate_plugin` register only when `bEnableGameFeatureActions=true`.
+- [x] `describe_game_feature_data`, `list_action_classes`, and `describe_action_set` provide bounded reflected `UGameFeatureAction` property summaries so callers can discover Lyra/CommonGame feature-action shapes before using writer actions.
 - [x] Creation remains reserved behind `bAllowGameFeaturePluginCreation`; no create, activate, deactivate, overwrite, delete, or descriptor mutation action is registered.
 
 ---
@@ -177,6 +178,7 @@ Plan spec: [specs/SPEC_MonolithRoutingCohesionRefactor.md](specs/SPEC_MonolithRo
 ### MonolithUI M0.5 — CommonUI Action Pack, 50 Actions COMPLETE (2026-04-19, v0.14.0)
 
 - [x] Phase 1 — Foundation: Build.cs 3-location CommonUI detection, `#if WITH_COMMONUI` scaffolding, `FMonolithActionInfo.Category` + backwards-compatible `RegisterAction`, `discover()` category filter, shared Pattern 1/2/3 helpers (asset create, widget-tree load/mutate/compile, runtime UFunction invoke, property-from-JSON), 9 category stubs, module wiring, dynamic action-count log (dv.245–251)
+- [x] **CommonFramework diagnostics/authoring (DONE 2026-06-30)** — Added always-on `ui.get_common_framework_status`, `ui.add_primary_game_layout_layer`, and `ui.describe_common_widget_blueprint` for Lyra Common plugin/module/class/struct reflection, `PrimaryGameLayout` parentage, `PrimaryGameLayout` CommonActivatable layer container authoring, `UIExtensionPointWidget` tags, and CommonActivatableWidgetContainerBase layer candidates without hard-linking optional Lyra Common plugins or modifying CommonGame runtime code. `get_common_framework_status` covers CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles. Evidence: `Docs/testing/2026-06-30-monolith-common-framework-ui.md`.
 - [x] Phase 2 Category A — Activatable Lifecycle (8 actions): create_activatable_widget, create_activatable_stack, create_activatable_switcher, configure_activatable, push/pop/get_state [RUNTIME], set_activatable_transition (dv.253)
 - [x] Phase 2 Category B — Buttons + Styling (9 actions): convert_button_to_common, configure_common_button, create_common_button/text/border_style, apply_style_to_widget, batch_retheme, configure_common_text/border (dv.256)
 - [x] Phase 2 Category C — Input/Actions/Glyphs (7 actions): create_input_action_data_table, add_input_action_row, bind_common_action_widget, create_bound_action_bar, get/set_input_type [RUNTIME], list_platform_input_tables (dv.257)

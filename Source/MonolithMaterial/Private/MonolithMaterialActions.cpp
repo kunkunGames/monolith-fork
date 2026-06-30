@@ -18,6 +18,7 @@
 #include "Materials/MaterialExpressionMaterialAttributeLayers.h"
 #include "Materials/MaterialExpressionMaterialFunctionCall.h"
 #include "Materials/MaterialFunction.h"
+#include "Materials/MaterialFunctionInterface.h"
 #include "Materials/MaterialFunctionMaterialLayer.h"
 #include "Materials/MaterialFunctionMaterialLayerBlend.h"
 #include "Materials/MaterialFunctionInstance.h"
@@ -32,6 +33,7 @@
 #include "EditorAssetLibrary.h"
 #include "MaterialEditingLibrary.h"
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "Editor.h"
 #include "MonolithJsonUtils.h"
 #include "Dom/JsonObject.h"
@@ -44,6 +46,7 @@
 #include "Misc/Base64.h"
 #include "MonolithJsonUtils.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 #include "Modules/ModuleManager.h"
@@ -464,6 +467,38 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("new_parent"), TEXT("string"), TEXT("Path to new parent material or material instance"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("material"), TEXT("repair_copied_material_instance_parameters"),
+		TEXT("Repair copied material-instance object references by remapping parent and texture parameter paths after package duplication"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::RepairCopiedMaterialInstanceParameters),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Material instance asset path"))
+			.OptionalAssetPath(TEXT("source_root"), TEXT("Old package or asset root prefix, e.g. /Game/UI/OldTheme"))
+			.OptionalAssetPath(TEXT("dest_root"), TEXT("New package or asset root prefix, e.g. /Game/UI/NewTheme"))
+			.Optional(TEXT("root_remaps"), TEXT("object"), TEXT("Root remaps: {old_root: new_root}. Longest matching source root wins"))
+			.Optional(TEXT("path_remaps"), TEXT("object"), TEXT("Exact path remaps: {old_asset_or_object_path: new_asset_or_object_path}"))
+			.Optional(TEXT("repair_parent"), TEXT("bool"), TEXT("Repair MIC parent reference"), TEXT("true"))
+			.Optional(TEXT("repair_texture_parameters"), TEXT("bool"), TEXT("Repair texture parameter object references"), TEXT("true"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Plan changes without mutating assets"), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required true when dry_run=false"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save asset after a successful repair"), TEXT("false"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("material"), TEXT("refresh_copied_material_graphs"),
+		TEXT("Refresh copied material and material-function graph assets after package copy/reference remap by calling PostEditChange on destination graph assets"),
+		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::RefreshCopiedMaterialGraphs),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.OptionalAssetPath(TEXT("asset_path"), TEXT("Single copied destination material/material-instance/material-function asset path"))
+			.Optional(TEXT("asset_paths"), TEXT("array"), TEXT("Copied destination material/material-instance/material-function asset paths"))
+			.Optional(TEXT("package_paths"), TEXT("array"), TEXT("Copied destination package paths to inspect for material graph assets"))
+			.Optional(TEXT("package_map"), TEXT("object|array"), TEXT("Rows from asset.plan/copy package_map, or {source_package: destination_package}; destination_package is refreshed when it resolves to a material graph asset"))
+			.Optional(TEXT("preserved_destination_packages"), TEXT("array"), TEXT("Destination packages to skip because another copy strategy already preserved them"))
+			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Plan refreshes without mutating assets"), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required true when dry_run=false"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("bool"), TEXT("Save refreshed assets after PostEditChange"), TEXT("false"))
+			.Optional(TEXT("strict"), TEXT("bool"), TEXT("Treat load failures as errors instead of skipped rows"), TEXT("true"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("material"), TEXT("clear_instance_parameter"),
 		TEXT("Remove a single parameter override (or all overrides) from a material instance"),
 		FMonolithActionHandler::CreateStatic(&FMonolithMaterialActions::ClearInstanceParameter),
@@ -783,6 +818,21 @@ void FMonolithMaterialActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("override"), TEXT("tweak scalar"), TEXT("set color vector"), TEXT("swap texture"), TEXT("static switch"), TEXT("tint") },
 		{ TEXT("set_param"), TEXT("override_parameter"), TEXT("set_scalar_parameter"), TEXT("set_vector_parameter") },
 		{ TEXT("set a scalar override on a material instance"), TEXT("change the tint color parameter of this material instance") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("repair_copied_material_instance_parameters"),
+		{ TEXT("copy repair"), TEXT("remap material instance references"), TEXT("fix MIC parent"), TEXT("remap texture parameters"), TEXT("post-copy material repair") },
+		{ TEXT("repair_mic_copy"), TEXT("remap_material_instance"), TEXT("repair_material_instance_copy") },
+		{ TEXT("dry-run repair of copied material instance references"), TEXT("remap a copied MIC from /Game/Old to /Game/New") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("refresh_copied_material_graphs"),
+		{ TEXT("copy repair"), TEXT("refresh material graph"), TEXT("post-copy material refresh"), TEXT("PostEditChange"), TEXT("material function refresh") },
+		{ TEXT("refresh_copied_materials"), TEXT("repair_material_graph_copy"), TEXT("refresh_material_graph_copy") },
+		{ TEXT("refresh copied material graph assets from an asset.copy_package_graph_with_remap package_map"), TEXT("dry-run material graph refresh after reference fixup") });
+	FMonolithToolRegistry::Get().SetActionPlanningMetadata(TEXT("material"), TEXT("refresh_copied_material_graphs"),
+		TEXT("unreal-materials"),
+		{ TEXT("Provide asset_path, asset_paths, package_paths, or an asset package_map containing destination_package rows") },
+		{ TEXT("Refresh report with planned/refreshed/skipped/error rows and dirty/save counts") },
+		{ TEXT("material.validate_material"), TEXT("asset.validate_dependency_closure") });
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("material"), TEXT("recompile_material"),
 		{ TEXT("rebuild shader"), TEXT("force compile"), TEXT("refresh material"), TEXT("recook shaders"), TEXT("instruction count") },
@@ -5015,6 +5065,441 @@ FMonolithActionResult FMonolithMaterialActions::GetMaterialProperties(const TSha
 	return FMonolithActionResult::Success(ResultJson);
 }
 
+namespace
+{
+	struct FMaterialCopyRepairRule
+	{
+		FString From;
+		FString To;
+	};
+
+	struct FMaterialCopyRepairChange
+	{
+		FString Kind;
+		FString Name;
+		FString FromPath;
+		FString ToPath;
+		FMaterialParameterInfo ParameterInfo;
+		UObject* Target = nullptr;
+		FString Error;
+
+		bool IsValid() const
+		{
+			return Target != nullptr && Error.IsEmpty();
+		}
+	};
+
+	static FString NormalizeCopyRepairPath(FString Path)
+	{
+		Path.TrimStartAndEndInline();
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		while (Path.Len() > 1 && Path.EndsWith(TEXT("/")))
+		{
+			Path.LeftChopInline(1);
+		}
+		return Path;
+	}
+
+	static bool IsValidCopyRepairRoot(const FString& Path)
+	{
+		return Path.StartsWith(TEXT("/")) && Path.Len() > 1 && !Path.Contains(TEXT("//"));
+	}
+
+	static FString GetPackagePathPart(const FString& ObjectOrPackagePath)
+	{
+		int32 DotIndex = INDEX_NONE;
+		if (ObjectOrPackagePath.FindChar(TEXT('.'), DotIndex) && DotIndex > 0)
+		{
+			return ObjectOrPackagePath.Left(DotIndex);
+		}
+		return ObjectOrPackagePath;
+	}
+
+	static bool PathMatchesPrefixBoundary(const FString& Path, const FString& Prefix)
+	{
+		if (Prefix.IsEmpty())
+		{
+			return false;
+		}
+		if (Path.Equals(Prefix, ESearchCase::CaseSensitive))
+		{
+			return true;
+		}
+		if (Path.Len() <= Prefix.Len())
+		{
+			return false;
+		}
+		if (!Path.StartsWith(Prefix, ESearchCase::CaseSensitive))
+		{
+			return false;
+		}
+		const TCHAR Boundary = Path[Prefix.Len()];
+		return Boundary == TCHAR('/') || Boundary == TCHAR('.');
+	}
+
+	static bool TryRemapCopiedMaterialPath(
+		const FString& InPath,
+		const TArray<FMaterialCopyRepairRule>& Rules,
+		FString& OutPath,
+		FString& OutMatchedFrom)
+	{
+		OutPath.Reset();
+		OutMatchedFrom.Reset();
+		const FString NormalizedPath = NormalizeCopyRepairPath(InPath);
+		const FString PackagePath = GetPackagePathPart(NormalizedPath);
+
+		for (const FMaterialCopyRepairRule& Rule : Rules)
+		{
+			if (Rule.From.IsEmpty() || Rule.To.IsEmpty())
+			{
+				continue;
+			}
+
+			if (NormalizedPath.Equals(Rule.From, ESearchCase::CaseSensitive))
+			{
+				OutPath = Rule.To;
+				OutMatchedFrom = Rule.From;
+				return true;
+			}
+
+			if (PackagePath.Equals(Rule.From, ESearchCase::CaseSensitive))
+			{
+				const FString ObjectSuffix = NormalizedPath.Mid(PackagePath.Len());
+				OutPath = Rule.To.Contains(TEXT(".")) ? Rule.To : Rule.To + ObjectSuffix;
+				OutMatchedFrom = Rule.From;
+				return true;
+			}
+
+			if (PathMatchesPrefixBoundary(NormalizedPath, Rule.From))
+			{
+				OutPath = Rule.To + NormalizedPath.Mid(Rule.From.Len());
+				OutMatchedFrom = Rule.From;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	static TSharedPtr<FJsonObject> MakeMaterialCopyRepairChangeJson(
+		const FMaterialCopyRepairChange& Change,
+		const FString& Status)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("kind"), Change.Kind);
+		if (!Change.Name.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("name"), Change.Name);
+		}
+		Obj->SetStringField(TEXT("from"), Change.FromPath);
+		Obj->SetStringField(TEXT("to"), Change.ToPath);
+		Obj->SetStringField(TEXT("status"), Status);
+		if (!Change.Error.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("error"), Change.Error);
+		}
+		return Obj;
+	}
+
+	static void AddStringArrayField(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Arr;
+		Arr.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			Arr.Add(MakeShared<FJsonValueString>(Value));
+		}
+		Obj->SetArrayField(FieldName, Arr);
+	}
+
+	struct FMaterialGraphRefreshTarget
+	{
+		FString InputPath;
+		FString SourcePackage;
+		FString DestinationPackage;
+		FString ObjectPath;
+		FString ClassName;
+		FString Status;
+		FString Error;
+		UObject* Object = nullptr;
+		bool bRefreshable = false;
+	};
+
+	static FString NormalizeMaterialGraphRefreshPath(const FString& Path)
+	{
+		return NormalizeCopyRepairPath(FMonolithAssetUtils::ResolveAssetPath(Path));
+	}
+
+	static FString NormalizeMaterialGraphRefreshPackagePath(const FString& Path)
+	{
+		return GetPackagePathPart(NormalizeMaterialGraphRefreshPath(Path));
+	}
+
+	static bool AddMaterialGraphRefreshTarget(
+		const FString& RawPath,
+		const FString& SourcePackage,
+		TArray<FMaterialGraphRefreshTarget>& OutTargets,
+		TSet<FString>& SeenDestinationPackages,
+		int32& OutDuplicateCount,
+		FString& OutError)
+	{
+		const FString NormalizedPath = NormalizeMaterialGraphRefreshPath(RawPath);
+		const FString DestinationPackage = GetPackagePathPart(NormalizedPath);
+		if (DestinationPackage.IsEmpty())
+		{
+			OutError = TEXT("Material graph refresh target paths must be non-empty strings.");
+			return false;
+		}
+		if (!FPackageName::IsValidLongPackageName(DestinationPackage, false))
+		{
+			OutError = FString::Printf(TEXT("Material graph refresh target '%s' does not resolve to a valid long package name."), *RawPath);
+			return false;
+		}
+		if (SeenDestinationPackages.Contains(DestinationPackage))
+		{
+			++OutDuplicateCount;
+			return true;
+		}
+
+		FMaterialGraphRefreshTarget Target;
+		Target.InputPath = NormalizedPath;
+		Target.SourcePackage = NormalizeMaterialGraphRefreshPackagePath(SourcePackage);
+		Target.DestinationPackage = DestinationPackage;
+		OutTargets.Add(Target);
+		SeenDestinationPackages.Add(DestinationPackage);
+		return true;
+	}
+
+	static bool AddMaterialGraphRefreshTargetArray(
+		const TArray<FString>& Paths,
+		TArray<FMaterialGraphRefreshTarget>& OutTargets,
+		TSet<FString>& SeenDestinationPackages,
+		int32& OutDuplicateCount,
+		FString& OutError)
+	{
+		for (const FString& Path : Paths)
+		{
+			if (!AddMaterialGraphRefreshTarget(Path, FString(), OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool ParseMaterialGraphRefreshTargets(
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<FMaterialGraphRefreshTarget>& OutTargets,
+		TSet<FString>& OutPreservedDestinationPackages,
+		int32& OutDuplicateCount,
+		FString& OutError)
+	{
+		OutTargets.Reset();
+		OutPreservedDestinationPackages.Reset();
+		OutDuplicateCount = 0;
+		TSet<FString> SeenDestinationPackages;
+
+		FString SingleAssetPath;
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("asset_path"), SingleAssetPath, OutError))
+		{
+			return false;
+		}
+		if (!SingleAssetPath.IsEmpty() &&
+			!AddMaterialGraphRefreshTarget(SingleAssetPath, FString(), OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+		{
+			return false;
+		}
+
+		TArray<FString> AssetPaths;
+		if (!MonolithParamUtils::GetOptionalStringArrayParam(Params, TEXT("asset_paths"), AssetPaths, OutError))
+		{
+			return false;
+		}
+		if (!AddMaterialGraphRefreshTargetArray(AssetPaths, OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+		{
+			return false;
+		}
+
+		TArray<FString> PackagePaths;
+		if (!MonolithParamUtils::GetOptionalStringArrayParam(Params, TEXT("package_paths"), PackagePaths, OutError))
+		{
+			return false;
+		}
+		if (!AddMaterialGraphRefreshTargetArray(PackagePaths, OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonValue> PackageMapValue = Params.IsValid() ? Params->TryGetField(TEXT("package_map")) : nullptr;
+		if (PackageMapValue.IsValid())
+		{
+			if (PackageMapValue->Type == EJson::Object)
+			{
+				const TSharedPtr<FJsonObject>* PackageMapObject = nullptr;
+				if (!PackageMapValue->TryGetObject(PackageMapObject) || !PackageMapObject || !PackageMapObject->IsValid())
+				{
+					OutError = TEXT("Parameter 'package_map' object is invalid.");
+					return false;
+				}
+
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : FMonolithJsonUtils::GetFields(*PackageMapObject))
+				{
+					FString DestinationPackage;
+					if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(DestinationPackage) || DestinationPackage.IsEmpty())
+					{
+						OutError = FString::Printf(TEXT("Parameter 'package_map.%s' must be a destination package string."), *Pair.Key);
+						return false;
+					}
+					if (!AddMaterialGraphRefreshTarget(DestinationPackage, Pair.Key, OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+					{
+						return false;
+					}
+				}
+			}
+			else
+			{
+				const TArray<TSharedPtr<FJsonValue>>* PackageMapRows = nullptr;
+				if (PackageMapValue->Type != EJson::Array || !PackageMapValue->TryGetArray(PackageMapRows) || !PackageMapRows)
+				{
+					OutError = TEXT("Parameter 'package_map' must be either an array of package-map objects or an object mapping source packages to destination packages.");
+					return false;
+				}
+
+				for (int32 Index = 0; Index < PackageMapRows->Num(); ++Index)
+				{
+					const TSharedPtr<FJsonObject>* RowObject = nullptr;
+					if (!(*PackageMapRows)[Index].IsValid() || !(*PackageMapRows)[Index]->TryGetObject(RowObject) || !RowObject || !RowObject->IsValid())
+					{
+						OutError = FString::Printf(TEXT("Parameter 'package_map[%d]' must be an object."), Index);
+						return false;
+					}
+
+					FString DestinationPackage;
+					(*RowObject)->TryGetStringField(TEXT("destination_package"), DestinationPackage);
+					if (DestinationPackage.IsEmpty())
+					{
+						(*RowObject)->TryGetStringField(TEXT("target_package"), DestinationPackage);
+					}
+					if (DestinationPackage.IsEmpty())
+					{
+						(*RowObject)->TryGetStringField(TEXT("destination_target_package"), DestinationPackage);
+					}
+					if (DestinationPackage.IsEmpty())
+					{
+						OutError = FString::Printf(TEXT("Parameter 'package_map[%d]' must include destination_package."), Index);
+						return false;
+					}
+
+					FString SourcePackage;
+					(*RowObject)->TryGetStringField(TEXT("source_package"), SourcePackage);
+					if (!AddMaterialGraphRefreshTarget(DestinationPackage, SourcePackage, OutTargets, SeenDestinationPackages, OutDuplicateCount, OutError))
+					{
+						return false;
+					}
+				}
+			}
+		}
+
+		TArray<FString> PreservedPackages;
+		if (!MonolithParamUtils::GetOptionalStringArrayParam(Params, TEXT("preserved_destination_packages"), PreservedPackages, OutError))
+		{
+			return false;
+		}
+		for (const FString& PreservedPackageRaw : PreservedPackages)
+		{
+			const FString PreservedPackage = NormalizeMaterialGraphRefreshPackagePath(PreservedPackageRaw);
+			if (PreservedPackage.IsEmpty() || !FPackageName::IsValidLongPackageName(PreservedPackage, false))
+			{
+				OutError = FString::Printf(TEXT("preserved_destination_packages entry '%s' does not resolve to a valid long package name."), *PreservedPackageRaw);
+				return false;
+			}
+			OutPreservedDestinationPackages.Add(PreservedPackage);
+		}
+
+		if (OutTargets.Num() == 0)
+		{
+			OutError = TEXT("Provide asset_path, asset_paths, package_paths, or package_map so copied material graph assets can be refreshed.");
+			return false;
+		}
+
+		return true;
+	}
+
+	static UObject* LoadMaterialGraphRefreshObject(const FString& InputPath, const FString& DestinationPackage, FString& OutError)
+	{
+		OutError.Reset();
+		if (UObject* DirectObject = FMonolithAssetUtils::LoadAssetByPath(InputPath))
+		{
+			return DirectObject;
+		}
+
+		if (IAssetRegistry* AssetRegistry = IAssetRegistry::Get())
+		{
+			TArray<FAssetData> PackageAssets;
+			AssetRegistry->GetAssetsByPackageName(FName(*DestinationPackage), PackageAssets, true);
+
+			UObject* FirstLoadedObject = nullptr;
+			for (const FAssetData& AssetData : PackageAssets)
+			{
+				UObject* Candidate = AssetData.GetAsset();
+				if (!Candidate)
+				{
+					continue;
+				}
+				if (!FirstLoadedObject)
+				{
+					FirstLoadedObject = Candidate;
+				}
+				if (Candidate->IsA<UMaterialInterface>() || Candidate->IsA<UMaterialFunctionInterface>())
+				{
+					return Candidate;
+				}
+			}
+			if (FirstLoadedObject)
+			{
+				return FirstLoadedObject;
+			}
+		}
+
+		if (UPackage* Package = FMonolithAssetUtils::LoadPackageByPath(DestinationPackage))
+		{
+			const FString AssetName = FPackageName::GetLongPackageAssetName(DestinationPackage);
+			if (UObject* PackagePrimaryObject = FindObject<UObject>(Package, *AssetName))
+			{
+				return PackagePrimaryObject;
+			}
+		}
+
+		OutError = FString::Printf(TEXT("Destination package '%s' could not be loaded or did not expose a primary asset."), *DestinationPackage);
+		return nullptr;
+	}
+
+	static TSharedPtr<FJsonObject> MakeMaterialGraphRefreshTargetJson(const FMaterialGraphRefreshTarget& Target)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("input_path"), Target.InputPath);
+		if (!Target.SourcePackage.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("source_package"), Target.SourcePackage);
+		}
+		Obj->SetStringField(TEXT("destination_package"), Target.DestinationPackage);
+		if (!Target.ObjectPath.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("object_path"), Target.ObjectPath);
+		}
+		if (!Target.ClassName.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("class"), Target.ClassName);
+		}
+		Obj->SetStringField(TEXT("status"), Target.Status);
+		if (!Target.Error.IsEmpty())
+		{
+			Obj->SetStringField(TEXT("error"), Target.Error);
+		}
+		return Obj;
+	}
+}
+
 // ============================================================================
 // Action: get_instance_parameters
 // Reads all parameter overrides from a MIC with override detection vs parent
@@ -5465,6 +5950,561 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParent(const TSharedP
 	ResultJson->SetStringField(TEXT("new_parent"), NewParent->GetPathName());
 	ResultJson->SetArrayField(TEXT("kept_parameters"), KeptArr);
 	ResultJson->SetArrayField(TEXT("lost_parameters"), LostArr);
+
+	return FMonolithActionResult::Success(ResultJson);
+}
+
+// ============================================================================
+// Action: repair_copied_material_instance_parameters
+// Remap copied MIC parent and texture override references after package copy.
+// ============================================================================
+
+FMonolithActionResult FMonolithMaterialActions::RepairCopiedMaterialInstanceParameters(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString ErrorMsg_AssetPath;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorMsg_AssetPath))
+	{
+		return FMonolithActionResult::Error(ErrorMsg_AssetPath, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bDryRun = true;
+	FString ErrorMsg;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, ErrorMsg, true))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bConfirm = false;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("confirm"), bConfirm, ErrorMsg, false))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!bDryRun && !bConfirm)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("repair_copied_material_instance_parameters is mutating; pass dry_run=true to inspect the plan or confirm=true with dry_run=false to apply."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bSave = false;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("save"), bSave, ErrorMsg, false))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bRepairParent = true;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("repair_parent"), bRepairParent, ErrorMsg, true))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bRepairTextureParameters = true;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("repair_texture_parameters"), bRepairTextureParameters, ErrorMsg, true))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	TArray<FMaterialCopyRepairRule> Rules;
+	FString SourceRoot;
+	FString DestRoot;
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("source_root"), SourceRoot, ErrorMsg))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("dest_root"), DestRoot, ErrorMsg))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	SourceRoot = NormalizeCopyRepairPath(SourceRoot);
+	DestRoot = NormalizeCopyRepairPath(DestRoot);
+	if (SourceRoot.IsEmpty() != DestRoot.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("source_root and dest_root must be supplied together."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!SourceRoot.IsEmpty())
+	{
+		if (!IsValidCopyRepairRoot(SourceRoot) || !IsValidCopyRepairRoot(DestRoot))
+		{
+			return FMonolithActionResult::Error(
+				TEXT("source_root and dest_root must be long package roots beginning with '/' and must not contain '//'."),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		FMaterialCopyRepairRule Rule;
+		Rule.From = SourceRoot;
+		Rule.To = DestRoot;
+		Rules.Add(Rule);
+	}
+
+	const TSharedPtr<FJsonObject>* RootRemaps = nullptr;
+	if (Params->TryGetObjectField(TEXT("root_remaps"), RootRemaps) && RootRemaps)
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : FMonolithJsonUtils::GetFields(*RootRemaps))
+		{
+			FString TargetRoot;
+			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(TargetRoot))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("root_remaps['%s'] must be a string destination root."), *Pair.Key),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+
+			FMaterialCopyRepairRule Rule;
+			Rule.From = NormalizeCopyRepairPath(Pair.Key);
+			Rule.To = NormalizeCopyRepairPath(TargetRoot);
+			if (!IsValidCopyRepairRoot(Rule.From) || !IsValidCopyRepairRoot(Rule.To))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("Invalid root_remaps entry '%s' -> '%s'; roots must begin with '/' and must not contain '//'."),
+						*Rule.From,
+						*Rule.To),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Rules.Add(Rule);
+		}
+	}
+
+	const TSharedPtr<FJsonObject>* PathRemaps = nullptr;
+	if (Params->TryGetObjectField(TEXT("path_remaps"), PathRemaps) && PathRemaps)
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : FMonolithJsonUtils::GetFields(*PathRemaps))
+		{
+			FString TargetPath;
+			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(TargetPath))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("path_remaps['%s'] must be a string target path."), *Pair.Key),
+					FMonolithJsonUtils::ErrInvalidParams);
+			}
+
+			FMaterialCopyRepairRule Rule;
+			Rule.From = NormalizeCopyRepairPath(Pair.Key);
+			Rule.To = NormalizeCopyRepairPath(TargetPath);
+			if (Rule.From.IsEmpty() || Rule.To.IsEmpty())
+			{
+				return FMonolithActionResult::Error(TEXT("path_remaps cannot contain empty source or target paths."), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Rules.Add(Rule);
+		}
+	}
+
+	Rules.Sort([](const FMaterialCopyRepairRule& A, const FMaterialCopyRepairRule& B)
+	{
+		return A.From.Len() > B.From.Len();
+	});
+
+	if (Rules.Num() == 0)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Provide root_remaps, source_root+dest_root, and/or path_remaps so copied material instance references can be remapped."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!bRepairParent && !bRepairTextureParameters)
+	{
+		return FMonolithActionResult::Error(TEXT("At least one of repair_parent or repair_texture_parameters must be true."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	UObject* LoadedAsset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
+	UMaterialInstanceConstant* MIC = LoadedAsset ? Cast<UMaterialInstanceConstant>(LoadedAsset) : nullptr;
+	if (!MIC)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to load material instance constant at '%s' (loaded as %s)"),
+			*AssetPath,
+			LoadedAsset ? *LoadedAsset->GetClass()->GetName() : TEXT("null")));
+	}
+
+	TArray<FMaterialCopyRepairChange> Changes;
+	TArray<TSharedPtr<FJsonValue>> ErrorsArr;
+
+	if (bRepairParent && MIC->Parent)
+	{
+		const FString ParentPath = NormalizeCopyRepairPath(MIC->Parent->GetPathName());
+		FString RemappedPath;
+		FString MatchedFrom;
+		if (TryRemapCopiedMaterialPath(ParentPath, Rules, RemappedPath, MatchedFrom) && RemappedPath != ParentPath)
+		{
+			FMaterialCopyRepairChange Change;
+			Change.Kind = TEXT("parent");
+			Change.Name = TEXT("Parent");
+			Change.FromPath = ParentPath;
+			Change.ToPath = RemappedPath;
+			Change.Target = Cast<UMaterialInterface>(FMonolithAssetUtils::LoadAssetByPath(RemappedPath));
+			if (!Change.Target)
+			{
+				Change.Error = FString::Printf(TEXT("Remapped parent target '%s' could not be loaded as UMaterialInterface."), *RemappedPath);
+			}
+			Changes.Add(Change);
+		}
+	}
+
+	if (bRepairTextureParameters)
+	{
+		for (const FTextureParameterValue& Param : MIC->TextureParameterValues)
+		{
+			if (!Param.ParameterValue)
+			{
+				continue;
+			}
+
+			const FString TexturePath = NormalizeCopyRepairPath(Param.ParameterValue->GetPathName());
+			FString RemappedPath;
+			FString MatchedFrom;
+			if (!TryRemapCopiedMaterialPath(TexturePath, Rules, RemappedPath, MatchedFrom) || RemappedPath == TexturePath)
+			{
+				continue;
+			}
+
+			FMaterialCopyRepairChange Change;
+			Change.Kind = TEXT("texture_parameter");
+			Change.Name = Param.ParameterInfo.Name.ToString();
+			Change.FromPath = TexturePath;
+			Change.ToPath = RemappedPath;
+			Change.ParameterInfo = Param.ParameterInfo;
+			Change.Target = Cast<UTexture>(FMonolithAssetUtils::LoadAssetByPath(RemappedPath));
+			if (!Change.Target)
+			{
+				Change.Error = FString::Printf(TEXT("Remapped texture target '%s' could not be loaded as UTexture."), *RemappedPath);
+			}
+			Changes.Add(Change);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ChangeArr;
+	ChangeArr.Reserve(Changes.Num());
+	int32 ValidChangeCount = 0;
+	for (const FMaterialCopyRepairChange& Change : Changes)
+	{
+		if (Change.IsValid())
+		{
+			ValidChangeCount++;
+		}
+		else if (!Change.Error.IsEmpty())
+		{
+			ErrorsArr.Add(MakeShared<FJsonValueObject>(MakeMaterialCopyRepairChangeJson(Change, TEXT("error"))));
+		}
+		ChangeArr.Add(MakeShared<FJsonValueObject>(MakeMaterialCopyRepairChangeJson(Change, Change.IsValid() ? (bDryRun ? TEXT("planned") : TEXT("pending")) : TEXT("error"))));
+	}
+
+	if (!bDryRun && ErrorsArr.Num() > 0)
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("asset_path"), AssetPath);
+		ErrorData->SetArrayField(TEXT("changes"), ChangeArr);
+		ErrorData->SetArrayField(TEXT("errors"), ErrorsArr);
+		ErrorData->SetBoolField(TEXT("applied"), false);
+		return FMonolithActionResult::Error(
+			TEXT("Copied material instance repair preflight failed; no asset changes were applied."),
+			FMonolithJsonUtils::ErrInvalidParams).WithErrorData(ErrorData);
+	}
+
+	bool bApplied = false;
+	bool bSaved = false;
+	bool bWasDirtyBeforeSave = MIC->GetPackage() ? MIC->GetPackage()->IsDirty() : false;
+	if (!bDryRun && ValidChangeCount > 0)
+	{
+		if (GEditor)
+		{
+			GEditor->BeginTransaction(FText::FromString(TEXT("RepairCopiedMaterialInstanceParameters")));
+		}
+		MIC->Modify();
+
+		for (const FMaterialCopyRepairChange& Change : Changes)
+		{
+			if (!Change.IsValid())
+			{
+				continue;
+			}
+
+			if (Change.Kind == TEXT("parent"))
+			{
+				UMaterialInterface* NewParent = Cast<UMaterialInterface>(Change.Target);
+				if (NewParent)
+				{
+					MIC->SetParentEditorOnly(NewParent, true);
+					bApplied = true;
+				}
+			}
+			else if (Change.Kind == TEXT("texture_parameter"))
+			{
+				UTexture* NewTexture = Cast<UTexture>(Change.Target);
+				if (NewTexture)
+				{
+					MIC->SetTextureParameterValueEditorOnly(Change.ParameterInfo, NewTexture);
+					bApplied = true;
+				}
+			}
+		}
+
+		if (bApplied)
+		{
+			UMaterialEditingLibrary::UpdateMaterialInstance(MIC);
+			MIC->PostEditChange();
+			MIC->MarkPackageDirty();
+		}
+
+		if (GEditor)
+		{
+			GEditor->EndTransaction();
+		}
+
+		if (bApplied && bSave)
+		{
+			bWasDirtyBeforeSave = MIC->GetPackage() ? MIC->GetPackage()->IsDirty() : false;
+			bSaved = UEditorAssetLibrary::SaveAsset(AssetPath, false);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> FinalChangeArr;
+	FinalChangeArr.Reserve(Changes.Num());
+	for (const FMaterialCopyRepairChange& Change : Changes)
+	{
+		FString Status = TEXT("skipped");
+		if (!Change.Error.IsEmpty())
+		{
+			Status = TEXT("error");
+		}
+		else if (Change.IsValid())
+		{
+			Status = bDryRun ? TEXT("planned") : TEXT("repaired");
+		}
+		FinalChangeArr.Add(MakeShared<FJsonValueObject>(MakeMaterialCopyRepairChangeJson(Change, Status)));
+	}
+
+	TArray<FString> RuleSummaries;
+	RuleSummaries.Reserve(Rules.Num());
+	for (const FMaterialCopyRepairRule& Rule : Rules)
+	{
+		RuleSummaries.Add(Rule.From + TEXT(" -> ") + Rule.To);
+	}
+
+	TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("asset_path"), AssetPath);
+	ResultJson->SetBoolField(TEXT("dry_run"), bDryRun);
+	ResultJson->SetBoolField(TEXT("applied"), bApplied);
+	ResultJson->SetNumberField(TEXT("planned_changes"), ValidChangeCount);
+	ResultJson->SetNumberField(TEXT("error_count"), ErrorsArr.Num());
+	ResultJson->SetArrayField(TEXT("changes"), FinalChangeArr);
+	ResultJson->SetArrayField(TEXT("errors"), ErrorsArr);
+	ResultJson->SetBoolField(TEXT("saved"), bSaved);
+	ResultJson->SetBoolField(TEXT("was_dirty_before_save"), bWasDirtyBeforeSave);
+	ResultJson->SetBoolField(TEXT("can_apply"), ErrorsArr.Num() == 0);
+	AddStringArrayField(ResultJson, TEXT("rules"), RuleSummaries);
+
+	return FMonolithActionResult::Success(ResultJson);
+}
+
+// ============================================================================
+// Action: refresh_copied_material_graphs
+// Post-copy refresh for material/material-function graph assets after reference fixup.
+// ============================================================================
+
+FMonolithActionResult FMonolithMaterialActions::RefreshCopiedMaterialGraphs(const TSharedPtr<FJsonObject>& Params)
+{
+	bool bDryRun = true;
+	FString ErrorMsg;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("dry_run"), bDryRun, ErrorMsg, true))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bConfirm = false;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("confirm"), bConfirm, ErrorMsg, false))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!bDryRun && !bConfirm)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("refresh_copied_material_graphs is mutating; pass dry_run=true to inspect the plan or confirm=true with dry_run=false to apply."),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bSave = false;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("save"), bSave, ErrorMsg, false))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	bool bStrict = true;
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("strict"), bStrict, ErrorMsg, true))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	TArray<FMaterialGraphRefreshTarget> Targets;
+	TSet<FString> PreservedDestinationPackages;
+	int32 DuplicatePackageCount = 0;
+	if (!ParseMaterialGraphRefreshTargets(Params, Targets, PreservedDestinationPackages, DuplicatePackageCount, ErrorMsg))
+	{
+		return FMonolithActionResult::Error(ErrorMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> ErrorRows;
+	int32 RefreshableCount = 0;
+	int32 PreservedSkipCount = 0;
+	int32 NonMaterialSkipCount = 0;
+	int32 LoadSkipCount = 0;
+
+	for (FMaterialGraphRefreshTarget& Target : Targets)
+	{
+		if (PreservedDestinationPackages.Contains(Target.DestinationPackage))
+		{
+			Target.Status = TEXT("skipped_preserved");
+			++PreservedSkipCount;
+			continue;
+		}
+
+		FString LoadError;
+		Target.Object = LoadMaterialGraphRefreshObject(Target.InputPath, Target.DestinationPackage, LoadError);
+		if (!Target.Object)
+		{
+			Target.Error = LoadError;
+			Target.Status = bStrict ? TEXT("error") : TEXT("skipped_load_failed");
+			++LoadSkipCount;
+			if (bStrict)
+			{
+				ErrorRows.Add(MakeShared<FJsonValueObject>(MakeMaterialGraphRefreshTargetJson(Target)));
+			}
+			continue;
+		}
+
+		Target.ObjectPath = Target.Object->GetPathName();
+		Target.ClassName = Target.Object->GetClass() ? Target.Object->GetClass()->GetName() : FString();
+		Target.bRefreshable = Target.Object->IsA<UMaterialInterface>() || Target.Object->IsA<UMaterialFunctionInterface>();
+		if (!Target.bRefreshable)
+		{
+			Target.Status = TEXT("skipped_non_material_graph");
+			++NonMaterialSkipCount;
+			continue;
+		}
+
+		Target.Status = bDryRun ? TEXT("planned") : TEXT("pending");
+		++RefreshableCount;
+	}
+
+	if (!bDryRun && ErrorRows.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> TargetRows;
+		TargetRows.Reserve(Targets.Num());
+		for (const FMaterialGraphRefreshTarget& Target : Targets)
+		{
+			TargetRows.Add(MakeShared<FJsonValueObject>(MakeMaterialGraphRefreshTargetJson(Target)));
+		}
+
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("namespace"), TEXT("material"));
+		ErrorData->SetStringField(TEXT("action"), TEXT("refresh_copied_material_graphs"));
+		ErrorData->SetBoolField(TEXT("dry_run"), bDryRun);
+		ErrorData->SetBoolField(TEXT("applied"), false);
+		ErrorData->SetArrayField(TEXT("targets"), TargetRows);
+		ErrorData->SetArrayField(TEXT("errors"), ErrorRows);
+		ErrorData->SetNumberField(TEXT("error_count"), ErrorRows.Num());
+		return FMonolithActionResult::Error(
+			TEXT("Copied material graph refresh preflight failed; no asset changes were applied."),
+			FMonolithJsonUtils::ErrInvalidParams).WithErrorData(ErrorData);
+	}
+
+	TSet<FString> DirtiedPackages;
+	TArray<FString> SavedPackages;
+	TArray<FString> FailedSavePackages;
+	int32 RefreshedCount = 0;
+	bool bApplied = false;
+
+	if (!bDryRun && RefreshableCount > 0)
+	{
+		if (GEditor)
+		{
+			GEditor->BeginTransaction(FText::FromString(TEXT("RefreshCopiedMaterialGraphs")));
+		}
+
+		for (FMaterialGraphRefreshTarget& Target : Targets)
+		{
+			if (!Target.bRefreshable || !Target.Object)
+			{
+				continue;
+			}
+
+			Target.Object->Modify();
+			Target.Object->PostEditChange();
+			if (UPackage* Package = Target.Object->GetOutermost())
+			{
+				Package->MarkPackageDirty();
+				DirtiedPackages.Add(Package->GetName());
+			}
+			Target.Status = TEXT("refreshed");
+			++RefreshedCount;
+			bApplied = true;
+		}
+
+		if (GEditor)
+		{
+			GEditor->EndTransaction();
+		}
+
+		if (bSave)
+		{
+			for (const FMaterialGraphRefreshTarget& Target : Targets)
+			{
+				if (!Target.bRefreshable || !Target.Object)
+				{
+					continue;
+				}
+
+				if (UEditorAssetLibrary::SaveAsset(Target.Object->GetPathName(), false))
+				{
+					SavedPackages.AddUnique(Target.DestinationPackage);
+				}
+				else
+				{
+					FailedSavePackages.AddUnique(Target.DestinationPackage);
+				}
+			}
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> TargetRows;
+	TargetRows.Reserve(Targets.Num());
+	for (const FMaterialGraphRefreshTarget& Target : Targets)
+	{
+		TargetRows.Add(MakeShared<FJsonValueObject>(MakeMaterialGraphRefreshTargetJson(Target)));
+	}
+
+	TArray<FString> RuleSummaries;
+	RuleSummaries.Reserve(PreservedDestinationPackages.Num());
+	for (const FString& PreservedPackage : PreservedDestinationPackages)
+	{
+		RuleSummaries.Add(PreservedPackage);
+	}
+
+	TArray<FString> DirtiedPackageList = DirtiedPackages.Array();
+	DirtiedPackageList.Sort();
+	SavedPackages.Sort();
+	FailedSavePackages.Sort();
+	RuleSummaries.Sort();
+
+	TSharedPtr<FJsonObject> ResultJson = MakeShared<FJsonObject>();
+	ResultJson->SetStringField(TEXT("namespace"), TEXT("material"));
+	ResultJson->SetStringField(TEXT("action"), TEXT("refresh_copied_material_graphs"));
+	ResultJson->SetBoolField(TEXT("dry_run"), bDryRun);
+	ResultJson->SetBoolField(TEXT("applied"), bApplied);
+	ResultJson->SetBoolField(TEXT("save"), bSave);
+	ResultJson->SetBoolField(TEXT("strict"), bStrict);
+	ResultJson->SetBoolField(TEXT("can_apply"), ErrorRows.Num() == 0);
+	ResultJson->SetNumberField(TEXT("target_count"), Targets.Num());
+	ResultJson->SetNumberField(TEXT("duplicate_package_count"), DuplicatePackageCount);
+	ResultJson->SetNumberField(TEXT("refreshable_count"), RefreshableCount);
+	ResultJson->SetNumberField(TEXT("refreshed_count"), RefreshedCount);
+	ResultJson->SetNumberField(TEXT("preserved_skip_count"), PreservedSkipCount);
+	ResultJson->SetNumberField(TEXT("non_material_skip_count"), NonMaterialSkipCount);
+	ResultJson->SetNumberField(TEXT("load_skip_count"), LoadSkipCount);
+	ResultJson->SetNumberField(TEXT("error_count"), ErrorRows.Num());
+	ResultJson->SetArrayField(TEXT("targets"), TargetRows);
+	ResultJson->SetArrayField(TEXT("errors"), ErrorRows);
+	AddStringArrayField(ResultJson, TEXT("dirtied_packages"), DirtiedPackageList);
+	AddStringArrayField(ResultJson, TEXT("saved_packages"), SavedPackages);
+	AddStringArrayField(ResultJson, TEXT("failed_save_packages"), FailedSavePackages);
+	AddStringArrayField(ResultJson, TEXT("preserved_destination_packages"), RuleSummaries);
 
 	return FMonolithActionResult::Success(ResultJson);
 }

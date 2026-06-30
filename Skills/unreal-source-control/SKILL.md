@@ -1,11 +1,11 @@
 ---
 name: unreal-source-control
-description: Use when running source control (Perforce/Git) operations from the editor via Monolith MCP (source_control) - provider/capabilities status, file or /Game asset status, checkout, mark for add, mark for delete, revert, and revert-unchanged. This skill owns the P4/Git checkout/add/delete/revert action, not the thing being versioned. To edit the .ini content after a checkout use unreal-config; to save/move/delete the asset package itself use unreal-asset; when group/collection means an editor asset Collection not a changelist use unreal-collection. Triggers on source control, perforce, p4, git, changelist, CL, checkout, check out file, mark for add, mark for delete, revert, revert unchanged, file status, depot, revision, who has this checked out, prepare file for edit, add to depot.
+description: Use when running source control (Perforce/Git) operations from the editor via Monolith MCP (source_control) - provider/capabilities status, file or /Game asset status, checkout, mark for add, mark for delete, revert/revert unchanged, plus Perforce opened/changelist and depot/local/package path mapping. This skill owns the P4/Git checkout/add/delete/revert and read-only opened/path-mapping actions, not the thing being versioned. To edit the .ini content after a checkout use unreal-config; to save/move/delete the asset package itself use unreal-asset; when group/collection means an editor asset Collection not a changelist use unreal-collection. Triggers on source control, perforce, p4, git, changelist, CL, checkout, check out file, mark for add, mark for delete, revert, revert unchanged, file status, depot, revision, who has this checked out, prepare file for edit, add to depot.
 ---
 
 # unreal-source-control
 
-**9 actions** via `source_control_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+**11 actions** via `source_control_query(action, params)`. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
 
 ## Discovery
 
@@ -18,7 +18,8 @@ When the right action is unclear, `monolith_find("<task>")` suggests candidates 
 
 ## When to use / Use a different skill for
 
-- Use this skill for the source-control ACTION itself — provider/capabilities status, file/asset status, checkout, mark for add, mark for delete, revert, and revert-unchanged through the active Unreal provider (Perforce or Git).
+- Use this skill for the source-control ACTION itself — provider/capabilities status, file/asset status, checkout, mark for add, mark for delete, revert, revert-unchanged through the active Unreal provider (Perforce or Git), plus read-only Perforce opened/changelist and path mapping.
+- **unreal-build / editor validation actions** — to run validation or build review after mapping a changelist. `source_control` can list/map opened files; `editor.plan_content_validation_changeset` and `editor.validate_changeset_assets` turn those mapped rows into DataValidation targets.
 - **unreal-config** — to read or edit the `.ini` setting/section/cvar content after this skill checks the file out; this skill owns the checkout/add, not the edit.
 - **unreal-asset** — to actually save/move/delete the asset package itself; this skill only marks files for add/delete/checkout in source control.
 - **unreal-collection** — when "group" or "collection" means a Content Browser asset Collection, not a source-control changelist or depot grouping.
@@ -27,7 +28,7 @@ When the right action is unclear, `monolith_find("<task>")` suggests candidates 
 
 Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. Keep the discover-first block above as the authority. The mutation param is `paths` (array of filesystem or `/Game` package/object paths), not `files`.
 
-### Core (9)
+### Core (11)
 
 | Action | Params | Purpose |
 |--------|--------|---------|
@@ -40,6 +41,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] mark_for_delete` | `paths*` `confirm?=false` `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert` | `paths*` `confirm?=false` `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert_unchanged` | `paths*` `confirm?=false` `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
+| `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` | Read-only `p4 -ztag opened`, optionally scoped to a changelist, with depot-to-local/package mapping. |
+| `map_depot_paths` | `paths*` | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths to local/package rows. |
 
 ## Common workflows
 
@@ -59,6 +62,10 @@ source_control_query("delete", { paths: ["/Game/Old/BP_Legacy"], confirm: true }
 
 # Roll back local changes through the active provider.
 source_control_query("revert", { paths: ["/Game/Maps/Interactable/BP_Wave"], confirm: true })
+
+# Inspect a pending changelist and map opened packages without mutating source control.
+source_control_query("list_opened", { changelist: "1006", resolve_packages: true })
+source_control_query("map_depot_paths", { paths: ["//depot/Game/UI/WBP_Menu.uasset", "/Game/UI/WBP_Menu"] })
 ```
 
 ### Recipe: prepare a file for edit, then drop no-op checkouts
@@ -102,6 +109,7 @@ source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Ga
 
 - `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` are destructive — they require `confirm=true` unless you pass `dry_run=true`. Run a `dry_run` first to preview the affected files.
 - This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
+- `list_opened` and `map_depot_paths` are read-only mapping primitives. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
 - Every action takes its file list as the `paths` array param (filesystem paths or `/Game` package/object paths), not `files`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
 
 ## Notes
