@@ -24,6 +24,9 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 33 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map/world-settings authoring, DataValidation, changelist validation planning, module status, automation test list/run, Python escape-hatch, persistent-level swap |
+| [build](#build) | 2 | Unreal engine root resolution and guarded UAT BuildCookRun command construction |
+| [artifact](#artifact) | 2 | Build-output manifests and screenshot evidence mirroring |
+| [notify](#notify) | 1 | Redacted screenshot-evidence notification payloads |
 | [config](#config) | 11 | INI config inspection and search |
 | [console](#console) | 15 | Live console object registry, EngineSource.db snapshot refresh, FTS5 search, exact lookup, health, command resolution/execution, log expectations/waits, sequences with artifacts, capture, failure diagnosis, scoped CVar runs |
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
@@ -754,6 +757,93 @@ Close the current persistent level (without saving) and load the specified level
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | **required** | Asset path of the level to load (e.g. `/Game/Maps/L_Backyard`). Must exist. |
+
+---
+
+## build
+
+Operational build helpers registered by `MonolithEditor`. These actions do not replace the project's primary build command; they provide structured, dry-run-first UAT planning and engine-path discovery.
+
+### `build.resolve_unreal_engine`
+
+Resolve the loaded project's Unreal Engine root from the current editor context and return `engine_root`, `engine_dir`, `uat_path`, `ubt_path`, `project_path`, and existence flags. This is read-only and does not use hard-coded alternate engine checkouts.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_path` | string | optional | `.uproject` path. Defaults to the loaded editor project. |
+
+### `build.run_buildcookrun`
+
+Build a UAT `BuildCookRun` command from structured parameters. Defaults to `dry_run=true`; launching UAT requires `dry_run=false` and `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_path` | string | optional | `.uproject` path. Defaults to the loaded editor project. |
+| `platform` | string | optional | UAT `-platform`. Default: `Win64` |
+| `client_config` | string | optional | UAT `-clientconfig`. Default: `Development` |
+| `server_config` | string | optional | Optional UAT `-serverconfig` |
+| `target` | string | optional | Optional UAT `-target` |
+| `map` | string | optional | Optional UAT `-map` |
+| `custom_config` | string | optional | Optional `-CustomConfig`, e.g. `EOS` |
+| `archive_directory` | string | optional | Optional UAT `-archivedirectory` |
+| `build`, `cook`, `stage`, `pak`, `archive` | bool | optional | BuildCookRun switches; archive is used when `archive_directory` is set |
+| `additional_args` | array | optional | Extra trusted UAT arguments appended verbatim |
+| `wait` | bool | optional | If executing, wait and return exit code plus bounded stdout/stderr tails |
+| `dry_run` | bool | optional | Preview command without launching. Default: `true` |
+| `confirm` | bool | optional | Required with `dry_run=false` |
+
+---
+
+## artifact
+
+Build and screenshot evidence artifact helpers. File writes/copies are dry-run-first and require explicit confirmation.
+
+### `artifact.package_build_outputs`
+
+Scan a build/archive output directory and return a JSON manifest object. Optional manifest file writing requires `write_manifest=true`, `dry_run=false`, and `confirm=true`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `archive_dir` | string | **required** | Existing build/archive directory to scan |
+| `manifest_path` | string | optional | Manifest output path. Defaults to `<archive_dir>/manifest.json` |
+| `recursive` | bool | optional | Scan recursively. Default: `true` |
+| `limit` | number | optional | Maximum files to include. Default: `5000` |
+| `write_manifest` | bool | optional | Write the manifest when confirmed. Default: `false` |
+| `dry_run` | bool | optional | Preview without writing. Default: `true` |
+| `confirm` | bool | optional | Required for manifest write |
+
+### `artifact.mirror_screenshot_evidence`
+
+Plan or copy screenshot/evidence files to a destination directory. Accepts explicit `files[]` or scans `source_dir` for `png/jpg/jpeg/gif`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `files` | array | optional | Explicit file paths |
+| `source_dir` | string | optional | Directory scanned when `files` is omitted |
+| `dest_dir` | string | **required** | Destination directory |
+| `limit` | number | optional | Maximum files to mirror. Default: `200` |
+| `dry_run` | bool | optional | Preview copy rows. Default: `true` |
+| `confirm` | bool | optional | Required for copying |
+
+---
+
+## notify
+
+Notification helpers for evidence workflows. Secret values are never accepted as action params.
+
+### `notify.discord_screenshot_evidence`
+
+Build a redacted text-only Discord screenshot-evidence payload from `test_name` and evidence files. Sending requires `send=true`, `dry_run=false`, `confirm=true`, and a webhook URL read from `webhook_env` (default `DISCORD_WEBHOOK_URL`).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `test_name` | string | **required** | One-line evidence summary |
+| `files` | array | optional | Evidence file paths |
+| `source_dir` | string | optional | Directory scanned when `files` is omitted |
+| `webhook_env` | string | optional | Environment variable containing the webhook URL. Default: `DISCORD_WEBHOOK_URL` |
+| `send` | bool | optional | Actually send the notification. Default: `false` |
+| `dry_run` | bool | optional | Preview payload without sending. Default: `true` |
+| `confirm` | bool | optional | Required for sending |
 
 ---
 
@@ -2360,7 +2450,7 @@ Guarded package graph duplication using the same root-remap plan contract. Requi
 
 ### `asset.copy_package_graph_with_strategy`
 
-Orchestrate a guarded package graph copy workflow with explicit copy strategy classification. The action always builds a read-only plan and `strategy_plan[]` first; only `duplicate_asset` rows execute in this slice. `advanced_copy`, `header_patched_advanced_copy`, `raw_package_file_copy`, and manual-copy selectors are reported as unsupported/deferred instead of silently falling back. Workflows are `plan_only`, `copy_only`, `copy_fixup`, and `copy_fixup_validate`.
+Orchestrate a guarded package graph copy workflow with explicit copy strategy classification. The action always builds a read-only plan and `strategy_plan[]` first; confirmed runs execute `duplicate_asset`, `advanced_copy`, `header_patched_advanced_copy`, and opt-in `raw_package_file_copy` rows. Manual-copy selectors remain unsupported and hard-error instead of silently falling back. Workflows are `plan_only`, `copy_only`, `copy_fixup`, and `copy_fixup_validate`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -2369,14 +2459,25 @@ Orchestrate a guarded package graph copy workflow with explicit copy strategy cl
 | `workflow` | string | optional | `plan_only`, `copy_only`, `copy_fixup`, or `copy_fixup_validate`. Default: `copy_fixup_validate` |
 | `strategy` | string | optional | Compatibility alias for either `workflow` or `copy_strategy` values |
 | `copy_strategy` | string | optional | `auto`, `duplicate_asset`, `advanced_copy`, `raw_package_file_copy`, or `header_patched_advanced_copy`. Default: `auto` |
+| `dependency_kinds` | string[] | optional | Dependency kinds to follow during planning: `hard`, `soft`. Default: both |
+| `max_packages` | integer | optional | Traversal safety cap for plan/copy. Default: `512` |
+| `fixup_max_packages` | integer | optional | Reference-fixup safety cap. Default: `1000` |
+| `closure_max_packages` | integer | optional | Dependency-closure validation safety cap. Default: `1000` |
+| `check_collisions` | boolean | optional | Report existing destination packages. Default: `true` |
+| `collision_policy` | string | optional | `fail_if_exists` rejects existing destinations; `skip_existing` leaves existing destinations untouched and excludes them from fixup/cleanup/closure. Default: `fail_if_exists` |
 | `header_patched_roots` / `header_patched_packages` | string[] | optional | Select packages that should use `header_patched_advanced_copy` when `copy_strategy=auto` |
 | `raw_package_roots` / `raw_package_packages` | string[] | optional | Select packages that should use `raw_package_file_copy` when `copy_strategy=auto` |
 | `manual_copy_roots` / `manual_copy_packages` | string[] | optional | Select packages known to require manual single-object duplication |
-| `allow_raw_package_copy` | boolean | optional | Reserved opt-in for raw package execution; current slice still reports raw copy as deferred. Default: `false` |
+| `allow_raw_package_copy` | boolean | optional | Required opt-in before `raw_package_file_copy` rows can execute. Default: `false` |
+| `cleanup_redirectors` | boolean | optional | Run explicit copied-root redirector cleanup after reference fixup and before closure validation. Default: `false` |
+| `allowed_external_roots` | string[] | optional | External roots allowed during dependency-closure validation |
+| `legacy_source_roots` | string[] | optional | Source roots that should not remain referenced; defaults to `root_remaps` sources when omitted |
+| `require_targets` | boolean | optional | Fail fixup when a remapped reference target package is missing. Default: `true` |
 | `run_fixup_on_dry_run` / `run_closure_on_dry_run` | boolean | optional | Scan existing destination packages during dry-run; otherwise post-copy phases are only planned. Default: `false` |
 | `dry_run` | boolean | optional | Return strategy/copy/fixup/closure plan without mutation. Default: `false` |
 | `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
 | `save` | boolean | optional | Save duplicated or changed packages. Default: `true` |
+| `strict` | boolean | optional | Treat fixup blockers as errors. Default: `true` |
 
 ### `asset.fixup_copied_references`
 

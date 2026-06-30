@@ -3,12 +3,17 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithAssetPackageGraphActions.h"
 #include "MonolithToolRegistry.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetRegistry/IAssetRegistry.h"
+#include "Curves/CurveFloat.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
+#include "UObject/Package.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAssetPackageGraphRegistryTest,
 	"Monolith.Asset.PackageGraph.RegistryAndParamGuards",
@@ -142,6 +147,19 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 		}
 		Object->SetArrayField(FieldName, JsonValues);
 	};
+	auto FirstStrategyRow = [](const FMonolithActionResult& ActionResult) -> TSharedPtr<FJsonObject>
+	{
+		if (!ActionResult.Result.IsValid())
+		{
+			return nullptr;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		if (!ActionResult.Result->TryGetArrayField(TEXT("strategy_plan"), Rows) || !Rows || Rows->Num() == 0)
+		{
+			return nullptr;
+		}
+		return (*Rows)[0].IsValid() ? (*Rows)[0]->AsObject() : nullptr;
+	};
 
 	const FString TempProjectPluginDirName = FString::Printf(TEXT("MonolithMountAutoPlugin_%s"), *TestRunId.Left(12));
 	const FString TempProjectPluginRootDir = FPaths::Combine(FPaths::ProjectPluginsDir(), TempProjectPluginDirName);
@@ -260,6 +278,14 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 	Remaps->SetStringField(TEXT("/Game/MonolithTests"), TEXT("/Game/MonolithTestsCopied"));
 	PlanParams->SetObjectField(TEXT("root_remaps"), Remaps);
 	PlanParams->SetBoolField(TEXT("check_collisions"), false);
+	auto MakePlanOnlyStrategyParams = [&PlanParams](const FString& CopyStrategy)
+	{
+		TSharedPtr<FJsonObject> ParamsObject = MakeShared<FJsonObject>();
+		ParamsObject->Values = PlanParams->Values;
+		ParamsObject->SetStringField(TEXT("workflow"), TEXT("plan_only"));
+		ParamsObject->SetStringField(TEXT("copy_strategy"), CopyStrategy);
+		return ParamsObject;
+	};
 
 	FMonolithActionResult Plan = FMonolithAssetPackageGraphActions::PlanPackageGraphCopy(PlanParams);
 	TestTrue(TEXT("plan_package_graph_copy returns a read-only plan for valid params"), Plan.bSuccess);
@@ -304,6 +330,121 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("copy_package_graph_with_strategy plan_only includes phases"), StrategyPlanOnly.Result->TryGetArrayField(TEXT("phases"), Phases) && Phases != nullptr);
 	}
 
+	FMonolithActionResult AdvancedPlanOnly = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(MakePlanOnlyStrategyParams(TEXT("advanced_copy")));
+	TestTrue(TEXT("copy_package_graph_with_strategy plans advanced_copy as executable"), AdvancedPlanOnly.bSuccess);
+	if (AdvancedPlanOnly.Result.IsValid())
+	{
+		bool bOk = false;
+		AdvancedPlanOnly.Result->TryGetBoolField(TEXT("ok"), bOk);
+		TestTrue(TEXT("advanced_copy plan is executable"), bOk);
+		double UnsupportedCount = -1.0;
+		AdvancedPlanOnly.Result->TryGetNumberField(TEXT("unsupported_strategy_count"), UnsupportedCount);
+		TestEqual(TEXT("advanced_copy has no unsupported strategy rows"), static_cast<int32>(UnsupportedCount), 0);
+		TSharedPtr<FJsonObject> Row = FirstStrategyRow(AdvancedPlanOnly);
+		TestTrue(TEXT("advanced_copy strategy row exists"), Row.IsValid());
+		if (Row.IsValid())
+		{
+			FString SelectedStrategy;
+			Row->TryGetStringField(TEXT("selected_strategy"), SelectedStrategy);
+			TestEqual(TEXT("advanced_copy selected strategy"), SelectedStrategy, FString(TEXT("advanced_copy")));
+			bool bExecutable = false;
+			Row->TryGetBoolField(TEXT("executable_by_this_action"), bExecutable);
+			TestTrue(TEXT("advanced_copy row executable"), bExecutable);
+		}
+	}
+
+	TSharedPtr<FJsonObject> HeaderPatchedAutoPlanParams = MakePlanOnlyStrategyParams(TEXT("auto"));
+	SetStringArray(HeaderPatchedAutoPlanParams, TEXT("header_patched_roots"), { TEXT("/Game/MonolithTests") });
+	FMonolithActionResult HeaderPatchedAutoPlan = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(HeaderPatchedAutoPlanParams);
+	TestTrue(TEXT("copy_package_graph_with_strategy auto plans header_patched_advanced_copy as executable"), HeaderPatchedAutoPlan.bSuccess);
+	if (HeaderPatchedAutoPlan.Result.IsValid())
+	{
+		bool bOk = false;
+		HeaderPatchedAutoPlan.Result->TryGetBoolField(TEXT("ok"), bOk);
+		TestTrue(TEXT("header_patched_advanced_copy auto plan is executable"), bOk);
+		TSharedPtr<FJsonObject> Row = FirstStrategyRow(HeaderPatchedAutoPlan);
+		TestTrue(TEXT("header_patched_advanced_copy strategy row exists"), Row.IsValid());
+		if (Row.IsValid())
+		{
+			FString SelectedStrategy;
+			Row->TryGetStringField(TEXT("selected_strategy"), SelectedStrategy);
+			TestEqual(TEXT("auto header selector selected strategy"), SelectedStrategy, FString(TEXT("header_patched_advanced_copy")));
+		}
+	}
+
+	TSharedPtr<FJsonObject> RawBlockedPlanParams = MakePlanOnlyStrategyParams(TEXT("auto"));
+	SetStringArray(RawBlockedPlanParams, TEXT("raw_package_roots"), { TEXT("/Game/MonolithTests") });
+	FMonolithActionResult RawBlockedPlan = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(RawBlockedPlanParams);
+	TestTrue(TEXT("copy_package_graph_with_strategy raw selector returns blocked plan without opt-in"), RawBlockedPlan.bSuccess);
+	if (RawBlockedPlan.Result.IsValid())
+	{
+		bool bOk = true;
+		RawBlockedPlan.Result->TryGetBoolField(TEXT("ok"), bOk);
+		TestFalse(TEXT("raw_package_file_copy without opt-in is not ok"), bOk);
+		TSharedPtr<FJsonObject> Row = FirstStrategyRow(RawBlockedPlan);
+		TestTrue(TEXT("raw_package_file_copy blocked strategy row exists"), Row.IsValid());
+		if (Row.IsValid())
+		{
+			FString SelectedStrategy;
+			FString StrategyStatus;
+			FString Reason;
+			bool bExecutable = true;
+			Row->TryGetStringField(TEXT("selected_strategy"), SelectedStrategy);
+			Row->TryGetStringField(TEXT("status"), StrategyStatus);
+			Row->TryGetStringField(TEXT("reason"), Reason);
+			Row->TryGetBoolField(TEXT("executable_by_this_action"), bExecutable);
+			TestEqual(TEXT("raw selector selected strategy"), SelectedStrategy, FString(TEXT("raw_package_file_copy")));
+			TestEqual(TEXT("raw selector is blocked without opt-in"), StrategyStatus, FString(TEXT("blocked")));
+			TestEqual(TEXT("raw selector reason"), Reason, FString(TEXT("allow_raw_package_copy_false")));
+			TestFalse(TEXT("raw selector not executable without opt-in"), bExecutable);
+		}
+	}
+
+	TSharedPtr<FJsonObject> RawAllowedPlanParams = MakePlanOnlyStrategyParams(TEXT("auto"));
+	SetStringArray(RawAllowedPlanParams, TEXT("raw_package_roots"), { TEXT("/Game/MonolithTests") });
+	RawAllowedPlanParams->SetBoolField(TEXT("allow_raw_package_copy"), true);
+	FMonolithActionResult RawAllowedPlan = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(RawAllowedPlanParams);
+	TestTrue(TEXT("copy_package_graph_with_strategy raw selector is executable with opt-in"), RawAllowedPlan.bSuccess);
+	if (RawAllowedPlan.Result.IsValid())
+	{
+		bool bOk = false;
+		RawAllowedPlan.Result->TryGetBoolField(TEXT("ok"), bOk);
+		TestTrue(TEXT("raw_package_file_copy with opt-in is ok"), bOk);
+		TSharedPtr<FJsonObject> Row = FirstStrategyRow(RawAllowedPlan);
+		TestTrue(TEXT("raw_package_file_copy allowed strategy row exists"), Row.IsValid());
+		if (Row.IsValid())
+		{
+			FString StrategyStatus;
+			bool bExecutable = false;
+			Row->TryGetStringField(TEXT("status"), StrategyStatus);
+			Row->TryGetBoolField(TEXT("executable_by_this_action"), bExecutable);
+			TestEqual(TEXT("raw selector ready with opt-in"), StrategyStatus, FString(TEXT("ready")));
+			TestTrue(TEXT("raw selector executable with opt-in"), bExecutable);
+		}
+	}
+
+	TSharedPtr<FJsonObject> ManualPlanParams = MakePlanOnlyStrategyParams(TEXT("auto"));
+	SetStringArray(ManualPlanParams, TEXT("manual_copy_roots"), { TEXT("/Game/MonolithTests") });
+	FMonolithActionResult ManualPlan = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(ManualPlanParams);
+	TestTrue(TEXT("copy_package_graph_with_strategy manual selector returns unsupported plan"), ManualPlan.bSuccess);
+	if (ManualPlan.Result.IsValid())
+	{
+		bool bOk = true;
+		ManualPlan.Result->TryGetBoolField(TEXT("ok"), bOk);
+		TestFalse(TEXT("manual selector is not ok"), bOk);
+		TSharedPtr<FJsonObject> Row = FirstStrategyRow(ManualPlan);
+		TestTrue(TEXT("manual strategy row exists"), Row.IsValid());
+		if (Row.IsValid())
+		{
+			FString SelectedStrategy;
+			FString StrategyStatus;
+			Row->TryGetStringField(TEXT("selected_strategy"), SelectedStrategy);
+			Row->TryGetStringField(TEXT("status"), StrategyStatus);
+			TestEqual(TEXT("manual selector selected strategy"), SelectedStrategy, FString(TEXT("manual_single_object_duplicate")));
+			TestEqual(TEXT("manual selector remains unsupported"), StrategyStatus, FString(TEXT("unsupported")));
+		}
+	}
+
 	TSharedPtr<FJsonObject> StrategyDryRunParams = MakeShared<FJsonObject>();
 	StrategyDryRunParams->Values = PlanParams->Values;
 	StrategyDryRunParams->SetStringField(TEXT("strategy"), TEXT("copy_fixup_validate"));
@@ -320,6 +461,108 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("copy_package_graph_with_strategy includes planned fixup params"), StrategyDryRun.Result->HasTypedField<EJson::Object>(TEXT("planned_fixup_params")));
 		TestTrue(TEXT("copy_package_graph_with_strategy includes planned closure params"), StrategyDryRun.Result->HasTypedField<EJson::Object>(TEXT("planned_closure_params")));
 	}
+
+	const FString CopyMountSuffix = TestRunId.Left(12);
+	const FString CopySourceRootWithSlash = FString::Printf(TEXT("/MonolithCopySrc%s/"), *CopyMountSuffix);
+	const FString CopyDestRootWithSlash = FString::Printf(TEXT("/MonolithCopyDst%s/"), *CopyMountSuffix);
+	const FString CopySourceRoot = CopySourceRootWithSlash.LeftChop(1);
+	const FString CopyDestRoot = CopyDestRootWithSlash.LeftChop(1);
+	const FString CopyBaseDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("MonolithPackageGraphCopy"), TestRunId);
+	const FString CopySourceContent = NormalizeTestContentDir(FPaths::Combine(CopyBaseDir, TEXT("Source"), TEXT("Content")));
+	const FString CopyDestContent = NormalizeTestContentDir(FPaths::Combine(CopyBaseDir, TEXT("Dest"), TEXT("Content")));
+	TestTrue(TEXT("copy_package_graph_with_strategy source temp content exists"), IFileManager::Get().MakeDirectory(*CopySourceContent, true));
+	TestTrue(TEXT("copy_package_graph_with_strategy dest temp content exists"), IFileManager::Get().MakeDirectory(*CopyDestContent, true));
+	FPackageName::RegisterMountPoint(CopySourceRootWithSlash, CopySourceContent);
+	FPackageName::RegisterMountPoint(CopyDestRootWithSlash, CopyDestContent);
+
+	const FString TempSourcePackage = CopySourceRoot + TEXT("/Root");
+	const FString TempDestinationPackage = CopyDestRoot + TEXT("/Root");
+	UPackage* TempPackage = CreatePackage(*TempSourcePackage);
+	UCurveFloat* TempSourceAsset = TempPackage
+		? NewObject<UCurveFloat>(TempPackage, UCurveFloat::StaticClass(), TEXT("Root"), RF_Public | RF_Standalone)
+		: nullptr;
+	TestNotNull(TEXT("copy_package_graph_with_strategy temp source package"), TempPackage);
+	TestNotNull(TEXT("copy_package_graph_with_strategy temp source asset"), TempSourceAsset);
+	if (TempPackage && TempSourceAsset)
+	{
+		IAssetRegistry& TestAssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TestAssetRegistry.AssetCreated(TempSourceAsset);
+		TempPackage->SetDirtyFlag(false);
+
+		TSharedPtr<FJsonObject> ConfirmedDuplicateParams = MakeShared<FJsonObject>();
+		SetStringArray(ConfirmedDuplicateParams, TEXT("root_packages"), { TempSourcePackage });
+		TSharedPtr<FJsonObject> ConfirmedDuplicateRemaps = MakeShared<FJsonObject>();
+		ConfirmedDuplicateRemaps->SetStringField(CopySourceRoot, CopyDestRoot);
+		ConfirmedDuplicateParams->SetObjectField(TEXT("root_remaps"), ConfirmedDuplicateRemaps);
+		ConfirmedDuplicateParams->SetStringField(TEXT("workflow"), TEXT("copy_only"));
+		ConfirmedDuplicateParams->SetStringField(TEXT("copy_strategy"), TEXT("duplicate_asset"));
+		ConfirmedDuplicateParams->SetBoolField(TEXT("confirm"), true);
+		ConfirmedDuplicateParams->SetBoolField(TEXT("save"), false);
+		ConfirmedDuplicateParams->SetBoolField(TEXT("check_collisions"), false);
+
+		FMonolithActionResult ConfirmedDuplicate = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(ConfirmedDuplicateParams);
+		TestTrue(TEXT("copy_package_graph_with_strategy confirmed duplicate copy succeeds"), ConfirmedDuplicate.bSuccess);
+		TestTrue(TEXT("copy_package_graph_with_strategy confirmed duplicate returns json"), ConfirmedDuplicate.Result.IsValid());
+		if (ConfirmedDuplicate.Result.IsValid())
+		{
+			FString Status;
+			ConfirmedDuplicate.Result->TryGetStringField(TEXT("status"), Status);
+			TestEqual(TEXT("copy_package_graph_with_strategy confirmed duplicate status"), Status, FString(TEXT("success")));
+			const TSharedPtr<FJsonObject>* CopyReport = nullptr;
+			TestTrue(TEXT("copy_package_graph_with_strategy confirmed duplicate includes copy report"), ConfirmedDuplicate.Result->TryGetObjectField(TEXT("copy_report"), CopyReport) && CopyReport && CopyReport->IsValid());
+			if (CopyReport && CopyReport->IsValid())
+			{
+				double CopiedCount = 0.0;
+				(*CopyReport)->TryGetNumberField(TEXT("copied_count"), CopiedCount);
+				TestEqual(TEXT("copy_package_graph_with_strategy confirmed duplicate copied one package"), static_cast<int32>(CopiedCount), 1);
+				double SavedCount = -1.0;
+				(*CopyReport)->TryGetNumberField(TEXT("saved_count"), SavedCount);
+				TestEqual(TEXT("copy_package_graph_with_strategy confirmed duplicate does not save in smoke"), static_cast<int32>(SavedCount), 0);
+			}
+		}
+
+		TArray<FAssetData> TempDestinationAssets;
+		TestAssetRegistry.GetAssetsByPackageName(FName(*TempDestinationPackage), TempDestinationAssets, /*bIncludeOnlyOnDiskAssets=*/false);
+		TestTrue(TEXT("copy_package_graph_with_strategy confirmed duplicate destination exists in asset registry"), TempDestinationAssets.Num() > 0);
+
+		TSharedPtr<FJsonObject> SkipExistingParams = MakeShared<FJsonObject>();
+		SkipExistingParams->Values = ConfirmedDuplicateParams->Values;
+		SkipExistingParams->SetStringField(TEXT("workflow"), TEXT("copy_fixup_validate"));
+		SkipExistingParams->SetStringField(TEXT("collision_policy"), TEXT("skip_existing"));
+		SkipExistingParams->SetBoolField(TEXT("cleanup_redirectors"), true);
+		FMonolithActionResult SkipExistingResult = FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy(SkipExistingParams);
+		TestTrue(TEXT("copy_package_graph_with_strategy skip_existing confirmed workflow succeeds"), SkipExistingResult.bSuccess);
+		TestTrue(TEXT("copy_package_graph_with_strategy skip_existing returns json"), SkipExistingResult.Result.IsValid());
+		if (SkipExistingResult.Result.IsValid())
+		{
+			double AffectedPackageCount = -1.0;
+			SkipExistingResult.Result->TryGetNumberField(TEXT("affected_package_count"), AffectedPackageCount);
+			TestEqual(TEXT("skip_existing has no affected packages for fixup/closure"), static_cast<int32>(AffectedPackageCount), 0);
+			TestFalse(TEXT("skip_existing does not run fixup report"), SkipExistingResult.Result->HasTypedField<EJson::Object>(TEXT("fixup_report")));
+			TestFalse(TEXT("skip_existing does not run redirector cleanup report"), SkipExistingResult.Result->HasTypedField<EJson::Object>(TEXT("redirector_cleanup_report")));
+			TestFalse(TEXT("skip_existing does not run closure report"), SkipExistingResult.Result->HasTypedField<EJson::Object>(TEXT("closure_report")));
+			const TSharedPtr<FJsonObject>* SkipCopyReport = nullptr;
+			TestTrue(TEXT("skip_existing includes copy report"), SkipExistingResult.Result->TryGetObjectField(TEXT("copy_report"), SkipCopyReport) && SkipCopyReport && SkipCopyReport->IsValid());
+			if (SkipCopyReport && SkipCopyReport->IsValid())
+			{
+				double SkippedCount = 0.0;
+				double CopiedCount = -1.0;
+				(*SkipCopyReport)->TryGetNumberField(TEXT("skipped_count"), SkippedCount);
+				(*SkipCopyReport)->TryGetNumberField(TEXT("copied_count"), CopiedCount);
+				TestEqual(TEXT("skip_existing reports one skipped package"), static_cast<int32>(SkippedCount), 1);
+				TestEqual(TEXT("skip_existing copies no packages"), static_cast<int32>(CopiedCount), 0);
+			}
+		}
+
+		if (UPackage* TempDestinationLoadedPackage = FindPackage(nullptr, *TempDestinationPackage))
+		{
+			TempDestinationLoadedPackage->SetDirtyFlag(false);
+		}
+		TempPackage->SetDirtyFlag(false);
+	}
+	FPackageName::UnRegisterMountPoint(CopySourceRootWithSlash, CopySourceContent);
+	FPackageName::UnRegisterMountPoint(CopyDestRootWithSlash, CopyDestContent);
+	IFileManager::Get().DeleteDirectory(*CopyBaseDir, false, true);
 
 	TSharedPtr<FJsonObject> FixupDryRunParams = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> FixupRemaps = MakeShared<FJsonObject>();

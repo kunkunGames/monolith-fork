@@ -11,11 +11,14 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "IAssetTools.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
+#include "UObject/ObjectRedirector.h"
 #include "ScopedTransaction.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -48,6 +51,7 @@ namespace
 		bool bSourceExists = false;
 		bool bDestinationExists = false;
 		FAssetData SourceAsset;
+		FString SelectedStrategy = TEXT("duplicate_asset");
 	};
 
 	struct FContentMountSpec
@@ -722,6 +726,40 @@ namespace
 		return DestinationPackages;
 	}
 
+	static TArray<FString> DestinationPackagesFromCopyReport(const TSharedPtr<FJsonObject>& CopyReport)
+	{
+		TArray<FString> DestinationPackages;
+		const TArray<TSharedPtr<FJsonValue>>* CopyRows = nullptr;
+		if (!CopyReport.IsValid() || !CopyReport->TryGetArrayField(TEXT("copies"), CopyRows) || !CopyRows)
+		{
+			return DestinationPackages;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *CopyRows)
+		{
+			const TSharedPtr<FJsonObject> Row = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Row.IsValid())
+			{
+				continue;
+			}
+
+			FString Status;
+			Row->TryGetStringField(TEXT("status"), Status);
+			if (Status.Equals(TEXT("skip_existing"), ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			FString DestinationPackage;
+			if (Row->TryGetStringField(TEXT("destination_package"), DestinationPackage))
+			{
+				DestinationPackages.AddUnique(NormalizePackagePath(DestinationPackage));
+			}
+		}
+		DestinationPackages.Sort();
+		return DestinationPackages;
+	}
+
 	static TSharedPtr<FJsonObject> MakePhaseRow(
 		const FString& PhaseName,
 		const FString& Status,
@@ -759,6 +797,22 @@ namespace
 			|| Value.Equals(TEXT("advanced_copy"), ESearchCase::IgnoreCase)
 			|| Value.Equals(TEXT("raw_package_file_copy"), ESearchCase::IgnoreCase)
 			|| Value.Equals(TEXT("header_patched_advanced_copy"), ESearchCase::IgnoreCase);
+	}
+
+	static bool IsExecutablePackageCopyStrategy(const FString& Value, bool bAllowRawPackageCopy)
+	{
+		return Value.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase)
+			|| Value.Equals(TEXT("advanced_copy"), ESearchCase::IgnoreCase)
+			|| Value.Equals(TEXT("header_patched_advanced_copy"), ESearchCase::IgnoreCase)
+			|| (bAllowRawPackageCopy && Value.Equals(TEXT("raw_package_file_copy"), ESearchCase::IgnoreCase));
+	}
+
+	static bool IsKnownNonManualCopyStrategy(const FString& Value)
+	{
+		return Value.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase)
+			|| Value.Equals(TEXT("advanced_copy"), ESearchCase::IgnoreCase)
+			|| Value.Equals(TEXT("header_patched_advanced_copy"), ESearchCase::IgnoreCase)
+			|| Value.Equals(TEXT("raw_package_file_copy"), ESearchCase::IgnoreCase);
 	}
 
 	static bool ReadStrategyAlias(
@@ -805,6 +859,35 @@ namespace
 		return IsUnderAnyRoot(PackagePath, Roots);
 	}
 
+	static FString PackagePairKey(const FString& SourcePackage, const FString& DestinationPackage)
+	{
+		return NormalizePackagePath(SourcePackage) + TEXT(" -> ") + NormalizePackagePath(DestinationPackage);
+	}
+
+	static TMap<FString, FString> BuildSelectedStrategyMap(const TArray<TSharedPtr<FJsonValue>>& StrategyRows)
+	{
+		TMap<FString, FString> StrategiesByPackagePair;
+		for (const TSharedPtr<FJsonValue>& Value : StrategyRows)
+		{
+			const TSharedPtr<FJsonObject> Row = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Row.IsValid())
+			{
+				continue;
+			}
+
+			FString SourcePackage;
+			FString DestinationPackage;
+			FString SelectedStrategy;
+			if (Row->TryGetStringField(TEXT("source_package"), SourcePackage)
+				&& Row->TryGetStringField(TEXT("destination_package"), DestinationPackage)
+				&& Row->TryGetStringField(TEXT("selected_strategy"), SelectedStrategy))
+			{
+				StrategiesByPackagePair.Add(PackagePairKey(SourcePackage, DestinationPackage), SelectedStrategy);
+			}
+		}
+		return StrategiesByPackagePair;
+	}
+
 	static bool BuildCopyStrategyPlan(
 		const TSharedPtr<FJsonObject>& Plan,
 		const FString& RequestedCopyStrategy,
@@ -846,7 +929,7 @@ namespace
 
 			FString SelectedStrategy = RequestedCopyStrategy;
 			FString Reason = TEXT("requested_strategy");
-			bool bExecutableByThisAction = SelectedStrategy.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase);
+			bool bExecutableByThisAction = IsExecutablePackageCopyStrategy(SelectedStrategy, bAllowRawPackageCopy);
 
 			const bool bManualSelected = IsPackageSelected(SourcePackage, ManualCopyRoots, ManualCopyPackages);
 			const bool bHeaderPatchedSelected = IsPackageSelected(SourcePackage, HeaderPatchedRoots, HeaderPatchedPackages);
@@ -864,13 +947,13 @@ namespace
 				{
 					SelectedStrategy = TEXT("header_patched_advanced_copy");
 					Reason = TEXT("header_patched_selector");
-					bExecutableByThisAction = false;
+					bExecutableByThisAction = true;
 				}
 				else if (bRawSelected)
 				{
 					SelectedStrategy = TEXT("raw_package_file_copy");
-					Reason = TEXT("raw_package_selector");
-					bExecutableByThisAction = false;
+					Reason = bAllowRawPackageCopy ? TEXT("raw_package_selector") : TEXT("allow_raw_package_copy_false");
+					bExecutableByThisAction = bAllowRawPackageCopy;
 				}
 				else
 				{
@@ -884,13 +967,13 @@ namespace
 				bExecutableByThisAction = false;
 				Reason = TEXT("allow_raw_package_copy_false");
 			}
-			else if (!SelectedStrategy.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase))
+			else if (!IsExecutablePackageCopyStrategy(SelectedStrategy, bAllowRawPackageCopy))
 			{
 				bExecutableByThisAction = false;
 				Reason = TEXT("strategy_execution_deferred");
 			}
 
-			const bool bSupportedStrategy = SelectedStrategy.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase);
+			const bool bSupportedStrategy = IsKnownNonManualCopyStrategy(SelectedStrategy);
 			const FString Status = bExecutableByThisAction
 				? TEXT("ready")
 				: (bSupportedStrategy ? TEXT("blocked") : TEXT("unsupported"));
@@ -1043,7 +1126,18 @@ namespace
 	{
 		TArray<FAssetData> Assets;
 		AssetRegistry.GetAssetsByPackageName(FName(*PackagePath), Assets, /*bIncludeOnlyOnDiskAssets=*/false);
-		return Assets.Num() > 0;
+		if (Assets.Num() > 0)
+		{
+			return true;
+		}
+
+		FString ExistingFilename;
+		if (FPackageName::DoesPackageExist(PackagePath, &ExistingFilename))
+		{
+			return true;
+		}
+
+		return FindPackage(nullptr, *PackagePath) != nullptr;
 	}
 
 	static FString ObjectPathForPackageAndObjectName(const FString& PackagePath, const FString& ObjectName)
@@ -1210,6 +1304,7 @@ namespace
 		IAssetRegistry& AssetRegistry,
 		const TSharedPtr<FJsonObject>& Plan,
 		const FString& CollisionPolicy,
+		const TMap<FString, FString>* SelectedStrategiesByPackagePair,
 		TArray<FPackageCopyRow>& OutRows,
 		TArray<TSharedPtr<FJsonValue>>& OutErrors)
 	{
@@ -1237,7 +1332,18 @@ namespace
 			RowObject->TryGetStringField(TEXT("source_package"), Row.SourcePackage);
 			RowObject->TryGetStringField(TEXT("destination_package"), Row.DestinationPackage);
 			RowObject->TryGetBoolField(TEXT("source_exists"), Row.bSourceExists);
-			RowObject->TryGetBoolField(TEXT("destination_exists"), Row.bDestinationExists);
+			bool bDestinationExistsFromPlan = false;
+			RowObject->TryGetBoolField(TEXT("destination_exists"), bDestinationExistsFromPlan);
+			Row.SourcePackage = NormalizePackagePath(Row.SourcePackage);
+			Row.DestinationPackage = NormalizePackagePath(Row.DestinationPackage);
+			Row.bDestinationExists = bDestinationExistsFromPlan || PackageExists(AssetRegistry, Row.DestinationPackage);
+			if (SelectedStrategiesByPackagePair)
+			{
+				if (const FString* SelectedStrategy = SelectedStrategiesByPackagePair->Find(PackagePairKey(Row.SourcePackage, Row.DestinationPackage)))
+				{
+					Row.SelectedStrategy = *SelectedStrategy;
+				}
+			}
 
 			FString ErrorText;
 			const bool bHasSourceAsset = SelectPrimaryAssetForPackage(AssetRegistry, Row.SourcePackage, Row.SourceAsset, ErrorText);
@@ -1267,6 +1373,495 @@ namespace
 		}
 
 		return OutErrors.Num() == 0;
+	}
+
+	static bool ResolvePackageCopyFilenames(
+		const FPackageCopyRow& Row,
+		FString& OutSourceFilename,
+		FString& OutDestinationFilename,
+		FString& OutError)
+	{
+		if (!FPackageName::DoesPackageExist(Row.SourcePackage, &OutSourceFilename))
+		{
+			OutError = FString::Printf(TEXT("Source package does not exist on disk: %s"), *Row.SourcePackage);
+			return false;
+		}
+
+		const FString Extension = FPaths::GetExtension(OutSourceFilename, /*bIncludeDot=*/true);
+		if (Extension.IsEmpty())
+		{
+			OutError = FString::Printf(TEXT("Could not infer package extension for source package: %s"), *Row.SourcePackage);
+			return false;
+		}
+
+		OutDestinationFilename = FPackageName::LongPackageNameToFilename(Row.DestinationPackage, Extension);
+		return true;
+	}
+
+	static bool CopyRawPackageFile(const FPackageCopyRow& Row, FString& OutSourceFilename, FString& OutDestinationFilename, FString& OutError)
+	{
+		if (!ResolvePackageCopyFilenames(Row, OutSourceFilename, OutDestinationFilename, OutError))
+		{
+			return false;
+		}
+
+		if (!IFileManager::Get().MakeDirectory(*FPaths::GetPath(OutDestinationFilename), /*Tree=*/true))
+		{
+			OutError = FString::Printf(TEXT("Could not create destination package directory: %s"), *FPaths::GetPath(OutDestinationFilename));
+			return false;
+		}
+
+		const uint32 CopyResult = IFileManager::Get().Copy(*OutDestinationFilename, *OutSourceFilename, /*Replace=*/false, /*EvenIfReadOnly=*/false);
+		if (CopyResult != COPY_OK)
+		{
+			OutError = FString::Printf(
+				TEXT("Raw package file copy failed (%u): %s -> %s"),
+				CopyResult,
+				*OutSourceFilename,
+				*OutDestinationFilename);
+			return false;
+		}
+		return true;
+	}
+
+	static bool RunAdvancedCopyPackageMap(
+		const TMap<FString, FString>& SourceAndDestPackages,
+		bool bUseHeaderPatching,
+		bool bSave,
+		FString& OutError)
+	{
+		if (SourceAndDestPackages.Num() == 0)
+		{
+			return true;
+		}
+
+		IConsoleVariable* HeaderPatchCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("AssetTools.UseHeaderPatchingAdvancedCopy"));
+		const int32 PreviousHeaderPatchValue = HeaderPatchCVar ? HeaderPatchCVar->GetInt() : 0;
+		if (bUseHeaderPatching && !HeaderPatchCVar)
+		{
+			OutError = TEXT("AssetTools.UseHeaderPatchingAdvancedCopy cvar is not available in this editor build");
+			return false;
+		}
+
+		if (HeaderPatchCVar)
+		{
+			HeaderPatchCVar->Set(bUseHeaderPatching ? 1 : 0, ECVF_SetByCode);
+		}
+
+		IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		const bool bCopied = AssetTools.AdvancedCopyPackages(
+			SourceAndDestPackages,
+			/*bForceAutosave=*/bSave,
+			/*bCopyOverAllDestinationOverlaps=*/false);
+
+		if (HeaderPatchCVar)
+		{
+			HeaderPatchCVar->Set(PreviousHeaderPatchValue, ECVF_SetByCode);
+		}
+
+		if (!bCopied)
+		{
+			OutError = bUseHeaderPatching
+				? TEXT("IAssetTools::AdvancedCopyPackages failed with header patching enabled")
+				: TEXT("IAssetTools::AdvancedCopyPackages failed");
+			return false;
+		}
+		return true;
+	}
+
+	static TSharedPtr<FJsonObject> MakeCopyReport(
+		const FString& ActionName,
+		const FMutationOptions& Mutation,
+		const FString& CollisionPolicy,
+		const TSharedPtr<FJsonObject>& Plan,
+		const TArray<TSharedPtr<FJsonValue>>& PreflightErrors,
+		const TArray<TSharedPtr<FJsonValue>>& CopyRows,
+		const TArray<TSharedPtr<FJsonValue>>& SavedRows,
+		int32 WouldCopyCount,
+		int32 CopiedCount,
+		int32 SkippedCount,
+		int32 SavedCount,
+		const FString& Status)
+	{
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("namespace"), TEXT("asset"));
+		Result->SetStringField(TEXT("action"), ActionName);
+		Result->SetBoolField(TEXT("dry_run"), Mutation.bDryRun);
+		Result->SetBoolField(TEXT("confirmed"), Mutation.bConfirm);
+		Result->SetBoolField(TEXT("save"), Mutation.bSave);
+		Result->SetStringField(TEXT("collision_policy"), CollisionPolicy);
+		Result->SetStringField(TEXT("status"), Status);
+		Result->SetObjectField(TEXT("plan"), Plan);
+		Result->SetArrayField(TEXT("preflight_errors"), PreflightErrors);
+		Result->SetArrayField(TEXT("copies"), CopyRows);
+		Result->SetArrayField(TEXT("saved_packages"), SavedRows);
+		Result->SetNumberField(TEXT("would_copy_count"), WouldCopyCount);
+		Result->SetNumberField(TEXT("copied_count"), CopiedCount);
+		Result->SetNumberField(TEXT("skipped_count"), SkippedCount);
+		Result->SetNumberField(TEXT("saved_count"), SavedCount);
+		Result->SetNumberField(TEXT("preflight_error_count"), PreflightErrors.Num());
+		Result->SetStringField(TEXT("next_recommended_action"), TEXT("asset.fixup_copied_references"));
+		return Result;
+	}
+
+	static FMonolithActionResult CopyPackageGraphWithSelectedStrategies(
+		const TSharedPtr<FJsonObject>& Plan,
+		const TArray<TSharedPtr<FJsonValue>>& StrategyRows,
+		const TSharedPtr<FJsonObject>& Params,
+		const FMutationOptions& Mutation)
+	{
+		FString Error;
+		FString CollisionPolicy = TEXT("fail_if_exists");
+		if (!ReadStringParam(Params, TEXT("collision_policy"), CollisionPolicy, Error))
+		{
+			return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("collision_policy"), Error));
+		}
+		if (!CollisionPolicy.Equals(TEXT("fail_if_exists"), ESearchCase::IgnoreCase)
+			&& !CollisionPolicy.Equals(TEXT("skip_existing"), ESearchCase::IgnoreCase))
+		{
+			Error = FString::Printf(TEXT("Unsupported collision_policy '%s'; expected fail_if_exists or skip_existing"), *CollisionPolicy);
+			return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("collision_policy"), Error));
+		}
+
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		const TMap<FString, FString> SelectedStrategiesByPackagePair = BuildSelectedStrategyMap(StrategyRows);
+
+		TArray<FPackageCopyRow> Rows;
+		TArray<TSharedPtr<FJsonValue>> PreflightErrors;
+		ExtractPackageMapRows(AssetRegistry, Plan, CollisionPolicy, &SelectedStrategiesByPackagePair, Rows, PreflightErrors);
+		if (PreflightErrors.Num() > 0 && !Mutation.bDryRun)
+		{
+			TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(
+				TEXT("copy_package_graph_with_strategy"),
+				Mutation,
+				CollisionPolicy,
+				Plan,
+				PreflightErrors,
+				TArray<TSharedPtr<FJsonValue>>(),
+				TArray<TSharedPtr<FJsonValue>>(),
+				0,
+				0,
+				0,
+				0,
+				TEXT("preflight_failed"));
+			return FMonolithActionResult::Error(TEXT("copy_package_graph_with_strategy preflight failed"), ErrInvalidParams)
+				.WithErrorData(ErrorResult);
+		}
+
+		TArray<TSharedPtr<FJsonValue>> CopyRows;
+		TArray<TSharedPtr<FJsonValue>> SavedRows;
+		TMap<FString, TSharedPtr<FJsonObject>> CopyRowsByPackagePair;
+		int32 WouldCopyCount = 0;
+		int32 CopiedCount = 0;
+		int32 SkippedCount = 0;
+		int32 SavedCount = 0;
+
+		TArray<FString> FilesToScan;
+		TArray<FPackageCopyRow> DuplicateRows;
+		TArray<FPackageCopyRow> RawRows;
+		TMap<FString, FString> AdvancedCopyMap;
+		TMap<FString, FString> HeaderPatchedAdvancedCopyMap;
+
+		for (const FPackageCopyRow& Row : Rows)
+		{
+			const bool bSkipExisting = Row.bDestinationExists && CollisionPolicy.Equals(TEXT("skip_existing"), ESearchCase::IgnoreCase);
+			if (bSkipExisting)
+			{
+				++SkippedCount;
+			}
+			else
+			{
+				++WouldCopyCount;
+			}
+
+			TSharedPtr<FJsonObject> CopyRow = MakeShared<FJsonObject>();
+			CopyRow->SetStringField(TEXT("source_package"), Row.SourcePackage);
+			CopyRow->SetStringField(TEXT("destination_package"), Row.DestinationPackage);
+			CopyRow->SetStringField(TEXT("selected_strategy"), Row.SelectedStrategy);
+			CopyRow->SetStringField(TEXT("source_asset"), Row.SourceAsset.GetSoftObjectPath().ToString());
+			CopyRow->SetStringField(TEXT("status"), bSkipExisting ? TEXT("skip_existing") : (Mutation.bDryRun ? TEXT("dry_run") : TEXT("pending")));
+			CopyRows.Add(MakeShared<FJsonValueObject>(CopyRow));
+			CopyRowsByPackagePair.Add(PackagePairKey(Row.SourcePackage, Row.DestinationPackage), CopyRow);
+
+			if (bSkipExisting || Mutation.bDryRun)
+			{
+				continue;
+			}
+
+			if (Row.SelectedStrategy.Equals(TEXT("duplicate_asset"), ESearchCase::IgnoreCase))
+			{
+				DuplicateRows.Add(Row);
+			}
+			else if (Row.SelectedStrategy.Equals(TEXT("raw_package_file_copy"), ESearchCase::IgnoreCase))
+			{
+				RawRows.Add(Row);
+			}
+			else if (Row.SelectedStrategy.Equals(TEXT("advanced_copy"), ESearchCase::IgnoreCase))
+			{
+				AdvancedCopyMap.Add(Row.SourcePackage, Row.DestinationPackage);
+			}
+			else if (Row.SelectedStrategy.Equals(TEXT("header_patched_advanced_copy"), ESearchCase::IgnoreCase))
+			{
+				HeaderPatchedAdvancedCopyMap.Add(Row.SourcePackage, Row.DestinationPackage);
+			}
+		}
+
+		if (!Mutation.bDryRun && WouldCopyCount > 0)
+		{
+			if (!Mutation.bSave && (AdvancedCopyMap.Num() > 0 || HeaderPatchedAdvancedCopyMap.Num() > 0))
+			{
+				Error = TEXT("advanced_copy and header_patched_advanced_copy require save=true because Unreal AssetTools may save copied packages during AdvancedCopyPackages");
+				TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+				ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+				return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorResult);
+			}
+
+			FScopedTransaction Transaction(NSLOCTEXT("MonolithAsset", "CopyPackageGraphWithStrategy", "Monolith Copy Package Graph With Strategy"));
+			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+
+			for (const FPackageCopyRow& Row : DuplicateRows)
+			{
+				UObject* SourceAsset = Row.SourceAsset.GetAsset();
+				if (!SourceAsset)
+				{
+					Error = FString::Printf(TEXT("Could not load source asset '%s'"), *Row.SourceAsset.GetSoftObjectPath().ToString());
+					TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+					ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+					return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+				}
+
+				const FString DestinationPackagePath = FPackageName::GetLongPackagePath(Row.DestinationPackage);
+				const FString DestinationAssetName = FPaths::GetBaseFilename(Row.DestinationPackage);
+				UObject* Duplicated = AssetTools.DuplicateAsset(DestinationAssetName, DestinationPackagePath, SourceAsset);
+				if (!Duplicated)
+				{
+					Error = FString::Printf(TEXT("DuplicateAsset failed: %s -> %s"), *Row.SourcePackage, *Row.DestinationPackage);
+					TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+					ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+					return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+				}
+
+				++CopiedCount;
+				Duplicated->MarkPackageDirty();
+				AssetRegistry.AssetCreated(Duplicated);
+
+				if (TSharedPtr<FJsonObject>* AppliedRow = CopyRowsByPackagePair.Find(PackagePairKey(Row.SourcePackage, Row.DestinationPackage)))
+				{
+					(*AppliedRow)->SetStringField(TEXT("duplicated_asset"), Duplicated->GetPathName());
+					(*AppliedRow)->SetStringField(TEXT("status"), TEXT("copied"));
+				}
+
+				FString SavedFilename;
+				FString SaveError;
+				if (!SavePackageIfRequested(Duplicated->GetOutermost(), Mutation.bSave, SavedFilename, SaveError))
+				{
+					TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+					ErrorResult->SetStringField(TEXT("failure_detail"), SaveError);
+					return FMonolithActionResult::Error(SaveError).WithErrorData(ErrorResult);
+				}
+				if (Mutation.bSave)
+				{
+					++SavedCount;
+					TSharedPtr<FJsonObject> SavedRow = MakeShared<FJsonObject>();
+					SavedRow->SetStringField(TEXT("package_path"), Row.DestinationPackage);
+					SavedRow->SetStringField(TEXT("filename"), SavedFilename);
+					SavedRows.Add(MakeShared<FJsonValueObject>(SavedRow));
+					FilesToScan.AddUnique(SavedFilename);
+				}
+			}
+
+			for (const FPackageCopyRow& Row : RawRows)
+			{
+				FString SourceFilename;
+				FString DestinationFilename;
+				if (!CopyRawPackageFile(Row, SourceFilename, DestinationFilename, Error))
+				{
+					TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+					ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+					return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+				}
+
+				++CopiedCount;
+				++SavedCount;
+				FilesToScan.AddUnique(DestinationFilename);
+
+				if (TSharedPtr<FJsonObject>* AppliedRow = CopyRowsByPackagePair.Find(PackagePairKey(Row.SourcePackage, Row.DestinationPackage)))
+				{
+					(*AppliedRow)->SetStringField(TEXT("source_filename"), SourceFilename);
+					(*AppliedRow)->SetStringField(TEXT("copied_file"), DestinationFilename);
+					(*AppliedRow)->SetStringField(TEXT("status"), TEXT("copied"));
+				}
+
+				TSharedPtr<FJsonObject> SavedRow = MakeShared<FJsonObject>();
+				SavedRow->SetStringField(TEXT("package_path"), Row.DestinationPackage);
+				SavedRow->SetStringField(TEXT("filename"), DestinationFilename);
+				SavedRows.Add(MakeShared<FJsonValueObject>(SavedRow));
+			}
+
+			auto MarkAdvancedRowsCopied = [&CopyRowsByPackagePair, &CopiedCount, &SavedCount, &SavedRows, &FilesToScan, &Error](const TMap<FString, FString>& PackageMap, const FString& StrategyName) -> bool
+			{
+				for (const TPair<FString, FString>& Pair : PackageMap)
+				{
+					FString ExistingDestinationFilename;
+					if (!FPackageName::DoesPackageExist(Pair.Value, &ExistingDestinationFilename))
+					{
+						Error = FString::Printf(TEXT("%s did not create destination package '%s'"), *StrategyName, *Pair.Value);
+						return false;
+					}
+
+					++CopiedCount;
+
+					FString SourceFilename;
+					FString DestinationFilename;
+					FString FilenameError;
+					FPackageCopyRow FilenameRow;
+					FilenameRow.SourcePackage = Pair.Key;
+					FilenameRow.DestinationPackage = Pair.Value;
+					if (ResolvePackageCopyFilenames(FilenameRow, SourceFilename, DestinationFilename, FilenameError))
+					{
+						++SavedCount;
+						FilesToScan.AddUnique(ExistingDestinationFilename);
+						TSharedPtr<FJsonObject> SavedRow = MakeShared<FJsonObject>();
+						SavedRow->SetStringField(TEXT("package_path"), Pair.Value);
+						SavedRow->SetStringField(TEXT("filename"), ExistingDestinationFilename);
+						SavedRows.Add(MakeShared<FJsonValueObject>(SavedRow));
+					}
+
+					if (TSharedPtr<FJsonObject>* AppliedRow = CopyRowsByPackagePair.Find(PackagePairKey(Pair.Key, Pair.Value)))
+					{
+						(*AppliedRow)->SetStringField(TEXT("advanced_copy_strategy"), StrategyName);
+						(*AppliedRow)->SetStringField(TEXT("copied_file"), ExistingDestinationFilename);
+						(*AppliedRow)->SetStringField(TEXT("status"), TEXT("copied"));
+					}
+				}
+				return true;
+			};
+
+			if (!RunAdvancedCopyPackageMap(AdvancedCopyMap, /*bUseHeaderPatching=*/false, Mutation.bSave, Error))
+			{
+				TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+				ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+				return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+			}
+			if (!MarkAdvancedRowsCopied(AdvancedCopyMap, TEXT("advanced_copy")))
+			{
+				TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+				ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+				return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+			}
+
+			if (!RunAdvancedCopyPackageMap(HeaderPatchedAdvancedCopyMap, /*bUseHeaderPatching=*/true, Mutation.bSave, Error))
+			{
+				TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+				ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+				return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+			}
+			if (!MarkAdvancedRowsCopied(HeaderPatchedAdvancedCopyMap, TEXT("header_patched_advanced_copy")))
+			{
+				TSharedPtr<FJsonObject> ErrorResult = MakeCopyReport(TEXT("copy_package_graph_with_strategy"), Mutation, CollisionPolicy, Plan, PreflightErrors, CopyRows, SavedRows, WouldCopyCount, CopiedCount, SkippedCount, SavedCount, TEXT("failed"));
+				ErrorResult->SetStringField(TEXT("failure_detail"), Error);
+				return FMonolithActionResult::Error(Error).WithErrorData(ErrorResult);
+			}
+
+			if (FilesToScan.Num() > 0)
+			{
+				AssetRegistry.ScanFilesSynchronous(FilesToScan, /*bForceRescan=*/true);
+			}
+		}
+
+		return FMonolithActionResult::Success(MakeCopyReport(
+			TEXT("copy_package_graph_with_strategy"),
+			Mutation,
+			CollisionPolicy,
+			Plan,
+			PreflightErrors,
+			CopyRows,
+			SavedRows,
+			WouldCopyCount,
+			CopiedCount,
+			SkippedCount,
+			SavedCount,
+			Mutation.bDryRun ? TEXT("dry_run") : TEXT("success")));
+	}
+
+	static FMonolithActionResult CleanupRedirectorsForCopiedRoots(
+		const TArray<FString>& DestinationRoots,
+		const TArray<FString>& PackagePaths,
+		const FMutationOptions& Mutation)
+	{
+		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+
+		TArray<FAssetData> RedirectorAssets;
+		if (DestinationRoots.Num() > 0)
+		{
+			FARFilter Filter;
+			Filter.bRecursivePaths = true;
+			Filter.ClassPaths.Add(UObjectRedirector::StaticClass()->GetClassPathName());
+			for (const FString& DestinationRoot : DestinationRoots)
+			{
+				Filter.PackagePaths.Add(FName(*DestinationRoot));
+			}
+			AssetRegistry.GetAssets(Filter, RedirectorAssets);
+		}
+
+		for (const FString& PackagePath : PackagePaths)
+		{
+			TArray<FAssetData> Assets;
+			AssetRegistry.GetAssetsByPackageName(FName(*PackagePath), Assets, /*bIncludeOnlyOnDiskAssets=*/false);
+			for (const FAssetData& Asset : Assets)
+			{
+				if (Asset.IsRedirector())
+				{
+					RedirectorAssets.AddUnique(Asset);
+				}
+			}
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		TArray<UObjectRedirector*> Redirectors;
+		for (const FAssetData& RedirectorAsset : RedirectorAssets)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("package_path"), RedirectorAsset.PackageName.ToString());
+			Row->SetStringField(TEXT("object_path"), RedirectorAsset.GetSoftObjectPath().ToString());
+			Row->SetStringField(TEXT("status"), Mutation.bDryRun ? TEXT("dry_run") : TEXT("pending"));
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+
+			if (!Mutation.bDryRun)
+			{
+				if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(RedirectorAsset.GetAsset()))
+				{
+					Redirectors.Add(Redirector);
+				}
+			}
+		}
+
+		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("namespace"), TEXT("asset"));
+		Result->SetStringField(TEXT("action"), TEXT("cleanup_copied_redirectors"));
+		Result->SetBoolField(TEXT("dry_run"), Mutation.bDryRun);
+		Result->SetBoolField(TEXT("confirmed"), Mutation.bConfirm);
+		Result->SetArrayField(TEXT("destination_roots"), StringsToJson(DestinationRoots));
+		Result->SetArrayField(TEXT("package_paths"), StringsToJson(PackagePaths));
+		Result->SetArrayField(TEXT("redirectors"), Rows);
+		Result->SetNumberField(TEXT("redirector_count"), RedirectorAssets.Num());
+
+		if (!Mutation.bDryRun && Redirectors.Num() > 0)
+		{
+			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+			if (AssetTools.IsFixupReferencersInProgress())
+			{
+				Result->SetStringField(TEXT("status"), TEXT("blocked"));
+				Result->SetBoolField(TEXT("ok"), false);
+				return FMonolithActionResult::Error(TEXT("AssetTools redirector fixup is already in progress")).WithErrorData(Result);
+			}
+
+			AssetTools.FixupReferencers(Redirectors, /*bCheckoutDialogPrompt=*/false, ERedirectFixupMode::DeleteFixedUpRedirectors);
+		}
+
+		Result->SetBoolField(TEXT("ok"), true);
+		Result->SetStringField(TEXT("status"), Mutation.bDryRun ? TEXT("dry_run") : TEXT("success"));
+		return FMonolithActionResult::Success(Result);
 	}
 
 	static bool FixupObjectProperty(
@@ -1746,10 +2341,10 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 		TEXT("PackageGraph"),
 		MutatingAssetPolicy());
 
-	Registry.RegisterAction(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
-		TEXT("Orchestrate a guarded package graph copy strategy: plan-only, copy-only, copy+fixup, or copy+fixup+dependency-closure validation."),
-		FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy),
-		FParamSchemaBuilder()
+		Registry.RegisterAction(TEXT("asset"), TEXT("copy_package_graph_with_strategy"),
+			TEXT("Orchestrate a guarded package graph copy strategy: plan-only, copy-only, copy+fixup, or copy+fixup+dependency-closure validation."),
+			FMonolithActionHandler::CreateStatic(&FMonolithAssetPackageGraphActions::CopyPackageGraphWithStrategy),
+			FParamSchemaBuilder()
 			.EnableValidation()
 			.Required(TEXT("root_packages"), TEXT("array"), TEXT("Source package roots to copy or plan"))
 			.Required(TEXT("root_remaps"), TEXT("object"), TEXT("Object mapping source roots to destination roots"))
@@ -1765,11 +2360,12 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 			.Optional(TEXT("header_patched_roots"), TEXT("array"), TEXT("Source roots that select header_patched_advanced_copy when copy_strategy=auto"))
 			.Optional(TEXT("header_patched_packages"), TEXT("array"), TEXT("Source packages that select header_patched_advanced_copy when copy_strategy=auto"))
 			.Optional(TEXT("raw_package_roots"), TEXT("array"), TEXT("Source roots that select raw_package_file_copy when copy_strategy=auto"))
-			.Optional(TEXT("raw_package_packages"), TEXT("array"), TEXT("Source packages that select raw_package_file_copy when copy_strategy=auto"))
-			.Optional(TEXT("manual_copy_roots"), TEXT("array"), TEXT("Source roots that are known to require manual single-object duplication"))
-			.Optional(TEXT("manual_copy_packages"), TEXT("array"), TEXT("Source packages that are known to require manual single-object duplication"))
-			.Optional(TEXT("allow_raw_package_copy"), TEXT("bool"), TEXT("Opt-in flag for future raw package file copy execution; current slice still reports execution as deferred"), TEXT("false"))
-			.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed during dependency-closure validation"))
+				.Optional(TEXT("raw_package_packages"), TEXT("array"), TEXT("Source packages that select raw_package_file_copy when copy_strategy=auto"))
+				.Optional(TEXT("manual_copy_roots"), TEXT("array"), TEXT("Source roots that are known to require manual single-object duplication"))
+				.Optional(TEXT("manual_copy_packages"), TEXT("array"), TEXT("Source packages that are known to require manual single-object duplication"))
+				.Optional(TEXT("allow_raw_package_copy"), TEXT("bool"), TEXT("Opt-in flag required before raw package file copy rows can execute"), TEXT("false"))
+				.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Run AssetTools redirector fixup over copied destination roots after fixup, before dependency closure"), TEXT("false"))
+				.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed during dependency-closure validation"))
 			.Optional(TEXT("legacy_source_roots"), TEXT("array"), TEXT("Source roots that should not remain referenced; defaults to root_remaps source roots when omitted"))
 			.Optional(TEXT("require_targets"), TEXT("bool"), TEXT("Fail fixup when a remapped reference target package is missing"), TEXT("true"))
 			.Optional(TEXT("run_fixup_on_dry_run"), TEXT("bool"), TEXT("Run fixup dry-run against existing destination packages instead of only reporting planned params"), TEXT("false"))
@@ -2230,7 +2826,7 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithRem
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 	TArray<FPackageCopyRow> Rows;
 	TArray<TSharedPtr<FJsonValue>> PreflightErrors;
-	ExtractPackageMapRows(AssetRegistry, PlanResult.Result, CollisionPolicy, Rows, PreflightErrors);
+	ExtractPackageMapRows(AssetRegistry, PlanResult.Result, CollisionPolicy, nullptr, Rows, PreflightErrors);
 	if (PreflightErrors.Num() > 0 && !Mutation.bDryRun)
 	{
 		TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
@@ -2396,6 +2992,7 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 	bool bRunFixupOnDryRun = false;
 	bool bRunClosureOnDryRun = false;
 	bool bAllowRawPackageCopy = false;
+	bool bCleanupRedirectors = false;
 	int32 FixupMaxPackages = 1000;
 	int32 ClosureMaxPackages = 1000;
 	if (!ReadStringArrayParam(Params, TEXT("header_patched_roots"), false, HeaderPatchedRoots, Error)
@@ -2405,6 +3002,7 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		|| !ReadStringArrayParam(Params, TEXT("manual_copy_roots"), false, ManualCopyRoots, Error)
 		|| !ReadStringArrayParam(Params, TEXT("manual_copy_packages"), false, ManualCopyPackages, Error)
 		|| !ReadBoolParam(Params, TEXT("allow_raw_package_copy"), bAllowRawPackageCopy, Error)
+		|| !ReadBoolParam(Params, TEXT("cleanup_redirectors"), bCleanupRedirectors, Error)
 		|| !ReadBoolParam(Params, TEXT("run_fixup_on_dry_run"), bRunFixupOnDryRun, Error)
 		|| !ReadBoolParam(Params, TEXT("run_closure_on_dry_run"), bRunClosureOnDryRun, Error)
 		|| !ReadIntParam(Params, TEXT("fixup_max_packages"), FixupMaxPackages, Error)
@@ -2482,6 +3080,7 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 	Result->SetNumberField(TEXT("executable_strategy_count"), ExecutableStrategyCount);
 	Result->SetArrayField(TEXT("destination_roots"), StringsToJson(DestinationRoots));
 	Result->SetArrayField(TEXT("package_paths"), StringsToJson(DestinationPackages));
+	Result->SetArrayField(TEXT("planned_package_paths"), StringsToJson(DestinationPackages));
 
 	if (bPlanOnly)
 	{
@@ -2526,12 +3125,10 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 			ErrInvalidParams).WithErrorData(Result);
 	}
 
-	TSharedPtr<FJsonObject> CopyParams = CloneParams(Params);
-	CopyParams->SetStringField(TEXT("strategy"), TEXT("registry_only_plan"));
-	FMonolithActionResult CopyResult = CopyPackageGraphWithRemap(CopyParams);
+	FMonolithActionResult CopyResult = CopyPackageGraphWithSelectedStrategies(PlanResult.Result, StrategyRows, Params, Mutation);
 	if (!CopyResult.bSuccess)
 	{
-		Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(TEXT("copy"), TEXT("failed"), false, TEXT("asset.copy_package_graph_with_remap"), CopyResult.ErrorMessage)));
+		Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(TEXT("copy"), TEXT("failed"), false, TEXT("asset.copy_package_graph_with_strategy"), CopyResult.ErrorMessage)));
 		return FailWithPhaseReport(TEXT("copy_package_graph_with_strategy copy phase failed"), CopyResult.ErrorCode, CopyResult);
 	}
 
@@ -2542,16 +3139,12 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		TEXT("copy"),
 		PreflightErrorCount > 0.0 ? TEXT("preflight_errors") : (Mutation.bDryRun ? TEXT("dry_run") : TEXT("success")),
 		PreflightErrorCount <= 0.0,
-		TEXT("asset.copy_package_graph_with_remap"))));
-
-	TSharedPtr<FJsonObject> PlanObject;
-	const TSharedPtr<FJsonObject>* PlanObjectPtr = nullptr;
-	if (CopyResult.Result->TryGetObjectField(TEXT("plan"), PlanObjectPtr) && PlanObjectPtr && PlanObjectPtr->IsValid())
-	{
-		PlanObject = *PlanObjectPtr;
-	}
+		TEXT("asset.copy_package_graph_with_strategy"))));
 
 	Result->SetObjectField(TEXT("copy_report"), CopyResult.Result);
+	const TArray<FString> AffectedDestinationPackages = DestinationPackagesFromCopyReport(CopyResult.Result);
+	Result->SetArrayField(TEXT("package_paths"), StringsToJson(AffectedDestinationPackages));
+	Result->SetNumberField(TEXT("affected_package_count"), AffectedDestinationPackages.Num());
 
 	const bool bStrategyNeedsFixup = bCopyFixup || bCopyFixupValidate;
 	if (bStrategyNeedsFixup)
@@ -2560,13 +3153,23 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		FixupParams->Values.Remove(TEXT("max_packages"));
 		FixupParams->SetNumberField(TEXT("max_packages"), FixupMaxPackages);
 		SetStringArrayField(FixupParams, TEXT("destination_roots"), DestinationRoots);
-		SetStringArrayField(FixupParams, TEXT("package_paths"), DestinationPackages);
+		SetStringArrayField(FixupParams, TEXT("package_paths"), AffectedDestinationPackages);
 		FixupParams->SetBoolField(TEXT("dry_run"), Mutation.bDryRun);
 		FixupParams->SetBoolField(TEXT("confirm"), Mutation.bConfirm);
 		FixupParams->SetBoolField(TEXT("save"), Mutation.bSave);
 		FixupParams->SetBoolField(TEXT("strict"), Mutation.bStrict);
 
-		if (Mutation.bDryRun && !bRunFixupOnDryRun)
+		if (AffectedDestinationPackages.Num() == 0)
+		{
+			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
+				TEXT("fixup"),
+				TEXT("skipped"),
+				true,
+				TEXT("asset.fixup_copied_references"),
+				TEXT("no copied destination packages; collision_policy may have skipped all rows"))));
+			Result->SetObjectField(TEXT("planned_fixup_params"), FixupParams);
+		}
+		else if (Mutation.bDryRun && !bRunFixupOnDryRun)
 		{
 			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
 				TEXT("fixup"),
@@ -2597,19 +3200,61 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		}
 	}
 
+	if (bCleanupRedirectors)
+	{
+		if (AffectedDestinationPackages.Num() == 0)
+		{
+			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
+				TEXT("redirector_cleanup"),
+				TEXT("skipped"),
+				true,
+				TEXT("asset.cleanup_copied_redirectors"),
+				TEXT("no copied destination packages; collision_policy may have skipped all rows"))));
+		}
+		else
+		{
+			FMonolithActionResult RedirectorCleanupResult = CleanupRedirectorsForCopiedRoots(DestinationRoots, AffectedDestinationPackages, Mutation);
+			if (!RedirectorCleanupResult.bSuccess)
+			{
+				Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(TEXT("redirector_cleanup"), TEXT("failed"), false, TEXT("asset.cleanup_copied_redirectors"), RedirectorCleanupResult.ErrorMessage)));
+				return FailWithPhaseReport(TEXT("copy_package_graph_with_strategy redirector cleanup phase failed"), RedirectorCleanupResult.ErrorCode, RedirectorCleanupResult);
+			}
+
+			bool bRedirectorCleanupOk = true;
+			RedirectorCleanupResult.Result->TryGetBoolField(TEXT("ok"), bRedirectorCleanupOk);
+			bOk &= bRedirectorCleanupOk;
+			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
+				TEXT("redirector_cleanup"),
+				bRedirectorCleanupOk ? (Mutation.bDryRun ? TEXT("dry_run") : TEXT("success")) : TEXT("issues"),
+				bRedirectorCleanupOk,
+				TEXT("asset.cleanup_copied_redirectors"))));
+			Result->SetObjectField(TEXT("redirector_cleanup_report"), RedirectorCleanupResult.Result);
+		}
+	}
+
 	if (bCopyFixupValidate)
 	{
 		TSharedPtr<FJsonObject> ClosureParams = CloneParams(Params);
 		ClosureParams->Values.Remove(TEXT("max_packages"));
 		ClosureParams->SetNumberField(TEXT("max_packages"), ClosureMaxPackages);
 		SetStringArrayField(ClosureParams, TEXT("destination_roots"), DestinationRoots);
-		SetStringArrayField(ClosureParams, TEXT("package_paths"), DestinationPackages);
+		SetStringArrayField(ClosureParams, TEXT("package_paths"), AffectedDestinationPackages);
 		if (!Params.IsValid() || !Params->HasField(TEXT("legacy_source_roots")))
 		{
 			SetStringArrayField(ClosureParams, TEXT("legacy_source_roots"), SourceRoots);
 		}
 
-		if (Mutation.bDryRun && !bRunClosureOnDryRun)
+		if (AffectedDestinationPackages.Num() == 0)
+		{
+			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
+				TEXT("closure"),
+				TEXT("skipped"),
+				true,
+				TEXT("asset.validate_dependency_closure"),
+				TEXT("no copied destination packages; collision_policy may have skipped all rows"))));
+			Result->SetObjectField(TEXT("planned_closure_params"), ClosureParams);
+		}
+		else if (Mutation.bDryRun && !bRunClosureOnDryRun)
 		{
 			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
 				TEXT("closure"),

@@ -4,6 +4,7 @@
 #include "MonolithEditorSelectionActions.h"
 #include "MonolithEditorLevelMetadataActions.h"
 #include "MonolithEditorCrashActions.h"
+#include "MonolithBuildArtifactActions.h"
 #include "MonolithPieInputActions.h"
 #include "MonolithPieObjectActions.h"
 #include "MonolithPieTimeseries.h"
@@ -254,6 +255,7 @@ void FMonolithEditorModule::StartupModule()
 		FMonolithPieTimeseries::RegisterActions(OwnedRegistry);
 		FMonolithPieInputActions::RegisterActions(OwnedRegistry);
 		FMonolithStatActions::RegisterActions(OwnedRegistry);
+		FMonolithBuildArtifactActions::RegisterActions(OwnedRegistry);
 	});
 	GMonolithPieTransactionBufferGuard.Register();
 	GMonolithHeadlessLayoutSaveGuard.Register();

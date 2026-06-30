@@ -1,18 +1,21 @@
 ---
 name: unreal-build
-description: Use when building, compiling, recompiling, or fixing first-line build errors in Unreal Engine projects via Monolith MCP - decides Live Coding vs UBT from what changed and drives the editor namespace (get_build_status, trigger_build, get_build_errors). unreal-build owns first-line compile/build-error fixing; for post-build log/crash/stack-trace forensics use unreal-debugging, for C++ API/signature/include correctness before building use unreal-cpp, for post-build profiling use unreal-performance. Triggers on build, compile, rebuild, recompile module, hot reload, Live Coding, UBT, UnrealBuildTool, link error, linker error, build target, build failed, build error, compile error, incremental build.
+description: Use when building, compiling, recompiling, fixing first-line build errors, planning UAT BuildCookRun, or packaging build/screenshot evidence via Monolith MCP - decides Live Coding vs UBT from what changed and drives the editor namespace plus build/artifact/notify operational namespaces. unreal-build owns first-line compile/build-error fixing and guarded build-output evidence workflows; for post-build log/crash/stack-trace forensics use unreal-debugging, for C++ API/signature/include correctness before building use unreal-cpp, for post-build profiling use unreal-performance. Triggers on build, compile, rebuild, recompile module, hot reload, Live Coding, UBT, UnrealBuildTool, BuildCookRun, package build, build artifact, Discord screenshot evidence, link error, linker error, build target, build failed, build error, compile error, incremental build.
 ---
 
 # Unreal Build — Smart Build Decision Guide
 
-Decides Live Coding vs full UBT from what changed, then drives the build through Monolith's **editor** namespace (`get_build_status`, `trigger_build`, `get_build_errors`) or a direct UBT command line when the editor is closed.
+Decides Live Coding vs full UBT from what changed, then drives the build through Monolith's **editor** namespace (`get_build_status`, `trigger_build`, `get_build_errors`) or a direct UBT command line when the editor is closed. It also owns the guarded operational namespaces **`build`**, **`artifact`**, and **`notify`** for BuildCookRun command construction, build-output manifests, screenshot evidence mirroring, and Discord evidence payloads.
 
 ## Discover first
 
-This skill drives the live **editor** namespace via direct `editor_query` calls. Confirm action names and schemas against the live catalog before calling — never trust a memorized name:
+This skill drives the live **editor** namespace via direct `editor_query` calls and the operational **build/artifact/notify** namespaces via their namespace query tools. Confirm action names and schemas against the live catalog before calling — never trust a memorized name:
 
 ```text
 monolith_discover('editor')                       # list editor-namespace actions
+monolith_discover('build')                        # BuildCookRun planning/actions
+monolith_discover('artifact')                     # build output + screenshot evidence artifacts
+monolith_discover('notify')                       # evidence notification payloads
 describe_query('action_schema', namespace='editor', action='trigger_build')
 describe_query('action_schema', namespace='editor', action='get_build_errors')
 ```
@@ -33,6 +36,18 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `search_build_output` | Search build log output by pattern | `pattern* limit?=100` (max 1000) |
 
 Notes on `get_build_errors` params: `since_marker` reports only errors after the latest log line containing that token (highest precedence); `since_iso` is an absolute ISO-8601 cutoff (e.g. `2026-06-06T12:00:00Z`); `since_seconds` (legacy alias `since`) is a relative last-N-seconds window; `clear_baseline=true` stamps a fresh "ignore prior noise" baseline and returns immediately; `category` narrows the query to one log category; `compile_only=true` narrows to compile categories (`LogLiveCoding`/`LogCompile`/`LogLinker`); `exclude_categories` is an array kept out of the headline `error_count` (default `[LogPython, LogMonolith]`, still returned).
+
+## BuildCookRun / Artifact / Evidence actions
+
+These actions are guarded operational helpers. They do not replace the repo's primary verified build command; use them to construct reproducible UAT and evidence workflows without hard-coded engine checkouts or secret-bearing params.
+
+| Namespace.Action | Purpose | Safety contract |
+|---|---|---|
+| `build.resolve_unreal_engine` | Report the loaded project's engine root plus `RunUAT`/`UBT` paths from the current editor context. | Read-only. |
+| `build.run_buildcookrun` | Build a structured UAT `BuildCookRun` command, including optional `-CustomConfig`. | `dry_run=true` default; external UAT launch requires `dry_run=false` and `confirm=true`. |
+| `artifact.package_build_outputs` | Scan an archive/build output directory and produce a JSON manifest; optionally write `manifest.json`. | Manifest write requires `dry_run=false`, `write_manifest=true`, and `confirm=true`. |
+| `artifact.mirror_screenshot_evidence` | Copy explicit screenshot files or scanned evidence images into an evidence directory. | File copy requires `dry_run=false` and `confirm=true`. |
+| `notify.discord_screenshot_evidence` | Build a redacted text-only Discord screenshot evidence payload; webhook is read only from `webhook_env`. | Send requires `send=true`, `dry_run=false`, `confirm=true`, and an environment variable; webhook URLs are never action params. |
 
 ## When to use this skill
 

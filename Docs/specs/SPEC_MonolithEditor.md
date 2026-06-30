@@ -16,9 +16,10 @@
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers the editor action surface across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map/world-settings authoring, DataValidation, module-status, asset-context, crash-report, metadata, temporal GIF encoding, and v0.16.0 preview/inspection toolsets, and owns editor PIE transaction-buffer cleanup plus the headless layout-save guard (below) |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers the editor action surface across build/log capture, crash reporting, context selection, viewport capture, automation, scripting, PIE, map/world-settings authoring, DataValidation, module-status, asset-context, crash-report, metadata, temporal GIF encoding, v0.16.0 preview/inspection toolsets, and the operational `build`/`artifact`/`notify` namespaces, and owns editor PIE transaction-buffer cleanup plus the headless layout-save guard (below) |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
 | `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
+| `FMonolithBuildArtifactActions` | Static handlers for guarded BuildCookRun command construction, build output manifests, screenshot evidence mirroring, and Discord evidence payloads. External launches/sends and file-copy/write actions are dry-run-first and require explicit `confirm=true` for real effects |
 | `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
 ### Headless layout-save guard (2026-06-12)
@@ -32,7 +33,7 @@ Headless editors (`-NullRHI` / `FApp::CanEverRender()==false`, e.g. `RunHeadless
 
 The per-manager `bCanDoDeferredLayoutSave` switch would be the precise off-switch but sits behind `FTabManager::FPrivateApi` (protected), and the engine is an installed build, so the guard uses the two public surfaces above. Each clearing pass also enumerates open asset editors through `UAssetEditorSubsystem` and clears their host tab managers (`IAssetEditorInstance::GetAssociatedTabManager`), so asset editors opened headless are covered too. Verified 2026-06-12: guarded headless boot bound MCP at +9s and stayed alive 40 minutes serving actions until externally terminated (pre-guard boots died at 10-20s in the layout-save fatal); guard log line `HeadlessLayoutSaveGuard: CanEverRender=false ...` confirms activation. Rendering editors are untouched (`CanEverRender()==true` short-circuits registration).
 
-### Actions (64+ — namespace: "editor")
+### Actions (64+ — namespace: "editor"; plus "build", "artifact", and "notify")
 
 **Base (23 — v0.14.7 baseline + Phase J F8 + temporal GIF encoding)**
 
@@ -155,6 +156,16 @@ Plus `capture_scene_preview` (in Base section above) was **extended** in v0.16.0
 | `validate_assets` | Generic DataValidation wrapper around `UEditorValidatorSubsystem::ValidateAssetsWithSettings`. Params include explicit `asset_paths`/`packages` or recursive `path`, `validation_usecase`, `load_assets`, `load_external_objects`, `capture_logs`, `warnings_as_errors`, `skip_excluded_directories`, `max_assets_to_validate`, and `silent`. `validate_project_settings=true` is reported as unsupported because UE 5.8 has no generic public `ValidateProjectSettings` API; project-specific wrappers should live in project adapters, not this common action. |
 | `plan_content_validation_changeset` | Read-only changeset planner for DataValidation. Params include optional `changelist`, `paths`, `packages`, `include_opened`, `resolve_packages`, `include_non_packages`, `limit`, and validation option passthrough. It composes the same path semantics as `source_control.list_opened` / `source_control.map_depot_paths`, classifies package targets, deleted packages, source files, non-package files, and unmapped rows, then emits `validation_packages[]` plus exact `validation_params` for `validate_assets`. It does not checkout, save, or validate assets. |
 | `validate_changeset_assets` | Read-only wrapper that runs `plan_content_validation_changeset`, then delegates to `validate_assets` for the resolved packages. Code-only or non-asset changesets return `{ validation_skipped: true, skip_reason: "no_packages_resolved" }` instead of failing. |
+
+**Build/artifact/evidence operations (5 — `MonolithBuildArtifactActions.cpp`; namespaces `build`, `artifact`, `notify`; 2026-07-01)**
+
+| Action | Description |
+|--------|-------------|
+| `build.resolve_unreal_engine` | Read-only resolver for the loaded project's engine context. Returns the current editor-derived `engine_root`, `engine_dir`, `uat_path`, `ubt_path`, `project_path`, and existence flags. This reports the engine actually running the project and does not hard-code alternate engine checkouts. |
+| `build.run_buildcookrun` | Constructs a UAT `BuildCookRun` command from structured params including `platform`, `client_config`, optional `server_config`, `target`, `map`, `custom_config`, `archive_directory`, and `additional_args`. Defaults to `dry_run=true` and returns `command_line`/`args` without launching. External UAT launch requires `dry_run=false` and `confirm=true`; `wait=true` returns exit code and bounded stdout/stderr tails. |
+| `artifact.package_build_outputs` | Scans an archive/build output directory and returns a manifest object with file rows, sizes, timestamps, total byte count, and `manifest_path`. Writing `manifest.json` requires `write_manifest=true`, `dry_run=false`, and `confirm=true`; dry-run never writes. |
+| `artifact.mirror_screenshot_evidence` | Plans or performs explicit screenshot/evidence file copying from `files[]` or a scanned `source_dir` into `dest_dir`. Copying files requires `dry_run=false` and `confirm=true`; dry-run reports per-file source/destination rows with `would_copy`. |
+| `notify.discord_screenshot_evidence` | Builds a redacted Discord screenshot-evidence payload from `test_name` and `files[]`/`source_dir`. Webhook URLs are never accepted as params; the handler reads only `webhook_env` (default `DISCORD_WEBHOOK_URL`) when `send=true`. Sending requires `send=true`, `dry_run=false`, `confirm=true`, and a populated environment variable. |
 
 **Live-PIE object read/call (Gap 8 — 2 — `MonolithPieObjectActions.cpp`)**
 

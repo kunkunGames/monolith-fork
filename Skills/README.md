@@ -39,7 +39,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-console` | `console` | 6 | Console object registry snapshots, cvars, console commands, hints, and guarded execution |
 | `unreal-asset` | `asset` | 18 | Generic asset ingest, save/delete, inspection, live find, naming, batch rename, guarded content mount registration, package graph copy/remap, and dependency validation |
 | `unreal-reflection-intel` | `cppreflect`/`network`/`decision`/`risk`/`reflect` | 20+ | Reflection Intelligence, replication audit, decision records, risk signals |
-| `unreal-build` | `editor` | 59* | Build, hot reload, compile errors, changeset validation planning |
+| `unreal-build` | `editor`/`build`/`artifact`/`notify` | 64* | Build, hot reload, compile errors, changeset validation planning, BuildCookRun planning, build-output manifests, screenshot evidence notifications |
 | `unreal-debugging` | `editor` | 59* | Logs, crash context, output log |
 | `unreal-performance` | `config`/`material`/`niagara` | — | Cross-domain perf analysis — INI/CVar tuning, material shader stats, Niagara complexity |
 
@@ -107,7 +107,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-collection` | `collection` | 13 | Editor asset Collections |
 | `unreal-localization` | `localization` | 10 | Localization targets, string tables, cultures |
 
-\* `editor` actions are split across `unreal-build` (build/hot reload) and `unreal-debugging` (logs/crash). `unreal-performance` is cross-domain (`config`/`material`/`niagara`) profiling, not an `editor`-namespace skill; per-mesh triangle/draw-call/shadow budgeting lives in `unreal-mesh`.
+\* `editor` actions are split across `unreal-build` (build/hot reload) and `unreal-debugging` (logs/crash). `unreal-build` also owns the small operational `build`, `artifact`, and `notify` namespaces for guarded BuildCookRun command construction, build-output manifests, and screenshot-evidence notification payloads. `unreal-performance` is cross-domain (`config`/`material`/`niagara`) profiling, not an `editor`-namespace skill; per-mesh triangle/draw-call/shadow budgeting lives in `unreal-mesh`.
 
 ## Reference companions
 
