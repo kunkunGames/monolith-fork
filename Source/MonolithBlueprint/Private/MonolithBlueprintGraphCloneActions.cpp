@@ -681,8 +681,9 @@ namespace
 			return;
 		}
 
-		SourcePackage->FullyLoad();
-		DestPackage->FullyLoad();
+		// Do not FullyLoad packages here as DestPackage might be newly created in-memory,
+		// which would cause data loss by reverting transient state from a leftover disk asset.
+		// The graph clone operation already relies on in-memory objects properly mapped.
 
 		const FString SourceAssetName = FPackageName::GetLongPackageAssetName(SourcePackageName);
 		const FString DestAssetName = FPackageName::GetLongPackageAssetName(DestPackageName);
