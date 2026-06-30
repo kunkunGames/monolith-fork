@@ -1495,8 +1495,14 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 		// use_set_by_caller -> UseSetByCaller
 		bool bUseSetByCaller = false;
-		if (ContainerData->TryGetBoolField(TEXT("use_set_by_caller"), bUseSetByCaller))
+		TSharedPtr<FJsonValue> UseSetByCallerVal = ContainerData->TryGetField(TEXT("use_set_by_caller"));
+		if (UseSetByCallerVal.IsValid())
 		{
+			if (UseSetByCallerVal->Type != EJson::Boolean)
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid type for param 'use_set_by_caller', expected boolean"));
+			}
+			bUseSetByCaller = UseSetByCallerVal->AsBool();
 			ContainerParts.Add(FString::Printf(TEXT("UseSetByCaller=%s"),
 				bUseSetByCaller ? TEXT("True") : TEXT("False")));
 		}
