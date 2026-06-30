@@ -517,14 +517,25 @@ FMonolithActionResult FMonolithUIActions::HandleAddWidget(const TSharedPtr<FJson
 
     if (!ParentPanel)
     {
-        // Phase K — Lookup-class error. Cannot enumerate live widget names in
-        // valid_options without scanning the WidgetTree (the suggested_fix
-        // points the LLM at get_widget_tree for that lookup).
-        return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
-            TEXT("Lookup"),
-            TEXT("/parent_name"),
-            FString::Printf(TEXT("Parent '%s' not found or is not a panel widget."), *ParentName),
-            TEXT("Call ui::get_widget_tree to enumerate live widget names; the parent must be a UPanelWidget subclass.")));
+        if (ParentName.IsEmpty())
+        {
+            return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+                TEXT("Lookup"),
+                TEXT("/parent_name"),
+                TEXT("Widget Blueprint has no root panel widget. Create one first."),
+                TEXT("Call ui::add_widget with a valid parent, or ensure the WBP has a CanvasPanel/VerticalBox root.")));
+        }
+        else
+        {
+            // Phase K — Lookup-class error. Cannot enumerate live widget names in
+            // valid_options without scanning the WidgetTree (the suggested_fix
+            // points the LLM at get_widget_tree for that lookup).
+            return MonolithUIInternal::MakeErrorFromSpecError(MonolithUIInternal::MakeSpecError(
+                TEXT("Lookup"),
+                TEXT("/parent_name"),
+                FString::Printf(TEXT("Parent '%s' not found or is not a panel widget."), *ParentName),
+                TEXT("Call ui::get_widget_tree to enumerate live widget names; the parent must be a UPanelWidget subclass.")));
+        }
     }
 
     WBP->Modify();
