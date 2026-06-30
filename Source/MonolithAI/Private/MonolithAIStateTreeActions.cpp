@@ -113,7 +113,7 @@ namespace
 	/** Load a UStateTree from the asset_path param. */
 	UStateTree* LoadStateTreeFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 	{
-		OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+		Params->TryGetStringField(TEXT("asset_path"), OutAssetPath);
 		if (OutAssetPath.IsEmpty())
 		{
 			OutError = TEXT("Missing required param 'asset_path'");
@@ -830,14 +830,17 @@ void FMonolithAIStateTreeActions::RegisterActions(FMonolithToolRegistry& Registr
 // 43. create_state_tree
 FMonolithActionResult FMonolithAIStateTreeActions::HandleCreateStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
 	}
 	SavePath = FMonolithAssetUtils::ResolveAssetPath(SavePath);
 
-	FString AssetName = Params->GetStringField(TEXT("name"));
+	FString AssetName;
+
+	Params->TryGetStringField(TEXT("name"), AssetName);
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -982,7 +985,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetStateTree(const TSha
 // 45. list_state_trees
 FMonolithActionResult FMonolithAIStateTreeActions::HandleListStateTrees(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -1037,8 +1041,10 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleDeleteStateTree(const T
 // 47. duplicate_state_tree
 FMonolithActionResult FMonolithAIStateTreeActions::HandleDuplicateStateTree(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SourcePath = Params->GetStringField(TEXT("source_path"));
-	FString DestPath = Params->GetStringField(TEXT("dest_path"));
+	FString SourcePath;
+	Params->TryGetStringField(TEXT("source_path"), SourcePath);
+	FString DestPath;
+	Params->TryGetStringField(TEXT("dest_path"), DestPath);
 
 	if (SourcePath.IsEmpty() || DestPath.IsEmpty())
 	{
@@ -1118,7 +1124,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTSchema(const TShar
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString SchemaClassName = Params->GetStringField(TEXT("schema_class"));
+	FString SchemaClassName;
+
+	Params->TryGetStringField(TEXT("schema_class"), SchemaClassName);
 	if (SchemaClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'schema_class'"));
@@ -1141,7 +1149,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTSchema(const TShar
 	EditorData->Schema = NewSchema;
 
 	// Set context actor class if provided
-	FString ContextActorClassName = Params->GetStringField(TEXT("context_actor_class"));
+	FString ContextActorClassName;
+	Params->TryGetStringField(TEXT("context_actor_class"), ContextActorClassName);
 	if (!ContextActorClassName.IsEmpty())
 	{
 		UClass* ActorClass = FindFirstObject<UClass>(*ContextActorClassName, EFindFirstObjectOptions::EnsureIfAmbiguous);
@@ -1292,7 +1301,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTState(const TSh
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	if (StateId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
@@ -1330,8 +1341,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRenameSTState(const TSh
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString NewName = Params->GetStringField(TEXT("new_name"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
+	FString NewName;
+	Params->TryGetStringField(TEXT("new_name"), NewName);
 
 	if (StateId.IsEmpty() || NewName.IsEmpty())
 	{
@@ -1378,8 +1392,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TShar
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString NewParentId = Params->GetStringField(TEXT("new_parent_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
+	FString NewParentId;
+	Params->TryGetStringField(TEXT("new_parent_id"), NewParentId);
 
 	if (StateId.IsEmpty())
 	{
@@ -1458,7 +1475,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTStateProperties(co
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	if (StateId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
@@ -1528,8 +1547,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTask(const TShared
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString TaskClassName = Params->GetStringField(TEXT("task_class"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
+	FString TaskClassName;
+	Params->TryGetStringField(TEXT("task_class"), TaskClassName);
 
 	if (StateId.IsEmpty() || TaskClassName.IsEmpty())
 	{
@@ -1598,7 +1620,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTask(const TSha
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	int32 TaskIndex = INDEX_NONE;
 	FMonolithActionResult TaskIndexError;
 	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, true))
@@ -1642,14 +1666,17 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTTaskProperty(const
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	int32 TaskIndex = INDEX_NONE;
 	FMonolithActionResult TaskIndexError;
 	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, true))
 	{
 		return TaskIndexError;
 	}
-	FString PropertyName = Params->GetStringField(TEXT("property_name"));
+	FString PropertyName;
+	Params->TryGetStringField(TEXT("property_name"), PropertyName);
 
 	if (StateId.IsEmpty() || PropertyName.IsEmpty())
 	{
@@ -1732,8 +1759,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTEnterCondition(con
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString CondClassName = Params->GetStringField(TEXT("condition_class"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
+	FString CondClassName;
+	Params->TryGetStringField(TEXT("condition_class"), CondClassName);
 
 	if (StateId.IsEmpty() || CondClassName.IsEmpty())
 	{
@@ -1795,7 +1825,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTEnterCondition(
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	int32 CondIndex = INDEX_NONE;
 	FMonolithActionResult CondIndexError;
 	if (!TryReadIntParam(Params, TEXT("condition_index"), CondIndex, CondIndexError, true))
@@ -1839,10 +1871,15 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransition(const T
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
-	FString TriggerStr = Params->GetStringField(TEXT("trigger"));
-	FString TargetStr = Params->GetStringField(TEXT("target_state"));
-	FString PriorityStr = Params->GetStringField(TEXT("priority"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
+	FString TriggerStr;
+	Params->TryGetStringField(TEXT("trigger"), TriggerStr);
+	FString TargetStr;
+	Params->TryGetStringField(TEXT("target_state"), TargetStr);
+	FString PriorityStr;
+	Params->TryGetStringField(TEXT("priority"), PriorityStr);
 	double Delay = 0.0;
 	if (Params->HasField(TEXT("delay")))
 	{
@@ -1943,7 +1980,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTransition(cons
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	int32 TransIndex = INDEX_NONE;
 	FMonolithActionResult TransIndexError;
 	if (!TryReadIntParam(Params, TEXT("transition_index"), TransIndex, TransIndexError, true))
@@ -1987,8 +2026,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTPropertyBinding(co
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString SourcePathStr = Params->GetStringField(TEXT("source_path"));
-	FString TargetPathStr = Params->GetStringField(TEXT("target_path"));
+	FString SourcePathStr;
+
+	Params->TryGetStringField(TEXT("source_path"), SourcePathStr);
+	FString TargetPathStr;
+	Params->TryGetStringField(TEXT("target_path"), TargetPathStr);
 
 	if (SourcePathStr.IsEmpty() || TargetPathStr.IsEmpty())
 	{
@@ -2145,7 +2187,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleGetSTBindableProperties
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	int32 TaskIndex = -1;
 	FMonolithActionResult TaskIndexError;
 	if (!TryReadIntParam(Params, TEXT("task_index"), TaskIndex, TaskIndexError, false, -1))
@@ -2327,7 +2371,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransitionConditio
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	if (StateId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
@@ -2350,7 +2396,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransitionConditio
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Transition index %d out of range (0-%d)"), TransIndex, State->Transitions.Num() - 1));
 	}
 
-	FString CondClassName = Params->GetStringField(TEXT("condition_class"));
+	FString CondClassName;
+
+	Params->TryGetStringField(TEXT("condition_class"), CondClassName);
 	if (CondClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'condition_class'"));
@@ -2410,7 +2458,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTConsideration(cons
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	if (StateId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
@@ -2422,7 +2472,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTConsideration(cons
 		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
 	}
 
-	FString ConsClassName = Params->GetStringField(TEXT("consideration_class"));
+	FString ConsClassName;
+
+	Params->TryGetStringField(TEXT("consideration_class"), ConsClassName);
 	if (ConsClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'consideration_class'"));
@@ -2477,7 +2529,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleConfigureSTConsideratio
 	UStateTreeEditorData* EditorData = GetEditorData(ST, Error);
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
-	FString StateId = Params->GetStringField(TEXT("state_id"));
+	FString StateId;
+
+	Params->TryGetStringField(TEXT("state_id"), StateId);
 	if (StateId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
@@ -2748,7 +2802,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTExtension(const TS
 	UStateTree* ST = LoadStateTreeFromParams(Params, AssetPath, Error);
 	if (!ST) return FMonolithActionResult::Error(Error);
 
-	FString ExtClassName = Params->GetStringField(TEXT("extension_class"));
+	FString ExtClassName;
+
+	Params->TryGetStringField(TEXT("extension_class"), ExtClassName);
 	if (ExtClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'extension_class'"));
@@ -2871,14 +2927,17 @@ namespace
 		TArray<FString>& OutWarnings,
 		FString& OutError)
 	{
-		FString StateName = StateSpec->GetStringField(TEXT("name"));
+		FString StateName;
+		StateSpec->TryGetStringField(TEXT("name"), StateName);
 		if (StateName.IsEmpty())
 		{
 			OutError = TEXT("State spec missing 'name'");
 			return false;
 		}
 
-		FString TypeStr = StateSpec->GetStringField(TEXT("type"));
+		FString TypeStr;
+
+		StateSpec->TryGetStringField(TEXT("type"), TypeStr);
 		EStateTreeStateType StateType = ParseStateType(TypeStr);
 
 		UStateTreeState* NewState = nullptr;
@@ -2893,7 +2952,8 @@ namespace
 		}
 
 		// Selection behavior
-		FString SelectionStr = StateSpec->GetStringField(TEXT("selection_behavior"));
+		FString SelectionStr;
+		StateSpec->TryGetStringField(TEXT("selection_behavior"), SelectionStr);
 		if (!SelectionStr.IsEmpty())
 		{
 			NewState->SelectionBehavior = ParseSelectionBehavior(SelectionStr);
@@ -2908,7 +2968,9 @@ namespace
 				TSharedPtr<FJsonObject> TaskSpec = TaskVal->AsObject();
 				if (!TaskSpec.IsValid()) continue;
 
-				FString TaskClassName = TaskSpec->GetStringField(TEXT("class"));
+				FString TaskClassName;
+
+				TaskSpec->TryGetStringField(TEXT("class"), TaskClassName);
 				if (TaskClassName.IsEmpty()) continue;
 
 				UScriptStruct* TaskStruct = FindStructByName(TaskClassName);
@@ -2964,10 +3026,14 @@ namespace
 				FStateTreeTransition& Trans = NewState->Transitions.AddDefaulted_GetRef();
 				Trans.ID = FGuid::NewGuid();
 
-				FString TriggerStr = TransSpec->GetStringField(TEXT("trigger"));
+				FString TriggerStr;
+
+				TransSpec->TryGetStringField(TEXT("trigger"), TriggerStr);
 				Trans.Trigger = ParseTransitionTrigger(TriggerStr);
 
-				FString PriorityStr = TransSpec->GetStringField(TEXT("priority"));
+				FString PriorityStr;
+
+				TransSpec->TryGetStringField(TEXT("priority"), PriorityStr);
 				if (!PriorityStr.IsEmpty())
 				{
 					Trans.Priority = ParseTransitionPriority(PriorityStr);
@@ -2986,7 +3052,8 @@ namespace
 				}
 
 				// Target — resolved as name-based link (deferred resolution at compile time)
-				FString TargetStr = TransSpec->GetStringField(TEXT("target"));
+				FString TargetStr;
+				TransSpec->TryGetStringField(TEXT("target"), TargetStr);
 #if WITH_EDITORONLY_DATA
 				if (TargetStr.Equals(TEXT("Succeeded"), ESearchCase::IgnoreCase))
 				{
@@ -3019,7 +3086,9 @@ namespace
 				TSharedPtr<FJsonObject> CondSpec = CondVal->AsObject();
 				if (!CondSpec.IsValid()) continue;
 
-				FString CondClassName = CondSpec->GetStringField(TEXT("class"));
+				FString CondClassName;
+
+				CondSpec->TryGetStringField(TEXT("class"), CondClassName);
 				if (CondClassName.IsEmpty()) continue;
 
 				UScriptStruct* CondStruct = FindStructByName(CondClassName);
@@ -3063,7 +3132,8 @@ namespace
 
 FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(const TSharedPtr<FJsonObject>& Params)
 {
-	FString SavePath = Params->GetStringField(TEXT("save_path"));
+	FString SavePath;
+	Params->TryGetStringField(TEXT("save_path"), SavePath);
 	if (SavePath.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
@@ -3107,7 +3177,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 			WalkSpec = [&](const TSharedPtr<FJsonObject>& StateSpec, const FString& Path)
 			{
 				if (!StateSpec.IsValid()) return;
-				const FString StateName = StateSpec->GetStringField(TEXT("name"));
+				FString StateName;
+				StateSpec->TryGetStringField(TEXT("name"), StateName);
 				const FString DisplayPath = StateName.IsEmpty() ? Path : Path + TEXT("/") + StateName;
 
 				const TArray<TSharedPtr<FJsonValue>>* TasksArr = nullptr;
@@ -3117,7 +3188,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 					{
 						TSharedPtr<FJsonObject> TaskSpec = TaskVal->AsObject();
 						if (!TaskSpec.IsValid()) continue;
-						const FString TaskClassName = TaskSpec->GetStringField(TEXT("class"));
+						FString TaskClassName;
+						TaskSpec->TryGetStringField(TEXT("class"), TaskClassName);
 						if (TaskClassName.IsEmpty()) continue;
 						if (!FindStructByName(TaskClassName))
 						{
@@ -3134,7 +3206,8 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleBuildStateTreeFromSpec(
 					{
 						TSharedPtr<FJsonObject> CondSpec = CondVal->AsObject();
 						if (!CondSpec.IsValid()) continue;
-						const FString CondClassName = CondSpec->GetStringField(TEXT("class"));
+						FString CondClassName;
+						CondSpec->TryGetStringField(TEXT("class"), CondClassName);
 						if (CondClassName.IsEmpty()) continue;
 						if (!FindStructByName(CondClassName))
 						{
@@ -3623,7 +3696,11 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAutoArrangeST(const TSh
 	UStateTree* ST = LoadStateTreeFromParams(Params, AssetPath, Error);
 	if (!ST) return FMonolithActionResult::Error(Error);
 
-	FString FormatterPref = Params->GetStringField(TEXT("formatter")).ToLower();
+	FString FormatterPref;
+
+	Params->TryGetStringField(TEXT("formatter"), FormatterPref);
+
+	FormatterPref = FormatterPref.ToLower();
 	constexpr bool bHasBuiltInFormatter = true;
 	const bool bMayUseExternalFormatter = IMonolithGraphFormatter::IsExternalMutationFormattingEnabled(bHasBuiltInFormatter);
 	if (FormatterPref == TEXT("blueprint_assist") && !bMayUseExternalFormatter)
