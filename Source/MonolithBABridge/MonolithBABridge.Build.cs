@@ -63,7 +63,7 @@ public class MonolithBABridge : ModuleRules
 			return true;
 		}
 
-		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "*", SearchOption.AllDirectories);
+		string[] Dirs = Directory.GetDirectories(BaseDir, PluginName + "*", SearchOption.TopDirectoryOnly);
 		foreach (string Dir in Dirs)
 		{
 			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
