@@ -4366,10 +4366,21 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetOrderedModules(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleInputs(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
-	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid))
+	{
+		if (!Params->TryGetStringField(TEXT("module_name"), ModuleNodeGuid))
+		{
+			if (!Params->TryGetStringField(TEXT("module"), ModuleNodeGuid))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+			}
+		}
+	}
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
@@ -5044,12 +5055,31 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleEnabled(const TSha
 FMonolithActionResult FMonolithNiagaraActions::HandleSetModuleInputValue(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ModuleNodeGuid = Params->GetStringField(TEXT("module_node"));
-	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module_name"));
-	if (ModuleNodeGuid.IsEmpty()) ModuleNodeGuid = Params->GetStringField(TEXT("module"));
-	FString InputName = Params->GetStringField(TEXT("input"));
-	if (InputName.IsEmpty()) InputName = Params->GetStringField(TEXT("input_name"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+
+	FString ModuleNodeGuid;
+	if (!Params->TryGetStringField(TEXT("module_node"), ModuleNodeGuid))
+	{
+		if (!Params->TryGetStringField(TEXT("module_name"), ModuleNodeGuid))
+		{
+			if (!Params->TryGetStringField(TEXT("module"), ModuleNodeGuid))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'module_node' must be a string"));
+			}
+		}
+	}
+
+	FString InputName;
+	if (!Params->TryGetStringField(TEXT("input"), InputName))
+	{
+		if (!Params->TryGetStringField(TEXT("input_name"), InputName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'input' must be a string"));
+		}
+	}
+
 	TSharedPtr<FJsonValue> JV = Params->TryGetField(TEXT("value"));
 	if (!JV.IsValid())
 		return FMonolithActionResult::Error(TEXT("Missing required field: value"));

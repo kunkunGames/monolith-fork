@@ -7,6 +7,26 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardSetModuleInputValueTe
 
 bool FMonolithNiagaraParamGuardSetModuleInputValueTest::RunTest(const FString& Parameters)
 {
+    // Test parameter type hardening
+    TSharedRef<FJsonObject> TypeTestParams = MakeShared<FJsonObject>();
+    TypeTestParams->SetStringField(TEXT("asset_path"), TEXT("/Game/NonExistentSystem"));
+    TypeTestParams->SetNumberField(TEXT("emitter"), 123); // Invalid type
+    FMonolithActionResult ResultType = FMonolithNiagaraActions::HandleSetModuleInputValue(TypeTestParams);
+    TestFalse(TEXT("HandleSetModuleInputValue should reject non-string emitter"), ResultType.bSuccess);
+    TestTrue(TEXT("Error message should mention emitter type"), ResultType.ErrorMessage.Contains(TEXT("must be a string")));
+
+    TypeTestParams->SetStringField(TEXT("emitter"), TEXT("TestEmitter"));
+    TypeTestParams->SetNumberField(TEXT("module_node"), 123); // Invalid type
+    ResultType = FMonolithNiagaraActions::HandleSetModuleInputValue(TypeTestParams);
+    TestFalse(TEXT("HandleSetModuleInputValue should reject non-string module_node"), ResultType.bSuccess);
+    TestTrue(TEXT("Error message should mention module_node type"), ResultType.ErrorMessage.Contains(TEXT("must be a string")));
+
+    TypeTestParams->SetStringField(TEXT("module_node"), TEXT("TestModule"));
+    TypeTestParams->SetNumberField(TEXT("input"), 123); // Invalid type
+    ResultType = FMonolithNiagaraActions::HandleSetModuleInputValue(TypeTestParams);
+    TestFalse(TEXT("HandleSetModuleInputValue should reject non-string input"), ResultType.bSuccess);
+    TestTrue(TEXT("Error message should mention input type"), ResultType.ErrorMessage.Contains(TEXT("must be a string")));
+
     // Test HandleSetModuleInputValue with malformed vector params (non-numeric 'x')
     TSharedRef<FJsonObject> ParamsX = MakeShared<FJsonObject>();
     ParamsX->SetStringField(TEXT("asset_path"), TEXT("/Game/NonExistentSystem"));
