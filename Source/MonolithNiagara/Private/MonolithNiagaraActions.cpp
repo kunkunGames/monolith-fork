@@ -12555,12 +12555,15 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetNPC(const TSharedPtr<FJs
 FMonolithActionResult FMonolithNiagaraActions::HandleAddNPCParameter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("name"));
-	FString TypeName = Params->GetStringField(TEXT("type"));
+	FString ParamName;
+	if (!Params->TryGetStringField(TEXT("name"), ParamName) || ParamName.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Missing required field: name"));
+
+	FString TypeName;
+	if (!Params->TryGetStringField(TEXT("type"), TypeName) || TypeName.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Missing required field: type"));
 
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
-	if (ParamName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: name"));
-	if (TypeName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: type"));
 
 	UNiagaraParameterCollection* NPC = FMonolithAssetUtils::LoadAssetByPath<UNiagaraParameterCollection>(AssetPath);
 	if (!NPC) return FMonolithActionResult::Error(TEXT("Failed to load NPC"));
@@ -12589,10 +12592,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleAddNPCParameter(const TShar
 FMonolithActionResult FMonolithNiagaraActions::HandleRemoveNPCParameter(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("name"));
+	FString ParamName;
+	if (!Params->TryGetStringField(TEXT("name"), ParamName) || ParamName.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Missing required field: name"));
 
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
-	if (ParamName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: name"));
 
 	UNiagaraParameterCollection* NPC = FMonolithAssetUtils::LoadAssetByPath<UNiagaraParameterCollection>(AssetPath);
 	if (!NPC) return FMonolithActionResult::Error(TEXT("Failed to load NPC"));
@@ -12642,11 +12646,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveNPCParameter(const TS
 FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = NA_GetAssetPath(Params);
-	FString ParamName = Params->GetStringField(TEXT("name"));
+	FString ParamName;
+	if (!Params->TryGetStringField(TEXT("name"), ParamName) || ParamName.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Missing required field: name"));
+
 	TSharedPtr<FJsonValue> ValueJV = Params->TryGetField(TEXT("value"));
 
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: asset_path"));
-	if (ParamName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: name"));
 	if (!ValueJV.IsValid()) return FMonolithActionResult::Error(TEXT("Missing required field: value"));
 
 	UNiagaraParameterCollection* NPC = FMonolithAssetUtils::LoadAssetByPath<UNiagaraParameterCollection>(AssetPath);
