@@ -56,7 +56,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-lyra` | `lyra` | 10 | Lyra Experience graphs/defaults, component-entry cleanup, bundle validation, UserFacingExperience hosting metadata, gameplay tag domains, and GamePhase flow diagnostics |
 | `unreal-online` | `online` | 8 | EOS/OSSv2, CommonSession flow/schema, UserFacingSession, CommonUser initialization/privilege, and AccountPortal log diagnostics with credential redaction |
 | `unreal-modular` | `modular` | 4 | ModularGameplay receiver lifecycle, AddComponentRequest actor/component target, and static extension-event source diagnostics |
-| `unreal-gameplay-message` | `gameplay_message` | 4 | GameplayMessageRouter channel, match-type, and payload UScriptStruct diagnostics |
+| `unreal-gameplay-message` | `gameplay_message` | 5 | GameplayMessageRouter channel, match-type, payload UScriptStruct, and static broadcaster/listener source diagnostics |
 | `unreal-game-settings` | `settings` | 6 | GameSettings registry/screen/setting, dynamic path, visual-data, and player-mappable input diagnostics |
 | `unreal-loading` | `loading` | 4 | CommonLoadingScreen manager reason, processor candidate, settings/CVar, and Lyra handoff diagnostics |
 | `unreal-world-conditions` | `world_conditions` | 4 | World Conditions / world state |

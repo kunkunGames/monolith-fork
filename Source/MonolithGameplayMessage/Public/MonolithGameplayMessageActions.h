@@ -12,4 +12,5 @@ public:
 	static FMonolithActionResult DescribeListenerContract(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateMessageStruct(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateChannelContract(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult TraceChannelUsage(const TSharedPtr<FJsonObject>& Params);
 };

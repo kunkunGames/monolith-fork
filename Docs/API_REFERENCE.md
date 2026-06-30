@@ -2166,7 +2166,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithModular.md`.
 
 ## gameplay_message
 
-Read-only GameplayMessageRouter channel, match-type, and payload UScriptStruct diagnostics. **4 actions.** The module uses reflection only and has no compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
+Read-only GameplayMessageRouter channel, match-type, payload UScriptStruct, and static source-usage diagnostics. **5 actions.** The module uses reflection and lexical source tracing only and has no compile-time dependency on `GameplayMessageRuntime` or `GameplayMessageNodes`.
 
 | Action | Params |
 |--------|--------|
@@ -2174,6 +2174,7 @@ Read-only GameplayMessageRouter channel, match-type, and payload UScriptStruct d
 | `describe_listener_contract` | none |
 | `validate_message_struct` | `message_struct`, optional `require_blueprint_type=false`, optional `require_no_object_references=false` |
 | `validate_channel_contract` | `channel_tag`, optional `message_struct`, optional `match_type=ExactMatch`, optional `require_registered_tag=true`, optional `require_blueprint_type=false` |
+| `trace_channel_usage` | optional `channel_tag`, `source_root`, `source_roots`, `include_monolith_source=false`, `include_engine_gameplay_message_sources=false`, `max_files=2000`, `max_results=500`, `include_line_text=false` |
 
 ### `gameplay_message.get_status`
 
@@ -2190,6 +2191,10 @@ Validate a payload `UScriptStruct` path, optional `BlueprintType` metadata requi
 ### `gameplay_message.validate_channel_contract`
 
 Validate a gameplay message channel tag, optional payload `UScriptStruct`, and match type. Missing tags are errors by default; pass `require_registered_tag=false` for preflight planning of tags that have not been added yet.
+
+### `gameplay_message.trace_channel_usage`
+
+Perform a bounded lexical source trace for GameplayMessageRouter broadcaster/listener call sites such as `BroadcastMessage`, `K2_BroadcastMessage`, `RegisterListener`, and `ListenForGameplayMessages`. Returns source roots, counts by role/code, raw matches, broadcaster/listener rows, a per-channel graph, and candidate issues for inferred payload mismatch, orphan broadcaster/listener, unresolved channel, and ExactMatch/PartialMatch ambiguity. This is read-only static analysis; it does not run PIE, register listeners, broadcast messages, or prove runtime reachability.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithGameplayMessage.md`.
 

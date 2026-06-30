@@ -2366,7 +2366,7 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("unreal-lyra"),
 		{ TEXT("LyraGamePhaseAbility and LyraGamePhaseSubsystem reflected classes must be loadable") },
 		{ TEXT("ok flag, checks array, phase ability summaries, duplicate tag groups, expected-tag gaps, and tag-domain payload") },
-		{ TEXT("lyra.describe_gameplay_tag_domain"), TEXT("gameplay_message.find_broadcasts_and_listeners") });
+		{ TEXT("lyra.describe_gameplay_tag_domain"), TEXT("gameplay_message.trace_channel_usage") });
 	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("describe_team_setup"),
 		TEXT("unreal-lyra"),
 		{ TEXT("LyraTeamCreationComponent reflected class must be loadable") },

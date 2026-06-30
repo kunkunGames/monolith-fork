@@ -6,7 +6,10 @@
 #include "Dom/JsonValue.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
+#include "HAL/FileManager.h"
 #include "Interfaces/IPluginManager.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "UObject/Class.h"
@@ -16,6 +19,37 @@
 namespace MonolithGameplayMessage
 {
 	static constexpr int32 ErrInvalidParams = -32602;
+
+	struct FTracePatternSpec
+	{
+		const TCHAR* Code;
+		const TCHAR* Token;
+		const TCHAR* Role;
+		const TCHAR* Meaning;
+	};
+
+	static const FTracePatternSpec TracePatterns[] =
+	{
+		{ TEXT("broadcast_template"), TEXT("BroadcastMessage<"), TEXT("broadcaster"), TEXT("Templated native broadcast call; template argument is the payload candidate.") },
+		{ TEXT("broadcast_call"), TEXT("BroadcastMessage("), TEXT("broadcaster"), TEXT("Native or reflected broadcast call; payload type may be implied by the message expression.") },
+		{ TEXT("broadcast_blueprint"), TEXT("K2_BroadcastMessage("), TEXT("broadcaster"), TEXT("Blueprint-facing broadcast call site.") },
+		{ TEXT("register_listener_template"), TEXT("RegisterListener<"), TEXT("listener"), TEXT("Templated native listener registration; template argument is the payload candidate.") },
+		{ TEXT("register_listener_call"), TEXT("RegisterListener("), TEXT("listener"), TEXT("Native listener registration; payload type may be implied by callback signature.") },
+		{ TEXT("async_listener"), TEXT("ListenForGameplayMessages("), TEXT("listener"), TEXT("Blueprint async listener registration call site.") }
+	};
+
+	struct FChannelTraceRow
+	{
+		FString Role;
+		FString Code;
+		FString Channel;
+		FString Payload;
+		FString MatchType;
+		FString File;
+		int32 Line = 0;
+		FString FunctionContext;
+		FString LineText;
+	};
 
 	static FString ObjectPath(const UObject* Object)
 	{
@@ -197,6 +231,391 @@ namespace MonolithGameplayMessage
 		return Params->TryGetBoolField(FieldName, Value) ? Value : DefaultValue;
 	}
 
+	static int32 ReadOptionalIntParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 DefaultValue, int32 MinValue, int32 MaxValue)
+	{
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return DefaultValue;
+		}
+		double Number = static_cast<double>(DefaultValue);
+		if (!Params->TryGetNumberField(FieldName, Number))
+		{
+			return DefaultValue;
+		}
+		return FMath::Clamp(static_cast<int32>(Number), MinValue, MaxValue);
+	}
+
+	static bool ReadOptionalStringArrayParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError)
+	{
+		OutValues.Reset();
+		if (!Params.IsValid() || !Params->HasField(FieldName))
+		{
+			return true;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Params->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must be an array of strings"), FieldName);
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			FString Text;
+			if (!Value.IsValid() || !Value->TryGetString(Text))
+			{
+				OutError = FString::Printf(TEXT("Param '%s' must be an array of strings"), FieldName);
+				return false;
+			}
+			Text.TrimStartAndEndInline();
+			if (!Text.IsEmpty())
+			{
+				OutValues.Add(Text);
+			}
+		}
+		return true;
+	}
+
+	static FString ResolveSourceRoot(FString Root)
+	{
+		Root.TrimStartAndEndInline();
+		if (Root.IsEmpty())
+		{
+			return FString();
+		}
+		Root.ReplaceInline(TEXT("\\"), TEXT("/"));
+		if (FPaths::IsRelative(Root))
+		{
+			Root = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Root);
+		}
+		else
+		{
+			Root = FPaths::ConvertRelativePathToFull(Root);
+		}
+		FPaths::NormalizeDirectoryName(Root);
+		return Root;
+	}
+
+	static void AddOptionalSourceRoot(const FString& Root, TArray<FString>& Roots)
+	{
+		const FString ResolvedRoot = ResolveSourceRoot(Root);
+		if (!ResolvedRoot.IsEmpty() && FPaths::DirectoryExists(ResolvedRoot))
+		{
+			Roots.AddUnique(ResolvedRoot);
+		}
+	}
+
+	static bool IsSkippedSourcePath(const FString& Path, bool bIncludeMonolithSource)
+	{
+		FString Normalized = Path;
+		FPaths::NormalizeFilename(Normalized);
+		if (Normalized.Contains(TEXT("/Intermediate/")) ||
+			Normalized.Contains(TEXT("/Binaries/")) ||
+			Normalized.Contains(TEXT("/DerivedDataCache/")))
+		{
+			return true;
+		}
+		return !bIncludeMonolithSource && Normalized.Contains(TEXT("/Plugins/Monolith/"));
+	}
+
+	static TArray<FString> DefaultProjectSourceRoots(bool bIncludeMonolithSource)
+	{
+		TArray<FString> Roots;
+		AddOptionalSourceRoot(FPaths::Combine(FPaths::ProjectDir(), TEXT("Source")), Roots);
+
+		TArray<FString> PluginDirs;
+		IFileManager::Get().FindFiles(PluginDirs, *FPaths::Combine(FPaths::ProjectPluginsDir(), TEXT("*")), false, true);
+		for (const FString& PluginDirName : PluginDirs)
+		{
+			const FString SourceRoot = FPaths::Combine(FPaths::ProjectPluginsDir(), PluginDirName, TEXT("Source"));
+			if (!IsSkippedSourcePath(SourceRoot, bIncludeMonolithSource))
+			{
+				AddOptionalSourceRoot(SourceRoot, Roots);
+			}
+		}
+		return Roots;
+	}
+
+	static void AddEngineGameplayMessageSourceRoots(TArray<FString>& Roots)
+	{
+		const TSharedPtr<IPlugin> Plugin = IPluginManager::Get().FindPlugin(TEXT("GameplayMessageRouter"));
+		if (Plugin.IsValid())
+		{
+			AddOptionalSourceRoot(FPaths::Combine(Plugin->GetBaseDir(), TEXT("Source")), Roots);
+		}
+	}
+
+	static bool HasSourceExtension(const FString& File)
+	{
+		const FString Extension = FPaths::GetExtension(File, false).ToLower();
+		return Extension == TEXT("cpp") || Extension == TEXT("h") || Extension == TEXT("hpp") || Extension == TEXT("inl");
+	}
+
+	static void CollectSourceFiles(
+		const TArray<FString>& Roots,
+		bool bIncludeMonolithSource,
+		int32 MaxFiles,
+		TArray<FString>& OutFiles,
+		TArray<TSharedPtr<FJsonValue>>& RootRows)
+	{
+		OutFiles.Reset();
+		for (const FString& Root : Roots)
+		{
+			TSharedPtr<FJsonObject> RootRow = MakeShared<FJsonObject>();
+			RootRow->SetStringField(TEXT("root"), Root);
+			RootRow->SetBoolField(TEXT("exists"), FPaths::DirectoryExists(Root));
+
+			int32 RootFileCount = 0;
+			if (FPaths::DirectoryExists(Root))
+			{
+				TArray<FString> Files;
+				IFileManager::Get().FindFilesRecursive(Files, *Root, TEXT("*.*"), true, false, false);
+				for (const FString& File : Files)
+				{
+					if (OutFiles.Num() >= MaxFiles)
+					{
+						break;
+					}
+					if (!HasSourceExtension(File) || IsSkippedSourcePath(File, bIncludeMonolithSource))
+					{
+						continue;
+					}
+					OutFiles.Add(File);
+					++RootFileCount;
+				}
+			}
+
+			RootRow->SetNumberField(TEXT("source_file_count"), RootFileCount);
+			RootRows.Add(MakeShared<FJsonValueObject>(RootRow));
+			if (OutFiles.Num() >= MaxFiles)
+			{
+				break;
+			}
+		}
+	}
+
+	static FString TrimForJson(FString Value, int32 MaxChars)
+	{
+		Value.TrimStartAndEndInline();
+		Value.ReplaceInline(TEXT("\t"), TEXT(" "));
+		while (Value.Contains(TEXT("  ")))
+		{
+			Value.ReplaceInline(TEXT("  "), TEXT(" "));
+		}
+		return Value.Len() > MaxChars ? Value.Left(MaxChars) + TEXT("...") : Value;
+	}
+
+	static bool IsCommentOnlyLine(FString Line)
+	{
+		Line.TrimStartInline();
+		return Line.StartsWith(TEXT("//")) || Line.StartsWith(TEXT("/*")) || Line.StartsWith(TEXT("*"));
+	}
+
+	static FString RelativeDisplayPath(const FString& File)
+	{
+		FString Display = File;
+		if (FPaths::MakePathRelativeTo(Display, *FPaths::ProjectDir()))
+		{
+			FPaths::NormalizeFilename(Display);
+			return Display;
+		}
+		FPaths::NormalizeFilename(Display);
+		return Display;
+	}
+
+	static FString InferFunctionContext(const TArray<FString>& Lines, int32 LineIndex)
+	{
+		for (int32 Index = LineIndex; Index >= FMath::Max(0, LineIndex - 50); --Index)
+		{
+			FString Candidate = Lines[Index];
+			Candidate.TrimStartAndEndInline();
+			if (Candidate.StartsWith(TEXT("//")) || Candidate.StartsWith(TEXT("*")) || Candidate.StartsWith(TEXT("/*")))
+			{
+				continue;
+			}
+			if (Candidate.Contains(TEXT("::")) && Candidate.Contains(TEXT("(")))
+			{
+				return TrimForJson(Candidate, 240);
+			}
+		}
+		return FString();
+	}
+
+	static FString ExtractTemplateArgumentNearToken(const FString& Line, const FString& Token)
+	{
+		const int32 TokenIndex = Line.Find(Token);
+		if (TokenIndex == INDEX_NONE)
+		{
+			return FString();
+		}
+
+		const int32 OpenIndex = Line.Find(TEXT("<"), ESearchCase::CaseSensitive, ESearchDir::FromStart, TokenIndex);
+		const int32 CloseIndex = Line.Find(TEXT(">"), ESearchCase::CaseSensitive, ESearchDir::FromStart, OpenIndex + 1);
+		const int32 ParenIndex = Line.Find(TEXT("("), ESearchCase::CaseSensitive, ESearchDir::FromStart, TokenIndex);
+		if (OpenIndex == INDEX_NONE || CloseIndex == INDEX_NONE || (ParenIndex != INDEX_NONE && OpenIndex > ParenIndex))
+		{
+			return FString();
+		}
+
+		FString Payload = Line.Mid(OpenIndex + 1, CloseIndex - OpenIndex - 1);
+		Payload.TrimStartAndEndInline();
+		return Payload;
+	}
+
+	static TArray<FString> ExtractQuotedGameplayTagCandidates(const FString& Line)
+	{
+		TArray<FString> Tags;
+		int32 SearchIndex = 0;
+		while (SearchIndex < Line.Len())
+		{
+			int32 QuoteIndex = Line.Find(TEXT("\""), ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchIndex);
+			if (QuoteIndex == INDEX_NONE)
+			{
+				break;
+			}
+			const int32 EndQuoteIndex = Line.Find(TEXT("\""), ESearchCase::CaseSensitive, ESearchDir::FromStart, QuoteIndex + 1);
+			if (EndQuoteIndex == INDEX_NONE)
+			{
+				break;
+			}
+
+			FString Candidate = Line.Mid(QuoteIndex + 1, EndQuoteIndex - QuoteIndex - 1);
+			Candidate.TrimStartAndEndInline();
+			const bool bLooksLikeTag = Candidate.Contains(TEXT("."))
+				&& !Candidate.Contains(TEXT("/"))
+				&& !Candidate.Contains(TEXT(" "))
+				&& !Candidate.Contains(TEXT("("))
+				&& !Candidate.Contains(TEXT(")"));
+			if (bLooksLikeTag)
+			{
+				Tags.AddUnique(Candidate);
+			}
+			SearchIndex = EndQuoteIndex + 1;
+		}
+		return Tags;
+	}
+
+	static TArray<FString> ExtractGameplayTagConstants(const FString& Line)
+	{
+		TArray<FString> Constants;
+		for (const FString& Prefix : { FString(TEXT("TAG_")), FString(TEXT("GameplayTag_")), FString(TEXT("NAME_")) })
+		{
+			int32 SearchIndex = 0;
+			while (true)
+			{
+				const int32 FoundIndex = Line.Find(Prefix, ESearchCase::CaseSensitive, ESearchDir::FromStart, SearchIndex);
+				if (FoundIndex == INDEX_NONE)
+				{
+					break;
+				}
+				int32 EndIndex = FoundIndex;
+				while (EndIndex < Line.Len() && (FChar::IsAlnum(Line[EndIndex]) || Line[EndIndex] == TEXT('_')))
+				{
+					++EndIndex;
+				}
+				Constants.AddUnique(Line.Mid(FoundIndex, EndIndex - FoundIndex));
+				SearchIndex = EndIndex;
+			}
+		}
+		return Constants;
+	}
+
+	static FString ExtractMatchTypeFromLine(const FString& Line)
+	{
+		if (Line.Contains(TEXT("PartialMatch")) || Line.Contains(TEXT("EGameplayMessageMatch::Partial")))
+		{
+			return TEXT("PartialMatch");
+		}
+		if (Line.Contains(TEXT("ExactMatch")) || Line.Contains(TEXT("EGameplayMessageMatch::Exact")))
+		{
+			return TEXT("ExactMatch");
+		}
+		return FString();
+	}
+
+	static FString ExtractStaticStructPayloadCandidate(const FString& Line)
+	{
+		const int32 StaticStructIndex = Line.Find(TEXT("::StaticStruct"));
+		if (StaticStructIndex == INDEX_NONE)
+		{
+			return FString();
+		}
+
+		int32 StartIndex = StaticStructIndex - 1;
+		while (StartIndex >= 0)
+		{
+			const TCHAR Ch = Line[StartIndex];
+			if (!(FChar::IsAlnum(Ch) || Ch == TEXT('_') || Ch == TEXT(':')))
+			{
+				break;
+			}
+			--StartIndex;
+		}
+
+		FString Candidate = Line.Mid(StartIndex + 1, StaticStructIndex - StartIndex - 1);
+		Candidate.TrimStartAndEndInline();
+		return Candidate;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const FString& Value : Values)
+		{
+			Rows.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return Rows;
+	}
+
+	static TSharedPtr<FJsonObject> TraceRowToJson(const FChannelTraceRow& Row, bool bIncludeLineText)
+	{
+		TSharedPtr<FJsonObject> Obj = MakeShared<FJsonObject>();
+		Obj->SetStringField(TEXT("role"), Row.Role);
+		Obj->SetStringField(TEXT("code"), Row.Code);
+		Obj->SetStringField(TEXT("channel"), Row.Channel);
+		Obj->SetStringField(TEXT("payload_candidate"), Row.Payload);
+		Obj->SetStringField(TEXT("match_type"), Row.MatchType);
+		Obj->SetStringField(TEXT("file"), Row.File);
+		Obj->SetNumberField(TEXT("line"), Row.Line);
+		Obj->SetStringField(TEXT("function_context"), Row.FunctionContext);
+		if (bIncludeLineText)
+		{
+			Obj->SetStringField(TEXT("line_text"), Row.LineText);
+		}
+		return Obj;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> TracePatternRows()
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const FTracePatternSpec& Pattern : TracePatterns)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("code"), Pattern.Code);
+			Row->SetStringField(TEXT("token"), Pattern.Token);
+			Row->SetStringField(TEXT("role"), Pattern.Role);
+			Row->SetStringField(TEXT("meaning"), Pattern.Meaning);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Rows;
+	}
+
+	static TArray<TSharedPtr<FJsonValue>> TraceLimitationRows()
+	{
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const TCHAR* Limitation : {
+			TEXT("Static source trace only; no PIE session, listener registration, broadcast execution, GameFeature activation, or live subsystem mutation is performed."),
+			TEXT("Lexical matches identify candidate broadcaster/listener call sites and nearby tag/payload tokens, but they do not prove runtime reachability or branch coverage."),
+			TEXT("Channel and payload extraction is best-effort for single-line C++/Blueprint-facing call sites; multi-line fluent calls may report unresolved candidates."),
+			TEXT("Payload compatibility issues are reported only when channel and payload candidates can be inferred from source text.")
+		})
+		{
+			Rows.Add(MakeShared<FJsonValueString>(Limitation));
+		}
+		return Rows;
+	}
+
 	static bool NormalizeMatchType(const FString& RawValue, FString& OutMatchType)
 	{
 		FString Value = RawValue;
@@ -346,6 +765,22 @@ void FMonolithGameplayMessageActions::RegisterActions(FMonolithToolRegistry& Reg
 			.Optional(TEXT("require_blueprint_type"), TEXT("boolean"), TEXT("Require BlueprintType metadata on message_struct when supplied."), TEXT("false"))
 			.Build(),
 		TEXT("Validation"));
+
+	Registry.RegisterAction(
+		TEXT("gameplay_message"), TEXT("trace_channel_usage"),
+		TEXT("Trace GameplayMessageRouter broadcaster/listener source call sites and report channel/payload compatibility candidates read-only."),
+		FMonolithActionHandler::CreateStatic(&TraceChannelUsage),
+		FParamSchemaBuilder()
+			.Optional(TEXT("channel_tag"), TEXT("string"), TEXT("Optional channel tag filter. Empty scans all detected channels."))
+			.Optional(TEXT("source_root"), TEXT("string"), TEXT("Optional local source directory to scan. Relative paths resolve under the project root."))
+			.Optional(TEXT("source_roots"), TEXT("array"), TEXT("Additional local source directories to scan."))
+			.Optional(TEXT("include_monolith_source"), TEXT("boolean"), TEXT("Include Plugins/Monolith source in the scan. Default skips Monolith to avoid self-noise."), TEXT("false"))
+			.Optional(TEXT("include_engine_gameplay_message_sources"), TEXT("boolean"), TEXT("Also scan the engine GameplayMessageRouter plugin source for the runtime contract."), TEXT("false"))
+			.Optional(TEXT("max_files"), TEXT("integer"), TEXT("Maximum source files to scan, clamped 1..10000."), TEXT("2000"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Maximum source matches to report, clamped 1..5000."), TEXT("500"))
+			.Optional(TEXT("include_line_text"), TEXT("boolean"), TEXT("Include trimmed source line text in each match."), TEXT("false"))
+			.Build(),
+		TEXT("Diagnostics"));
 }
 
 FMonolithActionResult FMonolithGameplayMessageActions::GetStatus(const TSharedPtr<FJsonObject>& Params)
@@ -512,5 +947,339 @@ FMonolithActionResult FMonolithGameplayMessageActions::ValidateChannelContract(c
 	Result->SetArrayField(TEXT("checks"), Checks);
 	Result->SetArrayField(TEXT("issues"), Issues);
 	Result->SetArrayField(TEXT("listener_contract"), ListenerContractRows());
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithGameplayMessageActions::TraceChannelUsage(const TSharedPtr<FJsonObject>& Params)
+{
+	using namespace MonolithGameplayMessage;
+
+	const bool bIncludeMonolithSource = ReadOptionalBoolParam(Params, TEXT("include_monolith_source"), false);
+	const bool bIncludeEngineGameplayMessageSources = ReadOptionalBoolParam(Params, TEXT("include_engine_gameplay_message_sources"), false);
+	const bool bIncludeLineText = ReadOptionalBoolParam(Params, TEXT("include_line_text"), false);
+	const int32 MaxFiles = ReadOptionalIntParam(Params, TEXT("max_files"), 2000, 1, 10000);
+	const int32 MaxResults = ReadOptionalIntParam(Params, TEXT("max_results"), 500, 1, 5000);
+	const FString RequestedChannelTag = ReadOptionalStringParam(Params, TEXT("channel_tag"));
+
+	TArray<FString> Roots;
+	const FString SingleSourceRoot = ReadOptionalStringParam(Params, TEXT("source_root"));
+	if (!SingleSourceRoot.IsEmpty())
+	{
+		AddOptionalSourceRoot(SingleSourceRoot, Roots);
+	}
+
+	FString Error;
+	TArray<FString> SourceRoots;
+	if (!ReadOptionalStringArrayParam(Params, TEXT("source_roots"), SourceRoots, Error))
+	{
+		return FMonolithActionResult::Error(Error, ErrInvalidParams);
+	}
+	for (const FString& SourceRoot : SourceRoots)
+	{
+		AddOptionalSourceRoot(SourceRoot, Roots);
+	}
+
+	if (Roots.Num() == 0)
+	{
+		Roots = DefaultProjectSourceRoots(bIncludeMonolithSource);
+	}
+	if (bIncludeEngineGameplayMessageSources)
+	{
+		AddEngineGameplayMessageSourceRoots(Roots);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> RootRows;
+	TArray<FString> SourceFiles;
+	CollectSourceFiles(Roots, bIncludeMonolithSource, MaxFiles, SourceFiles, RootRows);
+
+	TArray<TSharedPtr<FJsonValue>> Matches;
+	TArray<TSharedPtr<FJsonValue>> Broadcasters;
+	TArray<TSharedPtr<FJsonValue>> Listeners;
+	TMap<FString, TArray<FChannelTraceRow>> RowsByChannel;
+	TMap<FString, int32> CountsByRole;
+	TMap<FString, int32> CountsByCode;
+	int32 FilesWithMatches = 0;
+	bool bTruncated = false;
+
+	for (const FString& File : SourceFiles)
+	{
+		if (Matches.Num() >= MaxResults)
+		{
+			bTruncated = true;
+			break;
+		}
+
+		TArray<FString> Lines;
+		if (!FFileHelper::LoadFileToStringArray(Lines, *File))
+		{
+			continue;
+		}
+
+		bool bFileMatched = false;
+		for (int32 LineIndex = 0; LineIndex < Lines.Num(); ++LineIndex)
+		{
+			const FString& Line = Lines[LineIndex];
+			if (IsCommentOnlyLine(Line))
+			{
+				continue;
+			}
+
+			for (const FTracePatternSpec& Pattern : TracePatterns)
+			{
+				if (!Line.Contains(Pattern.Token))
+				{
+					continue;
+				}
+
+				TArray<FString> ChannelCandidates = ExtractQuotedGameplayTagCandidates(Line);
+				for (const FString& Constant : ExtractGameplayTagConstants(Line))
+				{
+					ChannelCandidates.AddUnique(Constant);
+				}
+				if (ChannelCandidates.Num() == 0)
+				{
+					ChannelCandidates.Add(TEXT("<unresolved>"));
+				}
+
+				FString Payload = ExtractTemplateArgumentNearToken(Line, Pattern.Token);
+				if (Payload.IsEmpty())
+				{
+					Payload = ExtractStaticStructPayloadCandidate(Line);
+				}
+
+				FString MatchType = ExtractMatchTypeFromLine(Line);
+				if (MatchType.IsEmpty() && FString(Pattern.Role).Equals(TEXT("listener"), ESearchCase::IgnoreCase))
+				{
+					MatchType = TEXT("ExactMatch(default)");
+				}
+
+				for (const FString& ChannelCandidate : ChannelCandidates)
+				{
+					if (!RequestedChannelTag.IsEmpty()
+						&& !ChannelCandidate.Equals(RequestedChannelTag, ESearchCase::IgnoreCase))
+					{
+						continue;
+					}
+
+					FChannelTraceRow TraceRow;
+					TraceRow.Role = Pattern.Role;
+					TraceRow.Code = Pattern.Code;
+					TraceRow.Channel = ChannelCandidate;
+					TraceRow.Payload = Payload;
+					TraceRow.MatchType = MatchType;
+					TraceRow.File = RelativeDisplayPath(File);
+					TraceRow.Line = LineIndex + 1;
+					TraceRow.FunctionContext = InferFunctionContext(Lines, LineIndex);
+					TraceRow.LineText = TrimForJson(Line, 300);
+
+					const TSharedPtr<FJsonObject> Match = TraceRowToJson(TraceRow, bIncludeLineText);
+					const TSharedPtr<FJsonValue> MatchValue = MakeShared<FJsonValueObject>(Match);
+					Matches.Add(MatchValue);
+					if (TraceRow.Role.Equals(TEXT("broadcaster"), ESearchCase::IgnoreCase))
+					{
+						Broadcasters.Add(MatchValue);
+					}
+					else if (TraceRow.Role.Equals(TEXT("listener"), ESearchCase::IgnoreCase))
+					{
+						Listeners.Add(MatchValue);
+					}
+
+					RowsByChannel.FindOrAdd(ChannelCandidate).Add(TraceRow);
+					CountsByRole.FindOrAdd(TraceRow.Role)++;
+					CountsByCode.FindOrAdd(TraceRow.Code)++;
+					bFileMatched = true;
+
+					if (Matches.Num() >= MaxResults)
+					{
+						bTruncated = true;
+						break;
+					}
+				}
+				if (Matches.Num() >= MaxResults)
+				{
+					break;
+				}
+			}
+			if (Matches.Num() >= MaxResults)
+			{
+				break;
+			}
+		}
+
+		if (bFileMatched)
+		{
+			++FilesWithMatches;
+		}
+	}
+
+	auto MapToJsonRows = [](const TMap<FString, int32>& Counts) -> TArray<TSharedPtr<FJsonValue>>
+	{
+		TArray<FString> Keys;
+		Counts.GenerateKeyArray(Keys);
+		Keys.Sort();
+
+		TArray<TSharedPtr<FJsonValue>> Rows;
+		for (const FString& Key : Keys)
+		{
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("key"), Key);
+			Row->SetNumberField(TEXT("count"), Counts[Key]);
+			Rows.Add(MakeShared<FJsonValueObject>(Row));
+		}
+		return Rows;
+	};
+
+	TArray<FString> Channels;
+	RowsByChannel.GenerateKeyArray(Channels);
+	Channels.Sort();
+
+	TArray<TSharedPtr<FJsonValue>> ChannelGraph;
+	TArray<TSharedPtr<FJsonValue>> Issues;
+	int32 PayloadMismatchCount = 0;
+	int32 OrphanBroadcasterCount = 0;
+	int32 OrphanListenerCount = 0;
+	int32 MatchAmbiguityCount = 0;
+	int32 UnresolvedChannelCount = 0;
+
+	for (const FString& Channel : Channels)
+	{
+		const TArray<FChannelTraceRow>& Rows = RowsByChannel[Channel];
+		TArray<FString> Payloads;
+		TArray<FString> MatchTypes;
+		int32 BroadcasterCount = 0;
+		int32 ListenerCount = 0;
+		bool bHasPartialMatch = false;
+		bool bHasExactMatch = false;
+
+		for (const FChannelTraceRow& Row : Rows)
+		{
+			if (Row.Role.Equals(TEXT("broadcaster"), ESearchCase::IgnoreCase))
+			{
+				++BroadcasterCount;
+			}
+			else if (Row.Role.Equals(TEXT("listener"), ESearchCase::IgnoreCase))
+			{
+				++ListenerCount;
+			}
+			if (!Row.Payload.IsEmpty())
+			{
+				Payloads.AddUnique(Row.Payload);
+			}
+			if (!Row.MatchType.IsEmpty())
+			{
+				MatchTypes.AddUnique(Row.MatchType);
+				bHasPartialMatch |= Row.MatchType.Contains(TEXT("PartialMatch"));
+				bHasExactMatch |= Row.MatchType.Contains(TEXT("ExactMatch"));
+			}
+		}
+		Payloads.Sort();
+		MatchTypes.Sort();
+
+		const bool bPayloadMismatch = BroadcasterCount > 0 && ListenerCount > 0 && Payloads.Num() > 1;
+		const bool bOrphanBroadcaster = BroadcasterCount > 0 && ListenerCount == 0;
+		const bool bOrphanListener = ListenerCount > 0 && BroadcasterCount == 0;
+		const bool bMatchAmbiguity = bHasPartialMatch && bHasExactMatch;
+		const bool bUnresolvedChannel = Channel.Equals(TEXT("<unresolved>"), ESearchCase::IgnoreCase);
+
+		PayloadMismatchCount += bPayloadMismatch ? 1 : 0;
+		OrphanBroadcasterCount += bOrphanBroadcaster ? 1 : 0;
+		OrphanListenerCount += bOrphanListener ? 1 : 0;
+		MatchAmbiguityCount += bMatchAmbiguity ? 1 : 0;
+		UnresolvedChannelCount += bUnresolvedChannel ? 1 : 0;
+
+		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+		Row->SetStringField(TEXT("channel"), Channel);
+		Row->SetNumberField(TEXT("broadcaster_count"), BroadcasterCount);
+		Row->SetNumberField(TEXT("listener_count"), ListenerCount);
+		Row->SetArrayField(TEXT("payload_candidates"), StringsToJson(Payloads));
+		Row->SetArrayField(TEXT("match_types"), StringsToJson(MatchTypes));
+		Row->SetBoolField(TEXT("payload_mismatch_candidate"), bPayloadMismatch);
+		Row->SetBoolField(TEXT("orphan_broadcaster_candidate"), bOrphanBroadcaster);
+		Row->SetBoolField(TEXT("orphan_listener_candidate"), bOrphanListener);
+		Row->SetBoolField(TEXT("match_type_ambiguity_candidate"), bMatchAmbiguity);
+		Row->SetBoolField(TEXT("unresolved_channel"), bUnresolvedChannel);
+		ChannelGraph.Add(MakeShared<FJsonValueObject>(Row));
+
+		auto AddChannelIssue = [&Issues, &Channel](const TCHAR* Severity, const TCHAR* Code, const FString& Message)
+		{
+			TSharedPtr<FJsonObject> Issue = MakeShared<FJsonObject>();
+			Issue->SetStringField(TEXT("severity"), Severity);
+			Issue->SetStringField(TEXT("code"), Code);
+			Issue->SetStringField(TEXT("channel"), Channel);
+			Issue->SetStringField(TEXT("message"), Message);
+			Issues.Add(MakeShared<FJsonValueObject>(Issue));
+		};
+
+		if (bPayloadMismatch)
+		{
+			AddChannelIssue(TEXT("warning"), TEXT("payload_mismatch_candidate"), FString::Printf(TEXT("Channel '%s' has multiple inferred payload candidates."), *Channel));
+		}
+		if (bOrphanBroadcaster)
+		{
+			AddChannelIssue(TEXT("warning"), TEXT("orphan_broadcaster_candidate"), FString::Printf(TEXT("Channel '%s' has broadcaster call sites but no listener call sites in the scanned source roots."), *Channel));
+		}
+		if (bOrphanListener)
+		{
+			AddChannelIssue(TEXT("warning"), TEXT("orphan_listener_candidate"), FString::Printf(TEXT("Channel '%s' has listener call sites but no broadcaster call sites in the scanned source roots."), *Channel));
+		}
+		if (bMatchAmbiguity)
+		{
+			AddChannelIssue(TEXT("info"), TEXT("match_type_ambiguity_candidate"), FString::Printf(TEXT("Channel '%s' mixes ExactMatch and PartialMatch candidates; verify parent/child channel routing intent."), *Channel));
+		}
+		if (bUnresolvedChannel)
+		{
+			AddChannelIssue(TEXT("info"), TEXT("unresolved_channel_candidate"), TEXT("One or more call sites did not expose a channel tag or constant on the matched source line."));
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	bool bOk = true;
+	AddCheck(Checks, bOk, TEXT("source_roots_present"), RootRows.Num() > 0, TEXT("error"), FString::Printf(TEXT("roots_checked=%d"), RootRows.Num()));
+	AddCheck(Checks, bOk, TEXT("source_files_scanned"), SourceFiles.Num() > 0, TEXT("error"), FString::Printf(TEXT("files_scanned=%d"), SourceFiles.Num()));
+	AddCheck(Checks, bOk, TEXT("trace_matches_collected"), Matches.Num() > 0, TEXT("warning"), FString::Printf(TEXT("match_count=%d"), Matches.Num()));
+
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("max_files"), MaxFiles);
+	Limits->SetNumberField(TEXT("max_results"), MaxResults);
+	Limits->SetBoolField(TEXT("truncated"), bTruncated);
+
+	TSharedPtr<FJsonObject> Summary = MakeShared<FJsonObject>();
+	Summary->SetNumberField(TEXT("channel_count"), Channels.Num());
+	Summary->SetNumberField(TEXT("broadcaster_count"), Broadcasters.Num());
+	Summary->SetNumberField(TEXT("listener_count"), Listeners.Num());
+	Summary->SetNumberField(TEXT("payload_mismatch_candidate_count"), PayloadMismatchCount);
+	Summary->SetNumberField(TEXT("orphan_broadcaster_candidate_count"), OrphanBroadcasterCount);
+	Summary->SetNumberField(TEXT("orphan_listener_candidate_count"), OrphanListenerCount);
+	Summary->SetNumberField(TEXT("match_type_ambiguity_candidate_count"), MatchAmbiguityCount);
+	Summary->SetNumberField(TEXT("unresolved_channel_count"), UnresolvedChannelCount);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("gameplay_message"));
+	Result->SetStringField(TEXT("action"), TEXT("trace_channel_usage"));
+	Result->SetBoolField(TEXT("ok"), bOk);
+	Result->SetStringField(TEXT("analysis_mode"), TEXT("static_source_trace"));
+	Result->SetStringField(TEXT("runtime_execution"), TEXT("not_performed"));
+	Result->SetBoolField(TEXT("uses_hard_dependencies"), false);
+	Result->SetStringField(TEXT("requested_channel_tag"), RequestedChannelTag);
+	Result->SetBoolField(TEXT("include_monolith_source"), bIncludeMonolithSource);
+	Result->SetBoolField(TEXT("include_engine_gameplay_message_sources"), bIncludeEngineGameplayMessageSources);
+	Result->SetNumberField(TEXT("roots_checked"), RootRows.Num());
+	Result->SetNumberField(TEXT("files_scanned"), SourceFiles.Num());
+	Result->SetNumberField(TEXT("files_with_matches"), FilesWithMatches);
+	Result->SetNumberField(TEXT("match_count"), Matches.Num());
+	Result->SetObjectField(TEXT("limits"), Limits);
+	Result->SetObjectField(TEXT("summary"), Summary);
+	Result->SetArrayField(TEXT("source_roots"), RootRows);
+	Result->SetArrayField(TEXT("patterns"), TracePatternRows());
+	Result->SetArrayField(TEXT("counts_by_code"), MapToJsonRows(CountsByCode));
+	Result->SetArrayField(TEXT("counts_by_role"), MapToJsonRows(CountsByRole));
+	Result->SetArrayField(TEXT("channel_graph"), ChannelGraph);
+	Result->SetArrayField(TEXT("broadcasters"), Broadcasters);
+	Result->SetArrayField(TEXT("listeners"), Listeners);
+	Result->SetArrayField(TEXT("matches"), Matches);
+	Result->SetArrayField(TEXT("checks"), Checks);
+	Result->SetArrayField(TEXT("issues"), Issues);
+	Result->SetArrayField(TEXT("limitations"), TraceLimitationRows());
+	Result->SetStringField(TEXT("trace_contract"), TEXT("Lexical GameplayMessageRouter source trace only: reports candidate broadcaster/listener channel and payload relationships, but does not prove runtime reachability, listener lifetime, or branch coverage."));
 	return FMonolithActionResult::Success(Result);
 }

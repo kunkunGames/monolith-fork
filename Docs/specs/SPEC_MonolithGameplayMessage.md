@@ -11,7 +11,7 @@
 
 ## 1. Purpose
 
-`MonolithGameplayMessage` provides reusable read-only diagnostics for Unreal projects that use Epic's `GameplayMessageRouter` plugin. It validates the channel tag, match type, and payload `UScriptStruct` contract that `UGameplayMessageSubsystem` requires, without linking against or modifying the runtime plugin.
+`MonolithGameplayMessage` provides reusable read-only diagnostics for Unreal projects that use Epic's `GameplayMessageRouter` plugin. It validates the channel tag, match type, payload `UScriptStruct`, and static source call-site contract that `UGameplayMessageSubsystem` requires, without linking against or modifying the runtime plugin.
 
 ---
 
@@ -23,6 +23,7 @@
 | Listener/broadcast contract explanation | `gameplay_message.describe_listener_contract` |
 | Payload struct validation | `gameplay_message.validate_message_struct` |
 | Channel + payload pair validation | `gameplay_message.validate_channel_contract` |
+| Static broadcaster/listener source tracing | `gameplay_message.trace_channel_usage` |
 
 ---
 
@@ -34,6 +35,7 @@
 | `gameplay_message.describe_listener_contract` | none | Reports the reflected subsystem/async-action functions and the shared listener contract rows for exact/partial match behavior and payload type agreement. |
 | `gameplay_message.validate_message_struct` | `message_struct`, optional `require_blueprint_type=false`, optional `require_no_object_references=false` | Loads the requested object as `UObject`, verifies it is a `UScriptStruct`, checks metadata and object-reference properties, and returns structured checks/issues. |
 | `gameplay_message.validate_channel_contract` | `channel_tag`, optional `message_struct`, optional `match_type=ExactMatch`, optional `require_registered_tag=true`, optional `require_blueprint_type=false` | Validates GameplayTags registration, match type (`ExactMatch`/`PartialMatch`), and optional payload struct compatibility. |
+| `gameplay_message.trace_channel_usage` | optional `channel_tag`, `source_root`, `source_roots`, `include_monolith_source=false`, `include_engine_gameplay_message_sources=false`, `max_files=2000`, `max_results=500`, `include_line_text=false` | Scans bounded project/plugin source text for GameplayMessageRouter broadcaster/listener call sites, groups inferred channel/payload/match candidates, and reports payload mismatch, orphan broadcaster/listener, unresolved channel, and ExactMatch/PartialMatch ambiguity candidates. |
 
 ---
 
@@ -45,6 +47,7 @@
 | Mutability | Actions are read-only and must not register listeners, broadcast messages, run PIE, or save assets. |
 | Tag validation | Missing gameplay tags are errors by default, but callers can pass `require_registered_tag=false` for preflight planning. |
 | Payload validation | `UScriptStruct` payload agreement is reported as data; the action does not infer per-channel runtime listener state. |
+| Source trace limits | `trace_channel_usage` is lexical static analysis only. It reports candidate call sites and inferred payload/channel/match relationships, but does not prove runtime reachability, listener lifetime, branch coverage, or live subsystem state. |
 
 ---
 
