@@ -15,6 +15,8 @@ public:
 	static FMonolithActionResult ValidateExperienceBundle(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult DescribeUserFacingExperience(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateUserFacingExperience(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ValidateMapDefaultExperience(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ValidateUserFacingMapReachability(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult DescribeGameplayTagDomain(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateGamePhaseFlow(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult DescribeTeamSetup(const TSharedPtr<FJsonObject>& Params);

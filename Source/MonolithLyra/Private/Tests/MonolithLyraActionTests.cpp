@@ -23,6 +23,8 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("lyra.validate_experience_bundle action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_experience_bundle")));
 	TestTrue(TEXT("lyra.describe_user_facing_experience action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("describe_user_facing_experience")));
 	TestTrue(TEXT("lyra.validate_user_facing_experience action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_user_facing_experience")));
+	TestTrue(TEXT("lyra.validate_map_default_experience action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_map_default_experience")));
+	TestTrue(TEXT("lyra.validate_user_facing_map_reachability action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_user_facing_map_reachability")));
 	TestTrue(TEXT("lyra.describe_gameplay_tag_domain action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("describe_gameplay_tag_domain")));
 	TestTrue(TEXT("lyra.validate_game_phase_flow action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_game_phase_flow")));
 	TestTrue(TEXT("lyra.describe_team_setup action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("describe_team_setup")));
@@ -108,6 +110,44 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	FMonolithActionResult MissingUserFacing = FMonolithLyraActions::ValidateUserFacingExperience(MakeShared<FJsonObject>());
 	TestFalse(TEXT("validate_user_facing_experience rejects missing user_facing_experience_path"), MissingUserFacing.bSuccess);
 	TestEqual(TEXT("validate_user_facing_experience invalid param code"), MissingUserFacing.ErrorCode, -32602);
+
+	FMonolithActionResult MissingMapDefault = FMonolithLyraActions::ValidateMapDefaultExperience(MakeShared<FJsonObject>());
+	TestFalse(TEXT("validate_map_default_experience rejects missing map_path"), MissingMapDefault.bSuccess);
+	TestEqual(TEXT("validate_map_default_experience invalid param code"), MissingMapDefault.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> BadExpectedExperienceParams = MakeShared<FJsonObject>();
+	BadExpectedExperienceParams->SetStringField(TEXT("map_path"), TEXT("/Script/Engine.Actor"));
+	BadExpectedExperienceParams->SetStringField(TEXT("expected_experience_id"), TEXT("Map:/Game/Maps/L_Test"));
+	FMonolithActionResult BadExpectedExperience = FMonolithLyraActions::ValidateMapDefaultExperience(BadExpectedExperienceParams);
+	TestFalse(TEXT("validate_map_default_experience rejects non-Lyra expected experience id"), BadExpectedExperience.bSuccess);
+	TestEqual(TEXT("validate_map_default_experience expected id invalid param code"), BadExpectedExperience.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> BadMapParams = MakeShared<FJsonObject>();
+	BadMapParams->SetStringField(TEXT("map_path"), TEXT("/Script/Engine.Actor"));
+	FMonolithActionResult BadMap = FMonolithLyraActions::ValidateMapDefaultExperience(BadMapParams);
+	TestTrue(TEXT("validate_map_default_experience returns structured result for bad map"), BadMap.bSuccess);
+	TestTrue(TEXT("validate_map_default_experience returns json"), BadMap.Result.IsValid());
+	if (BadMap.Result.IsValid())
+	{
+		TestFalse(TEXT("validate_map_default_experience ok=false for bad map"), BadMap.Result->GetBoolField(TEXT("ok")));
+		TestTrue(TEXT("validate_map_default_experience has map object"), BadMap.Result->HasTypedField<EJson::Object>(TEXT("map")));
+		TestTrue(TEXT("validate_map_default_experience has checks"), BadMap.Result->HasTypedField<EJson::Array>(TEXT("checks")));
+	}
+
+	FMonolithActionResult MissingReachability = FMonolithLyraActions::ValidateUserFacingMapReachability(MakeShared<FJsonObject>());
+	TestFalse(TEXT("validate_user_facing_map_reachability rejects missing user_facing_experience_path"), MissingReachability.bSuccess);
+	TestEqual(TEXT("validate_user_facing_map_reachability invalid param code"), MissingReachability.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> BadReachabilityParams = MakeShared<FJsonObject>();
+	BadReachabilityParams->SetStringField(TEXT("user_facing_experience_path"), TEXT("/Script/Engine.Actor"));
+	FMonolithActionResult BadReachability = FMonolithLyraActions::ValidateUserFacingMapReachability(BadReachabilityParams);
+	TestTrue(TEXT("validate_user_facing_map_reachability returns structured result for bad asset"), BadReachability.bSuccess);
+	TestTrue(TEXT("validate_user_facing_map_reachability returns json"), BadReachability.Result.IsValid());
+	if (BadReachability.Result.IsValid())
+	{
+		TestFalse(TEXT("validate_user_facing_map_reachability ok=false for bad asset"), BadReachability.Result->GetBoolField(TEXT("ok")));
+		TestTrue(TEXT("validate_user_facing_map_reachability has checks"), BadReachability.Result->HasTypedField<EJson::Array>(TEXT("checks")));
+	}
 
 	FMonolithActionResult TeamSetup = FMonolithLyraActions::DescribeTeamSetup(MakeShared<FJsonObject>());
 	TestTrue(TEXT("describe_team_setup succeeds with defaults"), TeamSetup.bSuccess);

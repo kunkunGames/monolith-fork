@@ -40,7 +40,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
 | [world_conditions](#world_conditions) | 4 | Optional WorldConditions query and condition-type inspection |
 | [gamefeatures](#gamefeatures) | 15 | Optional GameFeature plugin discovery, inspection, validation, and guarded instanced-action authoring |
-| [lyra](#lyra) | 18 | Reflection-based Lyra Experience, UserFacingExperience, GamePhase, PawnData, inventory, equipment, weapon, team, and cosmetic semantic diagnostics plus guarded writes |
+| [lyra](#lyra) | 20 | Reflection-based Lyra Experience, UserFacingExperience, map reachability, GamePhase, PawnData, inventory, equipment, weapon, team, and cosmetic semantic diagnostics plus guarded writes |
 | [online](#online) | 6 | EOS/OSSv2/CommonSession/CommonUser readiness diagnostics with credential redaction |
 | [modular](#modular) | 4 | ModularGameplay receiver lifecycle, AddComponentRequest target, and static extension-event source diagnostics |
 | [settings](#settings) | 6 | GameSettings registry/screen/setting, dynamic path, visual-data, and player-mappable input diagnostics |
@@ -1878,7 +1878,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's 
 
 ## lyra
 
-Reflection-based Lyra semantic inspection, validation, and guarded authoring. **18 actions.** The module resolves `/Script/LyraGame.*` classes reflectively and has no compile-time dependency on LyraGame, CommonGame, EOS, or Speed runtime modules.
+Reflection-based Lyra semantic inspection, validation, and guarded authoring. **20 actions.** The module resolves `/Script/LyraGame.*` classes reflectively and has no compile-time dependency on LyraGame, CommonGame, EOS, or Speed runtime modules.
 
 | Action | Params |
 |--------|--------|
@@ -1887,6 +1887,8 @@ Reflection-based Lyra semantic inspection, validation, and guarded authoring. **
 | `validate_experience_bundle` | `experience_path`, optional expected members, `require_default_pawn_data`, `require_action_sets`, `validate_default_pawn_data`, `require_pawn_class`, `require_pawn_ability_sets`, `require_pawn_input_config`, `require_default_camera_mode`, `validate_action_sets`, `require_action_set_actions`, `disallow_null_actions`, `validate_action_classes`, `require_action_set_game_features`, `validate_game_feature_plugins` |
 | `describe_user_facing_experience` | `user_facing_experience_path` |
 | `validate_user_facing_experience` | `user_facing_experience_path`, optional `require_resolved_primary_assets` |
+| `validate_map_default_experience` | `map_path`, optional `expected_experience_id`, `require_default_experience`, `require_lyra_world_settings`, `require_matching_experience` |
+| `validate_user_facing_map_reachability` | `user_facing_experience_path`, optional `require_resolved_primary_assets`, `require_map_default_experience`, `require_lyra_world_settings`, `require_matching_map_default_experience` |
 | `describe_gameplay_tag_domain` | optional `root_tag`, `include_children`, `max_tags` |
 | `validate_game_phase_flow` | optional `root_tag`, `path_filter`, `phase_ability_paths`, `expected_phase_tags`, `disallow_duplicate_tags`, `max_assets` |
 | `describe_team_setup` | optional `team_creation_component_class` |
@@ -1904,6 +1906,14 @@ Reflection-based Lyra semantic inspection, validation, and guarded authoring. **
 ### `lyra.validate_experience_bundle`
 
 Validate a Lyra Experience bundle as a semantic graph. In shallow mode it checks `DefaultPawnData`, composed `ActionSets`, and `GameFeaturesToEnable` against optional expected members. Deep flags inspect referenced PawnData fields, ActionSet action arrays, null entries, action class derivation from `UGameFeatureAction`, and optional GameFeature plugin descriptor presence/enabled state. The action is read-only and does not activate GameFeatures or mutate packages.
+
+### `lyra.validate_map_default_experience`
+
+Validate that a map loads as a `UWorld`, optionally uses `ALyraWorldSettings`, and exposes a reflected `DefaultGameplayExperience` that resolves to a `LyraExperienceDefinition` primary asset id. When `expected_experience_id` is supplied, `require_matching_experience=true` makes mismatches errors; otherwise they are reported as warnings.
+
+### `lyra.validate_user_facing_map_reachability`
+
+Validate a `ULyraUserFacingExperienceDefinition` hosting contract from `MapID` to a loadable map and optional map fallback experience. `ExperienceID` is compared to map `DefaultGameplayExperience` only as a warning by default because Lyra playlist hosting passes `ExperienceID` through the URL option before `ALyraWorldSettings` fallback is consulted; set `require_matching_map_default_experience=true` for strict audits.
 
 ### `lyra.describe_gameplay_tag_domain`
 

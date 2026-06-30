@@ -1,6 +1,6 @@
 ---
 name: unreal-lyra
-description: Use when inspecting, validating, or guarded-authoring Lyra framework assets via Monolith MCP (lyra namespace) - Lyra Experience graphs, Experience defaults, component-entry cleanup, PawnData/ActionSet composition, inventory/equipment/weapon definitions, team setup, cosmetics character parts, UserFacingExperience hosting/session metadata, and GamePhase tag-domain validation. For raw GameFeatureData action authoring use unreal-gamefeatures; for UMG/CommonUI widgets use unreal-ui; for generic asset copy/remap use unreal-asset.
+description: Use when inspecting, validating, or guarded-authoring Lyra framework assets via Monolith MCP (lyra namespace) - Lyra Experience graphs, map DefaultGameplayExperience, Experience defaults, component-entry cleanup, PawnData/ActionSet composition, inventory/equipment/weapon definitions, team setup, cosmetics character parts, UserFacingExperience hosting/session metadata/map reachability, and GamePhase tag-domain validation. For raw GameFeatureData action authoring use unreal-gamefeatures; for UMG/CommonUI widgets use unreal-ui; for generic asset copy/remap use unreal-asset.
 ---
 
 # unreal-lyra
@@ -24,6 +24,8 @@ Use this skill when the target is a Lyra-level contract rather than one raw asse
 - Experience bundle validation before replacing a project commandlet, including optional PawnData, ActionSet, and GameFeature plugin contract checks.
 - Guarded Experience writes: `DefaultPawnData`, replacement `ActionSets`, replacement `GameFeaturesToEnable`, and reflected `GameFeatureAction_AddComponents.ComponentList` cleanup.
 - UserFacingExperience validation before hosting through Lyra/CommonSession front-end flows.
+- Map `ALyraWorldSettings.DefaultGameplayExperience` validation before relying on map-only fallback travel.
+- UserFacingExperience `MapID` reachability validation and optional map-default Experience comparison; note that playlist hosting passes `ExperienceID` through URL options, so map default mismatches are only strict blockers when requested.
 - Guarded UserFacingExperience writes for map/experience IDs, tile metadata, loading widget, max players, session mode, lobby, voice, and presence flags.
 - GamePhase tag-domain inspection and `ULyraGamePhaseAbility.GamePhaseTag` coverage validation.
 - Static CDO/reflection diagnostics for `ULyraPawnData`, inventory items, equipment definitions, weapon-like item chains, team creation defaults, and cosmetic character-part actor classes.
@@ -46,6 +48,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default. Confirm 
 | `validate_experience_bundle` | `experience_path*`, `require_default_pawn_data?=true`, `require_action_sets?=false`, expected members, `validate_default_pawn_data?=false`, `require_pawn_class?=true`, `require_pawn_ability_sets?=false`, `require_pawn_input_config?=false`, `require_default_camera_mode?=false`, `validate_action_sets?=true`, `require_action_set_actions?=false`, `disallow_null_actions?=true`, `validate_action_classes?=true`, `require_action_set_game_features?=false`, `validate_game_feature_plugins?=false` | Validate the Experience contract, optional PawnData internals, ActionSet action entries/classes, and GameFeature plugin descriptors. |
 | `describe_user_facing_experience` | `user_facing_experience_path*` | Describe a UserFacingExperience hosting contract. |
 | `validate_user_facing_experience` | `user_facing_experience_path*`, `require_resolved_primary_assets?=false` | Validate map/experience IDs, max players, lobby, voice, and presence consistency. |
+| `validate_map_default_experience` | `map_path*`, `expected_experience_id?`, `require_default_experience?=true`, `require_lyra_world_settings?=true`, `require_matching_experience?=true` | Validate that a map loads, uses LyraWorldSettings when required, and has a resolvable `DefaultGameplayExperience` matching an optional expected LyraExperienceDefinition primary asset id. |
+| `validate_user_facing_map_reachability` | `user_facing_experience_path*`, `require_resolved_primary_assets?=false`, `require_map_default_experience?=false`, `require_lyra_world_settings?=true`, `require_matching_map_default_experience?=false` | Validate that a UserFacingExperience `MapID` resolves to a map and optionally compare its map fallback `DefaultGameplayExperience` to the playlist `ExperienceID`. |
 | `describe_gameplay_tag_domain` | `root_tag?="GamePhase"`, `include_children?=true`, `max_tags?=256` | Describe a GameplayTag root domain, source metadata, child tags, comments, and truncation status. |
 | `validate_game_phase_flow` | `root_tag?="GamePhase"`, `path_filter?`, `phase_ability_paths?`, `expected_phase_tags?`, `disallow_duplicate_tags?=false`, `max_assets?=256` | Validate reflected Lyra game phase ability classes and their `GamePhaseTag` values against the registered tag domain and expected tag coverage; `path_filter` enables Blueprint asset scanning. |
 | `describe_team_setup` | `team_creation_component_class?="/Script/LyraGame.LyraTeamCreationComponent"` | Describe reflected Lyra team creation defaults without spawning teams. |
@@ -88,6 +92,21 @@ lyra_query("validate_experience_bundle", {
 lyra_query("validate_user_facing_experience", {
   "user_facing_experience_path": "/SpeedMaps/System/FrontEnd/Experiences/DA_DefaultUserFacingExperience",
   "require_resolved_primary_assets": true
+})
+
+lyra_query("validate_user_facing_map_reachability", {
+  "user_facing_experience_path": "/SpeedMaps/System/Playlists/DA_SpeedDefault",
+  "require_resolved_primary_assets": true,
+  "require_matching_map_default_experience": false
+})
+```
+
+### Validate a map-only fallback experience
+
+```text
+lyra_query("validate_map_default_experience", {
+  "map_path": "Map:/SpeedMaps/Maps/L_Playground",
+  "expected_experience_id": "LyraExperienceDefinition:B_TagChase_Experience"
 })
 ```
 
@@ -176,4 +195,5 @@ lyra_query("set_user_facing_experience", {
 - `validate_game_phase_flow` does not scan every Blueprint by default; pass a narrow `path_filter` such as `/SpeedCore` when Blueprint phase ability discovery is needed.
 - `validate_experience_bundle` deep checks are read-only. They inspect referenced PawnData and ActionSet objects, validate action classes against `UGameFeatureAction`, and optionally report plugin descriptor presence/enabled state without activating GameFeatures.
 - UserFacingExperience diagnostics must not inspect, print, or infer EOS credential values.
+- `validate_user_facing_map_reachability` reports map default experience mismatches as warnings unless `require_matching_map_default_experience=true`, because Lyra playlist hosting passes `ExperienceID` as a URL option before `ALyraWorldSettings` fallback is consulted.
 - Static PawnData, inventory/equipment/weapon, team, and character-part inspectors are read-only. They inspect reflected CDO/default data only; they do not spawn teams, equip items, initialize pawns, apply cosmetics, or mutate packages.

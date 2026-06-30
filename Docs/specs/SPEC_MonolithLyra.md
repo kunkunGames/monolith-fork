@@ -11,7 +11,7 @@
 
 ## 1. Purpose
 
-`MonolithLyra` owns reusable Lyra semantic inspection, validation, and guarded authoring that is higher level than raw `gamefeatures`, `ui`, `asset`, or `editor` primitives. The current implementation slice covers Lyra Experience and UserFacingExperience contracts that were previously handled by project commandlets, read-only deep Experience bundle validation, read-only Lyra GamePhase tag/domain validation, and read-only P2 inspectors for PawnData, inventory/equipment/weapon definitions, team setup, and cosmetic character parts.
+`MonolithLyra` owns reusable Lyra semantic inspection, validation, and guarded authoring that is higher level than raw `gamefeatures`, `ui`, `asset`, or `editor` primitives. The current implementation slice covers Lyra Experience and UserFacingExperience contracts that were previously handled by project commandlets, read-only map `ALyraWorldSettings.DefaultGameplayExperience` and playlist-to-map reachability validation, read-only deep Experience bundle validation, read-only Lyra GamePhase tag/domain validation, and read-only P2 inspectors for PawnData, inventory/equipment/weapon definitions, team setup, and cosmetic character parts.
 
 The module does not include Lyra headers and does not hard-link `LyraGame`. It resolves `/Script/LyraGame.*` types reflectively, so non-Lyra projects can still load Monolith and receive explicit unavailable-class diagnostics when calling `lyra` actions.
 
@@ -22,7 +22,7 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | Class | Responsibility |
 | --- | --- |
 | `FMonolithLyraModule` | Registers and unregisters the `lyra` namespace. |
-| `FMonolithLyraActions` | Implements status, Experience graph inspection/validation, guarded Experience default writes, guarded component-entry removal, UserFacingExperience inspection/validation, read-only GamePhase tag/domain validation, read-only PawnData/inventory/equipment/weapon/team/cosmetic inspectors, and guarded UserFacingExperience writes. |
+| `FMonolithLyraActions` | Implements status, Experience graph inspection/validation, map default Experience validation, UserFacingExperience map reachability validation, guarded Experience default writes, guarded component-entry removal, UserFacingExperience inspection/validation, read-only GamePhase tag/domain validation, read-only PawnData/inventory/equipment/weapon/team/cosmetic inspectors, and guarded UserFacingExperience writes. |
 
 | Dependency | Purpose |
 | --- | --- |
@@ -44,6 +44,8 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | `lyra.validate_experience_bundle` | `experience_path`, optional expected members, `validate_default_pawn_data`, `require_pawn_class`, `require_pawn_ability_sets`, `require_pawn_input_config`, `require_default_camera_mode`, `validate_action_sets`, `require_action_set_actions`, `disallow_null_actions`, `validate_action_classes`, `require_action_set_game_features`, `validate_game_feature_plugins` | Validates the Experience bundle contract, optional PawnData internals, composed ActionSet action arrays, and GameFeature plugin descriptor readiness; returns exact check rows. |
 | `lyra.describe_user_facing_experience` | `user_facing_experience_path` | Describes `MapID`, `ExperienceID`, UI metadata, loading widget, max players, and session flags. |
 | `lyra.validate_user_facing_experience` | `user_facing_experience_path`, optional `require_resolved_primary_assets` | Validates the hosting contract for map, experience, max players, lobby, voice, and presence fields. |
+| `lyra.validate_map_default_experience` | `map_path`, optional `expected_experience_id`, `require_default_experience`, `require_lyra_world_settings`, `require_matching_experience` | Loads a map `UWorld`, verifies optional `ALyraWorldSettings` usage, reads `DefaultGameplayExperience` by reflection, resolves it to a `LyraExperienceDefinition` primary asset id, and optionally compares it to an expected id. |
+| `lyra.validate_user_facing_map_reachability` | `user_facing_experience_path`, optional `require_resolved_primary_assets`, `require_map_default_experience`, `require_lyra_world_settings`, `require_matching_map_default_experience` | Validates that a UserFacingExperience `MapID` resolves to a loadable map and reports the map's fallback `DefaultGameplayExperience`; map-default mismatch is a warning by default because playlist hosting sends `ExperienceID` through URL options before WorldSettings fallback. |
 | `lyra.describe_gameplay_tag_domain` | optional `root_tag`, `include_children`, `max_tags` | Describes a GameplayTag domain such as `GamePhase`, including root registration, source metadata, child tags, comments, and truncation status. |
 | `lyra.validate_game_phase_flow` | optional `root_tag`, `path_filter`, `phase_ability_paths`, `expected_phase_tags`, `disallow_duplicate_tags`, `max_assets` | Validates reflected `ULyraGamePhaseAbility` classes and their `GamePhaseTag` values against the registered tag domain, expected tags, duplicate tag policy, and missing/invalid class paths. |
 | `lyra.describe_team_setup` | optional `team_creation_component_class` | Describes a `ULyraTeamCreationComponent` CDO: `TeamsToCreate`, `PublicTeamInfoClass`, and `PrivateTeamInfoClass` without spawning teams. |
@@ -69,6 +71,7 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | Write gate | Mutating actions require `dry_run=true` or `confirm=true`. Without either flag the action fails before asset load or package creation. |
 | Dry-run behavior | `dry_run=true` dispatches inspection/planning only and reports field writes/candidates without changing CDOs, DataAssets, arrays, dirty state, or packages. |
 | GamePhase diagnostics | `describe_gameplay_tag_domain` and `validate_game_phase_flow` are read-only and only inspect registered tags, loaded native classes, explicit class/asset paths, and Blueprint CDOs under caller-provided `path_filter`. |
+| Map/playlist diagnostics | `validate_map_default_experience` and `validate_user_facing_map_reachability` are read-only. They load map assets and DataAssets for inspection only, do not save or dirty packages, and do not treat map default Experience mismatch as a playlist-hosting blocker unless the caller sets `require_matching_map_default_experience=true`. |
 | Deep Experience diagnostics | `validate_experience_bundle` can inspect referenced PawnData and ActionSets through reflected object/default data, count null action entries, validate action classes against `UGameFeatureAction`, and optionally report GameFeature plugin descriptor presence/enabled state. It does not activate GameFeatures or mutate packages. |
 | P2 Lyra inspectors | `describe_team_setup`, `describe_inventory_item`, `describe_equipment_definition`, `describe_weapon_definition`, `describe_pawn_initialization_graph`, `validate_pawn_data_contract`, `describe_character_part_graph`, and `validate_character_part_assets` are read-only. They inspect class default objects, reflected UPROPERTY values, and caller-supplied class paths; they do not spawn actors, create teams, equip items, initialize pawns, or apply cosmetics. |
 | Save behavior | `save=true` only saves after `dry_run=false`, `confirm=true`, and a clean committed report or removal. |
@@ -81,8 +84,8 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 
 | Gate | Evidence |
 | --- | --- |
-| Registration | `Monolith.Lyra.RegistryContract` verifies all eighteen actions register. |
-| Parameter guards | The registry contract test verifies missing required parameters return `-32602`, deep Experience bundle validation returns structured check rows and flag echoes, GamePhase and character-part validators reject malformed params, read-only inspectors return structured payloads, and guarded write actions reject mutation without `dry_run=true` or `confirm=true`. |
+| Registration | `Monolith.Lyra.RegistryContract` verifies all twenty actions register. |
+| Parameter guards | The registry contract test verifies missing required parameters return `-32602`, deep Experience bundle validation returns structured check rows and flag echoes, map/default-experience validators return structured bad-path payloads, GamePhase and character-part validators reject malformed params, read-only inspectors return structured payloads, and guarded write actions reject mutation without `dry_run=true` or `confirm=true`. |
 | Build | `SpeedEditor Win64 Development` UBT build must succeed with engine root resolved from `Speed.uproject`. |
 | Runtime code scope | No files under `Source/LyraGame`, `Source/LyraEditor`, or `Plugins/CommonGame` are changed by this module. |
 

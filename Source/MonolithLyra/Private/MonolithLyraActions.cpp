@@ -12,6 +12,8 @@
 #include "Engine/AssetManager.h"
 #include "Engine/Blueprint.h"
 #include "Engine/DataAsset.h"
+#include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
 #include "GameplayTagContainer.h"
 #include "GameplayTagsManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -19,6 +21,7 @@
 #include "Modules/ModuleManager.h"
 #include "ScopedTransaction.h"
 #include "UObject/PrimaryAssetId.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/TopLevelAssetPath.h"
@@ -32,6 +35,7 @@ namespace MonolithLyra
 	static const TCHAR* LyraExperienceDefinitionClassPath = TEXT("/Script/LyraGame.LyraExperienceDefinition");
 	static const TCHAR* LyraExperienceActionSetClassPath = TEXT("/Script/LyraGame.LyraExperienceActionSet");
 	static const TCHAR* LyraUserFacingExperienceClassPath = TEXT("/Script/LyraGame.LyraUserFacingExperienceDefinition");
+	static const TCHAR* LyraWorldSettingsClassPath = TEXT("/Script/LyraGame.LyraWorldSettings");
 	static const TCHAR* LyraGamePhaseAbilityClassPath = TEXT("/Script/LyraGame.LyraGamePhaseAbility");
 	static const TCHAR* LyraGamePhaseSubsystemClassPath = TEXT("/Script/LyraGame.LyraGamePhaseSubsystem");
 	static const TCHAR* LyraTeamCreationComponentClassPath = TEXT("/Script/LyraGame.LyraTeamCreationComponent");
@@ -579,6 +583,268 @@ namespace MonolithLyra
 		}
 		Result->SetStringField(TEXT("resolved_object_path"), ResolvedPath);
 		return Result;
+	}
+
+	static FString MapPackageToObjectPath(const FString& PackagePath)
+	{
+		if (PackagePath.Contains(TEXT(".")))
+		{
+			return PackagePath;
+		}
+		if (!PackagePath.StartsWith(TEXT("/")))
+		{
+			return PackagePath;
+		}
+		return PackagePath + TEXT(".") + FPackageName::GetLongPackageAssetName(PackagePath);
+	}
+
+	static bool ResolveMapObjectPath(const FString& InputPath, FString& OutObjectPath, FString& OutSourceKind, FString& OutError)
+	{
+		OutObjectPath.Reset();
+		OutSourceKind.Reset();
+
+		if (InputPath.IsEmpty())
+		{
+			OutError = TEXT("map_path must not be empty");
+			return false;
+		}
+
+		const FPrimaryAssetId AssetId = FPrimaryAssetId::FromString(InputPath);
+		if (AssetId.IsValid())
+		{
+			if (!AssetId.PrimaryAssetType.ToString().Equals(TEXT("Map"), ESearchCase::IgnoreCase))
+			{
+				OutError = FString::Printf(TEXT("map_path PrimaryAssetId must have type Map, got '%s'"), *AssetId.PrimaryAssetType.ToString());
+				return false;
+			}
+			if (UAssetManager::IsInitialized())
+			{
+				const FSoftObjectPath AssetPath = UAssetManager::Get().GetPrimaryAssetPath(AssetId);
+				if (AssetPath.IsValid())
+				{
+					OutObjectPath = AssetPath.ToString();
+					OutSourceKind = TEXT("primary_asset_id");
+					return true;
+				}
+			}
+
+			const FString PackageName = AssetId.PrimaryAssetName.ToString();
+			OutObjectPath = MapPackageToObjectPath(PackageName);
+			OutSourceKind = TEXT("primary_asset_id_name_fallback");
+			return true;
+		}
+
+		OutObjectPath = MapPackageToObjectPath(InputPath);
+		OutSourceKind = InputPath.Contains(TEXT(".")) ? TEXT("object_path") : TEXT("package_path");
+		return true;
+	}
+
+	static bool TryGetSoftClassPropertyPath(UObject* Object, const TCHAR* PropertyName, FSoftObjectPath& OutPath)
+	{
+		OutPath = FSoftObjectPath();
+		if (!Object)
+		{
+			return false;
+		}
+		if (FSoftClassProperty* Property = FindFProperty<FSoftClassProperty>(Object->GetClass(), PropertyName))
+		{
+			const void* PropertyValue = Property->ContainerPtrToValuePtr<void>(Object);
+			const FSoftObjectPtr* SoftPtr = static_cast<const FSoftObjectPtr*>(PropertyValue);
+			OutPath = SoftPtr ? SoftPtr->ToSoftObjectPath() : FSoftObjectPath();
+			return true;
+		}
+		return false;
+	}
+
+	static FPrimaryAssetId ResolveExperienceIdFromSoftClassPath(const FSoftObjectPath& ExperienceClassPath, FString& OutMethod, FString& OutLoadedClassPath)
+	{
+		OutMethod.Reset();
+		OutLoadedClassPath.Reset();
+		FPrimaryAssetId Result;
+		if (!ExperienceClassPath.IsValid())
+		{
+			return Result;
+		}
+
+		if (UAssetManager::IsInitialized())
+		{
+			Result = UAssetManager::Get().GetPrimaryAssetIdForPath(ExperienceClassPath);
+			if (Result.IsValid())
+			{
+				OutMethod = TEXT("asset_manager_soft_class_path");
+				return Result;
+			}
+
+			if (ExperienceClassPath.GetAssetName().EndsWith(TEXT("_C")))
+			{
+				const FString ExperiencePackageName = ExperienceClassPath.GetLongPackageName();
+				const FString ExperienceAssetName = FPackageName::GetLongPackageAssetName(ExperiencePackageName);
+				Result = UAssetManager::Get().GetPrimaryAssetIdForPath(FSoftObjectPath(ExperiencePackageName + TEXT(".") + ExperienceAssetName));
+				if (Result.IsValid())
+				{
+					OutMethod = TEXT("asset_manager_blueprint_asset_path");
+					return Result;
+				}
+			}
+		}
+
+		if (UClass* ExperienceClass = StaticLoadClass(UObject::StaticClass(), nullptr, *ExperienceClassPath.ToString()))
+		{
+			OutLoadedClassPath = ExperienceClass->GetPathName();
+			if (const UPrimaryDataAsset* PrimaryDataAsset = Cast<UPrimaryDataAsset>(ExperienceClass->GetDefaultObject()))
+			{
+				Result = PrimaryDataAsset->GetPrimaryAssetId();
+				if (Result.IsValid())
+				{
+					OutMethod = TEXT("loaded_class_default_object");
+					return Result;
+				}
+			}
+		}
+
+		return Result;
+	}
+
+	static bool TryParseExpectedExperienceId(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& bOutHasExpected, FPrimaryAssetId& OutExpectedId, FString& OutError)
+	{
+		bOutHasExpected = false;
+		OutExpectedId = FPrimaryAssetId();
+
+		FString ExpectedText;
+		if (!TryGetOptionalStringParam(Params, FieldName, ExpectedText, OutError))
+		{
+			return false;
+		}
+		if (ExpectedText.IsEmpty())
+		{
+			return true;
+		}
+
+		OutExpectedId = FPrimaryAssetId::FromString(ExpectedText);
+		if (!OutExpectedId.IsValid())
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must be a valid PrimaryAssetId in Type:Name form"), FieldName);
+			return false;
+		}
+		if (!OutExpectedId.PrimaryAssetType.ToString().Equals(TEXT("LyraExperienceDefinition"), ESearchCase::IgnoreCase))
+		{
+			OutError = FString::Printf(TEXT("Param '%s' must have type LyraExperienceDefinition"), FieldName);
+			return false;
+		}
+		bOutHasExpected = true;
+		return true;
+	}
+
+	static TSharedPtr<FJsonObject> BuildMapDefaultExperienceContract(
+		const FString& MapInputPath,
+		const FPrimaryAssetId& ExpectedExperienceId,
+		bool bHasExpectedExperience,
+		bool bRequireDefaultExperience,
+		bool bRequireLyraWorldSettings,
+		bool bRequireMatchingExperience,
+		TArray<TSharedPtr<FJsonValue>>& Checks,
+		TArray<TSharedPtr<FJsonValue>>& Warnings,
+		bool& bOk)
+	{
+		TSharedPtr<FJsonObject> Contract = MakeShared<FJsonObject>();
+		Contract->SetStringField(TEXT("map_input"), MapInputPath);
+
+		FString MapObjectPath;
+		FString MapSourceKind;
+		FString ResolveError;
+		const bool bResolvedMapPath = ResolveMapObjectPath(MapInputPath, MapObjectPath, MapSourceKind, ResolveError);
+		Contract->SetStringField(TEXT("map_object_path"), MapObjectPath);
+		Contract->SetStringField(TEXT("map_source_kind"), MapSourceKind);
+		AddCheck(Checks, bOk, TEXT("map_path_resolved"), bResolvedMapPath, TEXT("error"), bResolvedMapPath ? MapObjectPath : ResolveError);
+		if (!bResolvedMapPath)
+		{
+			return Contract;
+		}
+
+		UWorld* World = LoadObject<UWorld>(nullptr, *MapObjectPath);
+		Contract->SetBoolField(TEXT("map_loaded"), World != nullptr);
+		AddCheck(Checks, bOk, TEXT("map_loadable"), World != nullptr, TEXT("error"), World ? World->GetPathName() : FString::Printf(TEXT("Could not load UWorld '%s'"), *MapObjectPath));
+		if (!World)
+		{
+			return Contract;
+		}
+
+		AWorldSettings* WorldSettings = World->GetWorldSettings();
+		const FString WorldSettingsClassPath = WorldSettings && WorldSettings->GetClass() ? WorldSettings->GetClass()->GetPathName() : FString();
+		Contract->SetStringField(TEXT("world_settings_path"), WorldSettings ? WorldSettings->GetPathName() : FString());
+		Contract->SetStringField(TEXT("world_settings_class_path"), WorldSettingsClassPath);
+		AddCheck(Checks, bOk, TEXT("world_settings_present"), WorldSettings != nullptr, TEXT("error"), WorldSettings ? WorldSettings->GetPathName() : TEXT("World has no WorldSettings"));
+
+		UClass* LyraWorldSettingsClass = StaticLoadClass(UObject::StaticClass(), nullptr, LyraWorldSettingsClassPath);
+		const bool bIsLyraWorldSettings = WorldSettings && LyraWorldSettingsClass && WorldSettings->IsA(LyraWorldSettingsClass);
+		Contract->SetBoolField(TEXT("world_settings_is_lyra"), bIsLyraWorldSettings);
+		AddCheck(
+			Checks,
+			bOk,
+			TEXT("world_settings_is_lyra"),
+			!bRequireLyraWorldSettings || bIsLyraWorldSettings,
+			bRequireLyraWorldSettings ? TEXT("error") : TEXT("warning"),
+			WorldSettingsClassPath.IsEmpty() ? TEXT("WorldSettings class unavailable") : WorldSettingsClassPath);
+
+		FSoftObjectPath DefaultExperiencePath;
+		const bool bPropertyFound = TryGetSoftClassPropertyPath(WorldSettings, TEXT("DefaultGameplayExperience"), DefaultExperiencePath);
+		TSharedPtr<FJsonObject> DefaultExperience = MakeShared<FJsonObject>();
+		DefaultExperience->SetBoolField(TEXT("property_found"), bPropertyFound);
+		DefaultExperience->SetStringField(TEXT("soft_class_path"), DefaultExperiencePath.ToString());
+		DefaultExperience->SetBoolField(TEXT("is_set"), DefaultExperiencePath.IsValid());
+
+		FString ResolveMethod;
+		FString LoadedClassPath;
+		const FPrimaryAssetId DefaultExperienceId = ResolveExperienceIdFromSoftClassPath(DefaultExperiencePath, ResolveMethod, LoadedClassPath);
+		DefaultExperience->SetObjectField(TEXT("primary_asset_id"), PrimaryAssetIdToJson(DefaultExperienceId));
+		DefaultExperience->SetStringField(TEXT("resolve_method"), ResolveMethod);
+		DefaultExperience->SetStringField(TEXT("loaded_class_path"), LoadedClassPath);
+		if (bHasExpectedExperience)
+		{
+			DefaultExperience->SetObjectField(TEXT("expected_experience_id"), PrimaryAssetIdToJson(ExpectedExperienceId));
+		}
+		Contract->SetObjectField(TEXT("default_gameplay_experience"), DefaultExperience);
+
+		const bool bRequireDefaultExperienceProperty = bRequireDefaultExperience || bRequireLyraWorldSettings;
+		AddCheck(
+			Checks,
+			bOk,
+			TEXT("default_gameplay_experience_property"),
+			!bRequireDefaultExperienceProperty || bPropertyFound,
+			bRequireDefaultExperienceProperty ? TEXT("error") : TEXT("warning"),
+			bPropertyFound ? TEXT("DefaultGameplayExperience") : TEXT("WorldSettings has no DefaultGameplayExperience soft class property"));
+		AddCheck(
+			Checks,
+			bOk,
+			TEXT("default_gameplay_experience_set"),
+			!bRequireDefaultExperience || DefaultExperiencePath.IsValid(),
+			bRequireDefaultExperience ? TEXT("error") : TEXT("warning"),
+			DefaultExperiencePath.ToString());
+		AddCheck(
+			Checks,
+			bOk,
+			TEXT("default_gameplay_experience_resolves"),
+			!DefaultExperiencePath.IsValid() || DefaultExperienceId.IsValid(),
+			TEXT("error"),
+			DefaultExperienceId.IsValid() ? DefaultExperienceId.ToString() : TEXT("DefaultGameplayExperience did not resolve to a LyraExperienceDefinition primary asset id"));
+
+		if (bHasExpectedExperience)
+		{
+			const bool bMatches = DefaultExperienceId.IsValid() && DefaultExperienceId == ExpectedExperienceId;
+			AddCheck(
+				Checks,
+				bOk,
+				TEXT("default_gameplay_experience_matches_expected"),
+				!bRequireMatchingExperience || bMatches,
+				bRequireMatchingExperience ? TEXT("error") : TEXT("warning"),
+				FString::Printf(TEXT("actual=%s expected=%s"), *DefaultExperienceId.ToString(), *ExpectedExperienceId.ToString()));
+			if (!bRequireMatchingExperience && !bMatches)
+			{
+				Warnings.Add(MakeShared<FJsonValueString>(TEXT("Map DefaultGameplayExperience differs from the expected LyraExperienceDefinition; this may be valid when the hosting request passes an explicit Experience URL option.")));
+			}
+		}
+
+		return Contract;
 	}
 
 	static FString GetObjectPropertyPath(UObject* Object, const TCHAR* PropertyName)
@@ -1810,6 +2076,30 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("require_resolved_primary_assets"), TEXT("bool"), TEXT("Treat unresolved MapID/ExperienceID primary asset paths as errors"), TEXT("false"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("lyra"), TEXT("validate_map_default_experience"),
+		TEXT("Validate a map UWorld's LyraWorldSettings DefaultGameplayExperience without mutating the map"),
+		FMonolithActionHandler::CreateStatic(&FMonolithLyraActions::ValidateMapDefaultExperience),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("map_path"), TEXT("Map package/object path or Map primary asset id"))
+			.Optional(TEXT("expected_experience_id"), TEXT("string"), TEXT("Expected LyraExperienceDefinition primary asset id, e.g. LyraExperienceDefinition:B_TagChase_Experience"))
+			.Optional(TEXT("require_default_experience"), TEXT("bool"), TEXT("Treat missing DefaultGameplayExperience as an error"), TEXT("true"))
+			.Optional(TEXT("require_lyra_world_settings"), TEXT("bool"), TEXT("Treat non-Lyra WorldSettings as an error"), TEXT("true"))
+			.Optional(TEXT("require_matching_experience"), TEXT("bool"), TEXT("When expected_experience_id is supplied, treat mismatches as errors"), TEXT("true"))
+			.Build());
+
+	Registry.RegisterAction(TEXT("lyra"), TEXT("validate_user_facing_map_reachability"),
+		TEXT("Validate that a ULyraUserFacingExperienceDefinition MapID resolves to a map and optionally matches that map's DefaultGameplayExperience"),
+		FMonolithActionHandler::CreateStatic(&FMonolithLyraActions::ValidateUserFacingMapReachability),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("user_facing_experience_path"), TEXT("Lyra user-facing experience asset path"))
+			.Optional(TEXT("require_resolved_primary_assets"), TEXT("bool"), TEXT("Treat unresolved MapID/ExperienceID primary asset paths as errors"), TEXT("false"))
+			.Optional(TEXT("require_map_default_experience"), TEXT("bool"), TEXT("Treat missing map DefaultGameplayExperience as an error"), TEXT("false"))
+			.Optional(TEXT("require_lyra_world_settings"), TEXT("bool"), TEXT("Treat non-Lyra WorldSettings as an error"), TEXT("true"))
+			.Optional(TEXT("require_matching_map_default_experience"), TEXT("bool"), TEXT("Require map DefaultGameplayExperience to match the user-facing ExperienceID"), TEXT("false"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("lyra"), TEXT("describe_gameplay_tag_domain"),
 		TEXT("Describe a GameplayTag domain such as GamePhase, including root registration, children, source metadata, and comments"),
 		FMonolithActionHandler::CreateStatic(&FMonolithLyraActions::DescribeGameplayTagDomain),
@@ -1976,6 +2266,14 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("Lyra UserFacingExperience"), TEXT("CommonSession"), TEXT("hosting"), TEXT("MapID"), TEXT("ExperienceID") },
 		{ TEXT("validate hosting contract"), TEXT("validate front end session") },
 		{ TEXT("validate a Lyra user-facing experience before hosting online") });
+	Registry.SetActionSearchMetadata(TEXT("lyra"), TEXT("validate_map_default_experience"),
+		{ TEXT("Lyra map validation"), TEXT("ALyraWorldSettings"), TEXT("DefaultGameplayExperience"), TEXT("Map primary asset") },
+		{ TEXT("validate map default experience"), TEXT("check world settings experience") },
+		{ TEXT("validate that a map loads and its LyraWorldSettings DefaultGameplayExperience resolves") });
+	Registry.SetActionSearchMetadata(TEXT("lyra"), TEXT("validate_user_facing_map_reachability"),
+		{ TEXT("Lyra UserFacingExperience"), TEXT("MapID"), TEXT("ExperienceID"), TEXT("ALyraWorldSettings"), TEXT("playlist reachability") },
+		{ TEXT("validate playlist map"), TEXT("check user facing map reachability") },
+		{ TEXT("validate that a front-end playlist MapID loads and optionally matches the map default experience") });
 	Registry.SetActionSearchMetadata(TEXT("lyra"), TEXT("describe_gameplay_tag_domain"),
 		{ TEXT("GameplayTag"), TEXT("GamePhase"), TEXT("tag domain"), TEXT("tag source") },
 		{ TEXT("describe game phase tags"), TEXT("list gameplay tag children") },
@@ -2048,7 +2346,17 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("unreal-lyra"),
 		{ TEXT("A ULyraUserFacingExperienceDefinition asset path is required") },
 		{ TEXT("ok flag, checks array, warnings array, and user-facing experience payload") },
-		{ TEXT("online.validate_common_session_schema") });
+		{ TEXT("lyra.validate_user_facing_map_reachability"), TEXT("online.validate_common_session_schema") });
+	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("validate_map_default_experience"),
+		TEXT("unreal-lyra"),
+		{ TEXT("A map package/object path or Map primary asset id is required") },
+		{ TEXT("ok flag, checks array, warnings array, map payload, world settings class, and DefaultGameplayExperience primary asset id") },
+		{ TEXT("lyra.validate_user_facing_map_reachability"), TEXT("editor.set_world_settings_property") });
+	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("validate_user_facing_map_reachability"),
+		TEXT("unreal-lyra"),
+		{ TEXT("A ULyraUserFacingExperienceDefinition asset path is required") },
+		{ TEXT("ok flag, checks array, warnings array, user-facing experience payload, and nested map contract") },
+		{ TEXT("lyra.validate_user_facing_experience"), TEXT("online.validate_user_facing_session") });
 	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("describe_gameplay_tag_domain"),
 		TEXT("unreal-lyra"),
 		{ TEXT("GameplayTags module must be available; root_tag defaults to GamePhase") },
@@ -2157,6 +2465,8 @@ FMonolithActionResult FMonolithLyraActions::GetStatus(const TSharedPtr<FJsonObje
 		TEXT("lyra.validate_experience_bundle"),
 		TEXT("lyra.describe_user_facing_experience"),
 		TEXT("lyra.validate_user_facing_experience"),
+		TEXT("lyra.validate_map_default_experience"),
+		TEXT("lyra.validate_user_facing_map_reachability"),
 		TEXT("lyra.describe_gameplay_tag_domain"),
 		TEXT("lyra.validate_game_phase_flow"),
 		TEXT("lyra.describe_team_setup"),
@@ -2593,6 +2903,167 @@ FMonolithActionResult FMonolithLyraActions::ValidateUserFacingExperience(const T
 	{
 		Result->SetObjectField(TEXT("user_facing_experience"), Summary);
 	}
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLyraActions::ValidateMapDefaultExperience(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MapPath;
+	FString Error;
+	if (!MonolithLyra::TryGetRequiredStringParam(Params, TEXT("map_path"), MapPath, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	bool bHasExpectedExperience = false;
+	FPrimaryAssetId ExpectedExperienceId;
+	bool bRequireDefaultExperience = true;
+	bool bRequireLyraWorldSettings = true;
+	bool bRequireMatchingExperience = true;
+	if (!MonolithLyra::TryParseExpectedExperienceId(Params, TEXT("expected_experience_id"), bHasExpectedExperience, ExpectedExperienceId, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_default_experience"), bRequireDefaultExperience, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_lyra_world_settings"), bRequireLyraWorldSettings, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_matching_experience"), bRequireMatchingExperience, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	bool bOk = true;
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	TSharedPtr<FJsonObject> MapContract = MonolithLyra::BuildMapDefaultExperienceContract(
+		MapPath,
+		ExpectedExperienceId,
+		bHasExpectedExperience,
+		bRequireDefaultExperience,
+		bRequireLyraWorldSettings,
+		bRequireMatchingExperience,
+		Checks,
+		Warnings,
+		bOk);
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("lyra"));
+	Result->SetStringField(TEXT("action"), TEXT("validate_map_default_experience"));
+	Result->SetBoolField(TEXT("ok"), bOk);
+	Result->SetObjectField(TEXT("map"), MapContract);
+	Result->SetArrayField(TEXT("checks"), Checks);
+	Result->SetArrayField(TEXT("warnings"), Warnings);
+	Result->SetBoolField(TEXT("require_default_experience"), bRequireDefaultExperience);
+	Result->SetBoolField(TEXT("require_lyra_world_settings"), bRequireLyraWorldSettings);
+	Result->SetBoolField(TEXT("require_matching_experience"), bRequireMatchingExperience);
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLyraActions::ValidateUserFacingMapReachability(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	FString Error;
+	if (!MonolithLyra::TryGetRequiredStringParam(Params, TEXT("user_facing_experience_path"), AssetPath, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	bool bRequireResolvedPrimaryAssets = false;
+	bool bRequireMapDefaultExperience = false;
+	bool bRequireLyraWorldSettings = true;
+	bool bRequireMatchingMapDefaultExperience = false;
+	if (!MonolithLyra::TryReadBoolParam(Params, TEXT("require_resolved_primary_assets"), bRequireResolvedPrimaryAssets, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_map_default_experience"), bRequireMapDefaultExperience, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_lyra_world_settings"), bRequireLyraWorldSettings, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("require_matching_map_default_experience"), bRequireMatchingMapDefaultExperience, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	bool bOk = true;
+	TArray<TSharedPtr<FJsonValue>> Checks;
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	TSharedPtr<FJsonObject> Summary;
+	TSharedPtr<FJsonObject> MapContract = MakeShared<FJsonObject>();
+
+	MonolithLyra::FResolvedLyraObject Resolved;
+	if (!MonolithLyra::TryResolveLyraObject(AssetPath, MonolithLyra::LyraUserFacingExperienceClassPath, Resolved, Error))
+	{
+		MonolithLyra::AddCheck(Checks, bOk, TEXT("asset_resolved"), false, TEXT("error"), Error);
+	}
+	else
+	{
+		Summary = MonolithLyra::BuildUserFacingSummary(Resolved);
+		MonolithLyra::AddCheck(Checks, bOk, TEXT("asset_resolved"), true, TEXT("error"), Resolved.ResolvedPath);
+
+		FPrimaryAssetId MapId;
+		FPrimaryAssetId ExperienceId;
+		MonolithLyra::TryGetPrimaryAssetIdProperty(Resolved.Object, TEXT("MapID"), MapId);
+		MonolithLyra::TryGetPrimaryAssetIdProperty(Resolved.Object, TEXT("ExperienceID"), ExperienceId);
+		MonolithLyra::AddCheck(Checks, bOk, TEXT("map_id_valid"), MapId.IsValid(), TEXT("error"), MapId.ToString());
+		MonolithLyra::AddCheck(Checks, bOk, TEXT("experience_id_valid"), ExperienceId.IsValid(), TEXT("error"), ExperienceId.ToString());
+		MonolithLyra::AddCheck(
+			Checks,
+			bOk,
+			TEXT("map_id_type"),
+			!MapId.IsValid() || MapId.PrimaryAssetType.ToString().Equals(TEXT("Map"), ESearchCase::IgnoreCase),
+			TEXT("error"),
+			MapId.PrimaryAssetType.ToString());
+		MonolithLyra::AddCheck(
+			Checks,
+			bOk,
+			TEXT("experience_id_type"),
+			!ExperienceId.IsValid() || ExperienceId.PrimaryAssetType.ToString().Equals(TEXT("LyraExperienceDefinition"), ESearchCase::IgnoreCase),
+			TEXT("error"),
+			ExperienceId.PrimaryAssetType.ToString());
+
+		const FString MapResolvedPath = MapId.IsValid() && UAssetManager::IsInitialized()
+			? UAssetManager::Get().GetPrimaryAssetPath(MapId).ToString()
+			: FString();
+		const FString ExperienceResolvedPath = ExperienceId.IsValid() && UAssetManager::IsInitialized()
+			? UAssetManager::Get().GetPrimaryAssetPath(ExperienceId).ToString()
+			: FString();
+		MonolithLyra::AddCheck(
+			Checks,
+			bOk,
+			TEXT("map_primary_asset_resolves"),
+			!bRequireResolvedPrimaryAssets || !MapResolvedPath.IsEmpty(),
+			bRequireResolvedPrimaryAssets ? TEXT("error") : TEXT("warning"),
+			MapResolvedPath.IsEmpty() ? TEXT("MapID did not resolve through AssetManager; falling back to MapID name as package path") : MapResolvedPath);
+		MonolithLyra::AddCheck(
+			Checks,
+			bOk,
+			TEXT("experience_primary_asset_resolves"),
+			!bRequireResolvedPrimaryAssets || !ExperienceResolvedPath.IsEmpty(),
+			bRequireResolvedPrimaryAssets ? TEXT("error") : TEXT("warning"),
+			ExperienceResolvedPath.IsEmpty() ? TEXT("ExperienceID did not resolve through AssetManager") : ExperienceResolvedPath);
+
+		if (MapId.IsValid())
+		{
+			MapContract = MonolithLyra::BuildMapDefaultExperienceContract(
+				MapId.ToString(),
+				ExperienceId,
+				ExperienceId.IsValid(),
+				bRequireMapDefaultExperience,
+				bRequireLyraWorldSettings,
+				bRequireMatchingMapDefaultExperience,
+				Checks,
+				Warnings,
+				bOk);
+		}
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("lyra"));
+	Result->SetStringField(TEXT("action"), TEXT("validate_user_facing_map_reachability"));
+	Result->SetBoolField(TEXT("ok"), bOk);
+	Result->SetArrayField(TEXT("checks"), Checks);
+	Result->SetArrayField(TEXT("warnings"), Warnings);
+	Result->SetBoolField(TEXT("require_resolved_primary_assets"), bRequireResolvedPrimaryAssets);
+	Result->SetBoolField(TEXT("require_map_default_experience"), bRequireMapDefaultExperience);
+	Result->SetBoolField(TEXT("require_lyra_world_settings"), bRequireLyraWorldSettings);
+	Result->SetBoolField(TEXT("require_matching_map_default_experience"), bRequireMatchingMapDefaultExperience);
+	if (Summary.IsValid())
+	{
+		Result->SetObjectField(TEXT("user_facing_experience"), Summary);
+	}
+	Result->SetObjectField(TEXT("map"), MapContract);
 	return FMonolithActionResult::Success(Result);
 }
 
