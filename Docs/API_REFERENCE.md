@@ -1316,6 +1316,15 @@ Token-efficient source review package: seed symbol, risk, impact summary, compac
 
 ---
 
+## scene
+
+Actor/scene manipulation, spatial queries, volumes, lighting, decals, and editor debug views. (Split from `mesh` on 2026-05-20).
+
+See `Docs/specs/SPEC_MonolithScene.md` for the deep dive.
+
+--
+---
+
 ## mesh
 
 Mesh inspection, scene manipulation, spatial queries, level blockout, GeometryScript, procedural geometry, lighting, audio, performance, mesh import (incl. skeletal + animation, PR #58), and **experimental** procedural town generation. **194 actions** (always registered, in the public count) + 45 experimental town gen (gated on `bEnableProceduralTownGen=true`, default `false`) = 239 when town-gen is on.
