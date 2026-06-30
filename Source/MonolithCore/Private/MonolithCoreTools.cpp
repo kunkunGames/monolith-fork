@@ -2217,16 +2217,26 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		// verbose (alias) is set. Schemas are fetched lazily via describe_query
 		// action_schema, or inlined for the whole namespace with detail=true.
 		bool bDetail = false;
-		Params->TryGetBoolField(TEXT("detail"), bDetail);          // canonical
+		if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("detail"), bDetail, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
 		if (!bDetail)
 		{
-			Params->TryGetBoolField(TEXT("verbose"), bDetail);     // accepted alias
+			if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("verbose"), bDetail, ErrMsg))
+			{
+				return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		// Optional substring filter on action name OR description (case-insensitive).
 		// Applied AFTER the category filter, BEFORE pagination.
 		FString Filter;
-		if (Params->TryGetStringField(TEXT("filter"), Filter) && !Filter.IsEmpty())
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("filter"), Filter, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!Filter.IsEmpty())
 		{
 			Actions = Actions.FilterByPredicate([&Filter](const FMonolithActionInfo& Info)
 			{
@@ -2243,13 +2253,42 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		constexpr int32 MaxLimit = 1000;
 		int32 Offset = 0;
 		int32 RequestedLimit = DefaultLimit;
-		Params->TryGetNumberField(TEXT("offset"), Offset);
-		Params->TryGetNumberField(TEXT("limit"), RequestedLimit);
-		Offset = FMath::Clamp(Offset, 0, 1000000);
-		const int32 Limit = RequestedLimit <= 0
-			? DefaultLimit
-			: FMath::Clamp(RequestedLimit, 1, MaxLimit);
 
+		const TSharedPtr<FJsonValue> OffsetField = Params->TryGetField(TEXT("offset"));
+		if (OffsetField.IsValid())
+		{
+			double RawOffset = 0;
+			if (!OffsetField->TryGetNumber(RawOffset) || FMath::RoundToDouble(RawOffset) != RawOffset)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'offset' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Offset = static_cast<int32>(RawOffset);
+			if (Offset < 0 || Offset > 1000000)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'offset' must be between 0 and 1000000"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+
+		const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+		if (LimitField.IsValid())
+		{
+			double RawLimit = 0;
+			if (!LimitField->TryGetNumber(RawLimit) || FMath::RoundToDouble(RawLimit) != RawLimit)
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be an integer"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			RequestedLimit = static_cast<int32>(RawLimit);
+			if (RequestedLimit <= 0)
+			{
+				RequestedLimit = DefaultLimit;
+			}
+			else if (RequestedLimit > MaxLimit)
+			{
+				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'limit' cannot exceed %d"), MaxLimit), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
+
+		const int32 Limit = RequestedLimit;
 		const int32 SliceStart = FMath::Clamp(Offset, 0, TotalCount);
 		const int32 SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
 
