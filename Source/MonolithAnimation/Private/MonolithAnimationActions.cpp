@@ -11221,6 +11221,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetPhysicsAssetInfo(const
 
 	// Bodies
 	TArray<TSharedPtr<FJsonValue>> BodiesArr;
+	BodiesArr.Reserve(PhysAsset->SkeletalBodySetups.Num());
 	for (int32 i = 0; i < PhysAsset->SkeletalBodySetups.Num(); ++i)
 	{
 		USkeletalBodySetup* BodySetup = PhysAsset->SkeletalBodySetups[i];
@@ -11258,6 +11259,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetPhysicsAssetInfo(const
 
 	// Constraints
 	TArray<TSharedPtr<FJsonValue>> ConstraintsArr;
+	ConstraintsArr.Reserve(PhysAsset->ConstraintSetup.Num());
 	for (int32 i = 0; i < PhysAsset->ConstraintSetup.Num(); ++i)
 	{
 		UPhysicsConstraintTemplate* CT = PhysAsset->ConstraintSetup[i];
