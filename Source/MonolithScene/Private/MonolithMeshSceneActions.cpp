@@ -936,6 +936,24 @@ FMonolithActionResult FMonolithMeshSceneActions::BatchExecute(const TSharedPtr<F
 	Result->SetNumberField(TEXT("failed"), Failed);
 	Result->SetArrayField(TEXT("results"), ResultsArr);
 
+	if (bHadFailure)
+	{
+		FString ErrorMsg = TEXT("Batch execution failed on an action");
+		if (ResultsArr.Num() > 0)
+		{
+			const TSharedPtr<FJsonObject>* LastItem;
+			if (ResultsArr.Last()->TryGetObject(LastItem))
+			{
+				FString InnerError;
+				if ((*LastItem)->TryGetStringField(TEXT("error"), InnerError))
+				{
+					ErrorMsg = FString::Printf(TEXT("Batch execution failed: %s"), *InnerError);
+				}
+			}
+		}
+		return FMonolithActionResult::Error(ErrorMsg).WithErrorData(Result);
+	}
+
 	return FMonolithActionResult::Success(Result);
 }
 
