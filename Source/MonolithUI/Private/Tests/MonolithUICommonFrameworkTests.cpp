@@ -97,12 +97,14 @@ bool FMonolithUICommonFrameworkRegistrationTest::RunTest(const FString& /*Parame
     bool bHasDescribeMessagingFlow = false;
     bool bHasValidateDialogContract = false;
     bool bHasValidateLayerPushContract = false;
+    bool bHasValidateFrontendMenuFlow = false;
     bool bStatusCategory = false;
     bool bDescribeCategory = false;
     bool bAddLayerCategory = false;
     bool bDescribeMessagingFlowCategory = false;
     bool bValidateDialogContractCategory = false;
     bool bValidateLayerPushContractCategory = false;
+    bool bValidateFrontendMenuFlowCategory = false;
     for (const FMonolithActionInfo& ActionInfo : Registry.GetActions(TEXT("ui")))
     {
         if (ActionInfo.Action == TEXT("get_common_framework_status"))
@@ -139,6 +141,11 @@ bool FMonolithUICommonFrameworkRegistrationTest::RunTest(const FString& /*Parame
             bHasValidateLayerPushContract = true;
             bValidateLayerPushContractCategory = ActionInfo.Category == TEXT("CommonFramework");
         }
+        else if (ActionInfo.Action == TEXT("validate_frontend_menu_flow"))
+        {
+            bHasValidateFrontendMenuFlow = true;
+            bValidateFrontendMenuFlowCategory = ActionInfo.Category == TEXT("CommonFramework");
+        }
     }
 
     TestTrue(TEXT("get_common_framework_status registered"), bHasStatus);
@@ -154,6 +161,8 @@ bool FMonolithUICommonFrameworkRegistrationTest::RunTest(const FString& /*Parame
     TestTrue(TEXT("validate_common_dialog_contract category"), bValidateDialogContractCategory);
     TestTrue(TEXT("validate_common_layer_push_contract registered"), bHasValidateLayerPushContract);
     TestTrue(TEXT("validate_common_layer_push_contract category"), bValidateLayerPushContractCategory);
+    TestTrue(TEXT("validate_frontend_menu_flow registered"), bHasValidateFrontendMenuFlow);
+    TestTrue(TEXT("validate_frontend_menu_flow category"), bValidateFrontendMenuFlowCategory);
 
     const FMonolithActionResult MissingExtensionPointAssetPath = FMonolithUIActions::HandleAddExtensionPointWidget(MakeShared<FJsonObject>());
     TestFalse(TEXT("add_extension_point_widget rejects missing asset_path"), MissingExtensionPointAssetPath.bSuccess);
@@ -172,6 +181,16 @@ bool FMonolithUICommonFrameworkRegistrationTest::RunTest(const FString& /*Parame
     const FMonolithActionResult MissingLayoutPath = FMonolithUIActions::HandleValidateCommonLayerPushContract(RequireLayoutParams);
     TestFalse(TEXT("validate_common_layer_push_contract rejects missing required layout_asset_path"), MissingLayoutPath.bSuccess);
     TestTrue(TEXT("missing layout_asset_path error is clear"), MissingLayoutPath.ErrorMessage.Contains(TEXT("layout_asset_path")));
+
+    const FMonolithActionResult EmptyFrontendFlow = FMonolithUIActions::HandleValidateFrontendMenuFlow(MakeShared<FJsonObject>());
+    TestFalse(TEXT("validate_frontend_menu_flow rejects empty contract"), EmptyFrontendFlow.bSuccess);
+    TestTrue(TEXT("empty frontend flow error is clear"), EmptyFrontendFlow.ErrorMessage.Contains(TEXT("requires at least one")));
+
+    TSharedPtr<FJsonObject> BadScreensParams = MakeShared<FJsonObject>();
+    BadScreensParams->SetObjectField(TEXT("screens"), MakeShared<FJsonObject>());
+    const FMonolithActionResult BadScreens = FMonolithUIActions::HandleValidateFrontendMenuFlow(BadScreensParams);
+    TestFalse(TEXT("validate_frontend_menu_flow rejects non-array screens"), BadScreens.bSuccess);
+    TestTrue(TEXT("bad screens error is clear"), BadScreens.ErrorMessage.Contains(TEXT("screens")));
 
     return true;
 }
@@ -237,6 +256,21 @@ bool FMonolithUICommonFrameworkMessagingContractTest::RunTest(const FString& /*P
         TestFalse(TEXT("Actor is not valid for layer push dialog"), bOk);
         const TSharedPtr<FJsonObject>* Layout = nullptr;
         TestTrue(TEXT("layout object exists"), LayerResult.Result->TryGetObjectField(TEXT("layout"), Layout) && Layout && Layout->IsValid());
+    }
+
+    TSharedPtr<FJsonObject> FrontendParams = MakeShared<FJsonObject>();
+    FrontendParams->SetStringField(TEXT("dialog_class"), TEXT("/Script/Engine.Actor"));
+    const FMonolithActionResult FrontendResult = FMonolithUIActions::HandleValidateFrontendMenuFlow(FrontendParams);
+    TestTrue(TEXT("validate_frontend_menu_flow returns structured result for invalid dialog class"), FrontendResult.bSuccess);
+    TestTrue(TEXT("validate_frontend_menu_flow result object is valid"), FrontendResult.Result.IsValid());
+    if (FrontendResult.Result.IsValid())
+    {
+        bool bOk = true;
+        TestTrue(TEXT("frontend flow ok field exists"), FrontendResult.Result->TryGetBoolField(TEXT("ok"), bOk));
+        TestFalse(TEXT("Actor is not a valid frontend flow dialog"), bOk);
+
+        const TArray<TSharedPtr<FJsonValue>>* FrontendIssues = nullptr;
+        TestTrue(TEXT("frontend flow issues array exists"), FrontendResult.Result->TryGetArrayField(TEXT("issues"), FrontendIssues) && FrontendIssues && FrontendIssues->Num() > 0);
     }
 
     return true;

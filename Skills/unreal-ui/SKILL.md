@@ -19,7 +19,7 @@ monolith_discover({ namespace: "ui", action: "add_widget", mode: "schema" })  //
 monolith_find("make a health bar HUD")                                  // jump straight to the right action
 ```
 
-The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A–L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`), Slot, Templates, Styling, UI post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder, and Type Registry diagnostics.
+The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A-L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, `validate_frontend_menu_flow`), Slot, Templates, Styling, UI post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder, and Type Registry diagnostics.
 
 **CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, the `WITH_COMMONUI` action pack unregisters; detect the live surface via `monolith_discover`.
 
@@ -74,13 +74,14 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] dump_property_allowlist` | `widget_type*` | Allowed property paths for a widget type |
 | **UIExtension Points (1)** | | |
 | `[w] add_extension_point_widget` | `asset_path*`, `widget_name*`, `extension_point_tag*`, `widget_class?=/Script/UIExtension.UIExtensionPointWidget`, layout params, `compile=true`, `save=false` | Add/update a `UUIExtensionPointWidget`-compatible widget, assign a registered GameplayTag, and keep Canvas/box/overlay slot layout idempotent without hard-linking UIExtension. |
-| **CommonFramework (6)** | | |
+| **CommonFramework (7)** | | |
 | `get_common_framework_status` | `include_properties?=false`, `include_functions?=false`, `property_limit?=40`, `function_limit?=80` | Reflected availability/status for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles. |
 | `[w] add_primary_game_layout_layer` | `asset_path*`, `layer_tag*`, `widget_name?`, `widget_class?=/Script/CommonUI.CommonActivatableWidgetStack`, layout params, `compile=true`, `save=false` | Add/update a CommonActivatable layer container widget inside a PrimaryGameLayout WBP. Returns the `RegisterLayer` tag/widget pair; it does not modify CommonGame runtime code. |
 | `describe_common_widget_blueprint` | `asset_path*`, `include_extension_points?=true`, `include_layer_candidates?=true`, `include_widget_tree?=false` | Inspect PrimaryGameLayout parentage, UIExtension point tags, and CommonActivatable layer candidates. |
 | `describe_common_messaging_flow` | `messaging_class?`, `config_section?`, `modal_layer_tag?=UI.Layer.Modal`, `include_subclasses?=true`, `subclass_limit?=40` | Describe CommonGame messaging wiring by reflection/config only: selected CommonMessagingSubsystem subclass, dialog classes, modal layer tag, DefaultUIPolicyClass, and loaded subclasses. |
 | `validate_common_dialog_contract` | `messaging_class?`, `config_section?`, `confirmation_dialog_class?`, `error_dialog_class?` | Validate configured or explicit confirmation/error dialog classes are loadable concrete CommonGameDialog subclasses. |
 | `validate_common_layer_push_contract` | `layout_asset_path?`, `layer_tag?=UI.Layer.Modal`, `layer_widget_name?`, `dialog_class?`, `require_layout_asset?=false` | Validate modal-layer push readiness without editing PrimaryGameLayout: tag registration, optional layout WBP layer candidates, dialog class compatibility, and proof limits for RegisterLayer graph wiring. |
+| `validate_frontend_menu_flow` | `layout_asset_path?`, `required_layers?`, `screens?`, `modal_layer_tag?=UI.Layer.Modal`, `dialog_class?`, `require_layout_asset?=false`, `require_dialog?=false`, `include_graph_scan?=true` | Validate a Lyra/CommonUI frontend menu flow contract read-only: optional PrimaryGameLayout layer candidates, dialog class compatibility, per-screen CommonActivatable parentage, required/forbidden widgets, expected widget classes/variables, desired focus, and graph text needles. |
 | **Slot & Layout (3)** | | |
 | `[w] set_slot_property` | `asset_path*`, `widget_name*`, `anchors?`, `offsets?`, `position?`, `size?`, `alignment?`, `z_order?`, `auto_size?`, `h_align?`, `v_align?`, `padding?`, `compile=false` | Any slot property |
 | `[w] set_anchor_preset` | `asset_path*`, `widget_name*`, `preset*` (top_left/top_center/top_right/center_left/center/center_right/bottom_left/bottom_center/bottom_right/stretch_horizontal/stretch_vertical/stretch_fill/stretch_top/stretch_bottom/stretch_left/stretch_right), `compile=false` | Named anchor preset |
@@ -240,7 +241,7 @@ This action owns WBP tree repair only. Actor/component Blueprint graph cloning s
 
 ---
 
-## CommonFramework Diagnostics/Authoring (6, always-on)
+## CommonFramework Diagnostics/Authoring (7, always-on)
 
 Use these before editing Lyra/CommonGame layouts or debugging CommonUI policy setup:
 
@@ -250,6 +251,7 @@ Use these before editing Lyra/CommonGame layouts or debugging CommonUI policy se
 - `describe_common_messaging_flow` — reports selected `CommonMessagingSubsystem` subclass/config section, confirmation/error `CommonGameDialog` classes, modal layer tag registration, `DefaultUIPolicyClass`, and loaded messaging subclasses without modifying runtime code.
 - `validate_common_dialog_contract` — returns `ok=false` with structured issues when configured confirmation/error classes are missing, unloaded, abstract, deprecated, or not `CommonGameDialog` subclasses.
 - `validate_common_layer_push_contract` — checks the modal layer tag, optional `PrimaryGameLayout` WBP layer container candidates, dialog class compatibility, and explicitly reports when RegisterLayer graph wiring is not proven by read-only inspection.
+- `validate_frontend_menu_flow` — checks a frontend menu composition spec across optional `PrimaryGameLayout` layer candidates, dialog class compatibility, CommonActivatable screen parents, expected/forbidden widgets, widget classes, variable defaults, desired focus, and graph text needles without editing assets.
 
 These actions use reflection, config reads, and `StaticLoadClass`; they do not hard-link CommonGame, UIExtension, CommonUser, or modify PrimaryGameLayout/CommonGame runtime code.
 

@@ -936,6 +936,23 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
     );
 
     Registry.RegisterAction(
+        TEXT("ui"), TEXT("validate_frontend_menu_flow"),
+        TEXT("Validate a Lyra/CommonUI front-end menu flow without runtime edits: PrimaryGameLayout layer candidates, dialog push contract, activatable screen widgets, expected/forbidden widgets, variable defaults, and optional graph text evidence."),
+        FMonolithActionHandler::CreateStatic(&HandleValidateFrontendMenuFlow),
+        FParamSchemaBuilder()
+            .Optional(TEXT("layout_asset_path"), TEXT("string"), TEXT("PrimaryGameLayout Widget Blueprint asset path to inspect."))
+            .Optional(TEXT("required_layers"), TEXT("array"), TEXT("Required layer specs as strings or {layer_tag, widget_name} objects."))
+            .Optional(TEXT("screens"), TEXT("array"), TEXT("Screen specs: {asset_path, role, require_common_activatable, expected_parent_class, required_widgets[], forbidden_widgets[], expected_variables{}, desired_focus_widget, required_graph_needles[], forbidden_graph_needles[]}."))
+            .Optional(TEXT("modal_layer_tag"), TEXT("string"), TEXT("Modal layer GameplayTag used by dialog pushes."), TEXT("UI.Layer.Modal"))
+            .Optional(TEXT("dialog_class"), TEXT("string"), TEXT("Dialog class path to validate against CommonGameDialog."))
+            .Optional(TEXT("require_layout_asset"), TEXT("boolean"), TEXT("Fail when layout_asset_path is omitted."), TEXT("false"))
+            .Optional(TEXT("require_dialog"), TEXT("boolean"), TEXT("Fail when no dialog class is supplied or configured."), TEXT("false"))
+            .Optional(TEXT("include_graph_scan"), TEXT("boolean"), TEXT("Scan Blueprint graph node titles and pin defaults for required/forbidden graph needles."), TEXT("true"))
+            .Build(),
+        TEXT("CommonFramework")
+    );
+
+    Registry.RegisterAction(
         TEXT("ui"), TEXT("remove_widget"),
         TEXT("Remove a widget from a Widget Blueprint"),
         FMonolithActionHandler::CreateStatic(&HandleRemoveWidget),
@@ -1043,6 +1060,11 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("PrimaryGameLayout"), TEXT("UIExtensionPointWidget"), TEXT("ExtensionPointTag"), TEXT("CommonActivatableWidgetContainerBase"), TEXT("UI layer") },
 		{ TEXT("inspect common WBP"), TEXT("describe primary game layout"), TEXT("list extension points"), TEXT("find UI layers") },
 		{ TEXT("describe CommonGame layer widgets in WBP_PrimaryGameLayout"), TEXT("list UIExtension point tags in this widget blueprint") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("validate_frontend_menu_flow"),
+		{ TEXT("Lyra front-end menu validation"), TEXT("CommonUI activatable screens"), TEXT("PrimaryGameLayout layer candidates"), TEXT("front-end flow widget contract"), TEXT("menu graph needle validation") },
+		{ TEXT("validate_menu_flow"), TEXT("validate_common_frontend"), TEXT("validate_frontend_widgets") },
+		{ TEXT("validate copied ExperienceSelection and HostSession screens after a package graph copy"), TEXT("check required widgets, forbidden widgets, variable defaults, and layout layers without editing assets") });
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("compile_widget"),
 		{ TEXT("compile WBP"), TEXT("build widget blueprint"), TEXT("check widget compile errors"), TEXT("recompile UMG"), TEXT("validate widget") },

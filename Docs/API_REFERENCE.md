@@ -1454,7 +1454,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
 
 ## ui
 
-UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
+UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v1 + v2), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` / `validate_frontend_menu_flow` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal/frontend reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
 > For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
@@ -1464,7 +1464,7 @@ UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v
 |----------|---------|----------|
 | Widget CRUD | 9 | `create_widget_blueprint`, `get_widget_tree`, `add_widget`, `remove_widget`, `set_widget_property` (accepts `value` alias and routes `IsVariable`/`bIsVariable`), `compile_widget` (returns `errors[]`/`warnings[]`), `list_widget_types`, `rename_widget`, `dump_blueprint_compile_log` |
 | UIExtension points | 1 | `add_extension_point_widget` creates or updates a `UUIExtensionPointWidget`-compatible widget, assigns a registered GameplayTag, and keeps Canvas/box/overlay slot layout idempotent |
-| CommonFramework diagnostics/authoring | 6 | `get_common_framework_status` reports CommonUI/CommonGame/UIExtension/CommonUser/CommonLoadingScreen/GameSettings/GameplayMessageRouter/ModularGameplayActors/GameSubtitles plugin, module, reflected class, and reflected struct availability; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs; `describe_common_widget_blueprint` reports PrimaryGameLayout parentage, extension point tags, and CommonActivatableWidgetContainerBase layer candidates; `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract` report CommonGame messaging/dialog/modal-layer contract readiness without runtime edits |
+| CommonFramework diagnostics/authoring | 7 | `get_common_framework_status` reports CommonUI/CommonGame/UIExtension/CommonUser/CommonLoadingScreen/GameSettings/GameplayMessageRouter/ModularGameplayActors/GameSubtitles plugin, module, reflected class, and reflected struct availability; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs; `describe_common_widget_blueprint` reports PrimaryGameLayout parentage, extension point tags, and CommonActivatableWidgetContainerBase layer candidates; `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, and `validate_frontend_menu_flow` report CommonGame messaging/dialog/modal-layer/frontend contract readiness without runtime edits |
 | Variable flags (v0.15.0) | 3 | `add_widget_variable`, `set_widget_is_variable`, `list_widget_property_enums` |
 | Root / reparent (v0.15.0) | 1 | `reparent_widget_root` |
 | Slot / layout | 4 | `set_slot_property`, `set_anchor_preset`, `move_widget`, `set_brush` |
@@ -1480,6 +1480,23 @@ UMG widget Blueprint CRUD, templates, styling, UI post-copy repair, animation (v
 | Spec round-trip | 4 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `build_menu_from_spec` (v0.15.0) |
 | Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
 | Allowlist / diagnostics | 2 | `dump_property_allowlist`, `dump_style_cache_stats` |
+
+### `ui.validate_frontend_menu_flow`
+
+Validate a frontend menu composition contract without editing assets. The action uses reflection and Widget Blueprint inspection to check optional `PrimaryGameLayout` layer candidates, dialog compatibility, and per-screen CommonUI/CommonActivatable expectations.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `layout_asset_path` | string | optional | Optional PrimaryGameLayout Widget Blueprint to inspect for required layer candidates. |
+| `required_layers` | array | optional | Layer specs as strings or objects with `layer_tag` and optional `widget_name`. |
+| `screens` | array | optional | Screen specs with `asset_path`, optional `role`, `expected_parent_class`, `desired_focus_widget`, `require_common_activatable`, `required_widgets`, `forbidden_widgets`, `expected_variables`, `expected_widget_classes`, `required_graph_needles`, and `forbidden_graph_needles`. |
+| `modal_layer_tag` | string | optional | GameplayTag that should be registered for modal/dialog pushes. Default: `UI.Layer.Modal`. |
+| `dialog_class` | string | optional | Dialog class expected to be compatible with `CommonGameDialog`. |
+| `require_layout_asset` | boolean | optional | Fail parameter validation if `layout_asset_path` is omitted. Default: `false`. |
+| `require_dialog` | boolean | optional | Report `ok=false` when `dialog_class` is omitted. Default: `false`. |
+| `include_graph_scan` | boolean | optional | Scan Widget Blueprint graphs for required/forbidden text needles. Default: `true`. |
+
+Returns `{ ok, overall_status, checks[], issues[], warnings[], limitations[], layout, dialog, screens[] }`. `issues[]` is populated for missing assets, wrong parent classes, missing/forbidden widgets, widget class mismatches, variable default mismatches, desired focus mismatches, and graph-needle failures.
 
 ### `ui.copy_widget_subtree_with_class_remap`
 

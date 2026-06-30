@@ -18,6 +18,7 @@ public:
     static FMonolithActionResult HandleDescribeCommonMessagingFlow(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleValidateCommonDialogContract(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleValidateCommonLayerPushContract(const TSharedPtr<FJsonObject>& Params);
+    static FMonolithActionResult HandleValidateFrontendMenuFlow(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleRemoveWidget(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleSetWidgetProperty(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleCompileWidget(const TSharedPtr<FJsonObject>& Params);
