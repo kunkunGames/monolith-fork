@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.20.3 · **Last updated:** 2026-06-30
+**Version:** v0.20.3 · **Last updated:** 2026-07-01
 
 **In-tree action total is approximate: current source contains roughly 1,979 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -19,7 +19,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
 | [monolith](#monolith) | 5 | Core server tools (discover, status, update, reindex, guide) |
-| [blueprint](#blueprint) | 111 | Blueprint read/write, variable/component/graph CRUD, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
+| [blueprint](#blueprint) | ~120 | Blueprint read/write, variable/component/graph CRUD, graph export/clone/remap, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 49 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
@@ -101,6 +101,7 @@ These releases added the `level_sequence` namespace, the `bulk_fill` / `describe
 | Niagara Tranche 2 search/discovery hardening | Hardened ([Unreleased]) | `search_by_parameter`, `search_by_data_interface`, `query_niagara`, `find_similar_systems`, `search_by_material`, `find_niagara_references`, and `list_system_data_interfaces` now use typed schema validation, shared system enumeration/loading, range-checked cost governors, and strict integer parsing for the query DSL. |
 | `FMonolithActionJsonBridge` | Core helper ([Unreleased]) | Shared registry-to-JSON bridge for Blueprint wrapper libraries. It preserves successful action payloads and emits the existing parseable `{success:false,error,code}` failure envelope. |
 | `FMonolithToolInvocationLogger::FScopedTrace` | Export fixed ([Unreleased]) | The scoped trace/routing-context helper is now exported from `MonolithCore`, so sibling Monolith modules can verify or carry trace context across registry-dispatched action calls. |
+| `blueprint.clone_graphs_with_reference_remap` | **NEW** ([Unreleased]) | Clone function/macro graphs from one Blueprint asset to another with class/object/root reference remaps, dry-run/confirm guard, collision policy, and optional destination compile/save reporting. |
 | `blueprint` dataset pack (17 actions) | **NEW** (0.15.0) | DataTable (8), CurveTable (5), StringTable (3), `seed_data_asset` (1) — read with row-struct schema inline, bulk upsert with dry-run, row CRUD, JSON/CSV import/export. |
 | `blueprint.add_property_access` / `override_parent_function` / `save_dirty_assets` | **NEW** (0.15.0) | Cross-class UPROPERTY get/set, value-returning parent-function override, batch save of dirty BP/Widget packages. |
 | `ui` scaffolders + gap-closure (Tier 2/3/4 + Phase 3/4) | **NEW** (0.15.0) | `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu`, `build_menu_from_spec`, `rename_widget`, `audit_focus_chain`, `set_widget_navigation_bulk`, `dump_widget_navigation`, `convert_border_to_common`, `reparent_widget_root`, `set_widget_is_variable`, and more. |
@@ -232,7 +233,8 @@ Full read/write access to Blueprint graphs, variables, components, functions, no
 | Cross-class / overrides (0.15.0) | 3 | `add_property_access`, `override_parent_function`, `save_dirty_assets` |
 | CDO | 2 | `get_cdo_properties`, `set_cdo_property` |
 | Templates / spec | 4 | `build_blueprint_from_spec`, `apply_template`, `list_templates`, `compare_blueprints` |
-| Layout | 2 | `auto_layout`, `export_graph` |
+| Graph export / clone | 4 | `export_graph`, `copy_nodes`, `duplicate_graph`, `clone_graphs_with_reference_remap` |
+| Layout | 1 | `auto_layout` |
 | Spawn | 2 | `spawn_blueprint_actor`, `batch_spawn_blueprint_actors` |
 
 **Header set most callers reach for first:**
@@ -278,6 +280,30 @@ Search Blueprint-callable native functions. At least one of `query` or `class_fi
 ### `blueprint.build_blueprint_from_spec`
 
 The crown jewel — author an entire Blueprint (parent class, variables, components, functions, event graph nodes, connections) from a single JSON spec. Validates and compiles in one call. See `describe_query("action_schema", target_namespace="blueprint", target_action="build_blueprint_from_spec")` for the full spec schema.
+
+### `blueprint.clone_graphs_with_reference_remap`
+
+Clone function or macro graphs from one Blueprint asset into another, then repair copied hard object/class references and reflected soft object paths through explicit class/object/root remaps. Event graphs, interface graphs, and delegate signature graphs are rejected with actionable errors.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_asset_path` | string | **required** | Source Blueprint asset path |
+| `destination_asset_path` | string | **required** | Destination Blueprint asset path |
+| `graph_name` | string | optional | Single source graph name |
+| `new_name` | string | optional | Destination graph name for `graph_name`; defaults to the source graph name |
+| `graphs` | array | optional | Batch graph specs as strings or `{source_graph|graph_name, destination_graph|new_name}` objects |
+| `class_remaps` | object | optional | Map source class path/name to destination class path/name |
+| `object_remaps` | object | optional | Map exact object paths used for hard/soft reference replacement |
+| `root_remaps` | object | optional | Map source package roots to destination roots |
+| `source_root` / `dest_root` | string | optional | Single-root shorthand; must be supplied together |
+| `existing_policy` | string | optional | `fail`, `replace`, or `skip`. Default: `fail` |
+| `allow_empty_remap` | bool | optional | Allow clone without remaps. Default: `false` |
+| `dry_run` | bool | optional | Plan only. Default: `true` |
+| `confirm` | bool | optional | Required when `dry_run=false`. Default: `false` |
+| `compile` | bool | optional | Compile the destination Blueprint after applying. Default: `true` |
+| `save` | bool | optional | Save the destination package after applying. Default: `false` |
+
+Returns `plan`, `cloned_graphs`, `changed`, `replacement_object_count`, `hard_reference_fixup_count`, `soft_reference_fixup_count`, `pin_reference_fixup_count`, and optional `compile_result` / `saved_filename`.
 
 ### `blueprint.spawn_blueprint_actor`
 

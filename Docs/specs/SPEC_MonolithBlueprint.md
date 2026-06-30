@@ -23,9 +23,7 @@
 
 ### Actions (~120 — namespace: "blueprint")
 
-### Actions (121 — namespace: "blueprint")
-
-> **Count note (2026-05-27):** current static registry scan reports 121 unique `blueprint` actions after removing a duplicate `remove_data_table_row` registration. The table below remains a focused contract summary; use `monolith_discover("blueprint")` for the exhaustive live action schema.
+> **Count note (2026-07-01):** the action count varies by build/profile and cross-module registrations. The table below remains a focused contract summary; use `monolith_discover("blueprint")` for the exhaustive live action schema.
 
 **Read Actions (15)**
 | Action | Params | Description |
@@ -99,6 +97,25 @@ the generated `<Name>_C` class, then — if still unresolved — a Blueprint Int
 `GeneratedClass`. Previously only the native-name permutations were attempted, so a Blueprint
 Interface's natural identifier (e.g. `BPI_Interactable`) returned "Interface class not found"
 despite the help text promising asset-name support.
+
+**Graph clone/reference remap — `blueprint.clone_graphs_with_reference_remap`**
+
+Source implementation lives in `MonolithBlueprintGraphCloneActions.cpp`; verify the live endpoint with
+`monolith_discover({namespace:"blueprint", action:"clone_graphs_with_reference_remap"})` when the editor
+MCP server is running.
+
+| Contract area | Required behavior |
+| --- | --- |
+| Target assets | Accept `source_asset_path` and `destination_asset_path` as Blueprint asset paths. The destination Blueprint receives the cloned graph(s); the source Blueprint is read-only. |
+| Graph selection | Support a single graph with `graph_name` and optional `new_name`, and batch mode with `graphs[]`. Each batch entry may be a string graph name or an object using `source_graph`/`graph_name` plus `destination_graph`/`new_name`. |
+| Supported graph kinds | Clone function and macro graphs only. Event graphs, interface implementation graphs, and delegate signature graphs are explicitly excluded and must return actionable errors rather than partial clones. |
+| Reference remap inputs | Accept exact `class_remaps`, exact `object_remaps`, `root_remaps`, and single-root sugar `source_root` + `dest_root`. `root_remaps` and the single-root pair apply to hard object references and reflected soft object paths copied into the destination graph. |
+| Empty remap policy | Default `allow_empty_remap=false` so copy workflows cannot silently clone source-root references. Callers may opt in with `allow_empty_remap=true` for local/non-remapped graph copies. |
+| Write guard | Default `dry_run=true`. Any write (`dry_run=false`) requires `confirm=true`; missing confirmation must fail during parameter validation before loading or mutating assets. |
+| Collision policy | `existing_policy` accepts `fail`, `replace`, or `skip` and defaults to `fail`. `replace` must remove/replace only the targeted destination graph; `skip` must leave existing graphs untouched and report skipped rows. |
+| Optional post-steps | `compile` and `save` are optional booleans. Compile/save are destination-only and must report their result separately from clone/remap success. |
+| Result shape | Return the dry-run or write `plan`, per-graph cloned/skipped rows, `node_count`, `hard_reference_fixup_count`, `soft_reference_fixup_count`, `pin_reference_fixup_count`, `replacement_object_count`, plus compile/save result fields when requested. Include enough graph/source/destination names for a caller to reconcile batch output deterministically. |
+| Non-goals | This action does not perform full UI menu transforms or front-end flow validation. Those remain deferred to separate `ui.apply_common_menu_transform_spec` and `ui.validate_frontend_menu_flow` style work. |
 
 **Node & Pin Operations (7)**
 | Action | Params | Description |

@@ -2,7 +2,7 @@
 
 Full per-action parameter signatures for the Monolith **blueprint** namespace, called via `blueprint_query({ action, params })`. These are a live-catalog snapshot — confirm the live action set and an action's exact schema via `monolith_discover({ namespace: "blueprint", action: "<name>", mode: "schema" })` (or `describe_query("action_schema", {namespace:"blueprint", action:"<name>"})`) before relying on any param name, alias, default, or range. The discover-first block in `../SKILL.md` is the authority.
 
-**Param notation:** `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (transaction-wrapped). Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with mode `schema` (or `describe_query("action_schema", {namespace:"blueprint", action:"<name>"})`).
+**Param notation:** `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed values, `[w]` mutates (transaction-wrapped). `[draft]` marks a documented contract for an action whose implementation/live catalog entry is handled separately. Signatures are a snapshot of the live catalog — for the exact, full, current schema of any action call `monolith_discover` with mode `schema` (or `describe_query("action_schema", {namespace:"blueprint", action:"<name>"})`).
 
 ### Read (19)
 
@@ -139,13 +139,14 @@ Full per-action parameter signatures for the Monolith **blueprint** namespace, c
 |--------|-----------|---------|
 | `build_blueprint_from_spec` | `asset_path`, `graph_name`?, `variables`?, `components`?, `nodes`, `connections`?, `pin_defaults`?, `auto_compile`? | One-shot declarative builder |
 
-### Graph Export (3)
+### Graph Export And Clone (4)
 
 | Action | Key Params | Purpose |
 |--------|-----------|---------|
 | `export_graph` | `asset_path`, `graph_name`? | Export to JSON (build_from_spec compatible) |
 | `copy_nodes` | `source_asset`, `source_graph`, `node_ids`, `target_asset`, `target_graph` | Copy via T3D |
 | `duplicate_graph` | `asset_path`, `graph_name`, `new_name` | Duplicate within BP |
+| `clone_graphs_with_reference_remap` [w] | `source_asset_path*`, `destination_asset_path*`, single graph: `graph_name*`, `new_name?`; batch: `graphs*` (`["Graph"]` or `[{source_graph/graph_name, destination_graph/new_name}]`); remap: `class_remaps?`, `object_remaps?`, `root_remaps?`, `source_root?` + `dest_root?`; guard: `dry_run=true`, `confirm=false`; `existing_policy=fail` (`fail`/`replace`/`skip`); `compile?`, `save?`, `allow_empty_remap=false` | Clone function or macro graphs from one Blueprint asset to another, then remap copied class/object references and soft object paths. Event graphs, interface graphs, and delegate signature graphs are out of scope. `dry_run=false` requires `confirm=true`. Results include the planned graph map and cloned/skipped graph rows, `node_count`, `soft_reference_fixup_count`, `pin_reference_fixup_count`, `replacement_object_count`, and compile/save results when requested. |
 
 ### Diff, Template, Layout, Batch, Events (10)
 

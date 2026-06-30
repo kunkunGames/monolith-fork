@@ -11,4 +11,5 @@ public:
 	static FMonolithActionResult HandleExportGraph(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleCopyNodes(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleDuplicateGraph(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleCloneGraphsWithReferenceRemap(const TSharedPtr<FJsonObject>& Params);
 };

@@ -48,6 +48,35 @@ void FMonolithBlueprintGraphExportActions::RegisterActions(FMonolithToolRegistry
 			.Required(TEXT("graph_name"), TEXT("string"), TEXT("Name of the graph to duplicate"))
 			.Required(TEXT("new_name"), TEXT("string"), TEXT("Name for the duplicated graph"))
 			.Build());
+
+	Registry.RegisterAction(TEXT("blueprint"), TEXT("clone_graphs_with_reference_remap"),
+		TEXT("Clone function or macro graphs from one Blueprint into another while remapping hard and soft object/class references. "
+			"Dry-run is the default; mutating calls require confirm=true."),
+		FMonolithActionHandler::CreateStatic(&HandleCloneGraphsWithReferenceRemap),
+		FParamSchemaBuilder()
+			.RequiredAssetPath(TEXT("source_asset_path"), TEXT("Source Blueprint asset path"))
+			.RequiredAssetPath(TEXT("destination_asset_path"), TEXT("Destination Blueprint asset path"))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Single source graph name"))
+			.Optional(TEXT("new_name"), TEXT("string"), TEXT("Destination graph name for graph_name"))
+			.Optional(TEXT("graphs"), TEXT("array"), TEXT("Batch graph specs: strings or objects with source_graph and destination_graph/new_name"))
+			.Optional(TEXT("class_remaps"), TEXT("object"), TEXT("Map source class path/name to destination class path/name"))
+			.Optional(TEXT("object_remaps"), TEXT("object"), TEXT("Exact object path remaps used for hard/soft references"))
+			.Optional(TEXT("root_remaps"), TEXT("object"), TEXT("Map source package roots to destination roots, e.g. {\"/Game/Old\":\"/Game/New\"}"))
+			.Optional(TEXT("source_root"), TEXT("string"), TEXT("Single source root shorthand; must be supplied with dest_root"))
+			.Optional(TEXT("dest_root"), TEXT("string"), TEXT("Single destination root shorthand; must be supplied with source_root"))
+			.Optional(TEXT("allow_empty_remap"), TEXT("boolean"), TEXT("Allow cloning with no explicit class/object/root remap contract"), TEXT("false"))
+			.Optional(TEXT("existing_policy"), TEXT("string"), TEXT("How to handle destination name collisions: fail, replace, or skip"), TEXT("fail")).Enum(TEXT("existing_policy"), { TEXT("fail"), TEXT("replace"), TEXT("skip") })
+			.Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile the destination Blueprint after applying"), TEXT("true"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the destination package after applying"), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan without mutating the destination Blueprint"), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false"), TEXT("false"))
+			.Build(),
+		TEXT("PostCopyRepair"));
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("blueprint"), TEXT("clone_graphs_with_reference_remap"),
+		{ TEXT("Blueprint graph clone"), TEXT("copy function graph"), TEXT("copy macro graph"), TEXT("reference remap"), TEXT("post-copy Blueprint repair") },
+		{ TEXT("clone_graphs"), TEXT("copy_graphs_with_remap"), TEXT("remap_blueprint_graphs") },
+		{ TEXT("clone HostSession helper functions from a source Blueprint into a copied destination Blueprint"), TEXT("dry-run function graph copy with root_remaps before applying") });
 }
 
 // ============================================================
