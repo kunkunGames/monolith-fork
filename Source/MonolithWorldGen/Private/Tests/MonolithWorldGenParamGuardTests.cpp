@@ -300,4 +300,22 @@ bool FMonolithParamGuardWorldGenHorrorDamageMalformedParamsTest::RunTest(const F
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardWorldGenBlockoutBPMalformedParamsTest, "Monolith.ParamGuard.MonolithWorldGen.CreateBlockoutBlueprintRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamGuardWorldGenBlockoutBPMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithMeshBlockoutActions::RegisterActions(FMonolithToolRegistry::Get());
+	TestTrue(TEXT("create_blockout_blueprint action is registered"), FMonolithToolRegistry::Get().HasAction(TEXT("worldgen"), TEXT("create_blockout_blueprint")));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("force"), TEXT("invalid_boolean"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("create_blockout_blueprint"), Params);
+	TestFalse(TEXT("create_blockout_blueprint rejects malformed force parameter"), Result.bSuccess);
+	TestTrue(TEXT("create_blockout_blueprint reports the validation error for force"), Result.ErrorMessage.Contains(TEXT("force must be a boolean")));
+
+	return true;
+}
+
 #endif // WITH_GEOMETRYSCRIPT

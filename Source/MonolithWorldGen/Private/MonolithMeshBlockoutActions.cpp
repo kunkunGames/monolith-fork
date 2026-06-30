@@ -2955,7 +2955,7 @@ FMonolithActionResult FMonolithMeshBlockoutActions::CreateBlockoutBlueprint(cons
 	bool bForce = false;
 	if (Params->HasField(TEXT("force")))
 	{
-		bForce = Params->GetBoolField(TEXT("force"));
+		if (!Params->TryGetBoolField(TEXT("force"), bForce)) { return FMonolithActionResult::Error(TEXT("force must be a boolean")); }
 	}
 
 	// Check if already exists
