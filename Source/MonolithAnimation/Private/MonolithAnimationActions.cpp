@@ -5140,6 +5140,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetCompositeInfo(const TS
 
 	TArray<TSharedPtr<FJsonValue>> SegArray;
 	const TArray<FAnimSegment>& Segments = Composite->AnimationTrack.AnimSegments;
+	SegArray.Reserve(Segments.Num());
 	for (int32 i = 0; i < Segments.Num(); ++i)
 	{
 		const FAnimSegment& Seg = Segments[i];
