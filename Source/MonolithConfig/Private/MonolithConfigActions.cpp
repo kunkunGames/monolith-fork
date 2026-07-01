@@ -285,6 +285,11 @@ namespace
 
 FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("resolve_setting: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString Category;
 	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
 	{
@@ -332,6 +337,11 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 
 FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("explain_setting: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString Category, Section, Key;
 	if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), Category))
 	{
@@ -586,6 +596,11 @@ static TSharedPtr<FJsonObject> MakeDiffEntry(
 
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("diff_from_default: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString Category;
 	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
 	{
@@ -698,6 +713,11 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 
 FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("search_config: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString Query;
 	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
 	{
@@ -799,6 +819,11 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 
 FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("get_section: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString FileShortName;
 	if (!Params->TryGetStringField(TEXT("file"), FileShortName) || FileShortName.IsEmpty())
 	{
@@ -912,6 +937,11 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 
 FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("get_config_files: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString FilterCategory;
 	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
 	{
