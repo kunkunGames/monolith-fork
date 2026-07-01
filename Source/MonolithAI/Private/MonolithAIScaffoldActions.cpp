@@ -626,7 +626,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleHelloWorldAI(const TShar
 		return ErrResult;
 	}
 
-	FString Name = Params->GetStringField(TEXT("name"));
+	FString Name;
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), Name))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"));
+	}
 	if (Name.IsEmpty())
 	{
 		Name = TEXT("HelloWorldAI");
@@ -849,10 +853,18 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 		return ErrResult;
 	}
 
-	FString BTTemplate = Params->GetStringField(TEXT("bt_template"));
+	FString BTTemplate;
+	if (Params->HasField(TEXT("bt_template")) && !Params->TryGetStringField(TEXT("bt_template"), BTTemplate))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'bt_template' must be a string"));
+	}
 	if (BTTemplate.IsEmpty()) BTTemplate = TEXT("patrol");
 
-	FString PerceptionPreset = Params->GetStringField(TEXT("perception_preset"));
+	FString PerceptionPreset;
+	if (Params->HasField(TEXT("perception_preset")) && !Params->TryGetStringField(TEXT("perception_preset"), PerceptionPreset))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'perception_preset' must be a string"));
+	}
 	if (PerceptionPreset.IsEmpty()) PerceptionPreset = TEXT("sight_hearing");
 
 	int32 TeamId = 1;
@@ -966,7 +978,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 					CreatedAssets.Add(CharacterPath);
 
 					// Set mesh if provided
-					FString MeshPath = Params->GetStringField(TEXT("mesh"));
+					FString MeshPath;
+					if (Params->HasField(TEXT("mesh")) && !Params->TryGetStringField(TEXT("mesh"), MeshPath))
+					{
+						return FMonolithActionResult::Error(TEXT("Parameter 'mesh' must be a string"));
+					}
 					if (!MeshPath.IsEmpty())
 					{
 						// Mesh assignment would need a separate action; warn for now
@@ -1059,10 +1075,14 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPerceptionToBlac
 			if (MapVal->TryGetObject(MapObj) && MapObj)
 			{
 				FPerceptionMapping M;
-				M.Sense = (*MapObj)->GetStringField(TEXT("sense"));
-				M.BBKey = (*MapObj)->GetStringField(TEXT("bb_key"));
-				M.BBKeyType = (*MapObj)->GetStringField(TEXT("bb_key_type"));
-				M.BaseClass = (*MapObj)->GetStringField(TEXT("base_class"));
+				if ((*MapObj)->HasField(TEXT("sense")) && !(*MapObj)->TryGetStringField(TEXT("sense"), M.Sense))
+					return FMonolithActionResult::Error(TEXT("Mapping 'sense' must be a string"));
+				if ((*MapObj)->HasField(TEXT("bb_key")) && !(*MapObj)->TryGetStringField(TEXT("bb_key"), M.BBKey))
+					return FMonolithActionResult::Error(TEXT("Mapping 'bb_key' must be a string"));
+				if ((*MapObj)->HasField(TEXT("bb_key_type")) && !(*MapObj)->TryGetStringField(TEXT("bb_key_type"), M.BBKeyType))
+					return FMonolithActionResult::Error(TEXT("Mapping 'bb_key_type' must be a string"));
+				if ((*MapObj)->HasField(TEXT("base_class")) && !(*MapObj)->TryGetStringField(TEXT("base_class"), M.BaseClass))
+					return FMonolithActionResult::Error(TEXT("Mapping 'base_class' must be a string"));
 
 				// Infer type from sense if not provided
 				if (M.BBKeyType.IsEmpty())
@@ -1348,7 +1368,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 		return ErrResult;
 	}
 
-	FString PatrolType = Params->GetStringField(TEXT("patrol_type"));
+	FString PatrolType;
+	if (Params->HasField(TEXT("patrol_type")) && !Params->TryGetStringField(TEXT("patrol_type"), PatrolType))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'patrol_type' must be a string"));
+	}
 	if (PatrolType.IsEmpty()) PatrolType = TEXT("loop");
 
 	TSharedPtr<FJsonValue> InvestigationRadiusValue = Params->TryGetField(TEXT("investigation_radius"));
@@ -1677,7 +1701,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEQSMoveSequence(
 	if (!MonolithAI::RequireStringParam(Params, TEXT("eqs_path"), EQSPath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("bb_key"), BBKey, ErrResult)) return ErrResult;
 
-	FString ParentId = Params->GetStringField(TEXT("parent_id"));
+	FString ParentId;
+	if (Params->HasField(TEXT("parent_id")) && !Params->TryGetStringField(TEXT("parent_id"), ParentId))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_id' must be a string"));
+	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold EQS Move Sequence")));
 
@@ -1701,7 +1729,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEQSMoveSequence(
 		}
 		if (R.Result.IsValid())
 		{
-			SequenceId = R.Result->GetStringField(TEXT("node_id"));
+			R.Result->TryGetStringField(TEXT("node_id"), SequenceId);
 		}
 		CreatedNodeIds.Add(SequenceId);
 	}
@@ -1723,7 +1751,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEQSMoveSequence(
 		}
 		else if (R.Result.IsValid())
 		{
-			CreatedNodeIds.Add(R.Result->GetStringField(TEXT("node_id")));
+			FString TempNodeId;
+			if (R.Result->TryGetStringField(TEXT("node_id"), TempNodeId))
+			{
+				CreatedNodeIds.Add(TempNodeId);
+			}
 		}
 	}
 
@@ -1745,7 +1777,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldEQSMoveSequence(
 		{
 			if (R.Result.IsValid())
 			{
-				FString NodeId = R.Result->GetStringField(TEXT("node_id"));
+				FString NodeId;
+				R.Result->TryGetStringField(TEXT("node_id"), NodeId);
 				CreatedNodeIds.Add(NodeId);
 
 				// Set the BB key on the MoveTo
@@ -2062,7 +2095,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleCreateSTFromTemplate(con
 
 FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(const TSharedPtr<FJsonObject>& Params)
 {
-	FString PathFilter = Params->GetStringField(TEXT("path_filter"));
+	FString PathFilter;
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'path_filter' must be a string"));
+	}
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 
@@ -2512,7 +2549,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldAIControllerBlue
 	if (!MonolithAI::RequireStringParam(Params, TEXT("bt_path"), BTPath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("bb_path"), BBPath, ErrResult)) return ErrResult;
 
-	FString PerceptionPreset = Params->GetStringField(TEXT("perception_preset"));
+	FString PerceptionPreset;
+	if (Params->HasField(TEXT("perception_preset")) && !Params->TryGetStringField(TEXT("perception_preset"), PerceptionPreset))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'perception_preset' must be a string"));
+	}
 	int32 TeamId = -1;
 	if (Params->HasField(TEXT("team_id")))
 	{
@@ -2698,7 +2739,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompanionAI(cons
 		FollowDistance = static_cast<float>(TempVal);
 	}
 
-	FString CombatBehavior = Params->GetStringField(TEXT("combat_behavior"));
+	FString CombatBehavior;
+	if (Params->HasField(TEXT("combat_behavior")) && !Params->TryGetStringField(TEXT("combat_behavior"), CombatBehavior))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'combat_behavior' must be a string"));
+	}
 	if (CombatBehavior.IsEmpty()) CombatBehavior = TEXT("defensive");
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Companion AI")));
@@ -3248,7 +3293,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorStalker(co
 		StalkDistance = static_cast<float>(TempVal);
 	}
 
-	FString AttackConditions = Params->GetStringField(TEXT("attack_conditions"));
+	FString AttackConditions;
+	if (Params->HasField(TEXT("attack_conditions")) && !Params->TryGetStringField(TEXT("attack_conditions"), AttackConditions))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'attack_conditions' must be a string"));
+	}
 	if (AttackConditions.IsEmpty()) AttackConditions = TEXT("darkness");
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Horror Stalker")));
@@ -3398,9 +3447,17 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorAmbush(con
 	if (!MonolithAI::RequireStringParam(Params, TEXT("save_path"), SavePath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
-	FString TriggerType = Params->GetStringField(TEXT("trigger_type"));
+	FString TriggerType;
+	if (Params->HasField(TEXT("trigger_type")) && !Params->TryGetStringField(TEXT("trigger_type"), TriggerType))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'trigger_type' must be a string"));
+	}
 	if (TriggerType.IsEmpty()) TriggerType = TEXT("proximity");
-	FString AttackPattern = Params->GetStringField(TEXT("attack_pattern"));
+	FString AttackPattern;
+	if (Params->HasField(TEXT("attack_pattern")) && !Params->TryGetStringField(TEXT("attack_pattern"), AttackPattern))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'attack_pattern' must be a string"));
+	}
 	if (AttackPattern.IsEmpty()) AttackPattern = TEXT("lunge");
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Horror Ambush")));
@@ -3652,8 +3709,16 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorMimic(cons
 	if (!MonolithAI::RequireStringParam(Params, TEXT("save_path"), SavePath, ErrResult)) return ErrResult;
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
-	FString DisguiseMesh = Params->GetStringField(TEXT("disguise_mesh"));
-	FString RevealConditions = Params->GetStringField(TEXT("reveal_conditions"));
+	FString DisguiseMesh;
+	if (Params->HasField(TEXT("disguise_mesh")) && !Params->TryGetStringField(TEXT("disguise_mesh"), DisguiseMesh))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'disguise_mesh' must be a string"));
+	}
+	FString RevealConditions;
+	if (Params->HasField(TEXT("reveal_conditions")) && !Params->TryGetStringField(TEXT("reveal_conditions"), RevealConditions))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'reveal_conditions' must be a string"));
+	}
 	if (RevealConditions.IsEmpty()) RevealConditions = TEXT("proximity");
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Horror Mimic")));
@@ -3778,7 +3843,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldStealthGameAI(co
 			return FMonolithActionResult::Error(TEXT("Parameter 'detection_meter' must be a boolean"));
 		}
 	}
-	FString AlertStates = Params->GetStringField(TEXT("alert_states"));
+	FString AlertStates;
+	if (Params->HasField(TEXT("alert_states")) && !Params->TryGetStringField(TEXT("alert_states"), AlertStates))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'alert_states' must be a string"));
+	}
 	if (AlertStates.IsEmpty()) AlertStates = TEXT("standard");
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Scaffold Stealth Game AI")));
@@ -4177,7 +4246,11 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldFlyingAI(const T
 	if (!MonolithAI::RequireStringParam(Params, TEXT("name"), Name, ErrResult)) return ErrResult;
 
 	float MinAlt = 500.0f, MaxAlt = 2000.0f;
-	FString AltRange = Params->GetStringField(TEXT("altitude_range"));
+	FString AltRange;
+	if (Params->HasField(TEXT("altitude_range")) && !Params->TryGetStringField(TEXT("altitude_range"), AltRange))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'altitude_range' must be a string"));
+	}
 	if (!AltRange.IsEmpty())
 	{
 		FString MinStr, MaxStr;
