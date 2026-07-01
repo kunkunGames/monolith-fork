@@ -96,4 +96,45 @@ bool FMonolithLevelDesignAnalyzePacingCurveParamGuardTest::RunTest(const FString
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignClassifyZoneTensionParamGuardTest, "Monolith.Sentinel.LevelDesign.ClassifyZoneTensionParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignClassifyZoneTensionParamGuardTest::RunTest(const FString& Parameters)
+{
+	// 1. Negative radius
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> LocationArray;
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("location"), LocationArray);
+
+		Params->SetNumberField(TEXT("radius"), -10.0);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("classify_zone_tension"), Params);
+		TestFalse(TEXT("Negative radius should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention radius"), Result.ErrorMessage.Contains(TEXT("radius must be >=")));
+	}
+
+	// 2. Excessively large radius
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+		TArray<TSharedPtr<FJsonValue>> LocationArray;
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		LocationArray.Add(MakeShared<FJsonValueNumber>(0.0));
+		Params->SetArrayField(TEXT("location"), LocationArray);
+
+		Params->SetNumberField(TEXT("radius"), 100000.0);
+
+		FMonolithActionResult Result = ExecuteHorrorAction(TEXT("classify_zone_tension"), Params);
+		TestFalse(TEXT("Excessively large radius should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention radius"), Result.ErrorMessage.Contains(TEXT("radius must be <=")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

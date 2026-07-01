@@ -839,7 +839,17 @@ FMonolithActionResult FMonolithLevelDesignHorrorActions::ClassifyZoneTension(con
 	}
 
 	double Radius = 500.0;
-	Params->TryGetNumberField(TEXT("radius"), Radius);
+	if (Params->TryGetNumberField(TEXT("radius"), Radius))
+	{
+		if (Radius < 0.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be >= 0.0, got %f"), Radius));
+		}
+		if (Radius > 50000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("radius must be <= 50000.0, got %f"), Radius));
+		}
+	}
 
 	UWorld* World = MonolithMeshUtils::GetEditorWorld();
 	if (!World)
