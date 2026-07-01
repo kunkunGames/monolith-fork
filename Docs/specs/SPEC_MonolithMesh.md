@@ -90,7 +90,7 @@
 | `get_spatial_relationships` | `actor_name`, `radius` | Get nearby actors and their spatial relationships |
 | `query_navmesh` | `start`, `end` | Query navigation mesh for path between two points |
 
-**Level Blockout (15)**
+**Level Blockout (16)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `get_blockout_volumes` | none | List all blockout volumes in the level |
@@ -108,6 +108,7 @@
 | `import_blockout_layout` | `file_path` | Import a blockout layout from JSON |
 | `scan_volume` | `volume_name` | Scan a volume and report contents |
 | `scatter_props` | `volume_name`, `asset_paths`, `density`, `seed` | Scatter props randomly within a volume |
+| `create_blockout_blueprint` | `save_path`, `force` | Create the BP_MonolithBlockoutVolume Blueprint asset in the project |
 
 **Procedural Mesh Caching (4)** — Hash-based manifest at `Saved/Monolith/ProceduralCache/manifest.json`
 | Action | Params | Description |
