@@ -2339,6 +2339,7 @@ FMonolithActionResult FMonolithUIActions::HandleDescribeCommonWidgetBlueprint(co
     if (bIncludeExtensionPoints)
     {
         TArray<TSharedPtr<FJsonValue>> ExtensionPoints;
+        ExtensionPoints.Reserve(Widgets.Num());
         for (UWidget* Widget : Widgets)
         {
             if (!Widget)
@@ -2359,6 +2360,7 @@ FMonolithActionResult FMonolithUIActions::HandleDescribeCommonWidgetBlueprint(co
     if (bIncludeLayerCandidates)
     {
         TArray<TSharedPtr<FJsonValue>> LayerCandidates;
+        LayerCandidates.Reserve(Widgets.Num());
         if (ActivatableContainerClass)
         {
             for (UWidget* Widget : Widgets)
@@ -2662,6 +2664,7 @@ FMonolithActionResult FMonolithUIActions::HandleValidateCommonLayerPushContract(
         Layout->SetNumberField(TEXT("widget_count"), Widgets.Num());
 
         TArray<TSharedPtr<FJsonValue>> LayerCandidates;
+        LayerCandidates.Reserve(Widgets.Num());
         bool bExpectedLayerWidgetFound = false;
         if (ContainerBaseClass)
         {
