@@ -42,6 +42,7 @@ TArray<TSharedPtr<FJsonValue>> FGASIndexer::ExtractTagContainer(UObject* CDO, co
 	const FGameplayTagContainer* TagContainer = static_cast<const FGameplayTagContainer*>(ValuePtr);
 	if (!TagContainer) return Result;
 
+	Result.Reserve(TagContainer->Num());
 	for (const FGameplayTag& Tag : *TagContainer)
 	{
 		Result.Add(MakeShared<FJsonValueString>(Tag.ToString()));
