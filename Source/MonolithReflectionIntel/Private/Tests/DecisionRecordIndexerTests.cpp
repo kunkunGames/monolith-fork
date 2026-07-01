@@ -297,11 +297,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FDecisionQueryParamGuardTest::RunTest(const FString& /*Parameters*/)
 {
-	// To test the adapter action safely, we need to invoke it via the tool registry
-	// so that it handles parameter execution (the action expects to be invoked this way).
-	// We'll create a local registry just for testing.
-	FMonolithToolRegistry Registry;
-	FDecisionQueryAdapter::RegisterActions(Registry);
+	// Invoke through the process registry so parameter validation follows the same
+	// path as live tool calls. FMonolithToolRegistry is singleton-only.
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("decision_query"), TEXT("get_decision")))
+	{
+		FDecisionQueryAdapter::RegisterActions(Registry);
+	}
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 

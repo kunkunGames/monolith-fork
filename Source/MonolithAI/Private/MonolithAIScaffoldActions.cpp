@@ -2090,6 +2090,7 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleCreateSTFromTemplate(con
 FMonolithActionResult FMonolithAIScaffoldActions::HandleBatchValidateAIAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PathFilter;
+	FMonolithActionResult ErrResult;
 	if (!TryGetOptionalStringParam(Params, TEXT("path_filter"), PathFilter, ErrResult)) return ErrResult;
 
 	IAssetRegistry& AR = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();

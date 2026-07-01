@@ -4,15 +4,18 @@
 #include "MonolithNiagaraActions.h"
 
 BEGIN_DEFINE_SPEC(FNiagaraNPCParamGuardSpec, "Monolith.Niagara.ParamGuard.NPC", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-	TSharedPtr<FMonolithToolRegistry> Registry;
+	FMonolithToolRegistry* Registry = nullptr;
 END_DEFINE_SPEC(FNiagaraNPCParamGuardSpec)
 
 void FNiagaraNPCParamGuardSpec::Define()
 {
 	BeforeEach([this]()
 	{
-		Registry = MakeShared<FMonolithToolRegistry>();
-		FMonolithNiagaraActions::RegisterActions(*Registry);
+		Registry = &FMonolithToolRegistry::Get();
+		if (!Registry->HasAction(TEXT("niagara"), TEXT("add_npc_parameter")))
+		{
+			FMonolithNiagaraActions::RegisterActions(*Registry);
+		}
 	});
 
 	Describe("add_npc_parameter", [this]()
