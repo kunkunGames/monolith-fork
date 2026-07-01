@@ -11,6 +11,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Texture2D.h"
+#include "MonolithAssetUtils.h"
 #include "HAL/FileManager.h"
 #include "HttpModule.h"
 #include "IImageWrapper.h"
@@ -1106,7 +1107,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 			return false;
 		}
 
-		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ObjectPath);
+		UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(ObjectPath);
 		if (!Texture)
 		{
 			OutError = FString::Printf(TEXT("reference_asset_paths entry '%s' did not resolve to a Texture2D"), *AssetPath);
@@ -1821,7 +1822,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 
 	static bool ApplyProvenance(const FString& AssetPackagePath, const TSharedPtr<FJsonObject>& Provenance, bool bSave, FString& OutError)
 	{
-		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ObjectPathFromPackagePath(AssetPackagePath));
+		UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(ObjectPathFromPackagePath(AssetPackagePath));
 		if (!Texture)
 		{
 			OutError = FString::Printf(TEXT("Imported asset '%s' could not be loaded as UTexture2D"), *AssetPackagePath);
@@ -2883,7 +2884,7 @@ FMonolithActionResult FMonolithImageGenActions::HandleGetGeneratedAssetProvenanc
 		return FMonolithActionResult::Error(TEXT("Missing or empty required param: asset_path"), -32602);
 	}
 
-	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ImageGenerationInternal::ObjectPathFromPackagePath(AssetPath));
+	UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(ImageGenerationInternal::ObjectPathFromPackagePath(AssetPath));
 	if (!Texture)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset '%s' could not be loaded as UTexture2D"), *AssetPath), -32602);

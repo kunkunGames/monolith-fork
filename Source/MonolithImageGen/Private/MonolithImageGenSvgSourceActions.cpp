@@ -9,6 +9,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
+#include "MonolithAssetUtils.h"
 #include "HAL/FileManager.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
@@ -2627,7 +2628,7 @@ namespace
 		bool bSave,
 		FString& OutError)
 	{
-		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ObjectPathFromPackagePath(TexturePackagePath));
+		UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(ObjectPathFromPackagePath(TexturePackagePath));
 		if (!Texture)
 		{
 			OutError = FString::Printf(TEXT("Imported MSDF texture '%s' could not be loaded for provenance"), *TexturePackagePath);
@@ -2679,7 +2680,7 @@ namespace
 		int32 ExpectedSize,
 		FString& OutError)
 	{
-		UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *ObjectPathFromPackagePath(TexturePackagePath));
+		UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(ObjectPathFromPackagePath(TexturePackagePath));
 		if (!Texture)
 		{
 			OutError = FString::Printf(TEXT("Imported MSDF texture '%s' could not be loaded for settings"), *TexturePackagePath);
