@@ -1327,27 +1327,40 @@ FMonolithActionResult FMonolithMaterialActions::DisconnectExpression(const TShar
 		return FMonolithActionResult::Error(TEXT("Parameter 'expression_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString InputName = TEXT("");
-	if (Params->HasField(TEXT("input_name")) && !Params->TryGetStringField(TEXT("input_name"), InputName))
+	const TSharedPtr<FJsonValue> InputNameField = Params->TryGetField(TEXT("input_name"));
+	if (InputNameField && !InputNameField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'input_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		if (!InputNameField->TryGetString(InputName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'input_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	bool bDisconnectOutputs = false;
-	if (Params->HasField(TEXT("disconnect_outputs")) && !Params->TryGetBoolField(TEXT("disconnect_outputs"), bDisconnectOutputs))
+	const TSharedPtr<FJsonValue> DisconnectOutputsField = Params->TryGetField(TEXT("disconnect_outputs"));
+	if (DisconnectOutputsField && !DisconnectOutputsField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'disconnect_outputs' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		if (!DisconnectOutputsField->TryGetBool(bDisconnectOutputs))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'disconnect_outputs' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	// Optional filter: only disconnect from a specific downstream expression (when disconnect_outputs=true)
 	FString TargetDownstream = TEXT("");
-	if (Params->HasField(TEXT("target_expression")) && !Params->TryGetStringField(TEXT("target_expression"), TargetDownstream))
+	const TSharedPtr<FJsonValue> TargetExpressionField = Params->TryGetField(TEXT("target_expression"));
+	if (TargetExpressionField && !TargetExpressionField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'target_expression' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		if (!TargetExpressionField->TryGetString(TargetDownstream))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_expression' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	// Optional filter: only disconnect a specific output index
 	int32 TargetOutputIndex = -1;
 	double TargetOutputIndex_Val;
-	if (Params->HasField(TEXT("output_index")))
+	const TSharedPtr<FJsonValue> OutputIndexField = Params->TryGetField(TEXT("output_index"));
+	if (OutputIndexField && !OutputIndexField->IsNull())
 	{
-		if (!Params->TryGetNumberField(TEXT("output_index"), TargetOutputIndex_Val))
+		if (!OutputIndexField->TryGetNumber(TargetOutputIndex_Val))
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'output_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -2416,9 +2429,10 @@ FMonolithActionResult FMonolithMaterialActions::RenderPreview(const TSharedPtr<F
 		CaptureParams->SetArrayField(TEXT("resolution"), ResArr);
 
 		// Pass through background_color if provided
-		if (Params->HasField(TEXT("background_color")))
+		const TSharedPtr<FJsonValue> BackgroundColorField = Params->TryGetField(TEXT("background_color"));
+		if (BackgroundColorField && !BackgroundColorField->IsNull())
 		{
-			CaptureParams->SetField(TEXT("background_color"), Params->TryGetField(TEXT("background_color")));
+			CaptureParams->SetField(TEXT("background_color"), BackgroundColorField);
 		}
 
 		FMonolithActionResult CaptureResult = FMonolithToolRegistry::Get().ExecuteAction(
@@ -2676,10 +2690,11 @@ FMonolithActionResult FMonolithMaterialActions::CreateCustomHLSLNode(const TShar
 						return FMonolithActionResult::Error(TEXT("Custom node additional_output must specify a 'name' string"), FMonolithJsonUtils::ErrInvalidParams);
 					}
 					NewOutput.OutputName = *OutputNameStr;
-				if ((*OutObjPtr)->HasField(TEXT("type")))
+				const TSharedPtr<FJsonValue> TypeField = (*OutObjPtr)->TryGetField(TEXT("type"));
+				if (TypeField && !TypeField->IsNull())
 				{
 					FString OutTypeStr;
-					if ((*OutObjPtr)->TryGetStringField(TEXT("type"), OutTypeStr))
+					if (TypeField->TryGetString(OutTypeStr))
 					{
 						NewOutput.OutputType = ParseCustomOutputType(OutTypeStr);
 					}
