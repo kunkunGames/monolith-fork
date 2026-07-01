@@ -85,7 +85,10 @@ namespace MonolithNiagaraBulkFillInternal
 		}
 
 		FString UserParam;
-		Spec.Tree->TryGetStringField(TEXT("user_param"), UserParam);
+		if (!Spec.Tree->TryGetStringField(TEXT("user_param"), UserParam))
+		{
+			return MakeResolveFailureReport(TEXT("niagara adapter: DataInterfaceArray requires string \'user_param\'"));
+		}
 		if (UserParam.IsEmpty())
 		{
 			return MakeResolveFailureReport(
@@ -158,7 +161,10 @@ namespace MonolithNiagaraBulkFillInternal
 		}
 
 		FString CurveName;
-		Spec.Tree->TryGetStringField(TEXT("curve_name"), CurveName);
+		if (!Spec.Tree->TryGetStringField(TEXT("curve_name"), CurveName))
+		{
+			return MakeResolveFailureReport(TEXT("niagara adapter: Curve fill_kind requires string \'curve_name\'"));
+		}
 		if (CurveName.IsEmpty())
 		{
 			return MakeResolveFailureReport(
@@ -344,7 +350,10 @@ FDryRunReport FMonolithNiagaraBulkFillAdapter::NiagaraBulkFill(const FBulkFillSp
 	}
 
 	FString FillKind;
-	Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind);
+	if (!Spec.Tree->TryGetStringField(TEXT("fill_kind"), FillKind))
+	{
+		return MakeResolveFailureReport(TEXT("niagara adapter: spec.tree.fill_kind required \x2014 one of \'DataInterfaceArray\', \'Curve\', \'ParameterOverrides\'"));
+	}
 	if (FillKind.IsEmpty())
 	{
 		return MakeResolveFailureReport(TEXT(
