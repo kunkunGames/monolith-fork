@@ -2230,6 +2230,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSkeletalMeshInfo(const
 
 	// Materials
 	TArray<TSharedPtr<FJsonValue>> MatArr;
+	MatArr.Reserve(Mesh->GetMaterials().Num());
 	for (int32 i = 0; i < Mesh->GetMaterials().Num(); ++i)
 	{
 		const FSkeletalMaterial& MatSlot = Mesh->GetMaterials()[i];
@@ -3001,9 +3002,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneTrackKeys(const TS
 	Root->SetStringField(TEXT("bone_name"), BoneName);
 	Root->SetNumberField(TEXT("num_keys"), MaxKeys);
 
+	const int32 NumFrames = EndFrame - StartFrame + 1;
 	TArray<TSharedPtr<FJsonValue>> PosArr;
+	PosArr.Reserve(NumFrames);
 	TArray<TSharedPtr<FJsonValue>> RotArr;
+	RotArr.Reserve(NumFrames);
 	TArray<TSharedPtr<FJsonValue>> ScaleArr;
+	ScaleArr.Reserve(NumFrames);
 	for (int32 i = StartFrame; i <= EndFrame; ++i)
 	{
 		const FTransform& Xf = AllTransforms[i];
@@ -3012,12 +3017,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneTrackKeys(const TS
 		const FVector& Scl = Xf.GetScale3D();
 
 		TArray<TSharedPtr<FJsonValue>> P;
+		P.Reserve(3);
 		P.Add(MakeShared<FJsonValueNumber>(Pos.X));
 		P.Add(MakeShared<FJsonValueNumber>(Pos.Y));
 		P.Add(MakeShared<FJsonValueNumber>(Pos.Z));
 		PosArr.Add(MakeShared<FJsonValueArray>(P));
 
 		TArray<TSharedPtr<FJsonValue>> Q;
+		Q.Reserve(4);
 		Q.Add(MakeShared<FJsonValueNumber>(Rot.X));
 		Q.Add(MakeShared<FJsonValueNumber>(Rot.Y));
 		Q.Add(MakeShared<FJsonValueNumber>(Rot.Z));
@@ -3025,6 +3032,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetBoneTrackKeys(const TS
 		RotArr.Add(MakeShared<FJsonValueArray>(Q));
 
 		TArray<TSharedPtr<FJsonValue>> S;
+		S.Reserve(3);
 		S.Add(MakeShared<FJsonValueNumber>(Scl.X));
 		S.Add(MakeShared<FJsonValueNumber>(Scl.Y));
 		S.Add(MakeShared<FJsonValueNumber>(Scl.Z));
@@ -3873,6 +3881,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleListCurves(const TSharedP
 	if (!DataModel) return FMonolithActionResult::Error(TEXT("No animation data model"));
 
 	TArray<TSharedPtr<FJsonValue>> CurvesArray;
+	CurvesArray.Reserve(DataModel->GetFloatCurves().Num() + DataModel->GetTransformCurves().Num());
 
 	// Float curves
 	for (const FFloatCurve& Curve : DataModel->GetFloatCurves())
