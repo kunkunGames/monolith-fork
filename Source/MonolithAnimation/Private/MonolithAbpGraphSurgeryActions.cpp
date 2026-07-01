@@ -1939,9 +1939,17 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleBindThreadsafeUpdat
 		return FMonolithActionResult::Error(TEXT("result_target.var is required (the self variable to store the call result into; it must already exist on the ABP)"));
 	}
 
-	FString FuncGraphName = Params->HasField(TEXT("function_name")) ? Params->GetStringField(TEXT("function_name")) : TEXT("ThreadSafeUpdateFunction");
+	FString FuncGraphName = TEXT("ThreadSafeUpdateFunction");
+	if (Params->HasField(TEXT("function_name")) && !Params->TryGetStringField(TEXT("function_name"), FuncGraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'function_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (FuncGraphName.IsEmpty()) FuncGraphName = TEXT("ThreadSafeUpdateFunction");
-	FString AnimGraphName = Params->HasField(TEXT("anim_graph_name")) ? Params->GetStringField(TEXT("anim_graph_name")) : TEXT("AnimGraph");
+	FString AnimGraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("anim_graph_name")) && !Params->TryGetStringField(TEXT("anim_graph_name"), AnimGraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'anim_graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (AnimGraphName.IsEmpty()) AnimGraphName = TEXT("AnimGraph");
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);

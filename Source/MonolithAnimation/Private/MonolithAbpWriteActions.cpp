@@ -2352,7 +2352,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleBuildMotionMatchingNode(co
 FMonolithActionResult FMonolithAbpWriteActions::HandleGetAnimGraphOutputConnection(const TSharedPtr<FJsonObject>& Params)
 {
 	const FString AbpPath = Params->GetStringField(TEXT("abp_path"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (GraphName.IsEmpty()) GraphName = TEXT("AnimGraph");
 
 	if (AbpPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
@@ -2419,8 +2423,16 @@ FMonolithActionResult ApplyAdditiveImpl(const TSharedPtr<FJsonObject>& Params, b
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString BaseNode;     Params->TryGetStringField(TEXT("base_node"), BaseNode);
 	FString AdditiveNode; Params->TryGetStringField(TEXT("additive_node"), AdditiveNode);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double TempVal;
 	float PosX = 200.f, PosY = 0.f;
@@ -2559,8 +2571,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddSlotNode(const TSharedP
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SlotName;   Params->TryGetStringField(TEXT("slot_name"), SlotName);
 	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bValidateSlot = true;
 	if (Params->HasField(TEXT("validate_slot")) && !Params->TryGetBoolField(TEXT("validate_slot"), bValidateSlot))
@@ -2673,8 +2693,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddSaveCachedPose(const TS
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CacheName;  Params->TryGetStringField(TEXT("cache_name"), CacheName);
 	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double TempVal;
 	float PosX = 200.f, PosY = 0.f;
@@ -2751,7 +2779,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddUseCachedPose(const TSh
 
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString CacheName; Params->TryGetStringField(TEXT("cache_name"), CacheName);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bValidatePair = true;
 	if (Params->HasField(TEXT("validate_pair")) && !Params->TryGetBoolField(TEXT("validate_pair"), bValidatePair))
@@ -2841,7 +2873,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetOutputPoseSource(const 
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString SourceNode; Params->TryGetStringField(TEXT("source_node"), SourceNode);
 	FString SourcePin;  Params->TryGetStringField(TEXT("source_pin"), SourcePin);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	bool bBreakExisting = true;
 	if (Params->HasField(TEXT("break_existing")) && !Params->TryGetBoolField(TEXT("break_existing"), bBreakExisting))
@@ -3062,8 +3098,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddBlendByInt(const TShare
 	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
 
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double NumVal = 0.0;
 	if (!Params->TryGetNumberField(TEXT("num_poses"), NumVal))
@@ -3219,9 +3263,21 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddBlendByEnum(const TShar
 	if (!GEditor) return FMonolithActionResult::Error(TEXT("Editor is not available"));
 
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	const FString EnumPath  = Params->HasField(TEXT("enum_path")) ? Params->GetStringField(TEXT("enum_path")) : TEXT("");
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString EnumPath = TEXT("");
+	if (Params->HasField(TEXT("enum_path")) && !Params->TryGetStringField(TEXT("enum_path"), EnumPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'enum_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (EnumPath.IsEmpty())
 	{
@@ -3481,8 +3537,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetSyncGroup(const TShared
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeId;    Params->TryGetStringField(TEXT("node_id"), NodeId);
 	FString GroupName; Params->TryGetStringField(TEXT("group_name"), GroupName);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (NodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 	if (!Params->HasField(TEXT("group_name"))) return FMonolithActionResult::Error(TEXT("Missing required parameter: group_name"));
@@ -3621,8 +3685,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleSetLayeredBlendBones(const
 
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NodeId; Params->TryGetStringField(TEXT("node_id"), NodeId);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (NodeId.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: node_id"));
 
@@ -3803,10 +3875,22 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleBuildFootIkPass(const TSha
 	const FString LeftFootBone  = Params->GetStringField(TEXT("left_foot_bone"));
 	const FString RightFootBone = Params->GetStringField(TEXT("right_foot_bone"));
 	const FString PelvisBone    = Params->GetStringField(TEXT("pelvis_bone"));
-	FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (GraphName.IsEmpty()) GraphName = TEXT("AnimGraph");
-	FString LeftCurve  = Params->HasField(TEXT("left_contact_curve"))  ? Params->GetStringField(TEXT("left_contact_curve"))  : TEXT("contact_l");
-	FString RightCurve = Params->HasField(TEXT("right_contact_curve")) ? Params->GetStringField(TEXT("right_contact_curve")) : TEXT("contact_r");
+	FString LeftCurve = TEXT("contact_l");
+	if (Params->HasField(TEXT("left_contact_curve")) && !Params->TryGetStringField(TEXT("left_contact_curve"), LeftCurve))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'left_contact_curve' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString RightCurve = TEXT("contact_r");
+	if (Params->HasField(TEXT("right_contact_curve")) && !Params->TryGetStringField(TEXT("right_contact_curve"), RightCurve))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'right_contact_curve' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (AbpPath.IsEmpty())       return FMonolithActionResult::Error(TEXT("Missing required parameter: abp_path"));
 	if (LeftFootBone.IsEmpty() || RightFootBone.IsEmpty() || PelvisBone.IsEmpty())
@@ -4106,8 +4190,16 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddAnimControlRigNode(cons
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString ControlRigClassSpec; Params->TryGetStringField(TEXT("control_rig_class"), ControlRigClassSpec);
 	FString SourceNode;          Params->TryGetStringField(TEXT("source_node"), SourceNode);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
-	const FString StateName = Params->HasField(TEXT("state_name")) ? Params->GetStringField(TEXT("state_name")) : TEXT("");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString StateName = TEXT("");
+	if (Params->HasField(TEXT("state_name")) && !Params->TryGetStringField(TEXT("state_name"), StateName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'state_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (ControlRigClassSpec.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: control_rig_class"));
 
@@ -4212,7 +4304,11 @@ FMonolithActionResult FMonolithAbpWriteActions::HandleAddLinkedAnimLayer(const T
 	FString LayerName;          Params->TryGetStringField(TEXT("layer_name"), LayerName);
 	FString InterfaceClassSpec; Params->TryGetStringField(TEXT("interface_class"), InterfaceClassSpec);
 	FString InstanceClassSpec;  Params->TryGetStringField(TEXT("instance_class"), InstanceClassSpec);
-	const FString GraphName = Params->HasField(TEXT("graph_name")) ? Params->GetStringField(TEXT("graph_name")) : TEXT("AnimGraph");
+	FString GraphName = TEXT("AnimGraph");
+	if (Params->HasField(TEXT("graph_name")) && !Params->TryGetStringField(TEXT("graph_name"), GraphName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'graph_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	if (LayerName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required parameter: layer_name"));
 
