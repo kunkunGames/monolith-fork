@@ -14,4 +14,5 @@ public:
     static FMonolithActionResult HandleBatchStyle(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleSetText(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleSetImage(const TSharedPtr<FJsonObject>& Params);
+    static FMonolithActionResult HandleSetRetainerEffectMaterial(const TSharedPtr<FJsonObject>& Params);
 };

@@ -105,3 +105,13 @@ bool FMonolithUIParamGuardSetImageMissingNumericField::RunTest(const FString& Pa
 
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardSetRetainerEffectMaterialMissingParams, "Monolith.ParamGuard.MonolithUI.SetRetainerEffectMaterialMissingParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardSetRetainerEffectMaterialMissingParams::RunTest(const FString& Parameters)
+{
+    const FMonolithActionResult Result = FMonolithUIStylingActions::HandleSetRetainerEffectMaterial(MakeShared<FJsonObject>());
+    TestFalse(TEXT("set_retainer_effect_material rejects missing params"), Result.bSuccess);
+    TestTrue(TEXT("set_retainer_effect_material reports a required param"), Result.ErrorMessage.Contains(TEXT("asset_path")) || Result.ErrorMessage.Contains(TEXT("required")));
+    return true;
+}

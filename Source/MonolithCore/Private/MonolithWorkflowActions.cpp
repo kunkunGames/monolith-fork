@@ -5,6 +5,7 @@
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -127,6 +128,160 @@ namespace
 		Obj->SetStringField(TEXT("status"), Status);
 		Obj->SetStringField(TEXT("reason"), Reason);
 		return Obj;
+	}
+
+	bool IsMobileOrConsoleVisualProfileName(const FString& ProfileName)
+	{
+		return ProfileName.Contains(TEXT("mobile"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("console"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("handheld"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("switch"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("steamdeck"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("xbox"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("playstation"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("ps5"), ESearchCase::IgnoreCase)
+			|| ProfileName.Contains(TEXT("tv"), ESearchCase::IgnoreCase);
+	}
+
+	TSharedPtr<FJsonObject> MakeUiProfileFinding(
+		const FString& Severity,
+		const FString& RuleId,
+		const FString& ProfileName,
+		const FString& Message,
+		const FString& SuggestedFix)
+	{
+		TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+		Finding->SetStringField(TEXT("severity"), Severity);
+		Finding->SetStringField(TEXT("category"), RuleId);
+		Finding->SetStringField(TEXT("rule_id"), RuleId);
+		Finding->SetStringField(TEXT("profile"), ProfileName);
+		Finding->SetStringField(TEXT("message"), Message);
+		Finding->SetStringField(TEXT("suggested_fix"), SuggestedFix);
+		return Finding;
+	}
+
+	bool ValidateUiVisualProfilesForProof(
+		const TArray<TSharedPtr<FJsonValue>>* VisualProfiles,
+		bool bVisualProofRequested,
+		TSharedPtr<FJsonObject>& OutProof,
+		TArray<FString>& OutErrors)
+	{
+		OutProof = MakeShared<FJsonObject>();
+		OutProof->SetStringField(TEXT("schema_version"), TEXT("ui_visual_profile_proof.v1"));
+		OutProof->SetBoolField(TEXT("visual_artifacts_required"), bVisualProofRequested);
+
+		TArray<TSharedPtr<FJsonValue>> Findings;
+		int32 ProfileCount = 0;
+		int32 RequiredProfileCount = 0;
+		int32 ErrorCount = 0;
+
+		if (!bVisualProofRequested)
+		{
+			OutProof->SetStringField(TEXT("status"), TEXT("not_requested"));
+			OutProof->SetNumberField(TEXT("profile_count"), VisualProfiles ? VisualProfiles->Num() : 0);
+			OutProof->SetNumberField(TEXT("mobile_console_profile_count"), 0);
+			OutProof->SetNumberField(TEXT("error_count"), 0);
+			OutProof->SetArrayField(TEXT("findings"), Findings);
+			return true;
+		}
+
+		if (!VisualProfiles || VisualProfiles->Num() == 0)
+		{
+			OutProof->SetStringField(TEXT("status"), TEXT("planned_default_desktop"));
+			OutProof->SetNumberField(TEXT("profile_count"), 0);
+			OutProof->SetNumberField(TEXT("mobile_console_profile_count"), 0);
+			OutProof->SetNumberField(TEXT("error_count"), 0);
+			OutProof->SetArrayField(TEXT("findings"), Findings);
+			return true;
+		}
+
+		ProfileCount = VisualProfiles->Num();
+		for (int32 Index = 0; Index < VisualProfiles->Num(); ++Index)
+		{
+			const TSharedPtr<FJsonValue>& ProfileValue = (*VisualProfiles)[Index];
+			const TSharedPtr<FJsonObject> Profile = ProfileValue.IsValid() ? ProfileValue->AsObject() : nullptr;
+			if (!Profile.IsValid())
+			{
+				++ErrorCount;
+				const FString ProfileName = FString::Printf(TEXT("visual_profiles[%d]"), Index);
+				Findings.Add(MakeShared<FJsonValueObject>(MakeUiProfileFinding(
+					TEXT("error"),
+					TEXT("VisualProfileShapeInvalid"),
+					ProfileName,
+					TEXT("Visual proof profile must be a JSON object."),
+					TEXT("Pass visual_profiles rows as objects such as {\"name\":\"mobile\",\"resolution\":[1280,720],\"dpi_scale\":1.0,\"safe_zone\":{\"left\":48,\"top\":24,\"right\":48,\"bottom\":24}}."))));
+				OutErrors.Add(FString::Printf(TEXT("VisualProfileShapeInvalid: %s must be an object."), *ProfileName));
+				continue;
+			}
+
+			FString ProfileName;
+			if (!Profile->TryGetStringField(TEXT("name"), ProfileName) || ProfileName.IsEmpty())
+			{
+				ProfileName = FString::Printf(TEXT("profile_%d"), Index);
+			}
+
+			if (!IsMobileOrConsoleVisualProfileName(ProfileName))
+			{
+				continue;
+			}
+
+			++RequiredProfileCount;
+			double DpiScale = 0.0;
+			const bool bHasDpi = Profile->TryGetNumberField(TEXT("dpi_scale"), DpiScale) && DpiScale > 0.0;
+			const TSharedPtr<FJsonObject>* SafeZone = nullptr;
+			const bool bHasSafeZone = Profile->TryGetObjectField(TEXT("safe_zone"), SafeZone) && SafeZone && SafeZone->IsValid();
+			if (!bHasDpi || !bHasSafeZone)
+			{
+				++ErrorCount;
+				TSharedPtr<FJsonObject> Finding = MakeUiProfileFinding(
+					TEXT("error"),
+					TEXT("DpiSafeZoneProfileMissing"),
+					ProfileName,
+					TEXT("Mobile/console visual proof profile omits explicit DPI scale or safe-zone inputs."),
+					TEXT("Add dpi_scale and safe_zone:{left,top,right,bottom} to the visual profile, or rename the profile if it is not a mobile/console proof target."));
+				Finding->SetBoolField(TEXT("has_dpi_scale"), bHasDpi);
+				Finding->SetBoolField(TEXT("has_safe_zone"), bHasSafeZone);
+				Findings.Add(MakeShared<FJsonValueObject>(Finding));
+				OutErrors.Add(FString::Printf(TEXT("DpiSafeZoneProfileMissing: %s requires dpi_scale and safe_zone."), *ProfileName));
+			}
+		}
+
+		OutProof->SetStringField(TEXT("status"), ErrorCount == 0 ? TEXT("pass") : TEXT("blocked"));
+		OutProof->SetNumberField(TEXT("profile_count"), ProfileCount);
+		OutProof->SetNumberField(TEXT("mobile_console_profile_count"), RequiredProfileCount);
+		OutProof->SetNumberField(TEXT("error_count"), ErrorCount);
+		OutProof->SetArrayField(TEXT("findings"), Findings);
+		return ErrorCount == 0;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMeasureWidgetLayoutParams(
+		const FString& WidgetAssetPath,
+		const TArray<TSharedPtr<FJsonValue>>* VisualProfiles,
+		const TSharedPtr<FJsonValue>& PreviewResolution)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
+		Params->SetBoolField(TEXT("check_overlap"), true);
+		Params->SetBoolField(TEXT("check_safe_zone"), true);
+		Params->SetNumberField(TEXT("max_allowed_overlap_ratio"), 0.0);
+
+		TArray<TSharedPtr<FJsonValue>> Profiles;
+		if (VisualProfiles && VisualProfiles->Num() > 0 && (*VisualProfiles)[0].IsValid())
+		{
+			Profiles.Add((*VisualProfiles)[0]);
+		}
+		else if (PreviewResolution.IsValid())
+		{
+			TSharedPtr<FJsonObject> DefaultProfile = MakeShared<FJsonObject>();
+			DefaultProfile->SetStringField(TEXT("name"), TEXT("desktop"));
+			DefaultProfile->SetField(TEXT("resolution"), PreviewResolution);
+			Profiles.Add(MakeShared<FJsonValueObject>(DefaultProfile));
+		}
+
+		if (Profiles.Num() > 0)
+		{
+			Params->SetArrayField(TEXT("profiles"), Profiles);
+		}
+		return Params;
 	}
 
 	TSharedPtr<FJsonObject> MakeActionResultProof(const FMonolithActionResult& Result)
@@ -711,6 +866,744 @@ namespace
 			});
 	}
 
+	TArray<TSharedPtr<FJsonValue>> MakePositionArray(int32 X, int32 Y)
+	{
+		TArray<TSharedPtr<FJsonValue>> Values;
+		Values.Add(MakeShared<FJsonValueNumber>(X));
+		Values.Add(MakeShared<FJsonValueNumber>(Y));
+		return Values;
+	}
+
+	FString NormalizeUiWidgetDelegateName(const FString& EventName)
+	{
+		const FString Trimmed = EventName.TrimStartAndEnd();
+		if (Trimmed.StartsWith(TEXT("On")))
+		{
+			return Trimmed;
+		}
+
+		if (Trimmed.Equals(TEXT("Clicked"), ESearchCase::IgnoreCase)
+			|| Trimmed.Equals(TEXT("Click"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("OnClicked");
+		}
+		if (Trimmed.Equals(TEXT("Pressed"), ESearchCase::IgnoreCase)
+			|| Trimmed.Equals(TEXT("Press"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("OnPressed");
+		}
+		if (Trimmed.Equals(TEXT("Released"), ESearchCase::IgnoreCase)
+			|| Trimmed.Equals(TEXT("Release"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("OnReleased");
+		}
+		if (Trimmed.Equals(TEXT("Hovered"), ESearchCase::IgnoreCase)
+			|| Trimmed.Equals(TEXT("Hover"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("OnHovered");
+		}
+		if (Trimmed.Equals(TEXT("Unhovered"), ESearchCase::IgnoreCase)
+			|| Trimmed.Equals(TEXT("Unhover"), ESearchCase::IgnoreCase))
+		{
+			return TEXT("OnUnhovered");
+		}
+		return TEXT("On") + Trimmed;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindEventPlanObject(bool bDryRun, bool bConfirm, bool bCompile)
+	{
+		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
+		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("boundary_policy"), TEXT("workflow.ui_bind_widget_event"), TEXT("ready"), TEXT("Reject direct gameplay Actor/Pawn/Controller calls and require a ViewModel command intent for runtime UI."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_event_resolve"), TEXT("blueprint.resolve_node"), bDryRun ? TEXT("planned") : TEXT("ready"), TEXT("Resolve the Widget Blueprint component-bound delegate node without mutating first."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("viewmodel_resolve"), TEXT("blueprint.resolve_node"), bDryRun ? TEXT("planned") : TEXT("ready"), TEXT("Resolve ViewModel variable getter and command call node pins before wiring."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("event_binding_apply"), TEXT("blueprint.add_node + blueprint.connect_pins"), ApplyStatus, TEXT("Create the component-bound event node, ViewModel getter, command call node, then wire exec and target pins."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("compile_readback"), TEXT("blueprint.compile_blueprint + blueprint.get_graph_summary"), bCompile ? ApplyStatus : TEXT("not_requested"), TEXT("Compile and read back the edited graph when requested."))));
+
+		return MakePlanObject(
+			Steps,
+			{
+				TEXT("asset_path must identify a Widget Blueprint asset."),
+				TEXT("widget_name must be a named widget variable exposing the requested BlueprintAssignable delegate."),
+				TEXT("intent.kind must be viewmodel_command; direct gameplay access is rejected for runtime UI."),
+				TEXT("dry_run=false requires confirm=true before Blueprint graph mutation.")
+			},
+			{
+				TEXT("blueprint.resolve_node"),
+				TEXT("blueprint.add_node"),
+				TEXT("blueprint.connect_pins"),
+				TEXT("blueprint.compile_blueprint"),
+				TEXT("blueprint.get_graph_summary"),
+				TEXT("ui.dump_blueprint_compile_log")
+			});
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindEventNodeParams(
+		const FString& AssetPath,
+		const FString& GraphName,
+		const FString& WidgetName,
+		const FString& DelegateName)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("graph_name"), GraphName);
+		Params->SetStringField(TEXT("node_type"), TEXT("ComponentBoundEvent"));
+		Params->SetStringField(TEXT("component_name"), WidgetName);
+		Params->SetStringField(TEXT("delegate_property_name"), DelegateName);
+		Params->SetArrayField(TEXT("position"), MakePositionArray(0, 0));
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindVariableGetParams(
+		const FString& AssetPath,
+		const FString& GraphName,
+		const FString& ViewModelVariable)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("graph_name"), GraphName);
+		Params->SetStringField(TEXT("node_type"), TEXT("VariableGet"));
+		Params->SetStringField(TEXT("variable_name"), ViewModelVariable);
+		Params->SetArrayField(TEXT("position"), MakePositionArray(320, 120));
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindCommandCallParams(
+		const FString& AssetPath,
+		const FString& GraphName,
+		const FString& Command,
+		const FString& ViewModelClass)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("graph_name"), GraphName);
+		Params->SetStringField(TEXT("node_type"), TEXT("CallFunction"));
+		Params->SetStringField(TEXT("function_name"), Command);
+		if (!ViewModelClass.IsEmpty())
+		{
+			Params->SetStringField(TEXT("target_class"), ViewModelClass);
+		}
+		Params->SetArrayField(TEXT("position"), MakePositionArray(560, 0));
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindResolveNodeParams(const TSharedPtr<FJsonObject>& NodeParams)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		CopyJsonField(NodeParams, TEXT("asset_path"), Params);
+		CopyJsonField(NodeParams, TEXT("node_type"), Params);
+		CopyJsonField(NodeParams, TEXT("function_name"), Params);
+		CopyJsonField(NodeParams, TEXT("target_class"), Params);
+		CopyJsonField(NodeParams, TEXT("variable_name"), Params);
+		CopyJsonField(NodeParams, TEXT("component_name"), Params);
+		CopyJsonField(NodeParams, TEXT("delegate_property_name"), Params);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindConnectionParams(
+		const FString& AssetPath,
+		const FString& GraphName,
+		const FString& SourceNode,
+		const FString& SourcePin,
+		const FString& TargetNode,
+		const FString& TargetPin)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), AssetPath);
+		Params->SetStringField(TEXT("graph_name"), GraphName);
+		Params->SetStringField(TEXT("source_node"), SourceNode);
+		Params->SetStringField(TEXT("source_pin"), SourcePin);
+		Params->SetStringField(TEXT("target_node"), TargetNode);
+		Params->SetStringField(TEXT("target_pin"), TargetPin);
+		return Params;
+	}
+
+	FMonolithActionResult ExecutePrimitiveAndRecord(
+		const FString& Namespace,
+		const FString& Action,
+		const TSharedPtr<FJsonObject>& Params,
+		TArray<TSharedPtr<FJsonValue>>& OutActions,
+		TArray<TSharedPtr<FJsonValue>>& OutProofRows,
+		TArray<FString>& OutErrors)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		const FString ActionId = Namespace + TEXT(".") + Action;
+		const bool bAvailable = Registry.HasAction(Namespace, Action);
+		if (!bAvailable)
+		{
+			TSharedPtr<FJsonObject> Row = MakeActionRow(ActionId, TEXT("unavailable"), false, false, Params);
+			Row->SetStringField(TEXT("reason"), ActionId + TEXT(" is not registered in the current Monolith profile."));
+			OutActions.Add(MakeShared<FJsonValueObject>(Row));
+			OutProofRows.Add(MakeShared<FJsonValueObject>(Row));
+			OutErrors.Add(ActionId + TEXT(" unavailable"));
+			return FMonolithActionResult::Error(ActionId + TEXT(" unavailable"));
+		}
+
+		const FMonolithActionResult Result = Registry.ExecuteAction(Namespace, Action, Params);
+		TSharedPtr<FJsonObject> Row = MakeActionRow(ActionId, Result.bSuccess ? TEXT("succeeded") : TEXT("failed"), true, true, Params);
+		if (Result.bSuccess && Result.Result.IsValid())
+		{
+			Row->SetObjectField(TEXT("result"), Result.Result);
+		}
+		else if (!Result.bSuccess)
+		{
+			Row->SetStringField(TEXT("error"), Result.ErrorMessage);
+			Row->SetNumberField(TEXT("error_code"), Result.ErrorCode);
+			if (Result.ErrorData.IsValid())
+			{
+				Row->SetObjectField(TEXT("error_data"), Result.ErrorData);
+			}
+			OutErrors.Add(ActionId + TEXT(": ") + Result.ErrorMessage);
+		}
+		OutActions.Add(MakeShared<FJsonValueObject>(Row));
+		OutProofRows.Add(MakeShared<FJsonValueObject>(Row));
+		return Result;
+	}
+
+	bool TryGetWorkflowNodeId(const TSharedPtr<FJsonObject>& Result, FString& OutNodeId)
+	{
+		if (!Result.IsValid())
+		{
+			return false;
+		}
+		return Result->TryGetStringField(TEXT("node_id"), OutNodeId)
+			|| Result->TryGetStringField(TEXT("id"), OutNodeId);
+	}
+
+	bool PinMatches(const TSharedPtr<FJsonObject>& Pin, const FString& Direction, bool bExec)
+	{
+		if (!Pin.IsValid())
+		{
+			return false;
+		}
+
+		FString PinDirection;
+		FString PinType;
+		if (!Pin->TryGetStringField(TEXT("direction"), PinDirection)
+			|| !Pin->TryGetStringField(TEXT("type"), PinType)
+			|| !PinDirection.Equals(Direction, ESearchCase::IgnoreCase))
+		{
+			return false;
+		}
+		return bExec ? PinType.Equals(TEXT("exec"), ESearchCase::IgnoreCase) : !PinType.Equals(TEXT("exec"), ESearchCase::IgnoreCase);
+	}
+
+	bool FindPinNameInNode(
+		const TSharedPtr<FJsonObject>& Node,
+		const FString& Direction,
+		bool bExec,
+		const TArray<FString>& PreferredNames,
+		FString& OutPinName)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Pins = nullptr;
+		if (!Node.IsValid() || !Node->TryGetArrayField(TEXT("pins"), Pins) || !Pins)
+		{
+			return false;
+		}
+
+		for (const FString& PreferredName : PreferredNames)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Pins)
+			{
+				const TSharedPtr<FJsonObject> Pin = Value.IsValid() ? Value->AsObject() : nullptr;
+				FString PinName;
+				if (PinMatches(Pin, Direction, bExec)
+					&& Pin->TryGetStringField(TEXT("name"), PinName)
+					&& PinName.Equals(PreferredName, ESearchCase::IgnoreCase))
+				{
+					OutPinName = PinName;
+					return true;
+				}
+			}
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Pins)
+		{
+			const TSharedPtr<FJsonObject> Pin = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (PinMatches(Pin, Direction, bExec) && Pin->TryGetStringField(TEXT("name"), OutPinName))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiBindBoundaryProof(const FString& Status, const FString& Reason)
+	{
+		TSharedPtr<FJsonObject> Boundary = MakeShared<FJsonObject>();
+		Boundary->SetStringField(TEXT("schema_version"), TEXT("ui_event_binding_boundary.v1"));
+		Boundary->SetStringField(TEXT("status"), Status);
+		Boundary->SetStringField(TEXT("policy"), TEXT("runtime_ui_must_route_intent_through_viewmodel"));
+		Boundary->SetStringField(TEXT("reason"), Reason);
+		return Boundary;
+	}
+
+	bool IsAsciiIdentifierStart(TCHAR C)
+	{
+		return C == TCHAR('_')
+			|| (C >= TCHAR('A') && C <= TCHAR('Z'))
+			|| (C >= TCHAR('a') && C <= TCHAR('z'));
+	}
+
+	bool IsAsciiIdentifierChar(TCHAR C)
+	{
+		return IsAsciiIdentifierStart(C) || (C >= TCHAR('0') && C <= TCHAR('9'));
+	}
+
+	bool IsValidHlslIdentifier(const FString& Name)
+	{
+		if (Name.IsEmpty() || !IsAsciiIdentifierStart(Name[0]))
+		{
+			return false;
+		}
+		for (int32 Index = 1; Index < Name.Len(); ++Index)
+		{
+			if (!IsAsciiIdentifierChar(Name[Index]))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	TSharedPtr<FJsonObject> AnalyzeUiHlsl(
+		const FString& Hlsl,
+		const TArray<TSharedPtr<FJsonValue>>& Parameters)
+	{
+		TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
+		Proof->SetStringField(TEXT("schema_version"), TEXT("ui_hlsl_lint.v1"));
+		Proof->SetStringField(TEXT("output_type"), TEXT("Float4"));
+		Proof->SetNumberField(TEXT("code_length"), Hlsl.Len());
+		Proof->SetBoolField(TEXT("assumes_float4_return"), true);
+
+		TArray<TSharedPtr<FJsonValue>> Findings;
+		auto AddFinding = [&Findings](const FString& Severity, const FString& RuleId, const FString& Message)
+		{
+			TSharedPtr<FJsonObject> Finding = MakeShared<FJsonObject>();
+			Finding->SetStringField(TEXT("severity"), Severity);
+			Finding->SetStringField(TEXT("rule_id"), RuleId);
+			Finding->SetStringField(TEXT("message"), Message);
+			Findings.Add(MakeShared<FJsonValueObject>(Finding));
+		};
+
+		const TArray<FString> RiskyTokens = {
+			TEXT("clip"),
+			TEXT("discard"),
+			TEXT("ddx"),
+			TEXT("ddy"),
+			TEXT("fwidth"),
+			TEXT("SceneTexture")
+		};
+		for (const FString& Token : RiskyTokens)
+		{
+			if (Hlsl.Contains(Token, ESearchCase::IgnoreCase))
+			{
+				AddFinding(TEXT("warning"), TEXT("RiskyHlslToken"), FString::Printf(TEXT("HLSL contains token '%s'; verify UI-domain shader behavior and platform support."), *Token));
+			}
+		}
+		if (Hlsl.Contains(TEXT("tex2D"), ESearchCase::IgnoreCase)
+			|| Hlsl.Contains(TEXT("Texture2DSample"), ESearchCase::IgnoreCase)
+			|| Hlsl.Contains(TEXT(".Sample"), ESearchCase::IgnoreCase))
+		{
+			AddFinding(TEXT("warning"), TEXT("TextureSamplingNeedsMetadata"), TEXT("Texture sampling detected; confirm sampler inputs, texture parameter ownership, and UI material sampler budget."));
+		}
+
+		TArray<TSharedPtr<FJsonValue>> ParameterProof;
+		for (const TSharedPtr<FJsonValue>& Value : Parameters)
+		{
+			const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+			if (!Obj.IsValid())
+			{
+				AddFinding(TEXT("error"), TEXT("InvalidParameterDescriptor"), TEXT("Each parameter entry must be an object."));
+				continue;
+			}
+
+			FString Name;
+			Obj->TryGetStringField(TEXT("name"), Name);
+			FString Type;
+			Obj->TryGetStringField(TEXT("type"), Type);
+			if (Type.IsEmpty())
+			{
+				Obj->TryGetStringField(TEXT("kind"), Type);
+			}
+
+			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
+			Row->SetStringField(TEXT("name"), Name);
+			Row->SetStringField(TEXT("type"), Type.IsEmpty() ? TEXT("unknown") : Type);
+			Row->SetBoolField(TEXT("valid_hlsl_identifier"), IsValidHlslIdentifier(Name));
+			ParameterProof.Add(MakeShared<FJsonValueObject>(Row));
+
+			if (!IsValidHlslIdentifier(Name))
+			{
+				AddFinding(TEXT("error"), TEXT("InvalidHlslIdentifier"), FString::Printf(TEXT("Parameter name '%s' is not a valid HLSL identifier."), *Name));
+			}
+		}
+
+		Proof->SetArrayField(TEXT("parameters"), ParameterProof);
+		Proof->SetArrayField(TEXT("findings"), Findings);
+		Proof->SetStringField(TEXT("status"), Findings.Num() > 0 ? TEXT("warning") : TEXT("pass"));
+		return Proof;
+	}
+
+	TArray<TSharedPtr<FJsonValue>> MakeCustomNodeInputsFromParameters(const TArray<TSharedPtr<FJsonValue>>& Parameters)
+	{
+		TArray<TSharedPtr<FJsonValue>> Inputs;
+		for (const TSharedPtr<FJsonValue>& Value : Parameters)
+		{
+			const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString Name;
+			if (Obj.IsValid() && Obj->TryGetStringField(TEXT("name"), Name) && IsValidHlslIdentifier(Name))
+			{
+				TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+				Input->SetStringField(TEXT("name"), Name);
+				FString Type;
+				if (Obj->TryGetStringField(TEXT("type"), Type) || Obj->TryGetStringField(TEXT("kind"), Type))
+				{
+					Input->SetStringField(TEXT("type"), Type);
+				}
+				Inputs.Add(MakeShared<FJsonValueObject>(Input));
+			}
+		}
+		return Inputs;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialPlanObject(
+		bool bDryRun,
+		bool bConfirm,
+		bool bCreateMaterial,
+		bool bCompile,
+		bool bBindWidget,
+		bool bRunWidgetProof,
+		bool bAutoComponentMaskAlpha)
+	{
+		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
+		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("hlsl_lint"), TEXT("workflow.ui_material_hlsl_effect"), TEXT("ready"), TEXT("Lint the UI HLSL contract and parameter identifiers before touching assets."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_create"), TEXT("material.create_material"), bCreateMaterial ? ApplyStatus : TEXT("not_requested"), TEXT("Optionally create the base material through the material owner action with material_domain=UI."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("ui_domain_enforce"), TEXT("material.set_material_property"), ApplyStatus, TEXT("Force UI material domain and UI-safe blend/shading defaults through the material owner action."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("custom_hlsl_node"), TEXT("material.create_custom_hlsl_node + material.update_custom_hlsl_node"), ApplyStatus, TEXT("Create or update the Custom HLSL node using existing material graph primitives."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_output_wiring"), TEXT("material.connect_expressions"), ApplyStatus, TEXT("Wire the Custom node to material output properties through material.connect_expressions."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("opacity_component_mask"), TEXT("material.build_material_graph"), bAutoComponentMaskAlpha ? ApplyStatus : TEXT("not_requested"), TEXT("Optionally insert a ComponentMask node through material.build_material_graph(clear_existing=false) so a float4 Custom output alpha channel can drive Opacity without a duplicate UI/HLSL action."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_compile_stats"), TEXT("material.recompile_material + material.validate_material + material.get_compilation_stats + material.get_material_properties + material.get_full_connection_graph"), bCompile ? ApplyStatus : TEXT("not_requested"), TEXT("Compile/read material stats and confirm domain/properties/connections through material read actions."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_binding"), TEXT("ui.set_image/ui.set_brush + ui.compile_widget + ui.dump_blueprint_compile_log"), bBindWidget ? ApplyStatus : TEXT("not_requested"), TEXT("Bind the UI material to an Image or brush property through existing UI owner actions."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_lifecycle_audit"), TEXT("ui.audit_widget_material_lifecycle"), bBindWidget ? ApplyStatus : TEXT("not_requested"), TEXT("Audit the target Widget Blueprint graph for repeated-lifecycle dynamic material creation sites after binding."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("visual_proof"), TEXT("workflow.ui_shipping_widget_blueprint"), bRunWidgetProof ? ApplyStatus : TEXT("planned"), TEXT("Optional shipping proof composes compile, capture, layout, visual artifact verification, and follow-up save/source-control actions."))));
+
+		return MakePlanObject(
+			Steps,
+			{
+				TEXT("material_path must identify the material to create or update."),
+				TEXT("hlsl must be a Custom-node program that returns float4 for UI use."),
+				TEXT("bind_to.asset_path and bind_to.widget_name are required when widget binding is requested."),
+				TEXT("dry_run=false requires confirm=true before material or widget mutation."),
+				TEXT("This workflow composes material/ui/workflow owner actions; it does not register external hlsl_* or material_* aliases.")
+			},
+			{
+				TEXT("material.create_material"),
+				TEXT("material.set_material_property"),
+				TEXT("material.create_custom_hlsl_node"),
+				TEXT("material.update_custom_hlsl_node"),
+				TEXT("material.connect_expressions"),
+				TEXT("material.build_material_graph"),
+				TEXT("material.recompile_material"),
+				TEXT("material.validate_material"),
+				TEXT("material.get_compilation_stats"),
+				TEXT("material.get_material_properties"),
+				TEXT("material.get_full_connection_graph"),
+				TEXT("ui.set_image"),
+				TEXT("ui.set_brush"),
+				TEXT("ui.audit_widget_material_lifecycle"),
+				TEXT("ui.dump_blueprint_compile_log"),
+				TEXT("workflow.ui_shipping_widget_blueprint")
+			});
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialCreateParams(
+		const FString& MaterialPath,
+		const FString& BlendMode,
+		const FString& ShadingModel)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), MaterialPath);
+		Params->SetStringField(TEXT("material_domain"), TEXT("UI"));
+		Params->SetStringField(TEXT("blend_mode"), BlendMode);
+		Params->SetStringField(TEXT("shading_model"), ShadingModel);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialPropertyParams(
+		const FString& MaterialPath,
+		const FString& BlendMode,
+		const FString& ShadingModel)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), MaterialPath);
+		Params->SetStringField(TEXT("material_domain"), TEXT("UI"));
+		Params->SetStringField(TEXT("blend_mode"), BlendMode);
+		Params->SetStringField(TEXT("shading_model"), ShadingModel);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialCustomParams(
+		const FString& MaterialPath,
+		const FString& Hlsl,
+		const FString& OutputType,
+		const TArray<TSharedPtr<FJsonValue>>& Inputs,
+		const TSharedPtr<FJsonObject>& Source)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), MaterialPath);
+		Params->SetStringField(TEXT("code"), Hlsl);
+		Params->SetStringField(TEXT("description"), TEXT("Monolith UI HLSL effect"));
+		Params->SetStringField(TEXT("output_type"), OutputType);
+		Params->SetArrayField(TEXT("inputs"), Inputs);
+		CopyJsonField(Source, TEXT("additional_outputs"), Params);
+		CopyJsonField(Source, TEXT("pos_x"), Params);
+		CopyJsonField(Source, TEXT("pos_y"), Params);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialCustomUpdateParams(
+		const FString& MaterialPath,
+		const FString& ExpressionName,
+		const FString& Hlsl,
+		const FString& OutputType,
+		const TArray<TSharedPtr<FJsonValue>>& Inputs,
+		const TSharedPtr<FJsonObject>& Source)
+	{
+		TSharedPtr<FJsonObject> Params = MakeUiMaterialCustomParams(MaterialPath, Hlsl, OutputType, Inputs, Source);
+		Params->SetStringField(TEXT("expression_name"), ExpressionName);
+		CopyJsonField(Source, TEXT("include_file_paths"), Params);
+		CopyJsonField(Source, TEXT("additional_defines"), Params);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialConnectParams(
+		const FString& MaterialPath,
+		const FString& ExpressionName,
+		const FString& FromOutput,
+		const FString& ToProperty)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), MaterialPath);
+		Params->SetStringField(TEXT("from_expression"), ExpressionName);
+		if (!FromOutput.IsEmpty())
+		{
+			Params->SetStringField(TEXT("from_output"), FromOutput);
+		}
+		Params->SetStringField(TEXT("to_property"), ToProperty);
+		return Params;
+	}
+
+	FString NormalizeUiMaterialMaskChannel(const FString& InChannel)
+	{
+		FString Channel = InChannel;
+		Channel.TrimStartAndEndInline();
+		Channel = Channel.ToUpper();
+		return Channel.IsEmpty() ? TEXT("A") : Channel;
+	}
+
+	bool IsUiMaterialMaskChannelValid(const FString& Channel)
+	{
+		return Channel == TEXT("R") || Channel == TEXT("G") || Channel == TEXT("B") || Channel == TEXT("A");
+	}
+
+	bool JsonObjectArrayFieldHasName(
+		const TSharedPtr<FJsonObject>& Source,
+		const FString& FieldName,
+		const FString& ExpectedName)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (!Source.IsValid() || ExpectedName.IsEmpty() || !Source->TryGetArrayField(FieldName, Values) || !Values)
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			const TSharedPtr<FJsonObject> Obj = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString Name;
+			if (Obj.IsValid()
+				&& Obj->TryGetStringField(TEXT("name"), Name)
+				&& Name.Equals(ExpectedName, ESearchCase::IgnoreCase))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialAlphaMaskGraphParams(
+		const FString& MaterialPath,
+		const FString& SourceExpressionName,
+		const FString& SourceOutputPin,
+		const FString& MaskNodeId,
+		const FString& Channel)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), MaterialPath);
+		Params->SetBoolField(TEXT("clear_existing"), false);
+
+		TSharedPtr<FJsonObject> Props = MakeShared<FJsonObject>();
+		Props->SetBoolField(TEXT("R"), Channel == TEXT("R"));
+		Props->SetBoolField(TEXT("G"), Channel == TEXT("G"));
+		Props->SetBoolField(TEXT("B"), Channel == TEXT("B"));
+		Props->SetBoolField(TEXT("A"), Channel == TEXT("A"));
+		Props->SetStringField(TEXT("Desc"), TEXT("Monolith UI alpha-to-opacity mask"));
+
+		TSharedPtr<FJsonObject> MaskNode = MakeShared<FJsonObject>();
+		MaskNode->SetStringField(TEXT("id"), MaskNodeId);
+		MaskNode->SetStringField(TEXT("class"), TEXT("ComponentMask"));
+		MaskNode->SetNumberField(TEXT("pos_x"), 420.0);
+		MaskNode->SetNumberField(TEXT("pos_y"), 120.0);
+		MaskNode->SetObjectField(TEXT("properties"), Props);
+
+		TArray<TSharedPtr<FJsonValue>> Nodes;
+		Nodes.Add(MakeShared<FJsonValueObject>(MaskNode));
+
+		TSharedPtr<FJsonObject> SourceToMask = MakeShared<FJsonObject>();
+		SourceToMask->SetStringField(TEXT("from"), SourceExpressionName);
+		if (!SourceOutputPin.IsEmpty())
+		{
+			SourceToMask->SetStringField(TEXT("from_pin"), SourceOutputPin);
+		}
+		SourceToMask->SetStringField(TEXT("to"), MaskNodeId);
+		SourceToMask->SetStringField(TEXT("to_pin"), TEXT("Input"));
+
+		TSharedPtr<FJsonObject> MaskToOpacity = MakeShared<FJsonObject>();
+		MaskToOpacity->SetStringField(TEXT("from"), MaskNodeId);
+		MaskToOpacity->SetStringField(TEXT("to_property"), TEXT("Opacity"));
+
+		TArray<TSharedPtr<FJsonValue>> Connections;
+		Connections.Add(MakeShared<FJsonValueObject>(SourceToMask));
+		Connections.Add(MakeShared<FJsonValueObject>(MaskToOpacity));
+
+		TSharedPtr<FJsonObject> GraphSpec = MakeShared<FJsonObject>();
+		GraphSpec->SetArrayField(TEXT("nodes"), Nodes);
+		GraphSpec->SetArrayField(TEXT("connections"), Connections);
+		Params->SetObjectField(TEXT("graph_spec"), GraphSpec);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialOpacityWiringProof(
+		bool bRequested,
+		bool bAutoComponentMaskAlpha,
+		const FString& Channel,
+		const FString& SourceExpressionName,
+		const FString& SourceOutputPin,
+		const FString& DirectOutputPin,
+		const FString& MaskNodeId,
+		const FString& Status)
+	{
+		TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
+		Proof->SetStringField(TEXT("schema_version"), TEXT("ui_material_opacity_wiring.v1"));
+		Proof->SetBoolField(TEXT("requested"), bRequested);
+		Proof->SetStringField(TEXT("status"), Status);
+		if (!bRequested)
+		{
+			Proof->SetStringField(TEXT("mode"), TEXT("not_requested"));
+			Proof->SetStringField(TEXT("reason"), TEXT("connect_opacity=false and auto_component_mask_alpha=false."));
+			return Proof;
+		}
+
+		if (bAutoComponentMaskAlpha)
+		{
+			Proof->SetStringField(TEXT("mode"), TEXT("component_mask"));
+			Proof->SetStringField(TEXT("owner_action"), TEXT("material.build_material_graph"));
+			Proof->SetStringField(TEXT("source_expression"), SourceExpressionName);
+			Proof->SetStringField(TEXT("source_output_pin"), SourceOutputPin);
+			Proof->SetStringField(TEXT("component_mask_node_id"), MaskNodeId);
+			Proof->SetStringField(TEXT("component"), Channel);
+			Proof->SetStringField(TEXT("to_property"), TEXT("Opacity"));
+			Proof->SetStringField(TEXT("reason"), TEXT("A ComponentMask node is composed through material.build_material_graph(clear_existing=false), then connected to the material Opacity output."));
+			return Proof;
+		}
+
+		Proof->SetStringField(TEXT("mode"), TEXT("direct_custom_output"));
+		Proof->SetStringField(TEXT("owner_action"), TEXT("material.connect_expressions"));
+		Proof->SetStringField(TEXT("source_expression"), SourceExpressionName);
+		Proof->SetStringField(TEXT("source_output_pin"), DirectOutputPin);
+		Proof->SetStringField(TEXT("to_property"), TEXT("Opacity"));
+		Proof->SetStringField(TEXT("reason"), TEXT("Opacity is wired from an explicit Custom-node output pin."));
+		return Proof;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialBindParams(
+		const FString& BindingAction,
+		const FString& WidgetAssetPath,
+		const FString& WidgetName,
+		const FString& PropertyName,
+		const FString& MaterialPath,
+		bool bCompileWidget)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
+		Params->SetStringField(TEXT("widget_name"), WidgetName);
+		Params->SetStringField(TEXT("material_path"), MaterialPath);
+		Params->SetBoolField(TEXT("compile"), bCompileWidget);
+		if (BindingAction.Equals(TEXT("set_brush"), ESearchCase::IgnoreCase))
+		{
+			Params->SetStringField(TEXT("property_name"), PropertyName.IsEmpty() ? TEXT("Brush") : PropertyName);
+			Params->SetStringField(TEXT("draw_type"), TEXT("Image"));
+		}
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiMaterialLifecycleAuditParams(const FString& WidgetAssetPath)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
+		Params->SetBoolField(TEXT("include_advisory"), true);
+		Params->SetBoolField(TEXT("treat_warnings_as_errors"), false);
+		return Params;
+	}
+
+	TSharedPtr<FJsonObject> MakeUiRetainerPlanObject(
+		bool bDryRun,
+		bool bConfirm,
+		bool bCompile,
+		bool bRunReadOnlyChecks,
+		bool bRunWidgetProof,
+		bool bRequestRender)
+	{
+		const FString ApplyStatus = (!bDryRun && bConfirm) ? TEXT("ready") : TEXT("planned");
+		const FString ReadStatus = ((!bDryRun && bConfirm) || bRunReadOnlyChecks) ? TEXT("ready") : TEXT("planned");
+		TArray<TSharedPtr<FJsonValue>> Steps;
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_parameter_readback"), TEXT("material.get_material_parameters"), ReadStatus, TEXT("Read texture parameters from the effect material and require an exact Retainer texture-parameter match."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_domain_readback"), TEXT("material.get_material_properties"), ReadStatus, TEXT("Read material domain and blend/shading details without duplicating material logic in UI."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("retainer_binding"), TEXT("ui.set_retainer_effect_material"), ApplyStatus, TEXT("Bind the effect material and texture parameter through the RetainerBox owner API, not raw reflection."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("widget_compile_log"), TEXT("ui.compile_widget + ui.dump_blueprint_compile_log"), bCompile ? ApplyStatus : TEXT("not_requested"), TEXT("Compile/read the Widget Blueprint after Retainer binding."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("material_lifecycle_audit"), TEXT("ui.audit_widget_material_lifecycle"), ReadStatus, TEXT("Audit the Widget Blueprint graph for repeated-lifecycle dynamic material creation before treating the Retainer material workflow as production-ready."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("freshness_request"), TEXT("URetainerBox::RequestRender"), bRequestRender ? ApplyStatus : TEXT("not_requested"), TEXT("Optionally request a fresh Retainer render for visual proof; this is not a performance profile."))));
+		Steps.Add(MakeShared<FJsonValueObject>(MakeWorkflowStep(TEXT("visual_proof"), TEXT("workflow.ui_shipping_widget_blueprint"), bRunWidgetProof ? ApplyStatus : TEXT("planned"), TEXT("Optional visual artifact proof after Retainer effect binding."))));
+
+		return MakePlanObject(
+			Steps,
+			{
+				TEXT("material_path must identify a UI-domain material or material instance."),
+				TEXT("bind_to.asset_path and bind_to.retainer_widget_name/widget_name are required."),
+				TEXT("texture_parameter defaults to Texture and must exist exactly on the effect material."),
+				TEXT("dry_run=false requires confirm=true before Widget Blueprint mutation."),
+				TEXT("Retainer/Invalidation performance recommendations require a separate measured before/after profile.")
+			},
+			{
+				TEXT("material.get_material_parameters"),
+				TEXT("material.get_material_properties"),
+				TEXT("ui.set_retainer_effect_material"),
+				TEXT("ui.compile_widget"),
+				TEXT("ui.dump_blueprint_compile_log"),
+				TEXT("ui.audit_widget_material_lifecycle"),
+				TEXT("workflow.ui_shipping_widget_blueprint")
+			});
+	}
+
+	TSharedPtr<FJsonObject> MakeUiRetainerBindParams(
+		const FString& WidgetAssetPath,
+		const FString& RetainerWidgetName,
+		const FString& MaterialPath,
+		const FString& TextureParameter,
+		bool bCompileWidget,
+		bool bRequestRender)
+	{
+		TSharedPtr<FJsonObject> Params = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
+		Params->SetStringField(TEXT("widget_name"), RetainerWidgetName);
+		Params->SetStringField(TEXT("material_path"), MaterialPath);
+		Params->SetStringField(TEXT("texture_parameter"), TextureParameter);
+		Params->SetBoolField(TEXT("require_ui_material"), true);
+		Params->SetBoolField(TEXT("compile"), bCompileWidget);
+		Params->SetBoolField(TEXT("request_render"), bRequestRender);
+		return Params;
+	}
+
 	FMonolithActionExecutionPolicy MakeWorkflowMutationPolicy()
 	{
 		FMonolithActionExecutionPolicy Policy;
@@ -962,6 +1855,15 @@ void FMonolithWorkflowActions::RegisterAll()
 			.Optional(TEXT("include_binding_inventory"), TEXT("boolean"), TEXT("Include ui.get_widget_bindings."), TEXT("true"))
 			.Optional(TEXT("binding_expectations"), TEXT("object"), TEXT("Optional expectations echoed into validation.ui.binding_expectations."))
 			.Optional(TEXT("treat_warnings_as_errors"), TEXT("boolean"), TEXT("Forward to ui.audit_widget_layout."), TEXT("false"))
+			.Optional(TEXT("layout_rule_profile"), TEXT("string"), TEXT("Forwarded to ui.audit_widget_layout rule_profile: advisory, shipping, or strict. Default shipping, strict for proof_profile=runtime."), TEXT("shipping"))
+			.Optional(TEXT("suppress_layout_rule_ids"), TEXT("array"), TEXT("Forwarded to ui.audit_widget_layout suppress_rule_ids for intentional layout exceptions."))
+			.Optional(TEXT("proof_profile"), TEXT("string"), TEXT("Proof profile: minimal, visual, or runtime. minimal preserves the conservative read-back workflow; visual executes compile/capture/artifact verification when dry_run=false; runtime reports async PIE proof blockers until a runtime_flow can be executed."), TEXT("minimal"))
+			.Optional(TEXT("run_layout_measure"), TEXT("boolean"), TEXT("For proof_profile=visual/runtime, compose ui.measure_widget_layout as authored bounds, overlap, and safe-zone evidence. Default true."), TEXT("true"))
+			.Optional(TEXT("round_trip_check"), TEXT("string"), TEXT("UISpec round-trip policy: auto, force, or off. v1 records the policy and leaves non-representable edits as limitations."), TEXT("auto"))
+			.Optional(TEXT("run_id"), TEXT("string"), TEXT("Optional proof run id used for generated capture and manifest paths."))
+			.OptionalDiskPath(TEXT("output_dir"), TEXT("Optional output directory for generated visual proof artifacts."))
+			.Optional(TEXT("visual_profiles"), TEXT("array"), TEXT("Optional visual profile rows. v1 uses the first row: {name, resolution:[w,h], dpi_scale}."))
+			.Optional(TEXT("runtime_flow"), TEXT("object"), TEXT("Optional runtime flow manifest for future async PIE proof. v1 reports concrete runtime blockers."))
 			.Optional(TEXT("preview_required"), TEXT("boolean"), TEXT("When true, report editor.capture_scene_preview blocker and next action."), TEXT("false"))
 			.OptionalDiskPath(TEXT("preview_output_path"), TEXT("Optional preview output path for the explicit capture next action."))
 			.Optional(TEXT("preview_resolution"), TEXT("array"), TEXT("Optional preview resolution array for editor.capture_scene_preview next action."))
@@ -991,7 +1893,9 @@ void FMonolithWorkflowActions::RegisterAll()
 			TEXT("unreal-ui"),
 			{
 				TEXT("Use dry_run=true first; this first slice is read-only."),
-				TEXT("Compile, preview, save, and source-control prepare are declared next actions, not automatic first-slice execution."),
+				TEXT("proof_profile=minimal preserves the conservative plan-only compile/preview behavior."),
+				TEXT("proof_profile=visual executes compile, widget capture, and ui.verify_widget_visual_artifacts when dry_run=false and run_read_only_checks=true."),
+				TEXT("Save and source-control prepare remain explicit next actions."),
 				TEXT("CommonUI checks are optional and availability-marked.")
 			},
 			{
@@ -1007,12 +1911,14 @@ void FMonolithWorkflowActions::RegisterAll()
 				TEXT("ui.dump_ui_spec"),
 				TEXT("ui.get_widget_bindings"),
 				TEXT("ui.audit_widget_layout"),
+				TEXT("ui.measure_widget_layout"),
 				TEXT("ui.audit_accessibility"),
 				TEXT("ui.dump_widget_navigation"),
 				TEXT("ui.audit_focus_chain"),
 				TEXT("ui.audit_commonui_widget"),
 				TEXT("ui.dump_blueprint_compile_log"),
 				TEXT("editor.capture_scene_preview"),
+				TEXT("ui.verify_widget_visual_artifacts"),
 				TEXT("asset.save_asset")
 			}
 		});
@@ -1024,6 +1930,244 @@ void FMonolithWorkflowActions::RegisterAll()
 		/*bDestructive=*/false,
 		/*bIdempotent=*/true,
 		TEXT("Plan UI shipping Widget Blueprint proof"));
+
+	Registry.RegisterAction(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		TEXT("Compose a ViewModel-safe UMG widget event binding workflow. Uses existing Blueprint graph primitives for component-bound widget events, ViewModel command calls, compile, and read-back proof instead of registering duplicate UI graph-edit actions."),
+		FMonolithActionHandler::CreateStatic(&FMonolithWorkflowActions::HandleUiBindWidgetEvent),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path to edit."), { TEXT("widget_asset_path"), TEXT("wbp_path") })
+			.Required(TEXT("widget_name"), TEXT("string"), TEXT("Named widget variable whose delegate should be bound, e.g. StartButton."))
+			.Required(TEXT("event"), TEXT("string"), TEXT("Widget event/delegate name, e.g. OnClicked, Clicked, OnHovered."))
+			.Required(TEXT("intent"), TEXT("object"), TEXT("Event intent. Supported v1 shape: {kind:'viewmodel_command', viewmodel_variable:'ViewModel', viewmodel_class?, command:'StartGame', optional pin overrides}."))
+			.Optional(TEXT("graph_name"), TEXT("string"), TEXT("Event graph name. Defaults to EventGraph."), TEXT("EventGraph"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("When true, return the child-action plan only."), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required with dry_run=false before Blueprint graph mutation."), TEXT("false"))
+			.Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile the Widget Blueprint after confirmed graph edits."), TEXT("true"))
+			.Optional(TEXT("run_read_back"), TEXT("boolean"), TEXT("Resolve nodes before mutation and read graph summary after confirmed edits."), TEXT("true"))
+			.Build(),
+		TEXT("ui_workflow"),
+		MakeWorkflowMutationPolicy(),
+		FMonolithActionSearchMetadata{
+			{
+				TEXT("ui event binding workflow"),
+				TEXT("umg button onclicked viewmodel command"),
+				TEXT("widget event graph proof"),
+				TEXT("viewmodel boundary")
+			},
+			{
+				TEXT("bind widget event"),
+				TEXT("button clicked workflow"),
+				TEXT("WBP event binding")
+			},
+			{
+				TEXT("bind StartButton OnClicked to ViewModel.StartGame"),
+				TEXT("create a UMG event binding with compile proof"),
+				TEXT("wire widget event through a ViewModel command")
+			}
+		},
+		FMonolithActionPlanningMetadata{
+			TEXT("unreal-ui"),
+			{
+				TEXT("Use dry_run=true first; the workflow reports the exact Blueprint actions it will compose."),
+				TEXT("Only intent.kind=viewmodel_command is accepted for runtime UI; direct Actor/Pawn/Controller calls are rejected."),
+				TEXT("dry_run=false requires confirm=true and then executes blueprint.add_node/connect_pins/compile_blueprint where available."),
+				TEXT("Use widget_name for the named UMG widget variable and event for its BlueprintAssignable delegate.")
+			},
+			{
+				TEXT("workflow_id:ui_event_binding"),
+				TEXT("workflow_slice:viewmodel_command_event_binding_v1"),
+				TEXT("validation:{boundary,event_binding,compile,read_back}"),
+				TEXT("proof.read_back[]"),
+				TEXT("actions[]"),
+				TEXT("next_actions[]")
+			},
+			{
+				TEXT("blueprint.resolve_node"),
+				TEXT("blueprint.add_node"),
+				TEXT("blueprint.connect_pins"),
+				TEXT("blueprint.compile_blueprint"),
+				TEXT("blueprint.get_graph_summary"),
+				TEXT("ui.dump_blueprint_compile_log"),
+				TEXT("asset.save_asset")
+			}
+		});
+
+	Registry.SetActionAnnotations(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		/*bReadOnly=*/false,
+		/*bDestructive=*/false,
+		/*bIdempotent=*/false,
+		TEXT("Bind UMG widget event through ViewModel-safe Blueprint workflow"));
+
+	Registry.RegisterAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		TEXT("Compose a UI-domain material Custom-HLSL effect workflow. Uses existing material and UI owner actions for material domain enforcement, Custom node authoring, compile/stat proof, Image/brush binding, and optional widget shipping proof instead of adding duplicate hlsl_* or external material_* APIs."),
+		FMonolithActionHandler::CreateStatic(&FMonolithWorkflowActions::HandleUiMaterialHlslEffect),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("material_path"), TEXT("Material asset path to create or update."))
+			.Required(TEXT("hlsl"), TEXT("string"), TEXT("Custom HLSL program. v1 assumes it returns float4 for UI material use."))
+			.Required(TEXT("bind_to"), TEXT("object"), TEXT("Widget binding target: {asset_path, widget_name, property_name?, binding_action?}."))
+			.Optional(TEXT("parameters"), TEXT("array"), TEXT("Array of HLSL parameter descriptors {name,type,default?}. Names become Custom-node inputs when valid."))
+			.Optional(TEXT("additional_outputs"), TEXT("array"), TEXT("Optional Custom-node additional output descriptors forwarded to material.create_custom_hlsl_node/update_custom_hlsl_node. Use with opacity_output_pin for direct alpha wiring."))
+			.Optional(TEXT("include_file_paths"), TEXT("array"), TEXT("Optional Custom-node include file paths forwarded when updating an existing Custom HLSL node."))
+			.Optional(TEXT("additional_defines"), TEXT("object"), TEXT("Optional Custom-node preprocessor defines forwarded when updating an existing Custom HLSL node."))
+			.Optional(TEXT("expression_name"), TEXT("string"), TEXT("Existing UMaterialExpressionCustom name to update. Omit to create a Custom node."))
+			.Optional(TEXT("output_type"), TEXT("string"), TEXT("Custom node output type. Defaults to Float4."), TEXT("Float4"))
+			.Optional(TEXT("create_material"), TEXT("boolean"), TEXT("Create material first through material.create_material. Default false to support existing-material round-trips."), TEXT("false"))
+			.Optional(TEXT("blend_mode"), TEXT("string"), TEXT("UI material blend mode. Defaults to Translucent."), TEXT("Translucent"))
+			.Optional(TEXT("shading_model"), TEXT("string"), TEXT("UI material shading model. Defaults to Unlit."), TEXT("Unlit"))
+			.Optional(TEXT("connect_output_pin"), TEXT("string"), TEXT("Custom node output pin to connect to EmissiveColor. Empty uses default output."))
+			.Optional(TEXT("connect_opacity"), TEXT("boolean"), TEXT("Also connect opacity_output_pin to Opacity, or use auto_component_mask_alpha to split the float4 output alpha channel. Default false."), TEXT("false"))
+			.Optional(TEXT("opacity_output_pin"), TEXT("string"), TEXT("Custom node output pin for direct Opacity wiring when connect_opacity=true and auto_component_mask_alpha=false."), TEXT("Alpha"))
+			.Optional(TEXT("auto_component_mask_alpha"), TEXT("boolean"), TEXT("When true, compose material.build_material_graph(clear_existing=false) to insert a ComponentMask that routes the Custom node float4 alpha to Opacity. Implies connect_opacity=true."), TEXT("false"))
+			.Optional(TEXT("opacity_source_channel"), TEXT("string"), TEXT("Component channel to route through the generated ComponentMask when auto_component_mask_alpha=true. One of R/G/B/A; default A."), TEXT("A"))
+			.Optional(TEXT("compile"), TEXT("boolean"), TEXT("Run material compile/stat proof and widget compile after binding."), TEXT("true"))
+			.Optional(TEXT("run_widget_proof"), TEXT("boolean"), TEXT("Run workflow.ui_shipping_widget_blueprint after binding. Default false; returned as next action otherwise."), TEXT("false"))
+			.Optional(TEXT("pos_x"), TEXT("number"), TEXT("Optional editor graph X position forwarded to material Custom node authoring."))
+			.Optional(TEXT("pos_y"), TEXT("number"), TEXT("Optional editor graph Y position forwarded to material Custom node authoring."))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("When true, return owner-action plan only."), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required with dry_run=false before material/widget mutation."), TEXT("false"))
+			.Build(),
+		TEXT("ui_workflow"),
+		MakeWorkflowMutationPolicy(),
+		FMonolithActionSearchMetadata{
+			{
+				TEXT("ui material hlsl workflow"),
+				TEXT("umg material brush custom hlsl"),
+				TEXT("ui domain material proof"),
+				TEXT("widget material binding")
+			},
+			{
+				TEXT("create UI hlsl material"),
+				TEXT("bind material to image brush"),
+				TEXT("material custom node workflow")
+			},
+			{
+				TEXT("create a UI-domain HLSL material and bind it to an Image"),
+				TEXT("lint UI HLSL and compile material before widget visual proof"),
+				TEXT("wire material custom node through existing material owner actions")
+			}
+		},
+		FMonolithActionPlanningMetadata{
+			TEXT("unreal-ui"),
+			{
+				TEXT("Use dry_run=true first; the workflow reports every material/ui owner action it will compose."),
+				TEXT("No hlsl namespace or external material_* aliases are registered; low-level work stays in material and ui."),
+				TEXT("create_material defaults false so existing material round-trips do not fail on already-existing assets."),
+				TEXT("run_widget_proof=false returns workflow.ui_shipping_widget_blueprint as an explicit next action.")
+			},
+			{
+				TEXT("workflow_id:ui_material_hlsl_effect"),
+				TEXT("validation:{hlsl,material_proof,binding_proof,widget_proof}"),
+				TEXT("proof.material[]"),
+				TEXT("proof.widget[]"),
+				TEXT("actions[]"),
+				TEXT("next_actions[]")
+			},
+			{
+				TEXT("material.create_material"),
+				TEXT("material.set_material_property"),
+				TEXT("material.create_custom_hlsl_node"),
+				TEXT("material.update_custom_hlsl_node"),
+				TEXT("material.connect_expressions"),
+				TEXT("material.build_material_graph"),
+				TEXT("material.recompile_material"),
+				TEXT("material.validate_material"),
+				TEXT("material.get_compilation_stats"),
+				TEXT("material.get_material_properties"),
+				TEXT("material.get_full_connection_graph"),
+				TEXT("ui.set_image"),
+				TEXT("ui.set_brush"),
+				TEXT("ui.dump_blueprint_compile_log"),
+				TEXT("workflow.ui_shipping_widget_blueprint"),
+				TEXT("asset.save_asset")
+			}
+		});
+
+	Registry.SetActionAnnotations(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		/*bReadOnly=*/false,
+		/*bDestructive=*/false,
+		/*bIdempotent=*/false,
+		TEXT("Create/update UI-domain HLSL material and bind it to UMG"));
+
+	Registry.RegisterAction(
+		TEXT("workflow"),
+		TEXT("ui_retainer_effect_material"),
+		TEXT("Compose a RetainerBox effect-material workflow. Uses material.get_material_parameters/get_material_properties plus ui.set_retainer_effect_material to prove UI-domain material binding and exact Retainer texture-parameter match without adding duplicate low-level material or raw UMG reflection actions."),
+		FMonolithActionHandler::CreateStatic(&FMonolithWorkflowActions::HandleUiRetainerEffectMaterial),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("material_path"), TEXT("UI-domain Retainer effect material asset path."))
+			.Required(TEXT("bind_to"), TEXT("object"), TEXT("Retainer binding target: {asset_path, retainer_widget_name|widget_name, texture_parameter?}."))
+			.Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile/read Widget Blueprint after binding."), TEXT("true"))
+			.Optional(TEXT("run_read_only_checks"), TEXT("boolean"), TEXT("Execute material readback even in dry_run mode. Default false so planning can run without assets."), TEXT("false"))
+			.Optional(TEXT("request_render"), TEXT("boolean"), TEXT("Call RetainerBox RequestRender during confirmed binding."), TEXT("false"))
+			.Optional(TEXT("run_widget_proof"), TEXT("boolean"), TEXT("Run workflow.ui_shipping_widget_blueprint after binding. Default false; returned as next action otherwise."), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("When true, return owner-action plan only unless run_read_only_checks=true."), TEXT("true"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required with dry_run=false before Widget Blueprint mutation."), TEXT("false"))
+			.Build(),
+		TEXT("ui_workflow"),
+		MakeWorkflowMutationPolicy(),
+		FMonolithActionSearchMetadata{
+			{
+				TEXT("ui retainer effect material workflow"),
+				TEXT("retainerbox material texture parameter proof"),
+				TEXT("umg retainer blur effect"),
+				TEXT("retainer exact texture parameter")
+			},
+			{
+				TEXT("bind material to retainer box"),
+				TEXT("prove retainer texture parameter"),
+				TEXT("set RetainerBox effect material")
+			},
+			{
+				TEXT("bind a UI-domain effect material to a RetainerBox"),
+				TEXT("verify RetainerBox texture parameter exists on the material"),
+				TEXT("compose material readback and UI owner action instead of raw reflection")
+			}
+		},
+		FMonolithActionPlanningMetadata{
+			TEXT("unreal-ui"),
+			{
+				TEXT("Use dry_run=true first; the workflow reports material readback and Retainer owner binding steps."),
+				TEXT("Do not auto-insert RetainerBox or InvalidationBox for optimization; this workflow only binds an existing RetainerBox."),
+				TEXT("Texture parameter defaults to Texture, matching UE RetainerBox defaults, but exact material readback is required before proof."),
+				TEXT("Performance claims require a separate measured before/after runtime profile.")
+			},
+			{
+				TEXT("workflow_id:ui_retainer_effect_material"),
+				TEXT("validation:{material_parameter_proof,material_domain_proof,binding_proof,widget_proof,runtime_profile}"),
+				TEXT("proof.material[]"),
+				TEXT("proof.widget[]"),
+				TEXT("actions[]"),
+				TEXT("next_actions[]")
+			},
+			{
+				TEXT("material.get_material_parameters"),
+				TEXT("material.get_material_properties"),
+				TEXT("ui.set_retainer_effect_material"),
+				TEXT("ui.compile_widget"),
+				TEXT("ui.dump_blueprint_compile_log"),
+				TEXT("workflow.ui_shipping_widget_blueprint"),
+				TEXT("asset.save_asset")
+			}
+		});
+
+	Registry.SetActionAnnotations(
+		TEXT("workflow"),
+		TEXT("ui_retainer_effect_material"),
+		/*bReadOnly=*/false,
+		/*bDestructive=*/false,
+		/*bIdempotent=*/false,
+		TEXT("Bind UI-domain RetainerBox effect material with texture-parameter proof"));
 
 	Registry.RegisterAction(
 		TEXT("workflow"),
@@ -1829,15 +2973,75 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	Params->TryGetBoolField(TEXT("preview_required"), bPreviewRequired);
 	bool bSaveRequested = false;
 	Params->TryGetBoolField(TEXT("save"), bSaveRequested);
+	bool bRunLayoutMeasure = true;
+	Params->TryGetBoolField(TEXT("run_layout_measure"), bRunLayoutMeasure);
+
+	FString ProofProfile = TEXT("minimal");
+	Params->TryGetStringField(TEXT("proof_profile"), ProofProfile);
+	ProofProfile = ProofProfile.ToLower();
+	if (ProofProfile.IsEmpty())
+	{
+		ProofProfile = TEXT("minimal");
+	}
+	if (ProofProfile != TEXT("minimal") && ProofProfile != TEXT("visual") && ProofProfile != TEXT("runtime"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid proof_profile '%s'. Expected one of: minimal, visual, runtime."), *ProofProfile),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const bool bVisualProofRequested = ProofProfile == TEXT("visual") || ProofProfile == TEXT("runtime");
+	const bool bRuntimeProofRequested = ProofProfile == TEXT("runtime");
+	const bool bShouldMeasureLayout = bVisualProofRequested && bRunLayoutMeasure;
+
+	FString LayoutRuleProfile = bRuntimeProofRequested ? TEXT("strict") : TEXT("shipping");
+	Params->TryGetStringField(TEXT("layout_rule_profile"), LayoutRuleProfile);
+	LayoutRuleProfile = LayoutRuleProfile.ToLower();
+	if (LayoutRuleProfile.IsEmpty())
+	{
+		LayoutRuleProfile = bRuntimeProofRequested ? TEXT("strict") : TEXT("shipping");
+	}
+	if (LayoutRuleProfile != TEXT("advisory") && LayoutRuleProfile != TEXT("shipping") && LayoutRuleProfile != TEXT("strict"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid layout_rule_profile '%s'. Expected one of: advisory, shipping, strict."), *LayoutRuleProfile),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString RoundTripCheck = TEXT("auto");
+	Params->TryGetStringField(TEXT("round_trip_check"), RoundTripCheck);
+	RoundTripCheck = RoundTripCheck.ToLower();
+	if (RoundTripCheck.IsEmpty())
+	{
+		RoundTripCheck = TEXT("auto");
+	}
+	if (RoundTripCheck != TEXT("auto") && RoundTripCheck != TEXT("force") && RoundTripCheck != TEXT("off"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Invalid round_trip_check '%s'. Expected one of: auto, force, off."), *RoundTripCheck),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const bool bExecuteReadOnly = !bDryRun && bRunChecks;
+	const bool bExecuteVisualProof = bVisualProofRequested && bExecuteReadOnly;
 	TArray<FString> Warnings;
 	TArray<FString> Errors;
 	TArray<TSharedPtr<FJsonValue>> Actions;
 	TArray<TSharedPtr<FJsonValue>> ReadBack;
+	const TArray<TSharedPtr<FJsonValue>>* VisualProfiles = nullptr;
+	Params->TryGetArrayField(TEXT("visual_profiles"), VisualProfiles);
+	TSharedPtr<FJsonValue> PreviewResolution = Params->TryGetField(TEXT("preview_resolution"));
 
 	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
 	Input->SetStringField(TEXT("widget_asset_path"), WidgetAssetPath);
+	Input->SetStringField(TEXT("proof_profile"), ProofProfile);
+	Input->SetStringField(TEXT("layout_rule_profile"), LayoutRuleProfile);
+	Input->SetStringField(TEXT("round_trip_check"), RoundTripCheck);
+	Input->SetBoolField(TEXT("run_layout_measure"), bRunLayoutMeasure);
+	TSharedPtr<FJsonValue> SuppressLayoutRules = Params->TryGetField(TEXT("suppress_layout_rule_ids"));
+	if (SuppressLayoutRules.IsValid())
+	{
+		Input->SetField(TEXT("suppress_layout_rule_ids"), SuppressLayoutRules);
+	}
 	const TSharedPtr<FJsonObject>* BindingExpectations = nullptr;
 	if (Params->TryGetObjectField(TEXT("binding_expectations"), BindingExpectations) && BindingExpectations && BindingExpectations->IsValid())
 	{
@@ -1847,6 +3051,7 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("workflow_id"), TEXT("ui_shipping"));
 	Result->SetStringField(TEXT("workflow_slice"), TEXT("widget_blueprint_readiness_proof_v1"));
+	Result->SetStringField(TEXT("proof_profile"), ProofProfile);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("confirm"), false);
 	Result->SetObjectField(TEXT("input"), Input);
@@ -1862,8 +3067,27 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	TSharedPtr<FJsonObject> AssetValidation = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> Accessibility = MakeShared<FJsonObject>();
 	TSharedPtr<FJsonObject> UiValidation = MakeShared<FJsonObject>();
-	TSharedPtr<FJsonObject> Compile = MakeUnavailableProof(TEXT("blocked"), TEXT("Fresh compile is declared as ui.dump_blueprint_compile_log next action and is not run by this first slice."));
-	Compile->SetStringField(TEXT("next_action"), TEXT("ui.dump_blueprint_compile_log"));
+	TSharedPtr<FJsonObject> Compile = MakeShared<FJsonObject>();
+	if (bVisualProofRequested)
+	{
+		TArray<TSharedPtr<FJsonValue>> CompileRows;
+		PlanOrExecutePrimitive(
+			TEXT("ui"),
+			TEXT("dump_blueprint_compile_log"),
+			MakeActionParams(TEXT("asset_path"), WidgetAssetPath),
+			bExecuteVisualProof,
+			true,
+			Actions,
+			CompileRows,
+			Errors);
+		Compile->SetStringField(TEXT("status"), bExecuteVisualProof ? TEXT("checked") : TEXT("planned"));
+		Compile->SetArrayField(TEXT("read_back"), CompileRows);
+	}
+	else
+	{
+		Compile = MakeUnavailableProof(TEXT("blocked"), TEXT("Fresh compile is declared as ui.dump_blueprint_compile_log next action and is not run by the minimal proof profile."));
+		Compile->SetStringField(TEXT("next_action"), TEXT("ui.dump_blueprint_compile_log"));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> WidgetRows;
 	PlanOrExecutePrimitive(TEXT("ui"), TEXT("get_widget_tree"), MakeActionParams(TEXT("asset_path"), WidgetAssetPath), bExecuteReadOnly, true, Actions, WidgetRows, Errors);
@@ -1883,6 +3107,12 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 		TSharedPtr<FJsonObject> LayoutParams = MakeStringArrayParams(TEXT("asset_paths"), { WidgetAssetPath });
 		LayoutParams->SetBoolField(TEXT("include_tests"), false);
 		LayoutParams->SetBoolField(TEXT("treat_warnings_as_errors"), bTreatWarningsAsErrors);
+		LayoutParams->SetStringField(TEXT("rule_profile"), LayoutRuleProfile);
+		TSharedPtr<FJsonValue> SuppressRuleIds = Params->TryGetField(TEXT("suppress_layout_rule_ids"));
+		if (SuppressRuleIds.IsValid())
+		{
+			LayoutParams->SetField(TEXT("suppress_rule_ids"), SuppressRuleIds);
+		}
 		PlanOrExecutePrimitive(TEXT("ui"), TEXT("audit_widget_layout"), LayoutParams, bExecuteReadOnly, true, Actions, AccessibilityRows, Errors);
 	}
 	if (bIncludeAccessibility)
@@ -1891,6 +3121,35 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	}
 	Accessibility->SetStringField(TEXT("status"), bExecuteReadOnly ? TEXT("checked") : TEXT("planned"));
 	Accessibility->SetArrayField(TEXT("read_back"), AccessibilityRows);
+
+	TArray<TSharedPtr<FJsonValue>> LayoutMeasureRows;
+	TSharedPtr<FJsonObject> LayoutMeasureParams = MakeUiMeasureWidgetLayoutParams(WidgetAssetPath, VisualProfiles, PreviewResolution);
+	TSharedPtr<FJsonObject> LayoutMeasureProof;
+	if (bShouldMeasureLayout)
+	{
+		PlanOrExecutePrimitive(
+			TEXT("ui"),
+			TEXT("measure_widget_layout"),
+			LayoutMeasureParams,
+			bExecuteVisualProof,
+			true,
+			Actions,
+			LayoutMeasureRows,
+			Errors);
+		LayoutMeasureProof = MakeUnavailableProof(
+			bExecuteVisualProof ? TEXT("checked") : TEXT("planned"),
+			TEXT("Authored bounds, overlap, and safe-zone evidence is composed through ui.measure_widget_layout."));
+		LayoutMeasureProof->SetArrayField(TEXT("read_back"), LayoutMeasureRows);
+		LayoutMeasureProof->SetObjectField(TEXT("params"), LayoutMeasureParams);
+	}
+	else
+	{
+		LayoutMeasureProof = MakeUnavailableProof(
+			bVisualProofRequested ? TEXT("skipped") : TEXT("not_requested"),
+			bVisualProofRequested
+				? TEXT("run_layout_measure=false.")
+				: TEXT("proof_profile=minimal does not require authored layout measurement proof."));
+	}
 
 	TArray<TSharedPtr<FJsonValue>> UiRows;
 	if (bIncludeNavigation)
@@ -1912,29 +3171,154 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	Validation->SetObjectField(TEXT("compile"), Compile);
 	Validation->SetObjectField(TEXT("asset_validation"), AssetValidation);
 	Validation->SetObjectField(TEXT("accessibility"), Accessibility);
+	Validation->SetObjectField(TEXT("layout_measure"), LayoutMeasureProof);
 	Validation->SetObjectField(TEXT("ui"), UiValidation);
-	Validation->SetObjectField(TEXT("runtime"), MakeUnavailableProof(TEXT("not_applicable"), TEXT("UI shipping first slice does not run PIE/runtime UI interaction proof.")));
+	if (bRuntimeProofRequested)
+	{
+		TSharedPtr<FJsonObject> Runtime = MakeUnavailableProof(TEXT("blocked"), TEXT("proof_profile=runtime requires an async PIE/CommonUI flow proof; v1 reports concrete Monolith next actions instead of claiming runtime proof."));
+		Runtime->SetStringField(TEXT("failure_code"), TEXT("runtime_assertion_failed"));
+		const TSharedPtr<FJsonObject>* RuntimeFlow = nullptr;
+		if (Params->TryGetObjectField(TEXT("runtime_flow"), RuntimeFlow) && RuntimeFlow && RuntimeFlow->IsValid())
+		{
+			Runtime->SetObjectField(TEXT("runtime_flow"), *RuntimeFlow);
+		}
+		Validation->SetObjectField(TEXT("runtime"), Runtime);
+		Errors.Add(TEXT("proof_profile=runtime requested; async PIE/CommonUI runtime proof is blocked in this v1 workflow slice."));
+	}
+	else
+	{
+		Validation->SetObjectField(TEXT("runtime"), MakeUnavailableProof(TEXT("not_applicable"), TEXT("UI shipping proof_profile=minimal/visual does not run PIE/runtime UI interaction proof.")));
+	}
 	Validation->SetObjectField(TEXT("budget"), MakeUnavailableProof(TEXT("not_applicable"), TEXT("No material/shader budget proof applies to this UI first slice.")));
+	TSharedPtr<FJsonObject> VisualProfileProof;
+	ValidateUiVisualProfilesForProof(VisualProfiles, bVisualProofRequested, VisualProfileProof, Errors);
+	Validation->SetObjectField(TEXT("visual_profile"), VisualProfileProof);
 	Result->SetObjectField(TEXT("validation"), Validation);
 
 	TSharedPtr<FJsonObject> PreviewParams = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
 	PreviewParams->SetStringField(TEXT("asset_type"), TEXT("widget"));
 	double PreviewScale = 1.0;
 	Params->TryGetNumberField(TEXT("preview_scale"), PreviewScale);
+	FString VisualProfileName = TEXT("desktop");
+	if (VisualProfiles && VisualProfiles->Num() > 0)
+	{
+		const TSharedPtr<FJsonObject>* FirstProfile = nullptr;
+		if ((*VisualProfiles)[0].IsValid() && (*VisualProfiles)[0]->TryGetObject(FirstProfile) && FirstProfile && FirstProfile->IsValid())
+		{
+			FString RequestedProfileName;
+			if ((*FirstProfile)->TryGetStringField(TEXT("name"), RequestedProfileName) && !RequestedProfileName.IsEmpty())
+			{
+				VisualProfileName = RequestedProfileName;
+			}
+			double DpiScale = 0.0;
+			if ((*FirstProfile)->TryGetNumberField(TEXT("dpi_scale"), DpiScale) && DpiScale > 0.0)
+			{
+				PreviewScale = DpiScale;
+			}
+			TSharedPtr<FJsonValue> ProfileResolution = (*FirstProfile)->TryGetField(TEXT("resolution"));
+			if (ProfileResolution.IsValid())
+			{
+				PreviewParams->SetField(TEXT("resolution"), ProfileResolution);
+			}
+		}
+	}
 	PreviewParams->SetNumberField(TEXT("scale"), PreviewScale);
 	FString PreviewOutputPath;
 	if (Params->TryGetStringField(TEXT("preview_output_path"), PreviewOutputPath) && !PreviewOutputPath.IsEmpty())
 	{
 		PreviewParams->SetStringField(TEXT("output_path"), PreviewOutputPath);
 	}
-	TSharedPtr<FJsonValue> PreviewResolution = Params->TryGetField(TEXT("preview_resolution"));
 	if (PreviewResolution.IsValid())
 	{
 		PreviewParams->SetField(TEXT("resolution"), PreviewResolution);
 	}
+	if (bVisualProofRequested && PreviewOutputPath.IsEmpty())
+	{
+		FString RunId;
+		Params->TryGetStringField(TEXT("run_id"), RunId);
+		if (RunId.IsEmpty())
+		{
+			Params->TryGetStringField(TEXT("request_id"), RunId);
+		}
+		if (RunId.IsEmpty())
+		{
+			RunId = TEXT("ui_shipping_visual");
+		}
+		FString OutputDir;
+		Params->TryGetStringField(TEXT("output_dir"), OutputDir);
+		if (OutputDir.IsEmpty())
+		{
+			OutputDir = FPaths::ProjectSavedDir() / TEXT("Monolith/UIEvidence") / RunId;
+		}
+		FPaths::NormalizeFilename(OutputDir);
+		const FString SafeProfileName = FPaths::MakeValidFileName(VisualProfileName.IsEmpty() ? TEXT("desktop") : VisualProfileName);
+		PreviewOutputPath = FPaths::Combine(OutputDir, SafeProfileName + TEXT(".png"));
+		PreviewParams->SetStringField(TEXT("output_path"), PreviewOutputPath);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> PreviewArtifacts;
-	if (bPreviewRequired)
+	TSharedPtr<FJsonObject> VisualVerifyParams;
+	if (bVisualProofRequested)
+	{
+		TArray<TSharedPtr<FJsonValue>> CaptureRows;
+		const bool bCaptureOk = PlanOrExecutePrimitive(
+			TEXT("editor"),
+			TEXT("capture_scene_preview"),
+			PreviewParams,
+			bExecuteVisualProof,
+			true,
+			Actions,
+			CaptureRows,
+			Errors);
+		PreviewArtifacts.Append(CaptureRows);
+
+		TSharedPtr<FJsonObject> VerifyParams = MakeActionParams(TEXT("asset_path"), WidgetAssetPath);
+		FString RequestId;
+		if (Params->TryGetStringField(TEXT("request_id"), RequestId) && !RequestId.IsEmpty())
+		{
+			VerifyParams->SetStringField(TEXT("request_id"), RequestId);
+		}
+		FString RunId;
+		if (Params->TryGetStringField(TEXT("run_id"), RunId) && !RunId.IsEmpty())
+		{
+			VerifyParams->SetStringField(TEXT("run_id"), RunId);
+		}
+		FString OutputDir;
+		if (Params->TryGetStringField(TEXT("output_dir"), OutputDir) && !OutputDir.IsEmpty())
+		{
+			VerifyParams->SetStringField(TEXT("output_dir"), OutputDir);
+		}
+		VerifyParams->SetBoolField(TEXT("fail_on_blank"), true);
+
+		TSharedPtr<FJsonObject> CaptureSpec = MakeShared<FJsonObject>();
+		CaptureSpec->SetStringField(TEXT("profile"), VisualProfileName);
+		CaptureSpec->SetStringField(TEXT("path"), PreviewOutputPath);
+		TSharedPtr<FJsonValue> VerifyResolution = PreviewParams->TryGetField(TEXT("resolution"));
+		if (VerifyResolution.IsValid())
+		{
+			CaptureSpec->SetField(TEXT("expected_resolution"), VerifyResolution);
+		}
+		TArray<TSharedPtr<FJsonValue>> VerifyCaptures;
+		VerifyCaptures.Add(MakeShared<FJsonValueObject>(CaptureSpec));
+		VerifyParams->SetArrayField(TEXT("captures"), VerifyCaptures);
+		VisualVerifyParams = VerifyParams;
+
+		TArray<TSharedPtr<FJsonValue>> VerifyRows;
+		if (!bExecuteVisualProof || bCaptureOk)
+		{
+			PlanOrExecutePrimitive(
+				TEXT("ui"),
+				TEXT("verify_widget_visual_artifacts"),
+				VerifyParams,
+				bExecuteVisualProof && bCaptureOk,
+				true,
+				Actions,
+				VerifyRows,
+				Errors);
+			PreviewArtifacts.Append(VerifyRows);
+		}
+	}
+	else if (bPreviewRequired)
 	{
 		TSharedPtr<FJsonObject> PreviewBlocker = MakeUnavailableProof(TEXT("blocked"), TEXT("Preview capture is not run by this first slice; call editor.capture_scene_preview explicitly."));
 		PreviewBlocker->SetStringField(TEXT("next_action"), TEXT("editor.capture_scene_preview"));
@@ -1946,9 +3330,33 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	ReadBack = Actions;
 	TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
 	Proof->SetArrayField(TEXT("read_back"), ReadBack);
+	Proof->SetArrayField(TEXT("layout_measure"), LayoutMeasureRows);
 	Proof->SetArrayField(TEXT("preview_artifacts"), PreviewArtifacts);
 	Proof->SetArrayField(TEXT("logs"), {});
 	Proof->SetArrayField(TEXT("benchmarks"), {});
+	TSharedPtr<FJsonObject> UiEvidence = MakeShared<FJsonObject>();
+	UiEvidence->SetStringField(TEXT("schema_version"), TEXT("ui_workflow_proof.v1"));
+	UiEvidence->SetStringField(TEXT("proof_profile"), ProofProfile);
+	UiEvidence->SetStringField(TEXT("round_trip_check"), RoundTripCheck);
+	UiEvidence->SetStringField(TEXT("layout_rule_profile"), LayoutRuleProfile);
+	if (VisualProfileProof.IsValid())
+	{
+		UiEvidence->SetStringField(TEXT("visual_profile_status"), VisualProfileProof->GetStringField(TEXT("status")));
+	}
+	UiEvidence->SetStringField(TEXT("visual_artifacts_status"),
+		bVisualProofRequested ? (bExecuteVisualProof ? TEXT("checked") : TEXT("planned")) : TEXT("not_requested"));
+	UiEvidence->SetStringField(TEXT("layout_measure_status"),
+		bShouldMeasureLayout ? (bExecuteVisualProof ? TEXT("checked") : TEXT("planned")) : (bVisualProofRequested ? TEXT("skipped") : TEXT("not_requested")));
+	UiEvidence->SetBoolField(TEXT("visual_artifacts_required"), bVisualProofRequested);
+	UiEvidence->SetBoolField(TEXT("runtime_required"), bRuntimeProofRequested);
+	TArray<FString> UiEvidenceLimitations;
+	UiEvidenceLimitations.Add(TEXT("round_trip_check=auto runs only for spec-authored or clearly FUISpecDocument-representable changes; this workflow records the policy but does not infer representability from arbitrary WBP edits."));
+	if (bRuntimeProofRequested)
+	{
+		UiEvidenceLimitations.Add(TEXT("proof_profile=runtime is blocked until an async PIE/CommonUI proof chain is supplied and executed."));
+	}
+	UiEvidence->SetArrayField(TEXT("limitations"), StringsToJson(UiEvidenceLimitations));
+	Proof->SetObjectField(TEXT("ui_evidence"), UiEvidence);
 	Result->SetObjectField(TEXT("proof"), Proof);
 	Result->SetArrayField(TEXT("actions"), Actions);
 	Result->SetArrayField(TEXT("artifacts"), {});
@@ -1959,8 +3367,37 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	}
 
 	TArray<TSharedPtr<FJsonValue>> NextActions;
-	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.dump_blueprint_compile_log"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_blueprint_compile_log")), true, TEXT("Run a fresh compile/read-back proof explicitly."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
-	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.capture_scene_preview"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("capture_scene_preview")), true, TEXT("Produce a widget preview artifact with explicit output parameters."), PreviewParams)));
+	const bool bVisualProofAlreadyAttempted = bVisualProofRequested && bExecuteVisualProof;
+	const bool bKeepVisualProofFollowUps = !bVisualProofAlreadyAttempted || Errors.Num() > 0;
+	if (!bVisualProofRequested || bKeepVisualProofFollowUps)
+	{
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.dump_blueprint_compile_log"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_blueprint_compile_log")), true, TEXT("Run a fresh compile/read-back proof explicitly."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.capture_scene_preview"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("capture_scene_preview")), true, TEXT("Produce a widget preview artifact with explicit output parameters."), PreviewParams)));
+	}
+	if (bShouldMeasureLayout && bKeepVisualProofFollowUps)
+	{
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.measure_widget_layout"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("measure_widget_layout")), true, TEXT("Measure authored widget bounds, overlap, and safe-zone evidence for the visual proof profile."), LayoutMeasureParams)));
+	}
+	if (bVisualProofRequested && bKeepVisualProofFollowUps && VisualVerifyParams.IsValid())
+	{
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.verify_widget_visual_artifacts"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("verify_widget_visual_artifacts")), true, TEXT("Validate the widget PNG artifact before treating the visual proof as evidence."), VisualVerifyParams)));
+	}
+	if (bRuntimeProofRequested)
+	{
+		const TSharedPtr<FJsonObject>* RuntimeFlow = nullptr;
+		TSharedPtr<FJsonObject> RuntimeFlowParams = MakeShared<FJsonObject>();
+		if (Params->TryGetObjectField(TEXT("runtime_flow"), RuntimeFlow) && RuntimeFlow && RuntimeFlow->IsValid())
+		{
+			CopyJsonFields(*RuntimeFlow, RuntimeFlowParams);
+		}
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.validate_frontend_menu_flow"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("validate_frontend_menu_flow")), true, TEXT("Validate the declared CommonUI/frontend contract before starting PIE."), RuntimeFlowParams)));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.list_errored_blueprints"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("list_errored_blueprints")), true, TEXT("Run the exact PIE compile-error preflight gate before runtime UI proof."))));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.run_pie_smoke"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("run_pie_smoke")), true, TEXT("Start the async PIE proof only after frontend validation and compile preflight pass."), RuntimeFlowParams)));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.poll_pie_smoke"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("poll_pie_smoke")), true, TEXT("Poll the async PIE proof using the session_id returned by editor.run_pie_smoke."))));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.capture_pie_movement_clip"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("capture_pie_movement_clip")), true, TEXT("Capture runtime frames only when interaction proof requires viewport evidence."), RuntimeFlowParams)));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.pie_inject_input_action"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("pie_inject_input_action")), true, TEXT("Inject the declared Enhanced Input action during the async PIE session when the runtime flow needs interaction."), RuntimeFlowParams)));
+		NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("editor.stop_pie_smoke"), FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("stop_pie_smoke")), true, TEXT("Stop the async PIE proof session if polling does not reach a terminal state."))));
+	}
 	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("asset.save_asset"), FMonolithToolRegistry::Get().HasAction(TEXT("asset"), TEXT("save_asset")), true, TEXT("Persist the reviewed Widget Blueprint explicitly."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
 	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("source_control.checkout_or_add"), FMonolithToolRegistry::Get().HasAction(TEXT("source_control"), TEXT("checkout_or_add")), true, TEXT("Prepare the Widget Blueprint package path through source control."), MakeStringArrayParams(TEXT("paths"), { WidgetAssetPath }))));
 	Result->SetArrayField(TEXT("next_actions"), NextActions);
@@ -1973,10 +3410,846 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	}));
 	Result->SetObjectField(TEXT("rollback"), Rollback);
 
-	Result->SetStringField(TEXT("status"), Errors.Num() > 0 ? TEXT("blocked") : (bDryRun ? TEXT("planned") : TEXT("partial")));
+	FString Status = TEXT("partial");
+	if (Errors.Num() > 0)
+	{
+		Status = TEXT("blocked");
+	}
+	else if (bDryRun || !bRunChecks)
+	{
+		Status = TEXT("planned");
+	}
+	else if (bVisualProofRequested)
+	{
+		Status = TEXT("pass");
+	}
+	Result->SetStringField(TEXT("status"), Status);
 	if (!bDryRun && Errors.Num() == 0)
 	{
-		Warnings.Add(TEXT("Read-only UI proof completed where actions were available; compile, preview, save, and source-control remain explicit follow-ups."));
+		if (!bRunChecks)
+		{
+			Warnings.Add(TEXT("run_read_only_checks=false returned the proof plan without executing read-only checks."));
+		}
+		else if (bVisualProofRequested)
+		{
+			Warnings.Add(TEXT("UI visual proof completed where actions were available; save and source-control remain explicit follow-ups."));
+		}
+		else
+		{
+			Warnings.Add(TEXT("Read-only UI proof completed where actions were available; compile, preview, save, and source-control remain explicit follow-ups."));
+		}
+	}
+	Result->SetArrayField(TEXT("warnings"), StringsToJson(Warnings));
+	Result->SetArrayField(TEXT("errors"), StringsToJson(Errors));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithWorkflowActions::HandleUiBindWidgetEvent(const TSharedPtr<FJsonObject>& Params)
+{
+	FString AssetPath;
+	Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+	FString WidgetName;
+	Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+	FString EventName;
+	Params->TryGetStringField(TEXT("event"), EventName);
+	FString GraphName = TEXT("EventGraph");
+	Params->TryGetStringField(TEXT("graph_name"), GraphName);
+	if (GraphName.IsEmpty())
+	{
+		GraphName = TEXT("EventGraph");
+	}
+
+	const TSharedPtr<FJsonObject>* IntentPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("intent"), IntentPtr) || !IntentPtr || !IntentPtr->IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("intent must be an object."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const TSharedPtr<FJsonObject> Intent = *IntentPtr;
+
+	FString IntentKind = TEXT("viewmodel_command");
+	Intent->TryGetStringField(TEXT("kind"), IntentKind);
+	if (!IntentKind.Equals(TEXT("viewmodel_command"), ESearchCase::IgnoreCase))
+	{
+		TSharedPtr<FJsonObject> ErrorData = MakeUiBindBoundaryProof(
+			TEXT("rejected"),
+			TEXT("workflow.ui_bind_widget_event v1 only accepts intent.kind='viewmodel_command'."));
+		ErrorData->SetStringField(TEXT("rejected_intent_kind"), IntentKind);
+		return FMonolithActionResult::Error(
+			TEXT("UI event binding rejected: runtime UI must route user intent through a ViewModel command, not direct gameplay or arbitrary Blueprint calls."),
+			FMonolithJsonUtils::ErrInvalidParams)
+			.WithErrorData(ErrorData)
+			.WithRelatedActions({ TEXT("blueprint.add_node"), TEXT("blueprint.connect_pins"), TEXT("ui.get_widget_bindings") });
+	}
+
+	const TArray<FString> DirectGameplayFields = {
+		TEXT("actor"),
+		TEXT("actor_path"),
+		TEXT("pawn"),
+		TEXT("pawn_path"),
+		TEXT("controller"),
+		TEXT("controller_path"),
+		TEXT("component"),
+		TEXT("component_path"),
+		TEXT("gameplay_target")
+	};
+	for (const FString& Field : DirectGameplayFields)
+	{
+		if (Intent->HasField(Field))
+		{
+			TSharedPtr<FJsonObject> ErrorData = MakeUiBindBoundaryProof(
+				TEXT("rejected"),
+				TEXT("Direct gameplay targets are not accepted by runtime UI event workflows."));
+			ErrorData->SetStringField(TEXT("rejected_field"), Field);
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("UI event binding rejected: intent.%s would bypass the ViewModel boundary."), *Field),
+				FMonolithJsonUtils::ErrInvalidParams)
+				.WithErrorData(ErrorData)
+				.WithRelatedActions({ TEXT("blueprint.add_node"), TEXT("ui.get_widget_bindings") });
+		}
+	}
+
+	FString ViewModelVariable;
+	Intent->TryGetStringField(TEXT("viewmodel_variable"), ViewModelVariable);
+	FString Command;
+	Intent->TryGetStringField(TEXT("command"), Command);
+	if (ViewModelVariable.IsEmpty() || Command.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("intent.viewmodel_variable and intent.command are required for viewmodel_command."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString ViewModelClass;
+	Intent->TryGetStringField(TEXT("viewmodel_class"), ViewModelClass);
+	if (ViewModelClass.IsEmpty())
+	{
+		Intent->TryGetStringField(TEXT("target_class"), ViewModelClass);
+	}
+
+	FString EventExecPinOverride;
+	Intent->TryGetStringField(TEXT("event_exec_pin"), EventExecPinOverride);
+	FString CommandExecPinOverride;
+	Intent->TryGetStringField(TEXT("command_exec_pin"), CommandExecPinOverride);
+	FString ViewModelValuePinOverride;
+	Intent->TryGetStringField(TEXT("viewmodel_value_pin"), ViewModelValuePinOverride);
+	FString CommandTargetPinOverride;
+	Intent->TryGetStringField(TEXT("command_target_pin"), CommandTargetPinOverride);
+
+	bool bDryRun = true;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	bool bConfirm = false;
+	Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+	bool bCompile = true;
+	Params->TryGetBoolField(TEXT("compile"), bCompile);
+	bool bRunReadBack = true;
+	Params->TryGetBoolField(TEXT("run_read_back"), bRunReadBack);
+	const bool bExecuteMutation = !bDryRun && bConfirm;
+
+	const FString DelegateName = NormalizeUiWidgetDelegateName(EventName);
+	TSharedPtr<FJsonObject> EventParams = MakeUiBindEventNodeParams(AssetPath, GraphName, WidgetName, DelegateName);
+	TSharedPtr<FJsonObject> ViewModelParams = MakeUiBindVariableGetParams(AssetPath, GraphName, ViewModelVariable);
+	TSharedPtr<FJsonObject> CommandParams = MakeUiBindCommandCallParams(AssetPath, GraphName, Command, ViewModelClass);
+	TSharedPtr<FJsonObject> EventResolveParams = MakeUiBindResolveNodeParams(EventParams);
+	TSharedPtr<FJsonObject> ViewModelResolveParams = MakeUiBindResolveNodeParams(ViewModelParams);
+	TSharedPtr<FJsonObject> CommandResolveParams = MakeUiBindResolveNodeParams(CommandParams);
+
+	TArray<FString> Warnings;
+	TArray<FString> Errors;
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	TArray<TSharedPtr<FJsonValue>> ReadBackRows;
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("asset_path"), AssetPath);
+	Input->SetStringField(TEXT("widget_name"), WidgetName);
+	Input->SetStringField(TEXT("event"), EventName);
+	Input->SetStringField(TEXT("delegate_property_name"), DelegateName);
+	Input->SetStringField(TEXT("graph_name"), GraphName);
+	Input->SetObjectField(TEXT("intent"), Intent);
+	Input->SetBoolField(TEXT("compile"), bCompile);
+	Input->SetBoolField(TEXT("run_read_back"), bRunReadBack);
+
+	if (!bDryRun && !bConfirm)
+	{
+		Errors.Add(TEXT("dry_run=false requires confirm=true before Blueprint graph mutation."));
+	}
+
+	const bool bExecuteReadBack = bExecuteMutation && bRunReadBack;
+	PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("resolve_node"), EventResolveParams, bExecuteReadBack, true, Actions, ReadBackRows, Errors);
+	PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("resolve_node"), ViewModelResolveParams, bExecuteReadBack, true, Actions, ReadBackRows, Errors);
+	PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("resolve_node"), CommandResolveParams, bExecuteReadBack, true, Actions, ReadBackRows, Errors);
+
+	TSharedPtr<FJsonObject> EventBindingProof = MakeUnavailableProof(
+		bExecuteMutation ? TEXT("attempted") : TEXT("planned"),
+		TEXT("Component-bound event, ViewModel getter, command call, and pin wiring are composed from existing Blueprint owner actions."));
+	EventBindingProof->SetStringField(TEXT("schema_version"), TEXT("ui_event_binding_proof.v1"));
+	EventBindingProof->SetStringField(TEXT("delegate_property_name"), DelegateName);
+	EventBindingProof->SetStringField(TEXT("viewmodel_variable"), ViewModelVariable);
+	EventBindingProof->SetStringField(TEXT("command"), Command);
+
+	FString EventNodeId;
+	FString ViewModelNodeId;
+	FString CommandNodeId;
+	if (!bExecuteMutation)
+	{
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("add_node"), EventParams, false, true, Actions, ReadBackRows, Errors);
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("add_node"), ViewModelParams, false, true, Actions, ReadBackRows, Errors);
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("add_node"), CommandParams, false, true, Actions, ReadBackRows, Errors);
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("connect_pins"), MakeUiBindConnectionParams(AssetPath, GraphName, TEXT("${event_node.id}"), EventExecPinOverride.IsEmpty() ? TEXT("then") : EventExecPinOverride, TEXT("${command_node.id}"), CommandExecPinOverride.IsEmpty() ? TEXT("execute") : CommandExecPinOverride), false, true, Actions, ReadBackRows, Errors);
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("connect_pins"), MakeUiBindConnectionParams(AssetPath, GraphName, TEXT("${viewmodel_node.id}"), ViewModelValuePinOverride.IsEmpty() ? ViewModelVariable : ViewModelValuePinOverride, TEXT("${command_node.id}"), CommandTargetPinOverride.IsEmpty() ? TEXT("self") : CommandTargetPinOverride), false, true, Actions, ReadBackRows, Errors);
+	}
+	else
+	{
+		const FMonolithActionResult EventResult = ExecutePrimitiveAndRecord(TEXT("blueprint"), TEXT("add_node"), EventParams, Actions, ReadBackRows, Errors);
+		const FMonolithActionResult ViewModelResult = ExecutePrimitiveAndRecord(TEXT("blueprint"), TEXT("add_node"), ViewModelParams, Actions, ReadBackRows, Errors);
+		const FMonolithActionResult CommandResult = ExecutePrimitiveAndRecord(TEXT("blueprint"), TEXT("add_node"), CommandParams, Actions, ReadBackRows, Errors);
+
+		const bool bHaveNodes = EventResult.bSuccess
+			&& ViewModelResult.bSuccess
+			&& CommandResult.bSuccess
+			&& TryGetWorkflowNodeId(EventResult.Result, EventNodeId)
+			&& TryGetWorkflowNodeId(ViewModelResult.Result, ViewModelNodeId)
+			&& TryGetWorkflowNodeId(CommandResult.Result, CommandNodeId);
+
+		if (bHaveNodes)
+		{
+			FString EventExecPin = EventExecPinOverride;
+			if (EventExecPin.IsEmpty())
+			{
+				FindPinNameInNode(EventResult.Result, TEXT("output"), true, { TEXT("then"), TEXT("execute"), TEXT("Then") }, EventExecPin);
+			}
+			FString CommandExecPin = CommandExecPinOverride;
+			if (CommandExecPin.IsEmpty())
+			{
+				FindPinNameInNode(CommandResult.Result, TEXT("input"), true, { TEXT("execute"), TEXT("Exec"), TEXT("then") }, CommandExecPin);
+			}
+			FString ViewModelValuePin = ViewModelValuePinOverride;
+			if (ViewModelValuePin.IsEmpty())
+			{
+				FindPinNameInNode(ViewModelResult.Result, TEXT("output"), false, { ViewModelVariable, TEXT("ReturnValue") }, ViewModelValuePin);
+			}
+			FString CommandTargetPin = CommandTargetPinOverride;
+			if (CommandTargetPin.IsEmpty())
+			{
+				FindPinNameInNode(CommandResult.Result, TEXT("input"), false, { TEXT("self"), TEXT("Target"), TEXT("Object") }, CommandTargetPin);
+			}
+
+			if (EventExecPin.IsEmpty() || CommandExecPin.IsEmpty() || ViewModelValuePin.IsEmpty() || CommandTargetPin.IsEmpty())
+			{
+				Errors.Add(TEXT("Could not infer all required pins for event exec and ViewModel target wiring. Retry with intent.event_exec_pin, command_exec_pin, viewmodel_value_pin, and command_target_pin overrides."));
+			}
+			else
+			{
+				ExecutePrimitiveAndRecord(TEXT("blueprint"), TEXT("connect_pins"),
+					MakeUiBindConnectionParams(AssetPath, GraphName, EventNodeId, EventExecPin, CommandNodeId, CommandExecPin),
+					Actions, ReadBackRows, Errors);
+				ExecutePrimitiveAndRecord(TEXT("blueprint"), TEXT("connect_pins"),
+					MakeUiBindConnectionParams(AssetPath, GraphName, ViewModelNodeId, ViewModelValuePin, CommandNodeId, CommandTargetPin),
+					Actions, ReadBackRows, Errors);
+
+				EventBindingProof->SetStringField(TEXT("event_node_id"), EventNodeId);
+				EventBindingProof->SetStringField(TEXT("viewmodel_node_id"), ViewModelNodeId);
+				EventBindingProof->SetStringField(TEXT("command_node_id"), CommandNodeId);
+				EventBindingProof->SetStringField(TEXT("event_exec_pin"), EventExecPin);
+				EventBindingProof->SetStringField(TEXT("command_exec_pin"), CommandExecPin);
+				EventBindingProof->SetStringField(TEXT("viewmodel_value_pin"), ViewModelValuePin);
+				EventBindingProof->SetStringField(TEXT("command_target_pin"), CommandTargetPin);
+			}
+		}
+	}
+
+	if (bCompile)
+	{
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("compile_blueprint"), MakeActionParams(TEXT("asset_path"), AssetPath), bExecuteMutation, true, Actions, ReadBackRows, Errors);
+	}
+	if (bRunReadBack)
+	{
+		TSharedPtr<FJsonObject> GraphSummaryParams = MakeActionParams(TEXT("asset_path"), AssetPath);
+		GraphSummaryParams->SetStringField(TEXT("graph_name"), GraphName);
+		PlanOrExecutePrimitive(TEXT("blueprint"), TEXT("get_graph_summary"), GraphSummaryParams, bExecuteMutation, true, Actions, ReadBackRows, Errors);
+	}
+
+	if (bExecuteMutation && Errors.Num() == 0)
+	{
+		EventBindingProof->SetStringField(TEXT("status"), TEXT("pass"));
+		EventBindingProof->SetStringField(TEXT("reason"), TEXT("Blueprint event binding child actions executed and proof rows were recorded."));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("workflow_id"), TEXT("ui_event_binding"));
+	Result->SetStringField(TEXT("workflow_slice"), TEXT("viewmodel_command_event_binding_v1"));
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("confirm"), bConfirm);
+	Result->SetObjectField(TEXT("input"), Input);
+	Result->SetObjectField(TEXT("plan"), MakeUiBindEventPlanObject(bDryRun, bConfirm, bCompile));
+	Result->SetObjectField(TEXT("touched"), MakeTouchedObject({}, { AssetPath }, { AssetPath }, {}));
+	Result->SetArrayField(TEXT("dirty_packages"), {});
+
+	TSharedPtr<FJsonObject> Validation = MakeShared<FJsonObject>();
+	Validation->SetObjectField(TEXT("boundary"), MakeUiBindBoundaryProof(TEXT("pass"), TEXT("Intent routes through ViewModel command.")));
+	Validation->SetObjectField(TEXT("event_binding"), EventBindingProof);
+	Validation->SetObjectField(TEXT("compile"), MakeUnavailableProof(bCompile ? (bExecuteMutation ? TEXT("attempted") : TEXT("planned")) : TEXT("not_requested"), bCompile ? TEXT("See proof.read_back for blueprint.compile_blueprint row.") : TEXT("compile=false.")));
+	Validation->SetObjectField(TEXT("read_back"), MakeUnavailableProof(bRunReadBack ? (bExecuteMutation ? TEXT("attempted") : TEXT("planned")) : TEXT("not_requested"), bRunReadBack ? TEXT("See proof.read_back for resolve_node/get_graph_summary rows.") : TEXT("run_read_back=false.")));
+	Result->SetObjectField(TEXT("validation"), Validation);
+
+	TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
+	Proof->SetArrayField(TEXT("read_back"), ReadBackRows);
+	Proof->SetArrayField(TEXT("preview_artifacts"), {});
+	Proof->SetArrayField(TEXT("logs"), {});
+	Proof->SetArrayField(TEXT("benchmarks"), {});
+	Proof->SetStringField(TEXT("runtime_note"), TEXT("This workflow proves graph authoring and compile/read-back. Runtime interaction proof remains a separate PIE workflow."));
+	Result->SetObjectField(TEXT("proof"), Proof);
+	Result->SetArrayField(TEXT("actions"), Actions);
+	Result->SetArrayField(TEXT("artifacts"), {});
+
+	TArray<TSharedPtr<FJsonValue>> NextActions;
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("blueprint.get_graph_summary"), FMonolithToolRegistry::Get().HasAction(TEXT("blueprint"), TEXT("get_graph_summary")), true, TEXT("Read back the edited event graph."), MakeActionParams(TEXT("asset_path"), AssetPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.dump_blueprint_compile_log"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_blueprint_compile_log")), true, TEXT("Compile/read Widget Blueprint errors and warnings through the UI owner action."), MakeActionParams(TEXT("asset_path"), AssetPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("workflow.ui_shipping_widget_blueprint"), FMonolithToolRegistry::Get().HasAction(TEXT("workflow"), TEXT("ui_shipping_widget_blueprint")), true, TEXT("Run the UI shipping proof after binding the interaction."), MakeActionParams(TEXT("widget_asset_path"), AssetPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("asset.save_asset"), FMonolithToolRegistry::Get().HasAction(TEXT("asset"), TEXT("save_asset")), true, TEXT("Persist the reviewed Widget Blueprint explicitly."), MakeActionParams(TEXT("asset_path"), AssetPath))));
+	Result->SetArrayField(TEXT("next_actions"), NextActions);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetBoolField(TEXT("automatic"), false);
+	Rollback->SetArrayField(TEXT("limitations"), StringsToJson({
+		TEXT("Rollback is source-control/editor-undo based; the workflow records touched package scope but does not auto-delete graph nodes."),
+		TEXT("If pin inference fails after node creation, inspect proof.read_back rows and revert the package or delete the created nodes explicitly.")
+	}));
+	Result->SetObjectField(TEXT("rollback"), Rollback);
+
+	Result->SetStringField(TEXT("status"), Errors.Num() > 0 ? TEXT("blocked") : (bDryRun ? TEXT("planned") : TEXT("pass")));
+	if (bDryRun)
+	{
+		Warnings.Add(TEXT("dry_run=true returned the Blueprint graph plan only; no graph nodes were created."));
+	}
+	else if (!bConfirm)
+	{
+		Warnings.Add(TEXT("confirm=true is required before the workflow can mutate a Widget Blueprint event graph."));
+	}
+	Result->SetArrayField(TEXT("warnings"), StringsToJson(Warnings));
+	Result->SetArrayField(TEXT("errors"), StringsToJson(Errors));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithWorkflowActions::HandleUiMaterialHlslEffect(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MaterialPath;
+	Params->TryGetStringField(TEXT("material_path"), MaterialPath);
+	FString Hlsl;
+	Params->TryGetStringField(TEXT("hlsl"), Hlsl);
+	if (MaterialPath.IsEmpty() || Hlsl.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("material_path and hlsl are required."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const TSharedPtr<FJsonObject>* BindToPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("bind_to"), BindToPtr) || !BindToPtr || !BindToPtr->IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("bind_to must be an object with asset_path and widget_name."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const TSharedPtr<FJsonObject> BindTo = *BindToPtr;
+
+	FString WidgetAssetPath;
+	BindTo->TryGetStringField(TEXT("asset_path"), WidgetAssetPath);
+	if (WidgetAssetPath.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("widget_asset_path"), WidgetAssetPath);
+	}
+	if (WidgetAssetPath.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("wbp_path"), WidgetAssetPath);
+	}
+	FString WidgetName;
+	BindTo->TryGetStringField(TEXT("widget_name"), WidgetName);
+	if (WidgetName.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("image_widget_name"), WidgetName);
+	}
+	if (WidgetAssetPath.IsEmpty() || WidgetName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("bind_to.asset_path and bind_to.widget_name are required."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString PropertyName = TEXT("Brush");
+	BindTo->TryGetStringField(TEXT("property_name"), PropertyName);
+	FString BindingAction;
+	BindTo->TryGetStringField(TEXT("binding_action"), BindingAction);
+	if (BindingAction.IsEmpty())
+	{
+		BindingAction = PropertyName.Equals(TEXT("Brush"), ESearchCase::IgnoreCase) ? TEXT("set_image") : TEXT("set_brush");
+	}
+	if (!BindingAction.Equals(TEXT("set_image"), ESearchCase::IgnoreCase)
+		&& !BindingAction.Equals(TEXT("set_brush"), ESearchCase::IgnoreCase))
+	{
+		return FMonolithActionResult::Error(TEXT("bind_to.binding_action must be set_image or set_brush."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Parameters;
+	const TArray<TSharedPtr<FJsonValue>>* ParametersPtr = nullptr;
+	if (Params->TryGetArrayField(TEXT("parameters"), ParametersPtr) && ParametersPtr)
+	{
+		Parameters = *ParametersPtr;
+	}
+	const TArray<TSharedPtr<FJsonValue>> CustomInputs = MakeCustomNodeInputsFromParameters(Parameters);
+	const TSharedPtr<FJsonObject> HlslProof = AnalyzeUiHlsl(Hlsl, Parameters);
+
+	FString ExpressionName;
+	Params->TryGetStringField(TEXT("expression_name"), ExpressionName);
+	FString OutputType = TEXT("Float4");
+	Params->TryGetStringField(TEXT("output_type"), OutputType);
+	if (OutputType.IsEmpty())
+	{
+		OutputType = TEXT("Float4");
+	}
+	FString BlendMode = TEXT("Translucent");
+	Params->TryGetStringField(TEXT("blend_mode"), BlendMode);
+	if (BlendMode.IsEmpty())
+	{
+		BlendMode = TEXT("Translucent");
+	}
+	FString ShadingModel = TEXT("Unlit");
+	Params->TryGetStringField(TEXT("shading_model"), ShadingModel);
+	if (ShadingModel.IsEmpty())
+	{
+		ShadingModel = TEXT("Unlit");
+	}
+	FString ConnectOutputPin;
+	Params->TryGetStringField(TEXT("connect_output_pin"), ConnectOutputPin);
+	const bool bOpacityOutputPinExplicit = Params->HasField(TEXT("opacity_output_pin"));
+	FString OpacityOutputPin = TEXT("Alpha");
+	Params->TryGetStringField(TEXT("opacity_output_pin"), OpacityOutputPin);
+	FString OpacitySourceChannel = TEXT("A");
+	Params->TryGetStringField(TEXT("opacity_source_channel"), OpacitySourceChannel);
+	OpacitySourceChannel = NormalizeUiMaterialMaskChannel(OpacitySourceChannel);
+
+	bool bCreateMaterial = false;
+	Params->TryGetBoolField(TEXT("create_material"), bCreateMaterial);
+	bool bConnectOpacity = false;
+	Params->TryGetBoolField(TEXT("connect_opacity"), bConnectOpacity);
+	const bool bAutoComponentMaskAlphaExplicit = Params->HasField(TEXT("auto_component_mask_alpha"));
+	bool bAutoComponentMaskAlpha = false;
+	Params->TryGetBoolField(TEXT("auto_component_mask_alpha"), bAutoComponentMaskAlpha);
+	const bool bHasDirectOpacityOutput = JsonObjectArrayFieldHasName(Params, TEXT("additional_outputs"), OpacityOutputPin);
+	if (bConnectOpacity
+		&& !bAutoComponentMaskAlpha
+		&& !bAutoComponentMaskAlphaExplicit
+		&& !bOpacityOutputPinExplicit
+		&& !bHasDirectOpacityOutput)
+	{
+		bAutoComponentMaskAlpha = true;
+	}
+	if (bAutoComponentMaskAlpha)
+	{
+		bConnectOpacity = true;
+	}
+	bool bCompile = true;
+	Params->TryGetBoolField(TEXT("compile"), bCompile);
+	bool bRunWidgetProof = false;
+	Params->TryGetBoolField(TEXT("run_widget_proof"), bRunWidgetProof);
+	bool bDryRun = true;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	bool bConfirm = false;
+	Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+	const bool bExecute = !bDryRun && bConfirm;
+
+	TArray<FString> Warnings;
+	TArray<FString> Errors;
+	if (!bDryRun && !bConfirm)
+	{
+		Errors.Add(TEXT("dry_run=false requires confirm=true before material or widget mutation."));
+	}
+	if (!bConnectOpacity)
+	{
+		Warnings.Add(TEXT("connect_opacity=false: the workflow wires the Custom node to EmissiveColor only. Use connect_opacity=true with an explicit opacity_output_pin, or auto_component_mask_alpha=true to route float4 alpha through a ComponentMask."));
+	}
+	if (bAutoComponentMaskAlpha && bConnectOpacity && !bAutoComponentMaskAlphaExplicit)
+	{
+		Warnings.Add(TEXT("connect_opacity=true selected auto_component_mask_alpha because no explicit opacity_output_pin or matching Custom additional output was provided."));
+	}
+	if (bAutoComponentMaskAlpha && !IsUiMaterialMaskChannelValid(OpacitySourceChannel))
+	{
+		Errors.Add(FString::Printf(TEXT("opacity_source_channel must be one of R/G/B/A when auto_component_mask_alpha=true; got '%s'."), *OpacitySourceChannel));
+	}
+	if (bAutoComponentMaskAlpha && !OutputType.Contains(TEXT("4")))
+	{
+		Errors.Add(FString::Printf(TEXT("auto_component_mask_alpha requires output_type Float4/float4 so a component can be selected; got '%s'."), *OutputType));
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	TArray<TSharedPtr<FJsonValue>> MaterialRows;
+	TArray<TSharedPtr<FJsonValue>> WidgetRows;
+
+	const TSharedPtr<FJsonObject> CreateParams = MakeUiMaterialCreateParams(MaterialPath, BlendMode, ShadingModel);
+	const TSharedPtr<FJsonObject> PropertyParams = MakeUiMaterialPropertyParams(MaterialPath, BlendMode, ShadingModel);
+	const TSharedPtr<FJsonObject> CreateCustomParams = MakeUiMaterialCustomParams(MaterialPath, Hlsl, OutputType, CustomInputs, Params);
+
+	bool bHasAdvancedCustomFields = Params->HasField(TEXT("include_file_paths")) || Params->HasField(TEXT("additional_defines"));
+	FString EffectiveExpressionName = ExpressionName;
+	const FString MaskNodeId = EffectiveExpressionName.IsEmpty()
+		? TEXT("${custom_node.expression_name}_OpacityMask")
+		: EffectiveExpressionName + TEXT("_OpacityMask");
+	TSharedPtr<FJsonObject> OpacityMaskGraphParams;
+
+	if (!bExecute)
+	{
+		if (bCreateMaterial)
+		{
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("create_material"), CreateParams, false, true, Actions, MaterialRows, Errors);
+		}
+		PlanOrExecutePrimitive(TEXT("material"), TEXT("set_material_property"), PropertyParams, false, true, Actions, MaterialRows, Errors);
+		if (ExpressionName.IsEmpty())
+		{
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("create_custom_hlsl_node"), CreateCustomParams, false, true, Actions, MaterialRows, Errors);
+			EffectiveExpressionName = TEXT("${custom_node.expression_name}");
+			if (bHasAdvancedCustomFields)
+			{
+				PlanOrExecutePrimitive(TEXT("material"), TEXT("update_custom_hlsl_node"), MakeUiMaterialCustomUpdateParams(MaterialPath, EffectiveExpressionName, Hlsl, OutputType, CustomInputs, Params), false, true, Actions, MaterialRows, Errors);
+			}
+		}
+		else
+		{
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("update_custom_hlsl_node"), MakeUiMaterialCustomUpdateParams(MaterialPath, ExpressionName, Hlsl, OutputType, CustomInputs, Params), false, true, Actions, MaterialRows, Errors);
+		}
+		PlanOrExecutePrimitive(TEXT("material"), TEXT("connect_expressions"), MakeUiMaterialConnectParams(MaterialPath, EffectiveExpressionName, ConnectOutputPin, TEXT("EmissiveColor")), false, true, Actions, MaterialRows, Errors);
+		if (bConnectOpacity)
+		{
+			if (bAutoComponentMaskAlpha)
+			{
+				OpacityMaskGraphParams = MakeUiMaterialAlphaMaskGraphParams(MaterialPath, EffectiveExpressionName, ConnectOutputPin, MaskNodeId, OpacitySourceChannel);
+				PlanOrExecutePrimitive(TEXT("material"), TEXT("build_material_graph"), OpacityMaskGraphParams, false, true, Actions, MaterialRows, Errors);
+			}
+			else
+			{
+				PlanOrExecutePrimitive(TEXT("material"), TEXT("connect_expressions"), MakeUiMaterialConnectParams(MaterialPath, EffectiveExpressionName, OpacityOutputPin, TEXT("Opacity")), false, true, Actions, MaterialRows, Errors);
+			}
+		}
+		if (bCompile)
+		{
+			TSharedPtr<FJsonObject> RecompileParams = MakeActionParams(TEXT("asset_path"), MaterialPath);
+			RecompileParams->SetBoolField(TEXT("include_stats"), true);
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("recompile_material"), RecompileParams, false, true, Actions, MaterialRows, Errors);
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("validate_material"), MakeActionParams(TEXT("asset_path"), MaterialPath), false, true, Actions, MaterialRows, Errors);
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("get_compilation_stats"), MakeActionParams(TEXT("asset_path"), MaterialPath), false, true, Actions, MaterialRows, Errors);
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("get_material_properties"), MakeActionParams(TEXT("asset_path"), MaterialPath), false, true, Actions, MaterialRows, Errors);
+			PlanOrExecutePrimitive(TEXT("material"), TEXT("get_full_connection_graph"), MakeActionParams(TEXT("asset_path"), MaterialPath), false, true, Actions, MaterialRows, Errors);
+		}
+	}
+	else
+	{
+		if (bCreateMaterial)
+		{
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("create_material"), CreateParams, Actions, MaterialRows, Errors);
+		}
+		ExecutePrimitiveAndRecord(TEXT("material"), TEXT("set_material_property"), PropertyParams, Actions, MaterialRows, Errors);
+		if (ExpressionName.IsEmpty())
+		{
+			const FMonolithActionResult CustomResult = ExecutePrimitiveAndRecord(TEXT("material"), TEXT("create_custom_hlsl_node"), CreateCustomParams, Actions, MaterialRows, Errors);
+			if (CustomResult.bSuccess && CustomResult.Result.IsValid())
+			{
+				CustomResult.Result->TryGetStringField(TEXT("expression_name"), EffectiveExpressionName);
+			}
+			if (EffectiveExpressionName.IsEmpty())
+			{
+				Errors.Add(TEXT("material.create_custom_hlsl_node did not return expression_name; cannot wire material outputs."));
+			}
+			else if (bHasAdvancedCustomFields)
+			{
+				ExecutePrimitiveAndRecord(TEXT("material"), TEXT("update_custom_hlsl_node"), MakeUiMaterialCustomUpdateParams(MaterialPath, EffectiveExpressionName, Hlsl, OutputType, CustomInputs, Params), Actions, MaterialRows, Errors);
+			}
+		}
+		else
+		{
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("update_custom_hlsl_node"), MakeUiMaterialCustomUpdateParams(MaterialPath, ExpressionName, Hlsl, OutputType, CustomInputs, Params), Actions, MaterialRows, Errors);
+		}
+		if (!EffectiveExpressionName.IsEmpty())
+		{
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("connect_expressions"), MakeUiMaterialConnectParams(MaterialPath, EffectiveExpressionName, ConnectOutputPin, TEXT("EmissiveColor")), Actions, MaterialRows, Errors);
+			if (bConnectOpacity)
+			{
+				if (bAutoComponentMaskAlpha)
+				{
+					const FString ExecutedMaskNodeId = EffectiveExpressionName + TEXT("_OpacityMask");
+					OpacityMaskGraphParams = MakeUiMaterialAlphaMaskGraphParams(MaterialPath, EffectiveExpressionName, ConnectOutputPin, ExecutedMaskNodeId, OpacitySourceChannel);
+					ExecutePrimitiveAndRecord(TEXT("material"), TEXT("build_material_graph"), OpacityMaskGraphParams, Actions, MaterialRows, Errors);
+				}
+				else
+				{
+					ExecutePrimitiveAndRecord(TEXT("material"), TEXT("connect_expressions"), MakeUiMaterialConnectParams(MaterialPath, EffectiveExpressionName, OpacityOutputPin, TEXT("Opacity")), Actions, MaterialRows, Errors);
+				}
+			}
+		}
+		if (bCompile)
+		{
+			TSharedPtr<FJsonObject> RecompileParams = MakeActionParams(TEXT("asset_path"), MaterialPath);
+			RecompileParams->SetBoolField(TEXT("include_stats"), true);
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("recompile_material"), RecompileParams, Actions, MaterialRows, Errors);
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("validate_material"), MakeActionParams(TEXT("asset_path"), MaterialPath), Actions, MaterialRows, Errors);
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("get_compilation_stats"), MakeActionParams(TEXT("asset_path"), MaterialPath), Actions, MaterialRows, Errors);
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("get_material_properties"), MakeActionParams(TEXT("asset_path"), MaterialPath), Actions, MaterialRows, Errors);
+			ExecutePrimitiveAndRecord(TEXT("material"), TEXT("get_full_connection_graph"), MakeActionParams(TEXT("asset_path"), MaterialPath), Actions, MaterialRows, Errors);
+		}
+	}
+
+	const TSharedPtr<FJsonObject> BindParams = MakeUiMaterialBindParams(BindingAction, WidgetAssetPath, WidgetName, PropertyName, MaterialPath, false);
+	PlanOrExecutePrimitive(TEXT("ui"), BindingAction, BindParams, bExecute, true, Actions, WidgetRows, Errors);
+	if (bCompile)
+	{
+		PlanOrExecutePrimitive(TEXT("ui"), TEXT("compile_widget"), MakeActionParams(TEXT("asset_path"), WidgetAssetPath), bExecute, true, Actions, WidgetRows, Errors);
+		PlanOrExecutePrimitive(TEXT("ui"), TEXT("dump_blueprint_compile_log"), MakeActionParams(TEXT("asset_path"), WidgetAssetPath), bExecute, true, Actions, WidgetRows, Errors);
+	}
+	const TSharedPtr<FJsonObject> MaterialLifecycleAuditParams = MakeUiMaterialLifecycleAuditParams(WidgetAssetPath);
+	PlanOrExecutePrimitive(TEXT("ui"), TEXT("audit_widget_material_lifecycle"), MaterialLifecycleAuditParams, bExecute, false, Actions, WidgetRows, Warnings);
+	TSharedPtr<FJsonObject> WidgetProofParams = MakeActionParams(TEXT("widget_asset_path"), WidgetAssetPath);
+	WidgetProofParams->SetStringField(TEXT("proof_profile"), TEXT("visual"));
+	WidgetProofParams->SetBoolField(TEXT("dry_run"), !bExecute);
+	WidgetProofParams->SetBoolField(TEXT("run_read_only_checks"), true);
+	PlanOrExecutePrimitive(TEXT("workflow"), TEXT("ui_shipping_widget_blueprint"), WidgetProofParams, bExecute && bRunWidgetProof, true, Actions, WidgetRows, Errors);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("material_path"), MaterialPath);
+	Input->SetStringField(TEXT("widget_asset_path"), WidgetAssetPath);
+	Input->SetStringField(TEXT("widget_name"), WidgetName);
+	Input->SetStringField(TEXT("binding_action"), BindingAction);
+	Input->SetStringField(TEXT("property_name"), PropertyName);
+	Input->SetStringField(TEXT("expression_name"), EffectiveExpressionName);
+	Input->SetBoolField(TEXT("create_material"), bCreateMaterial);
+	Input->SetBoolField(TEXT("connect_opacity"), bConnectOpacity);
+	Input->SetBoolField(TEXT("auto_component_mask_alpha"), bAutoComponentMaskAlpha);
+	Input->SetStringField(TEXT("opacity_source_channel"), OpacitySourceChannel);
+	Input->SetBoolField(TEXT("compile"), bCompile);
+	Input->SetBoolField(TEXT("run_widget_proof"), bRunWidgetProof);
+
+	TSharedPtr<FJsonObject> Validation = MakeShared<FJsonObject>();
+	Validation->SetObjectField(TEXT("hlsl"), HlslProof);
+	Validation->SetObjectField(TEXT("material_proof"), MakeUnavailableProof(Errors.Num() > 0 ? TEXT("blocked") : (bExecute ? TEXT("attempted") : TEXT("planned")), TEXT("UI material domain, Custom HLSL node, output wiring, compile, stats, and connection graph readback are composed through material owner actions.")));
+	Validation->SetObjectField(TEXT("opacity_wiring"), MakeUiMaterialOpacityWiringProof(
+		bConnectOpacity,
+		bAutoComponentMaskAlpha,
+		OpacitySourceChannel,
+		EffectiveExpressionName,
+		ConnectOutputPin,
+		OpacityOutputPin,
+		bAutoComponentMaskAlpha ? (EffectiveExpressionName.IsEmpty() ? MaskNodeId : EffectiveExpressionName + TEXT("_OpacityMask")) : TEXT(""),
+		Errors.Num() > 0 ? TEXT("blocked") : (bExecute ? TEXT("attempted") : TEXT("planned"))));
+	Validation->SetObjectField(TEXT("binding_proof"), MakeUnavailableProof(Errors.Num() > 0 ? TEXT("blocked") : (bExecute ? TEXT("attempted") : TEXT("planned")), TEXT("Widget material binding is composed through ui.set_image or ui.set_brush plus ui.compile_widget.")));
+	Validation->SetObjectField(TEXT("material_lifecycle"), MakeUnavailableProof(Errors.Num() > 0 ? TEXT("blocked") : (bExecute ? TEXT("attempted") : TEXT("planned")), TEXT("Widget Blueprint dynamic-material lifecycle lint is composed through ui.audit_widget_material_lifecycle.")));
+	Validation->SetObjectField(TEXT("widget_proof"), MakeUnavailableProof(bRunWidgetProof ? (bExecute ? TEXT("attempted") : TEXT("planned")) : TEXT("next_action"), bRunWidgetProof ? TEXT("workflow.ui_shipping_widget_blueprint is part of this workflow run.") : TEXT("Run workflow.ui_shipping_widget_blueprint explicitly for visual artifact proof.")));
+
+	TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
+	Proof->SetArrayField(TEXT("material"), MaterialRows);
+	Proof->SetArrayField(TEXT("widget"), WidgetRows);
+	Proof->SetArrayField(TEXT("preview_artifacts"), {});
+	Proof->SetArrayField(TEXT("logs"), {});
+	Proof->SetArrayField(TEXT("benchmarks"), {});
+	Proof->SetStringField(TEXT("runtime_note"), TEXT("This workflow proves material graph authoring, compile/stat read-back, and widget binding. Retainer/runtime perf proof remains a separate workflow slice."));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("workflow_id"), TEXT("ui_material_hlsl_effect"));
+	Result->SetStringField(TEXT("workflow_slice"), TEXT("ui_material_custom_hlsl_brush_binding_v2"));
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("confirm"), bConfirm);
+	Result->SetObjectField(TEXT("input"), Input);
+	Result->SetObjectField(TEXT("plan"), MakeUiMaterialPlanObject(bDryRun, bConfirm, bCreateMaterial, bCompile, true, bRunWidgetProof, bAutoComponentMaskAlpha));
+	Result->SetObjectField(TEXT("touched"), MakeTouchedObject({}, { MaterialPath, WidgetAssetPath }, { MaterialPath, WidgetAssetPath }, {}));
+	Result->SetArrayField(TEXT("dirty_packages"), {});
+	Result->SetObjectField(TEXT("validation"), Validation);
+	Result->SetObjectField(TEXT("proof"), Proof);
+	Result->SetArrayField(TEXT("actions"), Actions);
+	Result->SetArrayField(TEXT("artifacts"), {});
+
+	TArray<TSharedPtr<FJsonValue>> NextActions;
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("workflow.ui_shipping_widget_blueprint"), FMonolithToolRegistry::Get().HasAction(TEXT("workflow"), TEXT("ui_shipping_widget_blueprint")), true, TEXT("Run visual widget proof after material binding."), WidgetProofParams)));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.audit_widget_material_lifecycle"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("audit_widget_material_lifecycle")), true, TEXT("Audit Widget Blueprint graph MID lifetime after material binding."), MaterialLifecycleAuditParams)));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("material.get_material_properties"), FMonolithToolRegistry::Get().HasAction(TEXT("material"), TEXT("get_material_properties")), true, TEXT("Read back material domain/blend/shading properties."), MakeActionParams(TEXT("asset_path"), MaterialPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.dump_blueprint_compile_log"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_blueprint_compile_log")), true, TEXT("Read Widget Blueprint compile warnings/errors through the UI owner action."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("asset.save_asset"), FMonolithToolRegistry::Get().HasAction(TEXT("asset"), TEXT("save_asset")), true, TEXT("Persist reviewed material and widget assets explicitly."), MakeActionParams(TEXT("asset_path"), MaterialPath))));
+	Result->SetArrayField(TEXT("next_actions"), NextActions);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetBoolField(TEXT("automatic"), false);
+	Rollback->SetArrayField(TEXT("limitations"), StringsToJson({
+		TEXT("Rollback is source-control/editor-undo based; the workflow records touched assets but does not auto-delete material expressions."),
+		TEXT("auto_component_mask_alpha inserts a ComponentMask through material.build_material_graph but does not yet deduplicate older masks from repeated confirmed runs."),
+		TEXT("RetainerBox effect-material proof is handled by workflow.ui_retainer_effect_material.")
+	}));
+	Result->SetObjectField(TEXT("rollback"), Rollback);
+
+	Result->SetStringField(TEXT("status"), Errors.Num() > 0 ? TEXT("blocked") : (bDryRun ? TEXT("planned") : TEXT("pass")));
+	if (bDryRun)
+	{
+		Warnings.Add(TEXT("dry_run=true returned the material/ui owner-action plan only; no material or widget assets were mutated."));
+	}
+	Result->SetArrayField(TEXT("warnings"), StringsToJson(Warnings));
+	Result->SetArrayField(TEXT("errors"), StringsToJson(Errors));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithWorkflowActions::HandleUiRetainerEffectMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+	FString MaterialPath;
+	Params->TryGetStringField(TEXT("material_path"), MaterialPath);
+	if (MaterialPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("material_path is required."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	const TSharedPtr<FJsonObject>* BindToPtr = nullptr;
+	if (!Params->TryGetObjectField(TEXT("bind_to"), BindToPtr) || !BindToPtr || !BindToPtr->IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("bind_to must be an object with asset_path and retainer_widget_name/widget_name."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const TSharedPtr<FJsonObject> BindTo = *BindToPtr;
+
+	FString WidgetAssetPath;
+	BindTo->TryGetStringField(TEXT("asset_path"), WidgetAssetPath);
+	if (WidgetAssetPath.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("widget_asset_path"), WidgetAssetPath);
+	}
+	if (WidgetAssetPath.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("wbp_path"), WidgetAssetPath);
+	}
+
+	FString RetainerWidgetName;
+	BindTo->TryGetStringField(TEXT("retainer_widget_name"), RetainerWidgetName);
+	if (RetainerWidgetName.IsEmpty())
+	{
+		BindTo->TryGetStringField(TEXT("widget_name"), RetainerWidgetName);
+	}
+	if (WidgetAssetPath.IsEmpty() || RetainerWidgetName.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("bind_to.asset_path and bind_to.retainer_widget_name/widget_name are required."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	FString TextureParameter = TEXT("Texture");
+	BindTo->TryGetStringField(TEXT("texture_parameter"), TextureParameter);
+	if (TextureParameter.IsEmpty())
+	{
+		Params->TryGetStringField(TEXT("texture_parameter"), TextureParameter);
+	}
+	if (TextureParameter.IsEmpty())
+	{
+		TextureParameter = TEXT("Texture");
+	}
+
+	bool bCompile = true;
+	Params->TryGetBoolField(TEXT("compile"), bCompile);
+	bool bRunReadOnlyChecks = false;
+	Params->TryGetBoolField(TEXT("run_read_only_checks"), bRunReadOnlyChecks);
+	bool bRequestRender = false;
+	Params->TryGetBoolField(TEXT("request_render"), bRequestRender);
+	bool bRunWidgetProof = false;
+	Params->TryGetBoolField(TEXT("run_widget_proof"), bRunWidgetProof);
+	bool bDryRun = true;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+	bool bConfirm = false;
+	Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+	const bool bExecuteMutation = !bDryRun && bConfirm;
+	const bool bExecuteReadOnly = bExecuteMutation || bRunReadOnlyChecks;
+
+	TArray<FString> Warnings;
+	TArray<FString> Errors;
+	if (!bDryRun && !bConfirm)
+	{
+		Errors.Add(TEXT("dry_run=false requires confirm=true before RetainerBox mutation."));
+	}
+	if (!bRunWidgetProof)
+	{
+		Warnings.Add(TEXT("run_widget_proof=false: visual artifact proof is returned as an explicit next action."));
+	}
+	Warnings.Add(TEXT("Retainer/invalidation performance proof is not claimed by this workflow; run a measured before/after runtime profile before treating RetainerBox as an optimization."));
+
+	TArray<TSharedPtr<FJsonValue>> Actions;
+	TArray<TSharedPtr<FJsonValue>> MaterialRows;
+	TArray<TSharedPtr<FJsonValue>> WidgetRows;
+
+	PlanOrExecutePrimitive(TEXT("material"), TEXT("get_material_parameters"), MakeActionParams(TEXT("asset_path"), MaterialPath), bExecuteReadOnly, true, Actions, MaterialRows, Errors);
+	PlanOrExecutePrimitive(TEXT("material"), TEXT("get_material_properties"), MakeActionParams(TEXT("asset_path"), MaterialPath), bExecuteReadOnly, true, Actions, MaterialRows, Errors);
+
+	const TSharedPtr<FJsonObject> RetainerBindParams = MakeUiRetainerBindParams(
+		WidgetAssetPath,
+		RetainerWidgetName,
+		MaterialPath,
+		TextureParameter,
+		false,
+		bRequestRender);
+	PlanOrExecutePrimitive(TEXT("ui"), TEXT("set_retainer_effect_material"), RetainerBindParams, bExecuteMutation, true, Actions, WidgetRows, Errors);
+	if (bCompile)
+	{
+		PlanOrExecutePrimitive(TEXT("ui"), TEXT("compile_widget"), MakeActionParams(TEXT("asset_path"), WidgetAssetPath), bExecuteMutation, true, Actions, WidgetRows, Errors);
+		PlanOrExecutePrimitive(TEXT("ui"), TEXT("dump_blueprint_compile_log"), MakeActionParams(TEXT("asset_path"), WidgetAssetPath), bExecuteMutation, true, Actions, WidgetRows, Errors);
+	}
+	const TSharedPtr<FJsonObject> MaterialLifecycleAuditParams = MakeUiMaterialLifecycleAuditParams(WidgetAssetPath);
+	PlanOrExecutePrimitive(TEXT("ui"), TEXT("audit_widget_material_lifecycle"), MaterialLifecycleAuditParams, bExecuteReadOnly, false, Actions, WidgetRows, Warnings);
+
+	TSharedPtr<FJsonObject> WidgetProofParams = MakeActionParams(TEXT("widget_asset_path"), WidgetAssetPath);
+	WidgetProofParams->SetStringField(TEXT("proof_profile"), TEXT("visual"));
+	WidgetProofParams->SetBoolField(TEXT("dry_run"), !bExecuteMutation);
+	WidgetProofParams->SetBoolField(TEXT("run_read_only_checks"), true);
+	PlanOrExecutePrimitive(TEXT("workflow"), TEXT("ui_shipping_widget_blueprint"), WidgetProofParams, bExecuteMutation && bRunWidgetProof, true, Actions, WidgetRows, Errors);
+
+	TSharedPtr<FJsonObject> Input = MakeShared<FJsonObject>();
+	Input->SetStringField(TEXT("material_path"), MaterialPath);
+	Input->SetStringField(TEXT("widget_asset_path"), WidgetAssetPath);
+	Input->SetStringField(TEXT("retainer_widget_name"), RetainerWidgetName);
+	Input->SetStringField(TEXT("texture_parameter"), TextureParameter);
+	Input->SetBoolField(TEXT("compile"), bCompile);
+	Input->SetBoolField(TEXT("run_read_only_checks"), bRunReadOnlyChecks);
+	Input->SetBoolField(TEXT("request_render"), bRequestRender);
+	Input->SetBoolField(TEXT("run_widget_proof"), bRunWidgetProof);
+
+	const FString ReadStatus = Errors.Num() > 0 ? TEXT("blocked") : (bExecuteReadOnly ? TEXT("attempted") : TEXT("planned"));
+	const FString MutateStatus = Errors.Num() > 0 ? TEXT("blocked") : (bExecuteMutation ? TEXT("attempted") : TEXT("planned"));
+	TSharedPtr<FJsonObject> Validation = MakeShared<FJsonObject>();
+	Validation->SetObjectField(TEXT("material_parameter_proof"), MakeUnavailableProof(ReadStatus, TEXT("Exact Retainer texture-parameter existence is proved through material.get_material_parameters and enforced by ui.set_retainer_effect_material.")));
+	Validation->SetObjectField(TEXT("material_domain_proof"), MakeUnavailableProof(ReadStatus, TEXT("UI material domain is read through material.get_material_properties and enforced by the Retainer owner action.")));
+	Validation->SetObjectField(TEXT("binding_proof"), MakeUnavailableProof(MutateStatus, TEXT("Retainer effect material binding uses ui.set_retainer_effect_material, not raw set_widget_property.")));
+	Validation->SetObjectField(TEXT("material_lifecycle"), MakeUnavailableProof(ReadStatus, TEXT("Widget Blueprint dynamic-material lifecycle lint is composed through ui.audit_widget_material_lifecycle.")));
+	Validation->SetObjectField(TEXT("widget_proof"), MakeUnavailableProof(bRunWidgetProof ? MutateStatus : TEXT("next_action"), bRunWidgetProof ? TEXT("workflow.ui_shipping_widget_blueprint is part of this workflow run.") : TEXT("Run workflow.ui_shipping_widget_blueprint explicitly for visual artifact proof.")));
+	Validation->SetObjectField(TEXT("runtime_profile"), MakeUnavailableProof(TEXT("not_claimed"), TEXT("Retainer performance benefit requires a separate measured before/after runtime profile.")));
+
+	TSharedPtr<FJsonObject> Proof = MakeShared<FJsonObject>();
+	Proof->SetArrayField(TEXT("material"), MaterialRows);
+	Proof->SetArrayField(TEXT("widget"), WidgetRows);
+	Proof->SetArrayField(TEXT("preview_artifacts"), {});
+	Proof->SetArrayField(TEXT("logs"), {});
+	Proof->SetArrayField(TEXT("benchmarks"), {});
+	Proof->SetStringField(TEXT("runtime_note"), TEXT("This workflow proves RetainerBox effect-material binding and exact texture-parameter contract. It does not claim Retainer performance gains without a separate profile."));
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("workflow_id"), TEXT("ui_retainer_effect_material"));
+	Result->SetStringField(TEXT("workflow_slice"), TEXT("ui_retainer_effect_texture_parameter_proof_v1"));
+	Result->SetBoolField(TEXT("dry_run"), bDryRun);
+	Result->SetBoolField(TEXT("confirm"), bConfirm);
+	Result->SetObjectField(TEXT("input"), Input);
+	Result->SetObjectField(TEXT("plan"), MakeUiRetainerPlanObject(bDryRun, bConfirm, bCompile, bRunReadOnlyChecks, bRunWidgetProof, bRequestRender));
+	Result->SetObjectField(TEXT("touched"), MakeTouchedObject({}, { MaterialPath, WidgetAssetPath }, { WidgetAssetPath }, {}));
+	Result->SetArrayField(TEXT("dirty_packages"), {});
+	Result->SetObjectField(TEXT("validation"), Validation);
+	Result->SetObjectField(TEXT("proof"), Proof);
+	Result->SetArrayField(TEXT("actions"), Actions);
+	Result->SetArrayField(TEXT("artifacts"), {});
+
+	TArray<TSharedPtr<FJsonValue>> NextActions;
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("workflow.ui_shipping_widget_blueprint"), FMonolithToolRegistry::Get().HasAction(TEXT("workflow"), TEXT("ui_shipping_widget_blueprint")), true, TEXT("Run visual widget proof after Retainer effect binding."), WidgetProofParams)));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.audit_widget_material_lifecycle"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("audit_widget_material_lifecycle")), true, TEXT("Audit Widget Blueprint graph MID lifetime before treating the Retainer workflow as production-ready."), MaterialLifecycleAuditParams)));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("material.get_material_parameters"), FMonolithToolRegistry::Get().HasAction(TEXT("material"), TEXT("get_material_parameters")), true, TEXT("Repeat exact texture-parameter readback if the material changed."), MakeActionParams(TEXT("asset_path"), MaterialPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("material.get_material_properties"), FMonolithToolRegistry::Get().HasAction(TEXT("material"), TEXT("get_material_properties")), true, TEXT("Read back material domain/blend/shading properties."), MakeActionParams(TEXT("asset_path"), MaterialPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("ui.dump_blueprint_compile_log"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_blueprint_compile_log")), true, TEXT("Read Widget Blueprint compile warnings/errors through the UI owner action."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
+	NextActions.Add(MakeShared<FJsonValueObject>(MakeNextAction(TEXT("asset.save_asset"), FMonolithToolRegistry::Get().HasAction(TEXT("asset"), TEXT("save_asset")), true, TEXT("Persist reviewed Widget Blueprint and material assets explicitly."), MakeActionParams(TEXT("asset_path"), WidgetAssetPath))));
+	Result->SetArrayField(TEXT("next_actions"), NextActions);
+
+	TSharedPtr<FJsonObject> Rollback = MakeShared<FJsonObject>();
+	Rollback->SetBoolField(TEXT("automatic"), false);
+	Rollback->SetArrayField(TEXT("limitations"), StringsToJson({
+		TEXT("Rollback is source-control/editor-undo based; the workflow records touched assets but does not auto-clear RetainerBox effect fields."),
+		TEXT("This workflow binds an existing RetainerBox. It does not insert RetainerBox or InvalidationBox as an optimization."),
+		TEXT("Runtime/performance proof is intentionally separate from static Retainer material binding proof.")
+	}));
+	Result->SetObjectField(TEXT("rollback"), Rollback);
+
+	Result->SetStringField(TEXT("status"), Errors.Num() > 0 ? TEXT("blocked") : (bDryRun ? TEXT("planned") : TEXT("pass")));
+	if (bDryRun && !bRunReadOnlyChecks)
+	{
+		Warnings.Add(TEXT("dry_run=true returned the Retainer owner-action plan only; pass run_read_only_checks=true to execute material parameter/domain readback without mutation."));
 	}
 	Result->SetArrayField(TEXT("warnings"), StringsToJson(Warnings));
 	Result->SetArrayField(TEXT("errors"), StringsToJson(Errors));

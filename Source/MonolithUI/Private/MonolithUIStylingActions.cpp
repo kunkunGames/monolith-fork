@@ -5,8 +5,10 @@
 #include "MonolithParamSchema.h"
 #include "Styling/SlateTypes.h"
 #include "Styling/StyleColors.h"
+#include "Components/RetainerBox.h"
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInterface.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
@@ -25,6 +27,63 @@ namespace
         Result->SetNumberField(TEXT("properties_set"), PropsSet);
         Result->SetBoolField(TEXT("compiled"), bCompile);
         return Result;
+    }
+
+    TArray<TSharedPtr<FJsonValue>> CollectTextureParameterNames(UMaterialInterface* Material)
+    {
+        TArray<TSharedPtr<FJsonValue>> TextureParameters;
+        if (!Material)
+        {
+            return TextureParameters;
+        }
+
+        TArray<FMaterialParameterInfo> TextureInfos;
+        TArray<FGuid> TextureGuids;
+        Material->GetAllTextureParameterInfo(TextureInfos, TextureGuids);
+        TextureParameters.Reserve(TextureInfos.Num());
+        for (const FMaterialParameterInfo& Info : TextureInfos)
+        {
+            TextureParameters.Add(MakeShared<FJsonValueString>(Info.Name.ToString()));
+        }
+        return TextureParameters;
+    }
+
+    bool HasExactTextureParameter(UMaterialInterface* Material, const FName& TextureParameter)
+    {
+        if (!Material || TextureParameter.IsNone())
+        {
+            return false;
+        }
+
+        TArray<FMaterialParameterInfo> TextureInfos;
+        TArray<FGuid> TextureGuids;
+        Material->GetAllTextureParameterInfo(TextureInfos, TextureGuids);
+        for (const FMaterialParameterInfo& Info : TextureInfos)
+        {
+            if (Info.Name == TextureParameter)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    FString GetMaterialDomainString(UMaterialInterface* Material)
+    {
+        const UMaterial* BaseMaterial = Material ? Material->GetMaterial() : nullptr;
+        if (!BaseMaterial)
+        {
+            return TEXT("unknown");
+        }
+
+        const UEnum* DomainEnum = StaticEnum<EMaterialDomain>();
+        return DomainEnum ? DomainEnum->GetNameStringByValue(static_cast<int64>(BaseMaterial->MaterialDomain)) : TEXT("unknown");
+    }
+
+    bool IsUiMaterial(UMaterialInterface* Material)
+    {
+        const UMaterial* BaseMaterial = Material ? Material->GetMaterial() : nullptr;
+        return BaseMaterial && BaseMaterial->MaterialDomain == MD_UI;
     }
 }
 
@@ -116,6 +175,24 @@ void FMonolithUIStylingActions::RegisterActions(FMonolithToolRegistry& Registry)
             .OptionalAssetPath(TEXT("material_path"), TEXT("Material asset path"))
             .Optional(TEXT("tint_color"), TEXT("string"), TEXT("Tint color as hex or r,g,b,a"))
             .Optional(TEXT("size"), TEXT("object"), TEXT("Desired size: {\"x\": 64, \"y\": 64}"))
+            .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
+            .Build()
+    );
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("set_retainer_effect_material"),
+        TEXT("Set a RetainerBox effect material and exact render-target texture parameter using the RetainerBox owner API"),
+        FMonolithActionHandler::CreateStatic(&HandleSetRetainerEffectMaterial),
+        FParamSchemaBuilder()
+            .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
+            .Required(TEXT("widget_name"), TEXT("string"), TEXT("Target RetainerBox widget name"))
+            .RequiredAssetPath(TEXT("material_path"), TEXT("UI-domain effect material asset path"))
+            .Optional(TEXT("texture_parameter"), TEXT("string"), TEXT("Texture parameter receiving the Retainer render target. Defaults to Texture."), TEXT("Texture"))
+            .Optional(TEXT("require_ui_material"), TEXT("boolean"), TEXT("Fail when the material domain is not UI. Default true."), TEXT("true"))
+            .Optional(TEXT("request_render"), TEXT("boolean"), TEXT("Call RequestRender after applying the effect material."), TEXT("false"))
+            .Optional(TEXT("retain_rendering"), TEXT("boolean"), TEXT("Optional SetRetainRendering value. Omit to preserve existing value."))
+            .Optional(TEXT("render_phase"), TEXT("integer"), TEXT("Optional render phase. Requires total_render_phases."))
+            .Optional(TEXT("total_render_phases"), TEXT("integer"), TEXT("Optional total rendering phases. Requires render_phase."))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile after setting"), TEXT("false"))
             .Build()
     );
@@ -656,8 +733,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     if (UTextBlock* TB = Cast<UTextBlock>(Widget))
     {
         FString Text;
-        Params->TryGetStringField(TEXT("text"), Text);
-        if (!Text.IsEmpty())
+        if (Params->TryGetStringField(TEXT("text"), Text))
         {
             TB->SetText(FText::FromString(Text));
             PropsSet++;
@@ -710,8 +786,7 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetText(const TSharedPtr<
     else if (URichTextBlock* RTB = Cast<URichTextBlock>(Widget))
     {
         FString Text;
-        Params->TryGetStringField(TEXT("text"), Text);
-        if (!Text.IsEmpty())
+        if (Params->TryGetStringField(TEXT("text"), Text))
         {
             RTB->SetText(FText::FromString(Text));
             PropsSet++;
@@ -867,4 +942,154 @@ FMonolithActionResult FMonolithUIStylingActions::HandleSetImage(const TSharedPtr
     Params->TryGetBoolField(TEXT("compile"), bCompile);
     if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
     return FMonolithActionResult::Success(MakeStylingResponse(WidgetName, PropsSet, bCompile));
+}
+
+// --- set_retainer_effect_material ---
+FMonolithActionResult FMonolithUIStylingActions::HandleSetRetainerEffectMaterial(const TSharedPtr<FJsonObject>& Params)
+{
+    FString AssetPath;
+    FMonolithActionResult ParamError;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("asset_path"), AssetPath, ParamError)) return ParamError;
+    FString WidgetName;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("widget_name"), WidgetName, ParamError)) return ParamError;
+    FString MaterialPath;
+    if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("material_path"), MaterialPath, ParamError)) return ParamError;
+
+    FString TextureParameterName = TEXT("Texture");
+    Params->TryGetStringField(TEXT("texture_parameter"), TextureParameterName);
+    if (TextureParameterName.IsEmpty())
+    {
+        TextureParameterName = TEXT("Texture");
+    }
+    const FName TextureParameter(*TextureParameterName);
+
+    bool bRequireUiMaterial = true;
+    Params->TryGetBoolField(TEXT("require_ui_material"), bRequireUiMaterial);
+
+    FMonolithActionResult Err;
+    UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(AssetPath, Err);
+    if (!WBP) return Err;
+
+    UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
+    if (!Widget)
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    URetainerBox* RetainerBox = Cast<URetainerBox>(Widget);
+    if (!RetainerBox)
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("WidgetClass"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' (class %s) is not a RetainerBox widget."),
+                *WidgetName, *Widget->GetClass()->GetName()),
+            TEXT("set_retainer_effect_material targets URetainerBox. Use ui::get_widget_tree to find the RetainerBox name."),
+            { TEXT("RetainerBox") });
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(MaterialPath);
+    if (!Material)
+    {
+        return FMonolithActionResult::Error(FString::Printf(TEXT("Material not found: %s"), *MaterialPath));
+    }
+
+    const bool bIsUiMaterial = IsUiMaterial(Material);
+    if (bRequireUiMaterial && !bIsUiMaterial)
+    {
+        TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+        ErrorData->SetStringField(TEXT("rule_id"), TEXT("MaterialDomainMismatch"));
+        ErrorData->SetStringField(TEXT("material_path"), MaterialPath);
+        ErrorData->SetStringField(TEXT("material_domain"), GetMaterialDomainString(Material));
+        ErrorData->SetStringField(TEXT("expected_domain"), TEXT("MD_UI"));
+        return FMonolithActionResult::Error(
+            FString::Printf(TEXT("Retainer effect material '%s' is not UI-domain."), *MaterialPath),
+            FMonolithJsonUtils::ErrInvalidParams).WithErrorData(ErrorData);
+    }
+
+    const bool bTextureParameterExists = HasExactTextureParameter(Material, TextureParameter);
+    if (!bTextureParameterExists)
+    {
+        TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+        ErrorData->SetStringField(TEXT("rule_id"), TEXT("RetainerEffectParameterMismatch"));
+        ErrorData->SetStringField(TEXT("material_path"), MaterialPath);
+        ErrorData->SetStringField(TEXT("texture_parameter"), TextureParameterName);
+        ErrorData->SetArrayField(TEXT("available_texture_parameters"), CollectTextureParameterNames(Material));
+        return FMonolithActionResult::Error(
+            FString::Printf(TEXT("Retainer effect material '%s' does not expose exact texture parameter '%s'."),
+                *MaterialPath, *TextureParameterName),
+            FMonolithJsonUtils::ErrInvalidParams).WithErrorData(ErrorData);
+    }
+
+    RetainerBox->Modify();
+    WBP->Modify();
+
+    int32 PropsSet = 0;
+    RetainerBox->SetEffectMaterial(Material);
+    ++PropsSet;
+    RetainerBox->SetTextureParameter(TextureParameter);
+    ++PropsSet;
+
+    bool bRetainRendering = false;
+    if (Params->TryGetBoolField(TEXT("retain_rendering"), bRetainRendering))
+    {
+        RetainerBox->SetRetainRendering(bRetainRendering);
+        ++PropsSet;
+    }
+
+    double RenderPhase = 0.0;
+    double TotalRenderPhases = 0.0;
+    const bool bHasRenderPhase = Params->TryGetNumberField(TEXT("render_phase"), RenderPhase);
+    const bool bHasTotalRenderPhases = Params->TryGetNumberField(TEXT("total_render_phases"), TotalRenderPhases);
+    if (bHasRenderPhase != bHasTotalRenderPhases)
+    {
+        return FMonolithActionResult::Error(TEXT("render_phase and total_render_phases must be supplied together."), FMonolithJsonUtils::ErrInvalidParams);
+    }
+    if (bHasRenderPhase && bHasTotalRenderPhases)
+    {
+        if (TotalRenderPhases < 1.0 || RenderPhase < 0.0)
+        {
+            return FMonolithActionResult::Error(TEXT("render_phase must be >= 0 and total_render_phases must be >= 1."), FMonolithJsonUtils::ErrInvalidParams);
+        }
+        RetainerBox->SetRenderingPhase(static_cast<int32>(RenderPhase), static_cast<int32>(TotalRenderPhases));
+        ++PropsSet;
+    }
+
+    bool bRequestRender = false;
+    Params->TryGetBoolField(TEXT("request_render"), bRequestRender);
+    if (bRequestRender)
+    {
+        RetainerBox->RequestRender();
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(WBP);
+
+    bool bCompile = false;
+    Params->TryGetBoolField(TEXT("compile"), bCompile);
+    if (bCompile) FKismetEditorUtilities::CompileBlueprint(WBP);
+
+    TSharedPtr<FJsonObject> Result = MakeStylingResponse(WidgetName, PropsSet, bCompile);
+    Result->SetStringField(TEXT("widget_class"), Widget->GetClass()->GetName());
+    Result->SetStringField(TEXT("material_path"), MaterialPath);
+    Result->SetStringField(TEXT("material_domain"), GetMaterialDomainString(Material));
+    Result->SetBoolField(TEXT("is_ui_material"), bIsUiMaterial);
+    Result->SetStringField(TEXT("texture_parameter"), TextureParameterName);
+    Result->SetBoolField(TEXT("texture_parameter_exists"), bTextureParameterExists);
+    Result->SetArrayField(TEXT("available_texture_parameters"), CollectTextureParameterNames(Material));
+    Result->SetBoolField(TEXT("requested_render"), bRequestRender);
+    Result->SetBoolField(TEXT("retain_rendering"), RetainerBox->IsRetainRendering());
+    Result->SetBoolField(TEXT("render_on_phase"), RetainerBox->IsRenderOnPhase());
+    Result->SetBoolField(TEXT("render_on_invalidation"), RetainerBox->IsRenderOnInvalidation());
+    Result->SetNumberField(TEXT("phase"), RetainerBox->GetPhase());
+    Result->SetNumberField(TEXT("phase_count"), RetainerBox->GetPhaseCount());
+    Result->SetStringField(TEXT("proof_schema"), TEXT("ui_retainer_effect_binding.v1"));
+    return FMonolithActionResult::Success(Result);
 }

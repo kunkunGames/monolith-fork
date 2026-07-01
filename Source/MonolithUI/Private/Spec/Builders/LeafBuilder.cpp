@@ -387,6 +387,31 @@ namespace MonolithUI::LeafBuilderInternal
             }
             return;
         }
+        if (UBorder* B = Cast<UBorder>(Widget))
+        {
+            if (!C.BrushPath.IsEmpty())
+            {
+                if (UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *C.BrushPath))
+                {
+                    B->SetBrushFromTexture(Tex);
+                }
+                else if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, *C.BrushPath))
+                {
+                    B->SetBrushFromMaterial(Mat);
+                }
+                else
+                {
+                    FUISpecError W;
+                    W.Severity = EUISpecErrorSeverity::Warning;
+                    W.Category = TEXT("Asset");
+                    W.WidgetId = Node.Id;
+                    W.Message = FString::Printf(
+                        TEXT("Border brush asset '%s' could not be loaded."), *C.BrushPath);
+                    Context.Warnings.Add(MoveTemp(W));
+                }
+            }
+            return;
+        }
         if (UButton* B = Cast<UButton>(Widget))
         {
             // UMG buttons hold a single child via SetContent — text labels

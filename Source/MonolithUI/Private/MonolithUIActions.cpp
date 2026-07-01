@@ -7,8 +7,16 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithHashUtils.h"
+#include "HAL/FileManager.h"
+#include "IImageWrapper.h"
+#include "IImageWrapperModule.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 #include "GameplayTagContainer.h"
 #include "Interfaces/IPluginManager.h"
 #include "Modules/ModuleManager.h"
@@ -51,6 +59,231 @@ namespace MonolithUIActionsPhase2
 {
     static FMonolithActionResult HandleRenameWidget(const TSharedPtr<FJsonObject>& Params);
     static FMonolithActionResult HandleDumpBlueprintCompileLog(const TSharedPtr<FJsonObject>& Params);
+    static FMonolithActionResult HandleVerifyWidgetVisualArtifacts(const TSharedPtr<FJsonObject>& Params);
+}
+
+namespace MonolithUIVisualArtifactsInternal
+{
+    struct FVerifiedPngInfo
+    {
+        FString Path;
+        int64 ByteCount = 0;
+        FString Sha256;
+        int32 Width = 0;
+        int32 Height = 0;
+        double TransparentRatio = 0.0;
+        int32 UniqueColorEstimate = 0;
+        bool bBlank = true;
+    };
+
+    static FString NormalizeArtifactPath(FString Path)
+    {
+        Path.TrimStartAndEndInline();
+        if (Path.IsEmpty())
+        {
+            return Path;
+        }
+
+        FPaths::NormalizeFilename(Path);
+        if (FPaths::IsRelative(Path))
+        {
+            Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Path);
+            FPaths::NormalizeFilename(Path);
+        }
+        return Path;
+    }
+
+    static FString Sha256Hex(const TArray<uint8>& Bytes)
+    {
+        FString OutHex;
+        FMonolithHashUtils::TrySha256Bytes(MakeArrayView(Bytes), OutHex);
+        return OutHex;
+    }
+
+    static bool DecodePngInfo(const FString& Path, FVerifiedPngInfo& OutInfo, FString& OutError)
+    {
+        OutInfo = FVerifiedPngInfo{};
+        OutInfo.Path = NormalizeArtifactPath(Path);
+        if (OutInfo.Path.IsEmpty())
+        {
+            OutError = TEXT("capture path is empty");
+            return false;
+        }
+
+        TArray<uint8> Bytes;
+        if (!FFileHelper::LoadFileToArray(Bytes, *OutInfo.Path) || Bytes.Num() == 0)
+        {
+            OutError = FString::Printf(TEXT("artifact_missing: failed to read PNG artifact '%s'"), *OutInfo.Path);
+            return false;
+        }
+
+        OutInfo.ByteCount = Bytes.Num();
+        OutInfo.Sha256 = Sha256Hex(Bytes);
+
+        IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+        TSharedPtr<IImageWrapper> Wrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
+        if (!Wrapper.IsValid() || !Wrapper->SetCompressed(Bytes.GetData(), Bytes.Num()))
+        {
+            OutError = FString::Printf(TEXT("invalid_png: artifact is not a decodable PNG '%s'"), *OutInfo.Path);
+            return false;
+        }
+
+        OutInfo.Width = Wrapper->GetWidth();
+        OutInfo.Height = Wrapper->GetHeight();
+        if (OutInfo.Width <= 0 || OutInfo.Height <= 0)
+        {
+            OutError = FString::Printf(TEXT("invalid_png: artifact has invalid dimensions '%s'"), *OutInfo.Path);
+            return false;
+        }
+
+        TArray<uint8> RawBgra;
+        if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, RawBgra) || RawBgra.Num() < 4)
+        {
+            OutError = FString::Printf(TEXT("invalid_png: failed to decode PNG pixels '%s'"), *OutInfo.Path);
+            return false;
+        }
+
+        const int64 PixelCount = static_cast<int64>(OutInfo.Width) * static_cast<int64>(OutInfo.Height);
+        if (PixelCount <= 0 || RawBgra.Num() < PixelCount * 4)
+        {
+            OutError = FString::Printf(TEXT("invalid_png: decoded pixel count does not match dimensions '%s'"), *OutInfo.Path);
+            return false;
+        }
+
+        int64 TransparentPixels = 0;
+        TSet<uint32> UniqueColors;
+        UniqueColors.Reserve(512);
+        for (int64 PixelIndex = 0; PixelIndex < PixelCount; ++PixelIndex)
+        {
+            const int64 Base = PixelIndex * 4;
+            const uint8 B = RawBgra[Base + 0];
+            const uint8 G = RawBgra[Base + 1];
+            const uint8 R = RawBgra[Base + 2];
+            const uint8 A = RawBgra[Base + 3];
+            if (A == 0)
+            {
+                ++TransparentPixels;
+            }
+            if (UniqueColors.Num() < 4096)
+            {
+                const uint32 Packed = (static_cast<uint32>(A) << 24)
+                    | (static_cast<uint32>(R) << 16)
+                    | (static_cast<uint32>(G) << 8)
+                    | static_cast<uint32>(B);
+                UniqueColors.Add(Packed);
+            }
+        }
+
+        OutInfo.TransparentRatio = static_cast<double>(TransparentPixels) / static_cast<double>(PixelCount);
+        OutInfo.UniqueColorEstimate = UniqueColors.Num();
+        OutInfo.bBlank = OutInfo.TransparentRatio >= 0.999 || OutInfo.UniqueColorEstimate <= 1;
+        return true;
+    }
+
+    static bool TryGetResolution(const TSharedPtr<FJsonObject>& Obj, int32& OutWidth, int32& OutHeight)
+    {
+        OutWidth = 0;
+        OutHeight = 0;
+        if (!Obj.IsValid())
+        {
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Resolution = nullptr;
+        if (!Obj->TryGetArrayField(TEXT("expected_resolution"), Resolution) || !Resolution || Resolution->Num() < 2)
+        {
+            return false;
+        }
+
+        double Width = 0.0;
+        double Height = 0.0;
+        if (!(*Resolution)[0].IsValid() || !(*Resolution)[0]->TryGetNumber(Width) ||
+            !(*Resolution)[1].IsValid() || !(*Resolution)[1]->TryGetNumber(Height))
+        {
+            return false;
+        }
+
+        OutWidth = FMath::RoundToInt(Width);
+        OutHeight = FMath::RoundToInt(Height);
+        return OutWidth > 0 && OutHeight > 0;
+    }
+
+    static TSharedPtr<FJsonObject> MakeCheck(
+        const FString& CheckId,
+        const FString& Status,
+        const FString& FailureCode,
+        const FString& Message)
+    {
+        TSharedPtr<FJsonObject> Check = MakeShared<FJsonObject>();
+        Check->SetStringField(TEXT("check_id"), CheckId);
+        Check->SetStringField(TEXT("category"), TEXT("visual_artifact"));
+        Check->SetBoolField(TEXT("required"), true);
+        Check->SetStringField(TEXT("status"), Status);
+        Check->SetStringField(TEXT("severity"), Status == TEXT("pass") ? TEXT("info") : TEXT("high"));
+        Check->SetStringField(TEXT("namespace"), TEXT("ui"));
+        Check->SetStringField(TEXT("action"), TEXT("verify_widget_visual_artifacts"));
+        Check->SetStringField(TEXT("failure_code"), FailureCode);
+        Check->SetStringField(TEXT("message"), Message);
+        return Check;
+    }
+
+    static TSharedPtr<FJsonObject> MakeCaptureResult(
+        const FString& Profile,
+        const FVerifiedPngInfo& Info,
+        bool bPassed,
+        const FString& FailureCode,
+        const FString& Message)
+    {
+        TSharedPtr<FJsonObject> Capture = MakeShared<FJsonObject>();
+        Capture->SetStringField(TEXT("profile"), Profile);
+        Capture->SetStringField(TEXT("path"), Info.Path);
+        Capture->SetStringField(TEXT("normalized_path"), Info.Path);
+        Capture->SetNumberField(TEXT("width"), Info.Width);
+        Capture->SetNumberField(TEXT("height"), Info.Height);
+        Capture->SetStringField(TEXT("sha256"), Info.Sha256);
+        Capture->SetNumberField(TEXT("byte_count"), static_cast<double>(Info.ByteCount));
+        Capture->SetBoolField(TEXT("blank"), Info.bBlank);
+        Capture->SetNumberField(TEXT("transparent_ratio"), Info.TransparentRatio);
+        Capture->SetNumberField(TEXT("unique_color_estimate"), Info.UniqueColorEstimate);
+        Capture->SetStringField(TEXT("status"), bPassed ? TEXT("pass") : TEXT("fail"));
+        Capture->SetStringField(TEXT("failure_code"), FailureCode);
+        Capture->SetStringField(TEXT("message"), Message);
+
+        TSharedPtr<FJsonObject> Diff = MakeShared<FJsonObject>();
+        Diff->SetStringField(TEXT("baseline_path"), TEXT(""));
+        Diff->SetStringField(TEXT("diff_path"), TEXT(""));
+        Diff->SetNumberField(TEXT("diff_ratio"), 0.0);
+        Diff->SetBoolField(TEXT("passed"), true);
+        Diff->SetStringField(TEXT("status"), TEXT("not_requested"));
+        Capture->SetObjectField(TEXT("diff"), Diff);
+        return Capture;
+    }
+
+    static bool WriteManifest(const FString& ManifestPath, const TSharedPtr<FJsonObject>& Manifest, FString& OutError)
+    {
+        FString Json;
+        TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
+        if (!FJsonSerializer::Serialize(Manifest.ToSharedRef(), Writer))
+        {
+            OutError = TEXT("failed to serialize visual artifact manifest");
+            return false;
+        }
+
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(ManifestPath), true);
+        if (!FFileHelper::SaveStringToFile(Json, *ManifestPath))
+        {
+            OutError = FString::Printf(TEXT("failed to write visual artifact manifest '%s'"), *ManifestPath);
+            return false;
+        }
+        return true;
+    }
+
+    static FMonolithActionExecutionPolicy MakeExplicitReadOnlyPolicy()
+    {
+        FMonolithActionExecutionPolicy Policy = FMonolithActionExecutionPolicy::DefaultReadOnly();
+        Policy.bDefaulted = false;
+        return Policy;
+    }
 }
 
 namespace MonolithUISetWidgetPropertyInternal
@@ -1031,6 +1264,26 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
         TEXT("WidgetCRUD")
     );
 
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("verify_widget_visual_artifacts"),
+        TEXT("Verify widget preview PNG artifacts produced by editor.capture_scene_preview(asset_type=\"widget\"): file exists, byte count, dimensions, SHA-256, transparent ratio, and nonblank/non-uniform pixels. Accepts capture rows with path or the editor action's output_file field."),
+        FMonolithActionHandler::CreateStatic(&MonolithUIActionsPhase2::HandleVerifyWidgetVisualArtifacts),
+        FParamSchemaBuilder()
+            .OptionalAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path the artifact represents. Echo-only for provenance."))
+            .Optional(TEXT("captures"), TEXT("array"), TEXT("Capture rows: {profile?, path? or output_file?, expected_resolution?}."))
+            .OptionalDiskPath(TEXT("path"), TEXT("Single PNG path when captures[] is omitted."))
+            .OptionalDiskPath(TEXT("output_file"), TEXT("Alias for path; matches editor.capture_scene_preview output."))
+            .OptionalDiskPath(TEXT("output_dir"), TEXT("Directory for manifest.json. Defaults under Saved/Monolith/UIVisualQA/<run_id>."))
+            .Optional(TEXT("baseline_dir"), TEXT("string"), TEXT("Reserved for future baseline diff. v1 records diff fields as not_requested."))
+            .Optional(TEXT("diff_threshold"), TEXT("number"), TEXT("Reserved for future baseline diff."))
+            .Optional(TEXT("fail_on_blank"), TEXT("boolean"), TEXT("Fail transparent or near-uniform captures."), TEXT("true"))
+            .Optional(TEXT("request_id"), TEXT("string"), TEXT("Optional caller request id echoed in the manifest."))
+            .Optional(TEXT("run_id"), TEXT("string"), TEXT("Optional run id used for default manifest directory."))
+            .Build(),
+        TEXT("WidgetCRUD"),
+        MonolithUIVisualArtifactsInternal::MakeExplicitReadOnlyPolicy()
+    );
+
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("create_widget_blueprint"),
 		{ TEXT("new WBP"), TEXT("make HUD widget"), TEXT("UMG widget blueprint"), TEXT("UserWidget asset"), TEXT("menu screen") },
 		{ TEXT("create_widget"), TEXT("new_widget_blueprint"), TEXT("make_wbp"), TEXT("create_umg") },
@@ -1070,6 +1323,11 @@ void FMonolithUIActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("compile WBP"), TEXT("build widget blueprint"), TEXT("check widget compile errors"), TEXT("recompile UMG"), TEXT("validate widget") },
 		{ TEXT("compile_widget_blueprint"), TEXT("build_wbp"), TEXT("recompile_widget"), TEXT("compile_umg") },
 		{ TEXT("compile WBP_HUD and report any errors"), TEXT("recompile the menu widget after editing it") });
+
+	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("verify_widget_visual_artifacts"),
+		{ TEXT("verify widget screenshot"), TEXT("UMG visual artifact proof"), TEXT("nonblank PNG"), TEXT("capture hash"), TEXT("widget visual QA") },
+		{ TEXT("verify_widget_preview"), TEXT("validate_widget_png"), TEXT("visual_artifact_check"), TEXT("verify_umg_capture") },
+		{ TEXT("verify the PNG returned by editor.capture_scene_preview for WBP_Menu"), TEXT("check that a widget preview artifact is not blank") });
 }
 
 // --- create_widget_blueprint ---
@@ -3171,6 +3429,173 @@ FMonolithActionResult FMonolithUIActions::HandleListWidgetTypes(const TSharedPtr
 
 namespace MonolithUIActionsPhase2
 {
+    static FMonolithActionResult HandleVerifyWidgetVisualArtifacts(const TSharedPtr<FJsonObject>& Params)
+    {
+        using namespace MonolithUIVisualArtifactsInternal;
+
+        if (!Params.IsValid())
+        {
+            return FMonolithActionResult::Error(TEXT("Missing params for verify_widget_visual_artifacts"), -32602);
+        }
+
+        FString AssetPath;
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+
+        FString RequestId;
+        Params->TryGetStringField(TEXT("request_id"), RequestId);
+        FString RunId;
+        Params->TryGetStringField(TEXT("run_id"), RunId);
+        if (RunId.IsEmpty())
+        {
+            RunId = RequestId.IsEmpty() ? TEXT("ui-visual-artifacts") : RequestId;
+        }
+
+        bool bFailOnBlank = true;
+        Params->TryGetBoolField(TEXT("fail_on_blank"), bFailOnBlank);
+
+        TArray<TSharedPtr<FJsonValue>> CaptureInputs;
+        const TArray<TSharedPtr<FJsonValue>>* Captures = nullptr;
+        if (Params->TryGetArrayField(TEXT("captures"), Captures) && Captures)
+        {
+            CaptureInputs = *Captures;
+        }
+        else
+        {
+            FString SinglePath;
+            if (!Params->TryGetStringField(TEXT("path"), SinglePath))
+            {
+                Params->TryGetStringField(TEXT("output_file"), SinglePath);
+            }
+            if (!SinglePath.IsEmpty())
+            {
+                TSharedPtr<FJsonObject> Single = MakeShared<FJsonObject>();
+                Single->SetStringField(TEXT("profile"), TEXT("default"));
+                Single->SetStringField(TEXT("path"), SinglePath);
+                CaptureInputs.Add(MakeShared<FJsonValueObject>(Single));
+            }
+        }
+
+        if (CaptureInputs.Num() == 0)
+        {
+            return FMonolithActionResult::Error(TEXT("Missing captures[] or path/output_file for verify_widget_visual_artifacts"), -32602);
+        }
+
+        TArray<TSharedPtr<FJsonValue>> CaptureResults;
+        TArray<TSharedPtr<FJsonValue>> Checks;
+        TArray<TSharedPtr<FJsonValue>> Warnings;
+        TArray<TSharedPtr<FJsonValue>> Limitations;
+        bool bOk = true;
+
+        for (int32 Index = 0; Index < CaptureInputs.Num(); ++Index)
+        {
+            const TSharedPtr<FJsonObject>* CaptureObj = nullptr;
+            if (!CaptureInputs[Index].IsValid() || !CaptureInputs[Index]->TryGetObject(CaptureObj) || !CaptureObj || !CaptureObj->IsValid())
+            {
+                bOk = false;
+                const FString CheckId = FString::Printf(TEXT("visual_artifact:%d"), Index);
+                Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(CheckId, TEXT("fail"), TEXT("schema_envelope_invalid"), TEXT("capture entry must be an object"))));
+                continue;
+            }
+
+            FString Profile;
+            if (!(*CaptureObj)->TryGetStringField(TEXT("profile"), Profile) || Profile.IsEmpty())
+            {
+                Profile = FString::Printf(TEXT("capture_%d"), Index);
+            }
+
+            FString Path;
+            if (!(*CaptureObj)->TryGetStringField(TEXT("path"), Path))
+            {
+                (*CaptureObj)->TryGetStringField(TEXT("output_file"), Path);
+            }
+
+            const FString CheckId = FString::Printf(TEXT("visual_artifact:%s"), *Profile);
+            FVerifiedPngInfo Info;
+            FString Error;
+            if (!DecodePngInfo(Path, Info, Error))
+            {
+                bOk = false;
+                FVerifiedPngInfo FailedInfo;
+                FailedInfo.Path = NormalizeArtifactPath(Path);
+                CaptureResults.Add(MakeShared<FJsonValueObject>(MakeCaptureResult(Profile, FailedInfo, false, TEXT("artifact_missing"), Error)));
+                Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(CheckId, TEXT("fail"), TEXT("artifact_missing"), Error)));
+                continue;
+            }
+
+            int32 ExpectedWidth = 0;
+            int32 ExpectedHeight = 0;
+            FString FailureCode;
+            FString Message = TEXT("visual artifact passed PNG existence, dimensions, hash, and nonblank checks");
+            bool bPassed = true;
+
+            if (TryGetResolution(*CaptureObj, ExpectedWidth, ExpectedHeight) &&
+                (Info.Width != ExpectedWidth || Info.Height != ExpectedHeight))
+            {
+                bPassed = false;
+                FailureCode = TEXT("dimension_mismatch");
+                Message = FString::Printf(TEXT("PNG dimensions %dx%d did not match expected %dx%d"),
+                    Info.Width, Info.Height, ExpectedWidth, ExpectedHeight);
+            }
+
+            if (bPassed && bFailOnBlank && Info.bBlank)
+            {
+                bPassed = false;
+                FailureCode = TEXT("pixel_blank_or_uniform");
+                Message = TEXT("PNG exists and decodes, but pixels are fully transparent or near-uniform");
+            }
+
+            if (!bPassed)
+            {
+                bOk = false;
+            }
+            else if (!bFailOnBlank && Info.bBlank)
+            {
+                Warnings.Add(MakeShared<FJsonValueString>(
+                    FString::Printf(TEXT("Capture '%s' is blank/uniform, but fail_on_blank=false."), *Profile)));
+            }
+
+            CaptureResults.Add(MakeShared<FJsonValueObject>(MakeCaptureResult(Profile, Info, bPassed, FailureCode, Message)));
+            Checks.Add(MakeShared<FJsonValueObject>(MakeCheck(CheckId, bPassed ? TEXT("pass") : TEXT("fail"), FailureCode, Message)));
+        }
+
+        FString OutputDir;
+        Params->TryGetStringField(TEXT("output_dir"), OutputDir);
+        if (OutputDir.IsEmpty())
+        {
+            OutputDir = FPaths::ProjectSavedDir() / TEXT("Monolith/UIVisualQA") / RunId;
+        }
+        OutputDir = NormalizeArtifactPath(OutputDir);
+        const FString ManifestPath = FPaths::Combine(OutputDir, TEXT("manifest.json"));
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetBoolField(TEXT("ok"), bOk);
+        Result->SetStringField(TEXT("schema_version"), TEXT("ui_visual_artifacts.v1"));
+        Result->SetStringField(TEXT("run_id"), RunId);
+        Result->SetStringField(TEXT("request_id"), RequestId);
+        Result->SetStringField(TEXT("asset_path"), AssetPath);
+        Result->SetStringField(TEXT("status"), bOk ? TEXT("pass") : TEXT("fail"));
+        Result->SetStringField(TEXT("manifest_path"), ManifestPath);
+        Result->SetArrayField(TEXT("captures"), CaptureResults);
+        Result->SetArrayField(TEXT("checks"), Checks);
+        Result->SetArrayField(TEXT("warnings"), Warnings);
+        Result->SetArrayField(TEXT("limitations"), Limitations);
+        Result->SetBoolField(TEXT("manifest_written"), true);
+
+        FString ManifestError;
+        if (!WriteManifest(ManifestPath, Result, ManifestError))
+        {
+            Result->SetBoolField(TEXT("manifest_written"), false);
+            Warnings.Add(MakeShared<FJsonValueString>(ManifestError));
+            Result->SetArrayField(TEXT("warnings"), Warnings);
+        }
+        else
+        {
+            Result->SetBoolField(TEXT("manifest_written"), true);
+        }
+
+        return FMonolithActionResult::Success(Result);
+    }
+
     // ---- Phase 2 Item #7 — rename_widget --------------------------------------
     //
     // Renames a UWidget in a WBP's WidgetTree. Validates uniqueness against the

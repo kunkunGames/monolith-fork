@@ -8,7 +8,7 @@
 
 ## MonolithUI
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, GameplayTags, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, UMGEditor, UMG, Slate, SlateCore, Json, JsonUtilities, XmlParser, GameplayTags, KismetCompiler, MovieScene, MovieSceneTracks, DeveloperSettings, AssetTools, ImageWrapper, ImageCore, Kismet, MaterialEditor, EditorSubsystem (Public — `UMonolithUIRegistrySubsystem` is exported), CommonUI (optional — `#if WITH_COMMONUI`)
 
 **The optional EffectSurface provider is NOT a build-system dependency** (decoupled 2026-04-27). EffectSurface support is delivered via UClass-by-name reflection through `MonolithUI::GetEffectSurfaceClass()` — see § "Optional Dep Probe API" and § "Error Contract — Optional EffectSurface Provider Absence (-32010)". External providers may depend on MonolithUI for registry/spec structs, but MonolithUI must not depend on them.
 **MonolithUI-owned actions in `ui::` namespace:** large and registry-derived; use `monolith_discover({ namespace: "ui" })` for the exact live count in the running editor. The current CommonFramework surface contributes **7** always-on MonolithUI actions. **4 GAS UI binding aliases owned by `MonolithGAS`** may also register into `ui::` when `WITH_GBA` is enabled.
@@ -20,7 +20,8 @@
 
 | Category | Count | Source file(s) | Conditional? |
 |----------|-------|----------------|--------------|
-| Widget CRUD | 10 | `MonolithUIActions.cpp` | always — Phase 2 (2026-05-16) added `rename_widget`, `dump_blueprint_compile_log`; 2026-06-30 added `add_extension_point_widget` for UIExtensionPointWidget + GameplayTag + slot layout |
+| Widget CRUD | 11 | `MonolithUIActions.cpp` | always — Phase 2 (2026-05-16) added `rename_widget`, `dump_blueprint_compile_log`; 2026-06-30 added `add_extension_point_widget` for UIExtensionPointWidget + GameplayTag + slot layout; 2026-07-01 added `verify_widget_visual_artifacts` for Monolith-native UI evidence manifests |
+| Context | 3 | `Actions/MonolithUIContextActions.cpp` | always — `set_widget_context`, `get_widget_context`, `clear_widget_context` store explicit session/request UMG focus for planning and diagnostics only; every response reports freshness and `usable_as_default_for_mutation=false` |
 | CommonFramework diagnostics/authoring | 7 | `MonolithUIActions.cpp`, `MonolithUIFrontendFlowActions.cpp` | always — `get_common_framework_status` reflects the Lyra Common plugin family without hard-linking optional plugins; `describe_common_widget_blueprint` inspects CommonGame/UIExtension/CommonUI WBP semantics; `add_primary_game_layout_layer` adds CommonActivatable layer container widgets to PrimaryGameLayout WBPs without changing CommonGame runtime code; `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, and `validate_frontend_menu_flow` validate CommonGame messaging/modal/frontend contracts read-only |
 | Post-copy repair | 3 | `MonolithUIWidgetCopyActions.cpp`, `MonolithUIFontRepairActions.cpp` | always — `copy_widget_subtree_with_class_remap` copies WBP widget subtrees into another WBP while remapping widget classes and object/package references; `clone_composite_font_with_remapped_faces` clones a composite `UFont` to a new asset and remaps `UFontFace` entries; `repair_slate_font_references` scans copied UI asset packages for serialized `FSlateFontInfo` values and remaps their `FontObject` `UFont` references. All three actions use dry-run/confirm guards. |
 | Slot | 3 | `MonolithUISlotActions.cpp` | always |
@@ -29,14 +30,16 @@
 | Animation v1 (deprecated) | 5 | `MonolithUIAnimationActions.cpp` | always — `create_animation` + `add_animation_keyframe` tagged `[DEPRECATED]` Phase L (2026-04-26) |
 | Animation v2 / hoisted core | 3 | `Actions/Hoisted/AnimationCoreActions.cpp` | always — `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation` |
 | Animation v2 / hoisted events | 2 | `Actions/Hoisted/AnimationEventActions.cpp` | always — `add_animation_event_track`, `bind_animation_to_event` |
+| Animation read inspection | 3 | `MonolithUIAnimationActions.cpp` | always — `get_animation_overview`, `get_animation_timeline`, `get_animation_time_slice` read UWidgetAnimation/MovieScene evidence without registering duplicate external Sequencer action names |
+| Animation delta | 1 | `MonolithUIAnimationActions.cpp` | always — `apply_animation_delta` performs confirm-gated scalar float-key merge/upsert/delete on existing animations; external Sequencer write names stay search metadata only |
 | Bindings | 4 | `MonolithUIBindingActions.cpp` | always |
 | Settings scaffolds | 5 | `MonolithUISettingsActions.cpp` | always |
 | Accessibility (non-CommonUI) | 4 | `MonolithUIAccessibilityActions.cpp` | always |
 | Hoisted Design Import | 5 | `Actions/Hoisted/{TextureIngest,FontIngest,RoundedCorner,Shadow,Gradient}Actions.cpp` | always — `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `apply_box_shadow`, `create_gradient_mid_from_spec` |
 | Effect Surface Actions | 10 | `Actions/MonolithUIEffectActions.cpp` | always |
-| Spec Builder + Serializer | 6 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, Phase 3 (2026-05-16) `build_menu_from_spec`, `apply_common_menu_transform_spec` for guarded menu-level transform application, plus `audit_widget_layout` (2026-06-24 UMG anchor audit) |
-| Type Registry diagnostic | 4 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
-| **Always-on subtotal** | **81+** | | Registry-derived; exact count varies with compatibility registrations |
+| Spec Builder + Serializer | 9 | `Actions/MonolithUISpecActions.cpp` | always — `build_ui_from_spec`, `dump_ui_spec_schema`, `dump_ui_spec`, `convert_markup_to_ui_spec` (read-only XML/HTML-like markup to canonical `FUISpecDocument`), Phase 3 (2026-05-16) `build_menu_from_spec`, `apply_common_menu_transform_spec` for guarded menu-level transform application, `audit_widget_layout` (2026-06-24 UMG anchor audit), `measure_widget_layout` for authored bounds / overlap / safe-zone evidence, and `audit_widget_material_lifecycle` for read-only Widget Blueprint dynamic-material lifetime lint |
+| Type Registry diagnostic | 5 | `MonolithUIRegistryActions.cpp` | always — `dump_property_allowlist`, `describe_widget_type_schema`, plus Phase 2 (2026-05-16) `add_widget_variable`, `list_widget_property_enums`, plus Phase 4 (2026-05-23) `set_widget_is_variable` |
+| **Always-on subtotal** | **92+** | | Registry-derived; exact count varies with compatibility registrations |
 | CommonUI Activatables | 8 | `CommonUI/MonolithCommonUIActivatableActions.cpp` | `WITH_COMMONUI` |
 | CommonUI Buttons + Styling | 14 | `CommonUI/MonolithCommonUIButtonActions.cpp` | `WITH_COMMONUI` — Phase 2 (2026-05-16) added `apply_token_binding`, `convert_textblock_to_common`, `set_action_bar_button_class`; Phase 3 (2026-05-23) added `convert_border_to_common`, `reparent_widget_root` |
 | CommonUI Input | 7 | `CommonUI/MonolithCommonUIInputActions.cpp` | `WITH_COMMONUI` |
@@ -49,30 +52,30 @@
 | CommonUI Scaffolders | 3 | `CommonUI/MonolithCommonUITemplateActions.cpp` | `WITH_COMMONUI` — Phase 3 (2026-05-16) `scaffold_main_menu`, `scaffold_settings_panel_with_tabs`, `scaffold_pause_menu` |
 | Style Service Diagnostics | 1 | inline lambda in `MonolithUIModule.cpp` | `WITH_COMMONUI` — `dump_style_cache_stats` |
 | **CommonUI subtotal** | **62** | | conditional |
-| **MonolithUI total** | **148** | | current Speed full configuration; registry-derived |
+| **MonolithUI total** | **160** | | current Speed full configuration; registry-derived |
 | GAS UI binding aliases | 4 | `MonolithGAS/Private/MonolithGASUIBindingActions.cpp` | `WITH_GBA` — registered cross-namespace into `ui::` |
 
-Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. The 2026-07-01 frontend menu flow pass added `validate_frontend_menu_flow` for read-only PrimaryGameLayout/layer/screen/dialog composition validation and `apply_common_menu_transform_spec` as the guarded apply-side counterpart for `build_menu_from_spec` deferred menu aggregation. Production registration sites only — Tests/ excluded.
+Count history before 2026-06-30 is retained for provenance, but the live registry remains authoritative because CommonUI/GAS aliases and duplicate compatibility registrations vary by build flags. The 2026-06-30 common Lyra/UIExtension pass landed `add_extension_point_widget`, `add_primary_game_layout_layer`, `get_common_framework_status`, and `describe_common_widget_blueprint`; the follow-up expanded `get_common_framework_status` to cover CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, and GameSubtitles reflected types. The 2026-06-30 CommonGame messaging pass then added three read-only validators: `describe_common_messaging_flow`, `validate_common_dialog_contract`, and `validate_common_layer_push_contract`. The 2026-07-01 frontend menu flow pass added `validate_frontend_menu_flow` for read-only PrimaryGameLayout/layer/screen/dialog composition validation and `apply_common_menu_transform_spec` as the guarded apply-side counterpart for `build_menu_from_spec` deferred menu aggregation. The 2026-07-01 UI evidence pass added `verify_widget_visual_artifacts` and `workflow.ui_shipping_widget_blueprint(proof_profile="visual")` composition for compile/capture/artifact proof without leaving Monolith. The 2026-07-02 UMG MCP high-ROI pass added `describe_widget_type_schema`, `convert_markup_to_ui_spec`, explicit `set_widget_context` / `get_widget_context` / `clear_widget_context` helpers, `measure_widget_layout` authored bounds / overlap / safe-zone evidence, `audit_widget_material_lifecycle` dynamic-material lifetime lint, `get_animation_overview` / `get_animation_timeline` / `get_animation_time_slice` animation read inspection, and `apply_animation_delta` guarded scalar float-key delta edits as Monolith-native schema/import/context/layout/animation evidence surfaces instead of external-name aliases or hidden mutating defaults. The workflow proof follow-up added `layout_rule_profile`/`suppress_layout_rule_ids` forwarding to `ui.audit_widget_layout`, `validation.visual_profile` profile checks for mobile/console DPI+safe-zone proof, `ui.measure_widget_layout` composition in `workflow.ui_shipping_widget_blueprint(proof_profile="visual"|"runtime")`, `workflow.ui_bind_widget_event` for ViewModel-safe widget event binding through existing Blueprint owner actions, `workflow.ui_material_hlsl_effect` for UI-domain material/HLSL binding proof, and `ui.set_retainer_effect_material` + `workflow.ui_retainer_effect_material` for RetainerBox effect-material binding with exact texture-parameter proof through existing material/UI owner actions instead of duplicate UI graph-edit, material, or HLSL APIs. Production registration sites only — Tests/ excluded.
 
 ### Classes
 
 | Class | Responsibility |
 |-------|---------------|
 | `FMonolithUIModule` | Registers the module-owned always-on and `WITH_COMMONUI` action surfaces. Logs the live `ui` namespace action count at startup. Owns the `OnPostEngineInit` re-scan delegate that catches late-loading marketplace widget UClasses |
-| `FMonolithUIActions` | Widget blueprint CRUD and CommonFramework helpers: create, inspect, add/remove widgets, ensure UIExtensionPointWidget-compatible extension points, add PrimaryGameLayout activatable layer container widgets, inspect Lyra Common framework state, validate frontend menu flow contracts, property writes, compile |
+| `FMonolithUIActions` | Widget blueprint CRUD, visual artifact evidence, and CommonFramework helpers: create, inspect, add/remove widgets, ensure UIExtensionPointWidget-compatible extension points, add PrimaryGameLayout activatable layer container widgets, inspect Lyra Common framework state, validate frontend menu flow contracts, property writes, compile |
 | `FMonolithUISlotActions` | Layout slot operations: slot properties, anchor presets, widget movement |
 | `FMonolithUITemplateActions` | High-level HUD/menu/panel scaffold templates (8 templates) |
 | `FMonolithUIStylingActions` | Visual styling: brush, font, color scheme, text, image, batch style |
 | `FMonolithUIWidgetCopyActions` | Post-copy WBP subtree repair: guarded `copy_widget_subtree_with_class_remap` dry-runs and applies widget subtree copies across Widget Blueprints with explicit widget class remaps, hard/soft object reference remaps, collision policy, compile/save options, and no Speed/CommonGame runtime edits |
 | `FMonolithUIFontRepairActions` | Post-copy UI font repair: guarded composite `UFont` clone with `UFontFace` root/exact remap preflight, destination collision refusal, optional save, plus copied asset-package `FSlateFontInfo.FontObject` `UFont` remap with package-local reflection scan, dry-run/confirm guards, optional save, and Slate-safe `PostEditChange` |
-| `FMonolithUIAnimationActions` | UMG widget animation v1 CRUD: list, inspect, create, add/remove keyframes (the latter two are Phase L `[DEPRECATED]` — prefer the hoisted v2 surface in `AnimationCoreActions`) |
+| `FMonolithUIAnimationActions` | UMG widget animation v1 CRUD, read-only UWidgetAnimation/MovieScene evidence, and guarded scalar float-key delta edits: list, inspect, create, add/remove keyframes (the latter two are Phase L `[DEPRECATED]` — prefer the hoisted v2 surface in `AnimationCoreActions`), plus overview/timeline/time-slice inspection and `apply_animation_delta` without duplicate external Sequencer registrations |
 | `FMonolithUIBindingActions` | Event/property binding inspection, list view setup, widget binding queries |
 | `FMonolithUISettingsActions` | Settings/save/audio/input remapping subsystem scaffolding (5 scaffolds) |
 | `FMonolithUIAccessibilityActions` | Accessibility subsystem scaffold, audit, colorblind mode, text scale |
 | `FMonolithUIRegistryActions` | Registers `dump_property_allowlist` (Phase B diagnostic) |
 | `MonolithUI::FTextureIngestActions` / `FFontIngestActions` / `FAnimationCoreActions` / `FAnimationEventActions` / `FRoundedCornerActions` / `FShadowActions` / `FGradientActions` | Hoisted Design Import + Animation v2 verbs (Phase D, 2026-04-26) |
 | `MonolithUI::FEffectSurfaceActions` | EffectSurface sub-bag setters + preset (Phase F, 2026-04-26) |
-| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) + `apply_common_menu_transform_spec` (guarded apply-side orchestration for menu layers, focus, navigation, UIExtension, widget properties/removal, variable defaults, subtree/font/graph repair, and frontend validation) + `audit_widget_layout` (2026-06-24 structural UMG anchor audit) |
+| `MonolithUI::FSpecActions` | `build_ui_from_spec` + `dump_ui_spec_schema` + `dump_ui_spec` (Phases H + J, 2026-04-26) + `convert_markup_to_ui_spec` (2026-07-02 read-only XML/HTML-like UMG markup to canonical `FUISpecDocument`) + `build_menu_from_spec` (Phase 3 of the 2026-05-16 UI Gap Audit; compacted so deferred aggregation is explicitly non-mutating) + `apply_common_menu_transform_spec` (guarded apply-side orchestration for menu layers, focus, navigation, UIExtension, widget properties/removal, variable defaults, subtree/font/graph repair, and frontend validation) + `audit_widget_layout` (2026-06-24 structural UMG anchor audit) + `audit_widget_material_lifecycle` (read-only Widget Blueprint DMI lifecycle lint) |
 | `MonolithCommonUITemplate::Register` | CommonUI headline scaffolders: `scaffold_main_menu` / `scaffold_settings_panel_with_tabs` / `scaffold_pause_menu` (Phase 3 of the 2026-05-16 UI Gap Audit). File-static handlers in `CommonUI/MonolithCommonUITemplateActions.cpp` — `WITH_COMMONUI` only |
 | `UMonolithUIRegistrySubsystem` (UEditorSubsystem) | Live type registry + per-type property allowlist (Phase B) |
 | `FUITypeRegistry` / `FUIPropertyAllowlist` / `FUIPropertyPathCache` / `FUIReflectionHelper` | Registry data model + safe reflection write surface (Phases B + C) |
@@ -83,9 +86,9 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 
 ---
 
-## Actions — UMG Baseline (49 — namespace: "ui")
+## Actions — UMG Baseline (56 — namespace: "ui")
 
-**Widget CRUD (10)**
+**Widget CRUD (11)**
 | Action | Params | Description |
 |--------|--------|-------------|
 | `create_widget_blueprint` | `save_path`, `parent_class` | Create a new Widget Blueprint asset |
@@ -98,6 +101,14 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `list_widget_types` | none | List all available widget classes that can be instantiated |
 | `rename_widget` | `wbp_path`, `old_name`, `new_name` | Rename a UWidget's FName in a WBP's tree. Uniqueness check runs against the full WidgetTree before the rename. Recompiles via `FKismetEditorUtilities::CompileBlueprint`. If `bIsVariable=true`, also walks `FBlueprintEditorUtils::RenameMemberVariable` so the BPVAR entry stays consistent with the new FName. Phase 2 Item #7 (2026-05-16 UI Gap Audit). |
 | `dump_blueprint_compile_log` | `asset_path` | Re-drive a compile and return `last_compile_status` (EBlueprintStatus → string) + `errors[]` / `warnings[]` / `notes[]`. Accepts both `UWidgetBlueprint` and plain `UBlueprint` paths so the action serves as a general-purpose "last status + messages" probe. Shape mirrors `compile_widget` on success. Phase 2 Item #14 (2026-05-16 UI Gap Audit). |
+| `verify_widget_visual_artifacts` | `asset_path`, `captures[]` or `path`/`output_file`, optional `expected_resolution`, `output_dir`, `fail_on_blank`, `request_id`, `run_id` | Read-only verifier for PNGs produced by `editor.capture_scene_preview(asset_type="widget")` or `workflow.ui_shipping_widget_blueprint(proof_profile="visual")`. Checks file existence, decoded dimensions, byte count, SHA-256, transparent pixel ratio, and blank/uniform pixels, then emits a `ui_visual_artifacts.v1` manifest. |
+
+**Context (3)**
+| Action | Params | Description |
+|--------|--------|-------------|
+| `set_widget_context` | optional `asset_path`, `widget_name`, `animation_name`, `scope=session|request`, `ttl_seconds` | Store explicit UMG work focus for the current MCP session/request. It validates existence for diagnostics but never creates assets and never becomes an implicit target for mutating actions. |
+| `get_widget_context` | optional `scope=auto|session|request`, `include_recent`, `recent_limit` | Read the explicit UMG work focus for the current session/request. Returns `resolved_from`, freshness, asset/widget/animation existence, recent context rows, and `usable_as_default_for_mutation=false`. |
+| `clear_widget_context` | optional `scope=all|session|request` | Clear current session/request UI work context without mutating any UMG asset or affecting other MCP sessions. |
 
 **CommonFramework Diagnostics/Authoring (7)**
 | Action | Params | Description |
@@ -139,10 +150,20 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `set_text` | `asset_path`, `widget_name`, `text` | Set display text on a text widget |
 | `set_image` | `asset_path`, `widget_name`, `texture_path` | Set the texture on an image widget |
 
-**Spec Builder + Menu Transform (6)**
+**Spec Builder + Menu Transform (10)**
 | Action | Params | Description |
 |--------|--------|-------------|
+| `build_ui_from_spec` | `asset_path`, `spec`, optional `overwrite`, `dry_run`, `treat_warnings_as_errors`, `raw_mode`, `request_id` | Transactional canonical `FUISpecDocument` to Widget Blueprint builder. |
+| `dump_ui_spec_schema` | none | JSON-schema-style projection for `FUISpecDocument` plus the live allowlist. |
+| `convert_markup_to_ui_spec` | `markup`, optional `dialect`, `strict`, `root_save_path`, `spec_name`, `parent_class`, `source_name`, `treat_warnings_as_errors`, `request_id` | Read-only converter from strict XML/HTML-like UMG markup into canonical `FUISpecDocument` JSON. Does not create/load/save assets; returns `spec`, `validation`, `errors[]`/`warnings[]`, `would_create_asset=false`, and next owner actions such as `ui.build_ui_from_spec`. |
+| `diff_ui_spec` | `asset_path`, `desired_spec`, optional `compare_mode`, `request_id` | Read-only live-WBP versus desired `FUISpecDocument` diff. Emits stable-name patch candidates for safe owner-action operations, reports `FDelegateEditorBinding` preservation/at-risk evidence, and reports unsupported fields instead of generating raw writes. |
+| `apply_ui_spec_patch` | `asset_path`, `patch`, optional `dry_run`, `confirm`, `compile`, `save`, `read_back`, `continue_on_error`, `request_id` | Confirm-gated patch workflow for existing Widget Blueprints. Routes add/remove/move/explicit replace/slot/property/text/image/Border-brush/common-style/type-specific-style/CommonUI-style/EffectSurface changes through existing owner actions, decomposes `replace_widget` to `remove_widget` + `add_widget` plus content/style/effect owner-action steps, decomposes `slot.anchorPreset` to `set_anchor_preset`, maps text `fontColor` through `set_text`, maps Image `brushPath` through `set_image`, maps Border `brushPath` through `set_brush(Background)`, decomposes `set_style` opacity/visibility plus SizeBox width/height/min/max constraints, Border brush color/padding, and ProgressBar fill color to allowlist-gated `set_widget_property`, routes `apply_style_to_widget` to the existing CommonUI style owner action, decomposes canonical `FUISpecEffect` fields to existing `set_effect_surface_*` actions, preflights slot-class compatibility, compiles once, optionally saves, and returns round-trip proof. |
+| `dump_ui_spec` | `asset_path`, optional `emit_defaults`, `request_id` | Read a live Widget Blueprint into canonical `FUISpecDocument` JSON for round-trip and diff workflows. |
+| `audit_widget_layout` | optional `asset_paths`, `path_prefix`, `allowed_canvas_slots`, `include_tests`, `rule_profile`, `suppress_rule_ids`, `treat_warnings_as_errors` | Read-only structural layout lint over dumped UISpec data, including guide-derived UMG production rule IDs. `workflow.ui_shipping_widget_blueprint` forwards `layout_rule_profile` and `suppress_layout_rule_ids` here instead of adding a duplicate workflow-local lint pass. |
+| `audit_widget_material_lifecycle` | optional `asset_path`, `asset_paths`, `path_prefix`, `include_tests`, `include_advisory`, `suppress_rule_ids`, `treat_warnings_as_errors` | Read-only Widget Blueprint graph lint for dynamic material instance lifetime. Scans K2 graphs for MID creation calls and reports `DynamicMaterialCreatedInRepeatedLifecycle` when a call is reachable from Tick/Paint/SynchronizeProperties/Prepass, so UI material workflows can prove MIDs are cached/reused instead of recreated in frame-driven paths. |
+| `measure_widget_layout` | `asset_path`, optional `profiles`, `check_overlap`, `check_safe_zone`, `max_allowed_overlap_ratio` | Read-only layout evidence derived from canonical `FUISpecSerializer` slot/style data. Reports authored bounds, sibling overlap findings, and explicit safe-zone violations. v1 marks render geometry unavailable instead of using cached designer geometry; compose with `editor.capture_scene_preview` and `ui.verify_widget_visual_artifacts` for visual proof. |
 | `apply_common_menu_transform_spec` | optional `spec`, `screens`, `layout_asset_path`, `layout_layers`/`layers`, `extension_points`, `widget_properties`, `remove_widgets`, `variable_defaults`, `focus_table`/`initial_focus`/`desired_focus`, `nav_overrides`/`navigation_bulk`, `widget_subtrees`, `blueprint_graphs`, `font_repairs`, `frontend_validation`, shared remaps, `compile`, `save`, `dry_run`, `confirm`, `continue_on_error`, `request_id` | Apply the menu-level transform counterpart to `build_menu_from_spec`. `dry_run=true` is default; plan-only child writers are not executed during dry-run, while native dry-run child repair actions and read-only validation can run. Writes require `dry_run=false` and `confirm=true`. |
+| `build_menu_from_spec` | `screens`, optional `layers`, `focus_table`, `nav_overrides`, `overwrite`, `dry_run`, `treat_warnings_as_errors`, `raw_mode`, `request_id` | Multi-screen menu document builder. Per-screen `spec` entries route through `build_ui_from_spec`; cross-screen aggregation is echoed for follow-up transform workflows. |
 
 **Post-Copy Repair (3)**
 | Action | Params | Description |
@@ -160,6 +181,20 @@ Count history before 2026-06-30 is retained for provenance, but the live registr
 | `create_animation` **[DEPRECATED]** | `asset_path`, `animation_name`, `duration`, `tracks?` | Create a new UMG widget animation. Phase L deprecation marker — response payload is tagged `{deprecated: true, use_action: "ui::create_animation_v2"}`. Removal scheduled one major release out. |
 | `add_animation_keyframe` **[DEPRECATED]** | `asset_path`, `animation_name`, `widget_name`, `property`, `time`, `value` | Add a keyframe to a widget animation track. Same deprecation tag as `create_animation`. Use `ui::create_animation_v2` (multi-key authoring) or `ui::add_bezier_eased_segment` (CSS bezier) instead. |
 | `remove_animation` | `asset_path`, `animation_name` | Remove a UMG widget animation |
+
+**Animation read inspection (3)**
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `get_animation_overview` | `asset_path`, optional `animation_name`, `include_all=false` | Read-only compact inventory for `UWidgetAnimation` timing, `FWidgetAnimationBinding` rows, MovieScene bindings/tracks, key counts, event summaries, and generated-class delegate binding rows. External MCP-style names such as `animation_overview` are search metadata only, not registered duplicate actions. |
+| `get_animation_timeline` | `asset_path`, `animation_name`, optional `widget_name`, `property_path`, `include_events=true`, `max_rows=1000` | Read-only sorted property-key and event-key rows filtered by animation/widget/property. This is timeline evidence, not a mutating Sequencer replacement. |
+| `get_animation_time_slice` | `asset_path`, `animation_name`, optional `time` or `times[]`, optional `widget_name`, `property_path`, `event_tolerance_frames=0` | Read-only sampled float-track values at one or more times, with event rows reported only for exact-frame or explicit-tolerance matches. |
+
+**Animation delta (1)**
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `apply_animation_delta` | `asset_path`, `animation_name`, `operations`, `dry_run=true`, `confirm=false`, `confirm_delete=false`, `compile=true`, `read_back=true` | Confirm-gated scalar `UMovieSceneFloatTrack` key merge/upsert/delete on existing animations. Writes require `dry_run=false` and `confirm=true`; deletes additionally require `confirm_delete=true`. It preserves existing sections/keys, reports unsupported event/transform/color/vector/object deltas, and keeps external Sequencer write names as search metadata only. |
 
 **Bindings (4)**
 | Action | Params | Description |
@@ -546,6 +581,14 @@ ui::dump_ui_spec({
 | Unallowlisted `CanvasPanelSlot` | Warning | Parent node is `CanvasPanel` and the asset/widget identifier is not present in `allowed_canvas_slots[]`. |
 | Edge anchor mismatch | Error | `top_right`/`bottom_right`/right-edge anchor with negative X offset and left alignment, or bottom-edge anchor with negative Y offset and top alignment. |
 | Dynamic text without width/wrap containment | Warning | Text-like widget id (`Stage`, `Wave`, `Prompt`, `Info`, `Description`, `Name`, `Title`, `Label`) has no serialized wrap mode and no inherited width bound from a fixed Canvas slot, explicit width, or `MaxDesiredWidth`. `MinDesiredWidth` is only a floor and is not treated as overflow containment. |
+| Nested one-child Canvas wrapper | Warning | Nested `CanvasPanel` has exactly one child and no serialized anchor/Z-order need. |
+| Canvas overuse | Warning | Nested/repeated `CanvasPanel` usage increases absolute-placement drift where automatic layout containers would be easier to prove. |
+| Edge UI without SafeZone ancestry | Warning by default, Error in `strict` profile | Edge-anchored Canvas child with authored footprint has no `SafeZone` ancestor in the serialized tree. |
+| Decorative hit-test blocker | Error | Visible decorative `Image`/`Border` is layered above an interactive sibling under `CanvasPanel` or `Overlay`. |
+| Hidden interactive layout space | Warning | Interactive widget uses `Hidden`, which still occupies layout space; use `Collapsed` when removal from responsive layout is intended. |
+| Unstyled button-like interactive state | Warning | `Button`/CommonButton-style controls and `CheckBox` nodes have no serialized `styleRef` or CommonUI `StyleRefs` evidence for normal/hovered/pressed/disabled/focused states. Native per-state `FButtonStyle` inspection is explicitly reported as not serialized rather than guessed. |
+| Material domain mismatch | Error | Serialized `content.brushPath` resolves to a `UMaterialInterface` whose base material domain is not `MD_UI`; UMG-bound brush/effect materials must be UI-domain before visual proof can be trusted. |
+| Large static list without virtualization | Warning | Large repeated child set under `ScrollBox`/box/grid panels is likely better modeled as `ListView`/`TileView`. |
 
 ```jsonc
 ui::audit_widget_layout({
@@ -556,6 +599,8 @@ ui::audit_widget_layout({
     "/Game/UI/Widget/HUD/WBP_HUD::InventoryWidget"
   ],
   include_tests?: false,
+  rule_profile?: "shipping", // advisory | shipping | strict
+  suppress_rule_ids?: ["EdgeUiMissingSafeZone"],
   treat_warnings_as_errors?: false
 })
 =>
@@ -570,18 +615,19 @@ ui::audit_widget_layout({
     error_count: int,
     warning_count: int,
     dump_error_count: int,
+    rule_profile: str,
     treat_warnings_as_errors: bool
   },
   assets: [
     { asset_path: str, parent_class: str, root_type: str, root_widget: str, node_count: int, canvas_slot_count: int, slot_counts: object, error_count: int, warning_count: int }
   ],
   findings: [
-    { severity: "warning" | "error", category: str, asset_path: str, widget_id: str, widget_path: str, message: str, suggested_fix: str, details?: object }
+    { severity: "warning" | "error", category: str, rule_id: str, rule_profile: str, asset_path: str, widget_id: str, widget_path: str, message: str, suggested_fix: str, details?: object }
   ]
 }
 ```
 
-This action is structural proof only. It does not replace the PC/mobile responsive screenshot gates when runtime UI layout or presentation changes.
+This action is structural proof only. It does not replace the PC/mobile responsive screenshot gates when runtime UI layout or presentation changes. The agent-facing proof contract for those screenshot/runtime gates is defined in [SPEC_MonolithUIAgentEvidenceGate.md](SPEC_MonolithUIAgentEvidenceGate.md), which standardizes compile, round-trip, layout/accessibility, visual artifact, schema-confusion, and runtime interaction proof for Monolith-driven UI work.
 
 **Lossy boundary catalogue.** The following do not roundtrip perfectly; the rebuild side falls back to defaults or warns:
 
@@ -617,10 +663,10 @@ This action is structural proof only. It does not replace the PC/mobile responsi
 
 - `Source/MonolithUI/Public/Spec/UISpecSerializer.h` -- `FUISpecSerializer::Dump` entry + `FUISpecSerializerInputs` / `FUISpecSerializerResult` structs.
 - `Source/MonolithUI/Private/Spec/UISpecSerializer.cpp` -- per-slot/-content/-style/-effect/-commonui readers + recursive widget walker.
-- `Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp` -- `ui::dump_ui_spec` action handler + the inverse `NodeToJson` / `SlotToJson` / `EffectToJson` / `CommonUIToJson` packers, plus the read-only `ui::audit_widget_layout` structural validator.
+- `Source/MonolithUI/Private/Actions/MonolithUISpecActions.cpp` -- `ui::dump_ui_spec` action handler + the inverse `NodeToJson` / `SlotToJson` / `EffectToJson` / `CommonUIToJson` packers, plus the read-only `ui::audit_widget_layout` structural validator and `ui::audit_widget_material_lifecycle` dynamic-material lifetime validator.
 - `Source/MonolithUI/Public/Registry/UIReflectionHelper.h` (+ `.cpp`) -- new `ReadJsonPath` method (symmetric counterpart to `ApplyJsonPath`); read-side `ReadValueFromProperty` dispatch table mirrors the existing write-side `WriteValueToProperty`.
 - `Source/MonolithUI/Private/Tests/UISpecRoundtripTests.cpp` -- automation tests J1 (`MonolithUI.SpecSerializer.RoundtripIdentity`), supported slot/content/style coverage (`MonolithUI.SpecSerializer.SupportedFields`), curated anchor coverage (`MonolithUI.SpecSerializer.PublicFields`), J4 (`MonolithUI.SpecSerializer.RoundtripCorpus` -- 5 representative WBP shapes), and a per-slot-type coverage test (`MonolithUI.SpecSerializer.SlotCoverage`).
-- `Source/MonolithUI/Private/Tests/MonolithUILayoutAuditTests.cpp` -- deterministic `ui::audit_widget_layout` contract tests that construct an edge-anchored Canvas slot with mismatched alignment and verify the `CanvasAnchorMismatch` finding, plus a min-width-only `SizeBox` wrapper around unwrapped dynamic text to verify `MinDesiredWidth` does not suppress `UnboundedDynamicText`.
+- `Source/MonolithUI/Private/Tests/MonolithUILayoutAuditTests.cpp` -- deterministic `ui::audit_widget_layout` contract tests that construct an edge-anchored Canvas slot with mismatched alignment and verify the `CanvasAnchorMismatch` finding, plus a min-width-only `SizeBox` wrapper around unwrapped dynamic text to verify `MinDesiredWidth` does not suppress `UnboundedDynamicText`; guide-derived fixtures cover `OneChildCanvasWrapper`, `DecorativeHitTestBlocker`, `HiddenInteractiveSpace`, `UnstyledInteractiveState`, `MaterialDomainMismatch`, and `EdgeUiMissingSafeZone`. The same file covers `ui::audit_widget_material_lifecycle` with unsaved WBP graph fixtures for clean and Tick-created dynamic material cases.
 
 ### LLM Error Reporting (M5 — Phase K, landed 2026-04-26)
 

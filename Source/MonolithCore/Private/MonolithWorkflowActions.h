@@ -18,6 +18,9 @@ public:
 	static FMonolithActionResult HandleGameplayFeatureManifest(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleLevelWorldBuilderBlockout(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleUiShippingWidgetBlueprint(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleUiBindWidgetEvent(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleUiMaterialHlslEffect(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleUiRetainerEffectMaterial(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleShotRenderLevelSequence(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAudioShippingAsset(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleLocalizationShippingStringTable(const TSharedPtr<FJsonObject>& Params);

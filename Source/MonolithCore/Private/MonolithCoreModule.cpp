@@ -41,14 +41,6 @@ void FMonolithCoreModule::StartupModule()
 	// sentinel only).
 	FMonolithCrashBreadcrumb::Get().Init();
 
-	// Skip MCP server + sentinel in commandlets (cook/compile). The running editor already holds port 9316
-	// and a second bind attempt surfaces as UAT ExitCode=1. Commandlets have no MCP consumer anyway.
-	if (IsRunningCommandlet())
-	{
-		UE_LOG(LogMonolith, Log, TEXT("Monolith — commandlet detected, skipping MCP server startup"));
-		return;
-	}
-
 	// Register core discovery/status tools
 	RegisterCoreTools();
 
@@ -56,6 +48,15 @@ void FMonolithCoreModule::StartupModule()
 	// adapters self-register from their own module's StartupModule via
 	// FMonolithBulkFillRegistry::RegisterAdapter — those land in Phases 1-5.
 	FMonolithBulkFillActions::RegisterAll();
+
+	// Skip MCP server + sentinel in commandlets (cook/compile). The running editor already holds port 9316
+	// and a second bind attempt surfaces as UAT ExitCode=1. Registry actions stay available so automation
+	// and offline commandlet checks can execute Monolith workflows through the same action registry.
+	if (IsRunningCommandlet())
+	{
+		UE_LOG(LogMonolith, Log, TEXT("Monolith — commandlet detected, registered actions and skipped MCP server startup"));
+		return;
+	}
 
 	// Start HTTP server (gated on bMcpServerEnabled — Issue #38 kill-switch)
 	const UMonolithSettings* Settings = UMonolithSettings::Get();

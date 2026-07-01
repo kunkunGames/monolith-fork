@@ -331,6 +331,12 @@ namespace
         AddMappingTo(Registry, Token, TEXT("Slot.SizeRule"),   TEXT("Slot.Size.SizeRule"), TEXT("Automatic/Fill size rule within the box slot."));
         AddMappingTo(Registry, Token, TEXT("Slot.FillWeight"), TEXT("Slot.Size.Value"),    TEXT("Fill weight within the box slot."));
     }
+
+    void AddCommonWidgetStyleMappings(FUITypeRegistry& Registry, const FName& Token)
+    {
+        AddMappingTo(Registry, Token, TEXT("RenderOpacity"), TEXT("RenderOpacity"), TEXT("Common UWidget render opacity."));
+        AddMappingTo(Registry, Token, TEXT("Visibility"), TEXT("Visibility"), TEXT("Common UWidget visibility token."));
+    }
 }
 
 void UMonolithUIRegistrySubsystem::RegisterCuratedMappings()
@@ -522,6 +528,7 @@ void UMonolithUIRegistrySubsystem::RegisterCuratedMappings()
 
         for (const FName& ChildToken : CommonChildren)
         {
+            AddCommonWidgetStyleMappings(TypeRegistry, ChildToken);
             AddCanvasSlotMappings(TypeRegistry, ChildToken);
             AddBoxSlotMappings(TypeRegistry, ChildToken);
         }

@@ -91,7 +91,8 @@ public class MonolithUI : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             "MonolithCore", "UnrealEd", "UMG", "UMGEditor",
-            "Slate", "SlateCore", "Json", "JsonUtilities",
+            "Slate", "SlateCore", "Json", "JsonUtilities", "XmlParser",
+            "ImageWrapper",
             "GameplayTags",
             "KismetCompiler", "MovieScene", "MovieSceneTracks",
             // Hoisted action requirements (Phase D — design effects and gradient MID factory):

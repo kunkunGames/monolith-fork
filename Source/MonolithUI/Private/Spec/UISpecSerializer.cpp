@@ -374,6 +374,21 @@ namespace MonolithUI::SpecSerializerInternal
             }
             return;
         }
+        if (UBorder* Border = Cast<UBorder>(Widget))
+        {
+            if (FStructProperty* BackgroundProp = CastField<FStructProperty>(Border->GetClass()->FindPropertyByName(TEXT("Background"))))
+            {
+                if (BackgroundProp->Struct && BackgroundProp->Struct->GetFName() == TEXT("SlateBrush"))
+                {
+                    const FSlateBrush* B = BackgroundProp->ContainerPtrToValuePtr<FSlateBrush>(Border);
+                    if (B && B->GetResourceObject())
+                    {
+                        OutContent.BrushPath = B->GetResourceObject()->GetPathName();
+                    }
+                }
+            }
+            return;
+        }
         if (UButton* Btn = Cast<UButton>(Widget))
         {
             // Button text comes from a child TextBlock (UMG idiom). The spec

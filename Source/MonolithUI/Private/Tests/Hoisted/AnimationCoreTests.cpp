@@ -10,6 +10,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithUIAnimationActions.h"
 
 // UMG -- build a throwaway WBP + probe the result
 #include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
@@ -39,6 +40,106 @@
 namespace MonolithUI::AnimationCoreTests
 {
     static const FString GTestAssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_AnimCoreTest");
+
+    static UWidgetAnimation* FindAnimationByReadableName(UWidgetBlueprint* WBP, const FString& AnimationName)
+    {
+        if (!WBP)
+        {
+            return nullptr;
+        }
+
+        for (UWidgetAnimation* Animation : WBP->Animations)
+        {
+            if (!Animation)
+            {
+                continue;
+            }
+            if (Animation->GetName() == AnimationName)
+            {
+                return Animation;
+            }
+#if WITH_EDITORONLY_DATA
+            if (Animation->GetDisplayLabel() == AnimationName)
+            {
+                return Animation;
+            }
+#endif
+        }
+        return nullptr;
+    }
+
+    static UMovieSceneFloatTrack* FindFloatTrackByProperty(UWidgetAnimation* Animation, const FName PropertyName)
+    {
+        if (!Animation || !Animation->GetMovieScene())
+        {
+            return nullptr;
+        }
+
+        UMovieScene* MovieScene = Animation->GetMovieScene();
+        const UMovieScene* ConstMovieScene = MovieScene;
+        for (const FMovieSceneBinding& Binding : ConstMovieScene->GetBindings())
+        {
+            if (UMovieSceneFloatTrack* FloatTrack = MovieScene->FindTrack<UMovieSceneFloatTrack>(
+                Binding.GetObjectGuid(),
+                PropertyName))
+            {
+                return FloatTrack;
+            }
+        }
+        return nullptr;
+    }
+
+    static int32 CountFloatTrackKeys(const UMovieSceneFloatTrack* FloatTrack)
+    {
+        int32 Count = 0;
+        if (!FloatTrack)
+        {
+            return Count;
+        }
+
+        for (UMovieSceneSection* Section : FloatTrack->GetAllSections())
+        {
+            if (const UMovieSceneFloatSection* FloatSection = Cast<UMovieSceneFloatSection>(Section))
+            {
+                Count += FloatSection->GetChannel().GetNumKeys();
+            }
+        }
+        return Count;
+    }
+
+    static bool TryGetFloatTrackValueAtFrame(
+        const UMovieSceneFloatTrack* FloatTrack,
+        const FFrameNumber Frame,
+        float& OutValue)
+    {
+        if (!FloatTrack)
+        {
+            return false;
+        }
+
+        for (UMovieSceneSection* Section : FloatTrack->GetAllSections())
+        {
+            const UMovieSceneFloatSection* FloatSection = Cast<UMovieSceneFloatSection>(Section);
+            if (!FloatSection)
+            {
+                continue;
+            }
+
+            const FMovieSceneFloatChannel& Channel = FloatSection->GetChannel();
+            const TArrayView<const FFrameNumber> Times = Channel.GetTimes();
+            const TArrayView<const FMovieSceneFloatValue> Values = Channel.GetValues();
+            const int32 NumKeys = FMath::Min(Times.Num(), Values.Num());
+            for (int32 KeyIndex = 0; KeyIndex < NumKeys; ++KeyIndex)
+            {
+                if (Times[KeyIndex] == Frame)
+                {
+                    OutValue = Values[KeyIndex].Value;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 } // namespace MonolithUI::AnimationCoreTests
 
 
@@ -720,6 +821,709 @@ bool FMonolithUIBindAnimationToEventBasicTest::RunTest(const FString& Parameters
             Entry.AnimationToBind, FName(TEXT("FadeIn")));
         TestEqual(TEXT("FunctionNameToBind matches"),
             Entry.FunctionNameToBind, FName(TEXT("OnHovered_PlayFadeIn")));
+    }
+
+    return true;
+}
+
+
+/**
+ * MonolithUI.AnimationReadActions.RegistryContract
+ *
+ * Locks the monolith-native naming contract: UMG MCP-style names may appear as
+ * search aliases, but only canonical ui.get_animation_* actions are registered.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationReadActionsRegistryContractTest,
+    "MonolithUI.AnimationReadActions.RegistryContract",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationReadActionsRegistryContractTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ui"), TEXT("get_animation_overview"))
+        || !Registry.HasAction(TEXT("ui"), TEXT("get_animation_timeline"))
+        || !Registry.HasAction(TEXT("ui"), TEXT("get_animation_time_slice")))
+    {
+        FMonolithUIAnimationActions::RegisterActions(Registry);
+    }
+
+    bool bOk = true;
+    const TCHAR* CanonicalActions[] = {
+        TEXT("get_animation_overview"),
+        TEXT("get_animation_timeline"),
+        TEXT("get_animation_time_slice")
+    };
+    for (const TCHAR* ActionName : CanonicalActions)
+    {
+        bOk &= TestTrue(
+            FString::Printf(TEXT("ui.%s is registered"), ActionName),
+            Registry.HasAction(TEXT("ui"), ActionName));
+        bOk &= TestEqual(
+            FString::Printf(TEXT("ui.%s is read-only"), ActionName),
+            Registry.GetActionExecutionPolicy(TEXT("ui"), ActionName).PolicyId,
+            FString(TEXT("read_only")));
+    }
+
+    const TCHAR* ExternalAliases[] = {
+        TEXT("animation_overview"),
+        TEXT("animation_widget_properties"),
+        TEXT("animation_time_properties")
+    };
+    for (const TCHAR* AliasName : ExternalAliases)
+    {
+        bOk &= TestFalse(
+            FString::Printf(TEXT("external alias ui.%s is not registered"), AliasName),
+            Registry.HasAction(TEXT("ui"), AliasName));
+    }
+
+    return bOk;
+}
+
+
+/**
+ * MonolithUI.AnimationReadActions.Basic
+ *
+ * Proves the read-only overview/timeline/time-slice actions can inspect the
+ * output of the canonical v2 writer plus an event track without creating a
+ * duplicate external animation API surface.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationReadActionsBasicTest,
+    "MonolithUI.AnimationReadActions.Basic",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationReadActionsBasicTest::RunTest(const FString& Parameters)
+{
+    using MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint;
+
+    const FString ReadTestPath = TEXT("/Game/Tests/Monolith/UI/WBP_AnimationReadActionsTest");
+
+    FString FixtureError;
+    if (!CreateOrReuseTestWidgetBlueprint(ReadTestPath, FName(TEXT("MyImage")), nullptr, FixtureError))
+    {
+        AddError(FString::Printf(TEXT("Fixture build failed: %s"), *FixtureError));
+        return false;
+    }
+
+    {
+        TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+        CreateParams->SetStringField(TEXT("asset_path"), ReadTestPath);
+        CreateParams->SetStringField(TEXT("animation_name"), TEXT("ReadFade"));
+        CreateParams->SetNumberField(TEXT("duration_sec"), 0.5);
+        CreateParams->SetBoolField(TEXT("compile_once"), true);
+
+        TArray<TSharedPtr<FJsonValue>> Tracks;
+        TSharedPtr<FJsonObject> Track = MakeShared<FJsonObject>();
+        Track->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Track->SetStringField(TEXT("property"), TEXT("RenderOpacity"));
+
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        TSharedPtr<FJsonObject> K0 = MakeShared<FJsonObject>();
+        K0->SetNumberField(TEXT("time"), 0.0);
+        K0->SetNumberField(TEXT("value"), 0.0);
+        K0->SetStringField(TEXT("interp"), TEXT("linear"));
+        Keys.Add(MakeShared<FJsonValueObject>(K0));
+
+        TSharedPtr<FJsonObject> K1 = MakeShared<FJsonObject>();
+        K1->SetNumberField(TEXT("time"), 0.5);
+        K1->SetNumberField(TEXT("value"), 1.0);
+        K1->SetStringField(TEXT("interp"), TEXT("linear"));
+        Keys.Add(MakeShared<FJsonValueObject>(K1));
+
+        Track->SetArrayField(TEXT("keys"), Keys);
+        Tracks.Add(MakeShared<FJsonValueObject>(Track));
+        CreateParams->SetArrayField(TEXT("tracks"), Tracks);
+
+        const FMonolithActionResult CreateResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("create_animation_v2"), CreateParams);
+        TestTrue(TEXT("create_animation_v2 succeeds"), CreateResult.bSuccess);
+        if (!CreateResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("create_animation_v2 failed: %s"), *CreateResult.ErrorMessage));
+            return false;
+        }
+    }
+
+    {
+        TSharedPtr<FJsonObject> EventParams = MakeShared<FJsonObject>();
+        EventParams->SetStringField(TEXT("asset_path"), ReadTestPath);
+        EventParams->SetStringField(TEXT("animation_name"), TEXT("ReadFade"));
+
+        TArray<TSharedPtr<FJsonValue>> Events;
+        TSharedPtr<FJsonObject> E0 = MakeShared<FJsonObject>();
+        E0->SetNumberField(TEXT("time"), 0.25);
+        E0->SetStringField(TEXT("event_name"), TEXT("OnReadMid"));
+        Events.Add(MakeShared<FJsonValueObject>(E0));
+        EventParams->SetArrayField(TEXT("events"), Events);
+
+        const FMonolithActionResult EventResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("add_animation_event_track"), EventParams);
+        TestTrue(TEXT("add_animation_event_track succeeds"), EventResult.bSuccess);
+        if (!EventResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("add_animation_event_track failed: %s"), *EventResult.ErrorMessage));
+            return false;
+        }
+    }
+
+    {
+        TSharedPtr<FJsonObject> OverviewParams = MakeShared<FJsonObject>();
+        OverviewParams->SetStringField(TEXT("asset_path"), ReadTestPath);
+        OverviewParams->SetStringField(TEXT("animation_name"), TEXT("ReadFade"));
+
+        const FMonolithActionResult Overview = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_overview"), OverviewParams);
+        TestTrue(TEXT("get_animation_overview succeeds"), Overview.bSuccess);
+        if (!Overview.bSuccess || !Overview.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("get_animation_overview failed: %s"), *Overview.ErrorMessage));
+            return false;
+        }
+
+        FString SchemaVersion;
+        TestTrue(TEXT("overview has schema_version"),
+            Overview.Result->TryGetStringField(TEXT("schema_version"), SchemaVersion));
+        TestEqual(TEXT("overview schema version"), SchemaVersion, TEXT("ui_animation_overview.v1"));
+
+        const TSharedPtr<FJsonObject>* AnimationObj = nullptr;
+        TestTrue(TEXT("overview has animation object"),
+            Overview.Result->TryGetObjectField(TEXT("animation"), AnimationObj));
+        if (!AnimationObj || !AnimationObj->IsValid())
+        {
+            return false;
+        }
+
+        double KeyCount = 0.0;
+        TestTrue(TEXT("overview animation has key_count"),
+            (*AnimationObj)->TryGetNumberField(TEXT("key_count"), KeyCount));
+        TestTrue(TEXT("overview key_count includes property and event keys"),
+            static_cast<int32>(KeyCount) >= 3);
+    }
+
+    {
+        TSharedPtr<FJsonObject> TimelineParams = MakeShared<FJsonObject>();
+        TimelineParams->SetStringField(TEXT("asset_path"), ReadTestPath);
+        TimelineParams->SetStringField(TEXT("animation_name"), TEXT("ReadFade"));
+
+        const FMonolithActionResult Timeline = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_timeline"), TimelineParams);
+        TestTrue(TEXT("get_animation_timeline succeeds"), Timeline.bSuccess);
+        if (!Timeline.bSuccess || !Timeline.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("get_animation_timeline failed: %s"), *Timeline.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("timeline has rows"), Timeline.Result->TryGetArrayField(TEXT("rows"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+
+        bool bSawRenderOpacity = false;
+        bool bSawEvent = false;
+        for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+        {
+            const TSharedPtr<FJsonObject>* Row = nullptr;
+            if (!RowValue.IsValid() || !RowValue->TryGetObject(Row) || !Row || !Row->IsValid())
+            {
+                continue;
+            }
+
+            FString RowType;
+            (*Row)->TryGetStringField(TEXT("row_type"), RowType);
+            FString PropertyPath;
+            (*Row)->TryGetStringField(TEXT("property_path"), PropertyPath);
+            FString EventName;
+            (*Row)->TryGetStringField(TEXT("event_name"), EventName);
+
+            bSawRenderOpacity |= RowType == TEXT("property_key") && PropertyPath == TEXT("RenderOpacity");
+            bSawEvent |= RowType == TEXT("event_key") && EventName == TEXT("OnReadMid");
+        }
+        TestTrue(TEXT("timeline includes RenderOpacity property keys"), bSawRenderOpacity);
+        TestTrue(TEXT("timeline includes OnReadMid event key"), bSawEvent);
+    }
+
+    {
+        TSharedPtr<FJsonObject> SliceParams = MakeShared<FJsonObject>();
+        SliceParams->SetStringField(TEXT("asset_path"), ReadTestPath);
+        SliceParams->SetStringField(TEXT("animation_name"), TEXT("ReadFade"));
+        SliceParams->SetNumberField(TEXT("time"), 0.25);
+        SliceParams->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+
+        const FMonolithActionResult Slice = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_time_slice"), SliceParams);
+        TestTrue(TEXT("get_animation_time_slice succeeds"), Slice.bSuccess);
+        if (!Slice.bSuccess || !Slice.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("get_animation_time_slice failed: %s"), *Slice.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Samples = nullptr;
+        TestTrue(TEXT("time_slice has samples"), Slice.Result->TryGetArrayField(TEXT("samples"), Samples));
+        if (!Samples || Samples->Num() == 0)
+        {
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* FirstSample = nullptr;
+        TestTrue(TEXT("sample[0] is object"), (*Samples)[0]->TryGetObject(FirstSample));
+        if (!FirstSample || !FirstSample->IsValid())
+        {
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("sample has rows"), (*FirstSample)->TryGetArrayField(TEXT("rows"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+
+        bool bSawSample = false;
+        bool bSawEvent = false;
+        for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+        {
+            const TSharedPtr<FJsonObject>* Row = nullptr;
+            if (!RowValue.IsValid() || !RowValue->TryGetObject(Row) || !Row || !Row->IsValid())
+            {
+                continue;
+            }
+
+            FString RowType;
+            (*Row)->TryGetStringField(TEXT("row_type"), RowType);
+            if (RowType == TEXT("property_sample"))
+            {
+                double Value = 0.0;
+                if ((*Row)->TryGetNumberField(TEXT("value"), Value))
+                {
+                    bSawSample |= FMath::IsNearlyEqual(Value, 0.5, 0.01);
+                }
+            }
+
+            FString EventName;
+            (*Row)->TryGetStringField(TEXT("event_name"), EventName);
+            bSawEvent |= RowType == TEXT("event_match") && EventName == TEXT("OnReadMid");
+        }
+        TestTrue(TEXT("time_slice evaluates RenderOpacity at t=0.25 ~= 0.5"), bSawSample);
+        TestTrue(TEXT("time_slice includes exact event match"), bSawEvent);
+    }
+
+    return true;
+}
+
+
+/**
+ * MonolithUI.AnimationDelta.RegistryContract
+ *
+ * Locks the monolith-native delta contract: one canonical aggregate action,
+ * guarded write defaults, and external sequencer-style names as search aliases
+ * only.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationDeltaRegistryContractTest,
+    "MonolithUI.AnimationDelta.RegistryContract",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationDeltaRegistryContractTest::RunTest(const FString& Parameters)
+{
+    FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+    if (!Registry.HasAction(TEXT("ui"), TEXT("apply_animation_delta")))
+    {
+        FMonolithUIAnimationActions::RegisterActions(Registry);
+    }
+
+    bool bFoundAction = false;
+    bool bDryRunDefault = false;
+    bool bConfirmDefault = false;
+    bool bConfirmDeleteDefault = false;
+    bool bCompileDefault = false;
+    bool bReadBackDefault = false;
+    for (const FMonolithActionInfo& ActionInfo : Registry.GetActions(TEXT("ui")))
+    {
+        if (ActionInfo.Action != TEXT("apply_animation_delta"))
+        {
+            continue;
+        }
+
+        bFoundAction = true;
+        if (ActionInfo.ParamSchema.IsValid())
+        {
+            const TSharedPtr<FJsonObject>* DryRun = nullptr;
+            const TSharedPtr<FJsonObject>* Confirm = nullptr;
+            const TSharedPtr<FJsonObject>* ConfirmDelete = nullptr;
+            const TSharedPtr<FJsonObject>* Compile = nullptr;
+            const TSharedPtr<FJsonObject>* ReadBack = nullptr;
+            FString DefaultValue;
+
+            bDryRunDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("dry_run"), DryRun) && DryRun && DryRun->IsValid()
+                && (*DryRun)->TryGetStringField(TEXT("default"), DefaultValue) && DefaultValue == TEXT("true");
+            bConfirmDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("confirm"), Confirm) && Confirm && Confirm->IsValid()
+                && (*Confirm)->TryGetStringField(TEXT("default"), DefaultValue) && DefaultValue == TEXT("false");
+            bConfirmDeleteDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("confirm_delete"), ConfirmDelete) && ConfirmDelete && ConfirmDelete->IsValid()
+                && (*ConfirmDelete)->TryGetStringField(TEXT("default"), DefaultValue) && DefaultValue == TEXT("false");
+            bCompileDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("compile"), Compile) && Compile && Compile->IsValid()
+                && (*Compile)->TryGetStringField(TEXT("default"), DefaultValue) && DefaultValue == TEXT("true");
+            bReadBackDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("read_back"), ReadBack) && ReadBack && ReadBack->IsValid()
+                && (*ReadBack)->TryGetStringField(TEXT("default"), DefaultValue) && DefaultValue == TEXT("true");
+        }
+        break;
+    }
+
+    bool bOk = true;
+    bOk &= TestTrue(TEXT("ui.apply_animation_delta is registered"), Registry.HasAction(TEXT("ui"), TEXT("apply_animation_delta")));
+    bOk &= TestTrue(TEXT("apply_animation_delta action info found"), bFoundAction);
+    bOk &= TestEqual(
+        TEXT("ui.apply_animation_delta is inferred as transaction_optional"),
+        Registry.GetActionExecutionPolicy(TEXT("ui"), TEXT("apply_animation_delta")).PolicyId,
+        FString(TEXT("transaction_optional")));
+    bOk &= TestTrue(TEXT("dry_run defaults true"), bDryRunDefault);
+    bOk &= TestTrue(TEXT("confirm defaults false"), bConfirmDefault);
+    bOk &= TestTrue(TEXT("confirm_delete defaults false"), bConfirmDeleteDefault);
+    bOk &= TestTrue(TEXT("compile defaults true"), bCompileDefault);
+    bOk &= TestTrue(TEXT("read_back defaults true"), bReadBackDefault);
+
+    const TCHAR* ExternalAliases[] = {
+        TEXT("animation_append_widget_tracks"),
+        TEXT("animation_append_time_slice"),
+        TEXT("animation_delete_widget_keys"),
+        TEXT("set_property_keys")
+    };
+    for (const TCHAR* AliasName : ExternalAliases)
+    {
+        bOk &= TestFalse(
+            FString::Printf(TEXT("external alias ui.%s is not registered"), AliasName),
+            Registry.HasAction(TEXT("ui"), AliasName));
+    }
+
+    return bOk;
+}
+
+
+/**
+ * MonolithUI.AnimationDelta.FloatKeyLifecycle
+ *
+ * Proves the delta action modifies existing scalar float keys without
+ * re-creating the animation, without resetting existing keys, and with explicit
+ * write/delete confirmation gates.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationDeltaFloatKeyLifecycleTest,
+    "MonolithUI.AnimationDelta.FloatKeyLifecycle",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationDeltaFloatKeyLifecycleTest::RunTest(const FString& Parameters)
+{
+    using namespace MonolithUI::AnimationCoreTests;
+    using MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint;
+
+    const FString DeltaTestPath = TEXT("/Game/Tests/Monolith/UI/WBP_AnimationDeltaTest");
+
+    FString FixtureError;
+    if (!CreateOrReuseTestWidgetBlueprint(DeltaTestPath, FName(TEXT("MyImage")), nullptr, FixtureError))
+    {
+        AddError(FString::Printf(TEXT("Fixture build failed: %s"), *FixtureError));
+        return false;
+    }
+
+    {
+        TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+        CreateParams->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        CreateParams->SetStringField(TEXT("animation_name"), TEXT("DeltaFade"));
+        CreateParams->SetNumberField(TEXT("duration_sec"), 1.0);
+        CreateParams->SetBoolField(TEXT("compile_once"), true);
+
+        TArray<TSharedPtr<FJsonValue>> Tracks;
+        TSharedPtr<FJsonObject> Track = MakeShared<FJsonObject>();
+        Track->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Track->SetStringField(TEXT("property"), TEXT("RenderOpacity"));
+
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        TSharedPtr<FJsonObject> K0 = MakeShared<FJsonObject>();
+        K0->SetNumberField(TEXT("time"), 0.0);
+        K0->SetNumberField(TEXT("value"), 0.0);
+        K0->SetStringField(TEXT("interp"), TEXT("linear"));
+        Keys.Add(MakeShared<FJsonValueObject>(K0));
+
+        TSharedPtr<FJsonObject> K1 = MakeShared<FJsonObject>();
+        K1->SetNumberField(TEXT("time"), 1.0);
+        K1->SetNumberField(TEXT("value"), 1.0);
+        K1->SetStringField(TEXT("interp"), TEXT("linear"));
+        Keys.Add(MakeShared<FJsonValueObject>(K1));
+
+        Track->SetArrayField(TEXT("keys"), Keys);
+        Tracks.Add(MakeShared<FJsonValueObject>(Track));
+        CreateParams->SetArrayField(TEXT("tracks"), Tracks);
+
+        const FMonolithActionResult CreateResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("create_animation_v2"), CreateParams);
+        TestTrue(TEXT("create_animation_v2 succeeds"), CreateResult.bSuccess);
+        if (!CreateResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("create_animation_v2 failed: %s"), *CreateResult.ErrorMessage));
+            return false;
+        }
+    }
+
+    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *DeltaTestPath);
+    UWidgetAnimation* OriginalAnim = FindAnimationByReadableName(WBP, TEXT("DeltaFade"));
+    TestNotNull(TEXT("DeltaFade animation found"), OriginalAnim);
+    if (!OriginalAnim || !OriginalAnim->GetMovieScene())
+    {
+        return false;
+    }
+    const UWidgetAnimation* OriginalAnimPtr = OriginalAnim;
+    const FGuid OriginalBindingGuid = OriginalAnim->AnimationBindings.Num() > 0
+        ? OriginalAnim->AnimationBindings[0].AnimationGuid
+        : FGuid();
+    const FFrameRate TickResolution = OriginalAnim->GetMovieScene()->GetTickResolution();
+    const FFrameNumber Frame0 = TickResolution.AsFrameNumber(0.0);
+    const FFrameNumber FrameHalf = TickResolution.AsFrameNumber(0.5);
+    const FFrameNumber FrameOne = TickResolution.AsFrameNumber(1.0);
+
+    UMovieSceneFloatTrack* FloatTrack = FindFloatTrackByProperty(OriginalAnim, FName(TEXT("RenderOpacity")));
+    TestNotNull(TEXT("initial RenderOpacity track found"), FloatTrack);
+    if (!FloatTrack)
+    {
+        return false;
+    }
+    TestEqual(TEXT("initial key count == 2"), CountFloatTrackKeys(FloatTrack), 2);
+
+    auto MakeDeltaParams = [&DeltaTestPath](bool bSetDryRun, bool bDryRun, bool bSetConfirm, bool bConfirm, bool bConfirmDelete)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        Params->SetStringField(TEXT("animation_name"), TEXT("DeltaFade"));
+        if (bSetDryRun)
+        {
+            Params->SetBoolField(TEXT("dry_run"), bDryRun);
+        }
+        if (bSetConfirm)
+        {
+            Params->SetBoolField(TEXT("confirm"), bConfirm);
+        }
+        if (bConfirmDelete)
+        {
+            Params->SetBoolField(TEXT("confirm_delete"), true);
+        }
+        Params->SetBoolField(TEXT("compile"), true);
+        Params->SetBoolField(TEXT("read_back"), true);
+        return Params;
+    };
+
+    {
+        TSharedPtr<FJsonObject> DryRunParams = MakeDeltaParams(false, true, false, false, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+        Op->SetStringField(TEXT("op"), TEXT("upsert_float_key"));
+        Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Op->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+        Op->SetNumberField(TEXT("time"), 0.5);
+        Op->SetNumberField(TEXT("value"), 0.25);
+        Operations.Add(MakeShared<FJsonValueObject>(Op));
+        DryRunParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult DryRun = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), DryRunParams);
+        TestTrue(TEXT("default dry-run succeeds"), DryRun.bSuccess);
+        if (!DryRun.bSuccess || !DryRun.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("dry-run failed: %s"), *DryRun.ErrorMessage));
+            return false;
+        }
+
+        bool bMutated = true;
+        TestTrue(TEXT("dry-run result has mutated"), DryRun.Result->TryGetBoolField(TEXT("mutated"), bMutated));
+        TestFalse(TEXT("dry-run did not mutate"), bMutated);
+        double OperationsApplied = -1.0;
+        TestTrue(TEXT("dry-run result has operations_applied"), DryRun.Result->TryGetNumberField(TEXT("operations_applied"), OperationsApplied));
+        TestEqual(TEXT("dry-run operations_applied == 0"), static_cast<int32>(OperationsApplied), 0);
+        TestEqual(TEXT("dry-run keeps key count == 2"), CountFloatTrackKeys(FloatTrack), 2);
+    }
+
+    {
+        TSharedPtr<FJsonObject> NoConfirmParams = MakeDeltaParams(true, false, false, false, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+        Op->SetStringField(TEXT("op"), TEXT("upsert_float_key"));
+        Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Op->SetStringField(TEXT("property"), TEXT("opacity"));
+        Op->SetNumberField(TEXT("time"), 0.5);
+        Op->SetNumberField(TEXT("value"), 0.25);
+        Operations.Add(MakeShared<FJsonValueObject>(Op));
+        NoConfirmParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult NoConfirm = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), NoConfirmParams);
+        TestFalse(TEXT("dry_run=false without confirm fails"), NoConfirm.bSuccess);
+        TestEqual(TEXT("no-confirm keeps key count == 2"), CountFloatTrackKeys(FloatTrack), 2);
+    }
+
+    {
+        TSharedPtr<FJsonObject> ApplyParams = MakeDeltaParams(true, false, true, true, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        {
+            TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+            Op->SetStringField(TEXT("op"), TEXT("upsert_float_key"));
+            Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+            Op->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+            Op->SetNumberField(TEXT("time"), 0.5);
+            Op->SetNumberField(TEXT("value"), 0.25);
+            Operations.Add(MakeShared<FJsonValueObject>(Op));
+        }
+        {
+            TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+            Op->SetStringField(TEXT("op"), TEXT("upsert_float_key"));
+            Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+            Op->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+            Op->SetNumberField(TEXT("time"), 1.0);
+            Op->SetNumberField(TEXT("value"), 0.75);
+            Operations.Add(MakeShared<FJsonValueObject>(Op));
+        }
+        ApplyParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult Apply = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), ApplyParams);
+        TestTrue(TEXT("apply delta succeeds"), Apply.bSuccess);
+        if (!Apply.bSuccess || !Apply.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("apply delta failed: %s"), *Apply.ErrorMessage));
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* ReadBack = nullptr;
+        TestTrue(TEXT("apply result has read_back_overview"),
+            Apply.Result->TryGetObjectField(TEXT("read_back_overview"), ReadBack) && ReadBack && ReadBack->IsValid());
+        double KeysInserted = -1.0;
+        double KeysUpdated = -1.0;
+        TestTrue(TEXT("apply result has keys_inserted"), Apply.Result->TryGetNumberField(TEXT("keys_inserted"), KeysInserted));
+        TestTrue(TEXT("apply result has keys_updated"), Apply.Result->TryGetNumberField(TEXT("keys_updated"), KeysUpdated));
+        TestEqual(TEXT("one key inserted"), static_cast<int32>(KeysInserted), 1);
+        TestEqual(TEXT("one key updated"), static_cast<int32>(KeysUpdated), 1);
+    }
+
+    UWidgetAnimation* AfterApplyAnim = FindAnimationByReadableName(WBP, TEXT("DeltaFade"));
+    TestTrue(TEXT("animation UObject identity preserved after delta"), AfterApplyAnim == OriginalAnimPtr);
+    if (OriginalBindingGuid.IsValid() && AfterApplyAnim && AfterApplyAnim->AnimationBindings.Num() > 0)
+    {
+        TestEqual(TEXT("animation binding guid preserved"), AfterApplyAnim->AnimationBindings[0].AnimationGuid, OriginalBindingGuid);
+    }
+    FloatTrack = FindFloatTrackByProperty(AfterApplyAnim, FName(TEXT("RenderOpacity")));
+    TestEqual(TEXT("apply produces 3 keys"), CountFloatTrackKeys(FloatTrack), 3);
+    float Value = -1.0f;
+    TestTrue(TEXT("frame 0 key exists"), TryGetFloatTrackValueAtFrame(FloatTrack, Frame0, Value));
+    TestNearlyEqual(TEXT("frame 0 value remains 0"), Value, 0.0f, 0.01f);
+    TestTrue(TEXT("frame 0.5 key exists"), TryGetFloatTrackValueAtFrame(FloatTrack, FrameHalf, Value));
+    TestNearlyEqual(TEXT("frame 0.5 value inserted"), Value, 0.25f, 0.01f);
+    TestTrue(TEXT("frame 1.0 key exists"), TryGetFloatTrackValueAtFrame(FloatTrack, FrameOne, Value));
+    TestNearlyEqual(TEXT("frame 1.0 value updated"), Value, 0.75f, 0.01f);
+
+    {
+        TSharedPtr<FJsonObject> DeleteGuardParams = MakeDeltaParams(true, false, true, true, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+        Op->SetStringField(TEXT("op"), TEXT("delete_float_key"));
+        Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Op->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+        Op->SetNumberField(TEXT("time"), 0.5);
+        Operations.Add(MakeShared<FJsonValueObject>(Op));
+        DeleteGuardParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult DeleteGuard = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), DeleteGuardParams);
+        TestFalse(TEXT("delete without confirm_delete fails"), DeleteGuard.bSuccess);
+        TestEqual(TEXT("delete guard keeps key count == 3"), CountFloatTrackKeys(FloatTrack), 3);
+    }
+
+    {
+        TSharedPtr<FJsonObject> DeleteParams = MakeDeltaParams(true, false, true, true, true);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+        Op->SetStringField(TEXT("op"), TEXT("delete_float_key"));
+        Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Op->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+        Op->SetNumberField(TEXT("time"), 0.5);
+        Operations.Add(MakeShared<FJsonValueObject>(Op));
+        DeleteParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult Delete = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), DeleteParams);
+        TestTrue(TEXT("delete with confirm_delete succeeds"), Delete.bSuccess);
+        if (!Delete.bSuccess || !Delete.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("delete delta failed: %s"), *Delete.ErrorMessage));
+            return false;
+        }
+        double KeysDeleted = -1.0;
+        TestTrue(TEXT("delete result has keys_deleted"), Delete.Result->TryGetNumberField(TEXT("keys_deleted"), KeysDeleted));
+        TestEqual(TEXT("one key deleted"), static_cast<int32>(KeysDeleted), 1);
+    }
+
+    FloatTrack = FindFloatTrackByProperty(FindAnimationByReadableName(WBP, TEXT("DeltaFade")), FName(TEXT("RenderOpacity")));
+    TestEqual(TEXT("delete leaves 2 keys"), CountFloatTrackKeys(FloatTrack), 2);
+    TestFalse(TEXT("frame 0.5 key removed"), TryGetFloatTrackValueAtFrame(FloatTrack, FrameHalf, Value));
+    TestTrue(TEXT("frame 1.0 key remains"), TryGetFloatTrackValueAtFrame(FloatTrack, FrameOne, Value));
+    TestNearlyEqual(TEXT("frame 1.0 value still 0.75"), Value, 0.75f, 0.01f);
+
+    {
+        TSharedPtr<FJsonObject> TimelineParams = MakeShared<FJsonObject>();
+        TimelineParams->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        TimelineParams->SetStringField(TEXT("animation_name"), TEXT("DeltaFade"));
+        TimelineParams->SetStringField(TEXT("property_path"), TEXT("RenderOpacity"));
+
+        const FMonolithActionResult Timeline = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_timeline"), TimelineParams);
+        TestTrue(TEXT("timeline read-back succeeds"), Timeline.bSuccess);
+        if (!Timeline.bSuccess || !Timeline.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("timeline read-back failed: %s"), *Timeline.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("timeline has rows"), Timeline.Result->TryGetArrayField(TEXT("rows"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+
+        bool bSawFrameHalf = false;
+        bool bSawFrameOneUpdated = false;
+        for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+        {
+            const TSharedPtr<FJsonObject>* Row = nullptr;
+            if (!RowValue.IsValid() || !RowValue->TryGetObject(Row) || !Row || !Row->IsValid())
+            {
+                continue;
+            }
+
+            FString RowType;
+            (*Row)->TryGetStringField(TEXT("row_type"), RowType);
+            if (RowType != TEXT("property_key"))
+            {
+                continue;
+            }
+
+            double FrameNumber = 0.0;
+            (*Row)->TryGetNumberField(TEXT("frame"), FrameNumber);
+            bSawFrameHalf |= static_cast<int32>(FrameNumber) == FrameHalf.Value;
+
+            if (static_cast<int32>(FrameNumber) == FrameOne.Value)
+            {
+                const TSharedPtr<FJsonObject>* KeyObj = nullptr;
+                if ((*Row)->TryGetObjectField(TEXT("key"), KeyObj) && KeyObj && KeyObj->IsValid())
+                {
+                    double KeyValue = 0.0;
+                    bSawFrameOneUpdated |= (*KeyObj)->TryGetNumberField(TEXT("value"), KeyValue)
+                        && FMath::IsNearlyEqual(KeyValue, 0.75, 0.01);
+                }
+            }
+        }
+        TestFalse(TEXT("timeline read-back no longer has deleted 0.5 key"), bSawFrameHalf);
+        TestTrue(TEXT("timeline read-back has updated 1.0 key"), bSawFrameOneUpdated);
     }
 
     return true;

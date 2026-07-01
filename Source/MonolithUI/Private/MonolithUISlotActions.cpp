@@ -3,6 +3,196 @@
 #include "MonolithUIInternal.h"
 #include "MonolithParamSchema.h"
 
+#include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/OverlaySlot.h"
+#include "Components/VerticalBoxSlot.h"
+
+namespace
+{
+    enum class EMonolithUISlotSnapshotKind
+    {
+        None,
+        Canvas,
+        VerticalBox,
+        HorizontalBox,
+        Overlay
+    };
+
+    struct FMonolithUISlotSnapshot
+    {
+        EMonolithUISlotSnapshotKind Kind = EMonolithUISlotSnapshotKind::None;
+        FString SlotType;
+        FAnchorData CanvasLayout;
+        bool bCanvasAutoSize = false;
+        int32 CanvasZOrder = 0;
+        FSlateChildSize BoxSize;
+        FMargin Padding;
+        EHorizontalAlignment HorizontalAlignment = HAlign_Fill;
+        EVerticalAlignment VerticalAlignment = VAlign_Fill;
+
+        bool IsValid() const
+        {
+            return Kind != EMonolithUISlotSnapshotKind::None;
+        }
+    };
+
+    static void AddCopiedField(TArray<TSharedPtr<FJsonValue>>& Fields, const TCHAR* FieldName)
+    {
+        Fields.Add(MakeShared<FJsonValueString>(FieldName));
+    }
+
+    static FMonolithUISlotSnapshot CaptureCompatibleSlotProperties(UPanelSlot* Slot)
+    {
+        FMonolithUISlotSnapshot Snapshot;
+        if (!Slot)
+        {
+            return Snapshot;
+        }
+
+        Snapshot.SlotType = Slot->GetClass()->GetName();
+
+        if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Slot))
+        {
+            Snapshot.Kind = EMonolithUISlotSnapshotKind::Canvas;
+            Snapshot.CanvasLayout = CanvasSlot->GetLayout();
+            Snapshot.bCanvasAutoSize = CanvasSlot->GetAutoSize();
+            Snapshot.CanvasZOrder = CanvasSlot->GetZOrder();
+            return Snapshot;
+        }
+
+        if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(Slot))
+        {
+            Snapshot.Kind = EMonolithUISlotSnapshotKind::VerticalBox;
+            Snapshot.BoxSize = VerticalSlot->GetSize();
+            Snapshot.Padding = VerticalSlot->GetPadding();
+            Snapshot.HorizontalAlignment = VerticalSlot->GetHorizontalAlignment();
+            Snapshot.VerticalAlignment = VerticalSlot->GetVerticalAlignment();
+            return Snapshot;
+        }
+
+        if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(Slot))
+        {
+            Snapshot.Kind = EMonolithUISlotSnapshotKind::HorizontalBox;
+            Snapshot.BoxSize = HorizontalSlot->GetSize();
+            Snapshot.Padding = HorizontalSlot->GetPadding();
+            Snapshot.HorizontalAlignment = HorizontalSlot->GetHorizontalAlignment();
+            Snapshot.VerticalAlignment = HorizontalSlot->GetVerticalAlignment();
+            return Snapshot;
+        }
+
+        if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(Slot))
+        {
+            Snapshot.Kind = EMonolithUISlotSnapshotKind::Overlay;
+            Snapshot.Padding = OverlaySlot->GetPadding();
+            Snapshot.HorizontalAlignment = OverlaySlot->GetHorizontalAlignment();
+            Snapshot.VerticalAlignment = OverlaySlot->GetVerticalAlignment();
+            return Snapshot;
+        }
+
+        return Snapshot;
+    }
+
+    static TSharedPtr<FJsonObject> RestoreCompatibleSlotProperties(
+        const FMonolithUISlotSnapshot& Snapshot,
+        UPanelSlot* NewSlot,
+        int32 OldParentIndex,
+        int32 NewParentIndex)
+    {
+        TSharedPtr<FJsonObject> Preservation = MakeShared<FJsonObject>();
+        Preservation->SetBoolField(TEXT("attempted"), Snapshot.IsValid());
+        Preservation->SetStringField(TEXT("old_slot_type"), Snapshot.SlotType.IsEmpty() ? TEXT("none") : Snapshot.SlotType);
+        Preservation->SetStringField(TEXT("new_slot_type"), NewSlot ? NewSlot->GetClass()->GetName() : TEXT("none"));
+        Preservation->SetNumberField(TEXT("old_parent_index"), OldParentIndex);
+        Preservation->SetNumberField(TEXT("new_parent_index"), NewParentIndex);
+
+        TArray<TSharedPtr<FJsonValue>> CopiedFields;
+
+        if (!Snapshot.IsValid())
+        {
+            Preservation->SetStringField(TEXT("status"), TEXT("unsupported_old_slot"));
+            Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+            return Preservation;
+        }
+
+        if (!NewSlot)
+        {
+            Preservation->SetStringField(TEXT("status"), TEXT("failed_no_new_slot"));
+            Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+            return Preservation;
+        }
+
+        if (Snapshot.Kind == EMonolithUISlotSnapshotKind::Canvas)
+        {
+            if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(NewSlot))
+            {
+                CanvasSlot->SetLayout(Snapshot.CanvasLayout);
+                CanvasSlot->SetAutoSize(Snapshot.bCanvasAutoSize);
+                CanvasSlot->SetZOrder(Snapshot.CanvasZOrder);
+                AddCopiedField(CopiedFields, TEXT("layout"));
+                AddCopiedField(CopiedFields, TEXT("auto_size"));
+                AddCopiedField(CopiedFields, TEXT("z_order"));
+                Preservation->SetStringField(TEXT("status"), TEXT("preserved"));
+                Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+                return Preservation;
+            }
+        }
+        else if (Snapshot.Kind == EMonolithUISlotSnapshotKind::VerticalBox)
+        {
+            if (UVerticalBoxSlot* VerticalSlot = Cast<UVerticalBoxSlot>(NewSlot))
+            {
+                VerticalSlot->SetSize(Snapshot.BoxSize);
+                VerticalSlot->SetPadding(Snapshot.Padding);
+                VerticalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+                VerticalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+                AddCopiedField(CopiedFields, TEXT("size"));
+                AddCopiedField(CopiedFields, TEXT("padding"));
+                AddCopiedField(CopiedFields, TEXT("h_align"));
+                AddCopiedField(CopiedFields, TEXT("v_align"));
+                Preservation->SetStringField(TEXT("status"), TEXT("preserved"));
+                Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+                return Preservation;
+            }
+        }
+        else if (Snapshot.Kind == EMonolithUISlotSnapshotKind::HorizontalBox)
+        {
+            if (UHorizontalBoxSlot* HorizontalSlot = Cast<UHorizontalBoxSlot>(NewSlot))
+            {
+                HorizontalSlot->SetSize(Snapshot.BoxSize);
+                HorizontalSlot->SetPadding(Snapshot.Padding);
+                HorizontalSlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+                HorizontalSlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+                AddCopiedField(CopiedFields, TEXT("size"));
+                AddCopiedField(CopiedFields, TEXT("padding"));
+                AddCopiedField(CopiedFields, TEXT("h_align"));
+                AddCopiedField(CopiedFields, TEXT("v_align"));
+                Preservation->SetStringField(TEXT("status"), TEXT("preserved"));
+                Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+                return Preservation;
+            }
+        }
+        else if (Snapshot.Kind == EMonolithUISlotSnapshotKind::Overlay)
+        {
+            if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(NewSlot))
+            {
+                OverlaySlot->SetPadding(Snapshot.Padding);
+                OverlaySlot->SetHorizontalAlignment(Snapshot.HorizontalAlignment);
+                OverlaySlot->SetVerticalAlignment(Snapshot.VerticalAlignment);
+                AddCopiedField(CopiedFields, TEXT("padding"));
+                AddCopiedField(CopiedFields, TEXT("h_align"));
+                AddCopiedField(CopiedFields, TEXT("v_align"));
+                Preservation->SetStringField(TEXT("status"), TEXT("preserved"));
+                Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+                return Preservation;
+            }
+        }
+
+        Preservation->SetStringField(TEXT("status"), TEXT("slot_class_changed"));
+        Preservation->SetArrayField(TEXT("copied_fields"), CopiedFields);
+        return Preservation;
+    }
+}
+
 void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
     Registry.RegisterAction(
@@ -40,7 +230,7 @@ void FMonolithUISlotActions::RegisterActions(FMonolithToolRegistry& Registry)
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("move_widget"),
-        TEXT("Move a widget to a different parent panel"),
+        TEXT("Move a widget to a different parent panel, preserving compatible slot layout data"),
         FMonolithActionHandler::CreateStatic(&HandleMoveWidget),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
@@ -338,28 +528,65 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
     UWidget* Widget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
     if (!Widget)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Widget '%s' not found"), *WidgetName));
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Lookup"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' not found in WBP '%s'."), *WidgetName, *AssetPath),
+            TEXT("Call ui::get_widget_tree to enumerate live widget names before moving."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
     UWidget* NewParentWidget = WBP->WidgetTree->FindWidget(FName(*NewParentName));
     UPanelWidget* NewParent = Cast<UPanelWidget>(NewParentWidget);
     if (!NewParent)
     {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("New parent '%s' not found or not a panel"), *NewParentName));
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Slot"),
+            TEXT("/new_parent_name"),
+            FString::Printf(TEXT("New parent '%s' was not found or is not a UPanelWidget."), *NewParentName),
+            TEXT("Choose a parent panel from ui::get_widget_tree, or create a compatible panel first."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
     }
 
-    // Remove from current parent
     int32 OldIndex = -1;
     UPanelWidget* OldParent = UWidgetTree::FindWidgetParent(Widget, OldIndex);
+    if (!OldParent || !Widget->Slot)
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Slot"),
+            TEXT("/widget_name"),
+            FString::Printf(TEXT("Widget '%s' has no parent slot and cannot be moved with ui::move_widget."), *WidgetName),
+            TEXT("Use ui::reparent_widget_root for root-widget replacement, or move a non-root child widget."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    if (OldParent != NewParent && !NewParent->CanAddMoreChildren())
+    {
+        FUISpecError E = MonolithUIInternal::MakeSpecError(
+            TEXT("Slot"),
+            TEXT("/new_parent_name"),
+            FString::Printf(
+                TEXT("New parent '%s' cannot accept another child; it currently has %d child widget(s)."),
+                *NewParentName,
+                NewParent->GetChildrenCount()),
+            TEXT("Pick an empty single-child panel, remove its existing child first, or move the widget into a multi-child panel."));
+        E.WidgetId = FName(*WidgetName);
+        return MonolithUIInternal::MakeErrorFromSpecError(E);
+    }
+
+    const FMonolithUISlotSnapshot SlotSnapshot = CaptureCompatibleSlotProperties(Widget->Slot);
+
     if (OldParent)
     {
         OldParent->RemoveChild(Widget);
     }
 
-    // Add to new parent
     UPanelSlot* NewSlot = NewParent->AddChild(Widget);
+    const int32 NewIndex = NewParent->GetChildIndex(Widget);
+    TSharedPtr<FJsonObject> SlotPreservation = RestoreCompatibleSlotProperties(SlotSnapshot, NewSlot, OldIndex, NewIndex);
 
     FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
 
@@ -369,9 +596,11 @@ FMonolithActionResult FMonolithUISlotActions::HandleMoveWidget(const TSharedPtr<
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("widget"), WidgetName);
+    Result->SetStringField(TEXT("operation_source"), TEXT("monolith_equivalent"));
     Result->SetStringField(TEXT("old_parent"), OldParent ? OldParent->GetName() : TEXT("none"));
     Result->SetStringField(TEXT("new_parent"), NewParentName);
     Result->SetStringField(TEXT("new_slot_type"), NewSlot ? NewSlot->GetClass()->GetName() : TEXT("none"));
+    Result->SetObjectField(TEXT("slot_preservation"), SlotPreservation);
     Result->SetBoolField(TEXT("compiled"), bCompile);
     return FMonolithActionResult::Success(Result);
 }

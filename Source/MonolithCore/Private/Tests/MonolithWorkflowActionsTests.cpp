@@ -68,6 +68,34 @@ namespace
 		return JsonArrayContainsStringField(Actions, TEXT("action_id"), ActionId);
 	}
 
+	TSharedPtr<FJsonObject> FindActionParams(const TSharedPtr<FJsonObject>& Result, const FString& ActionId)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
+		if (!Result.IsValid() || !Result->TryGetArrayField(TEXT("actions"), Actions) || !Actions)
+		{
+			return nullptr;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Actions)
+		{
+			const TSharedPtr<FJsonObject> Action = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString FoundActionId;
+			if (!Action.IsValid()
+				|| !Action->TryGetStringField(TEXT("action_id"), FoundActionId)
+				|| FoundActionId != ActionId)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>* Params = nullptr;
+			if (Action->TryGetObjectField(TEXT("params"), Params) && Params && Params->IsValid())
+			{
+				return *Params;
+			}
+		}
+		return nullptr;
+	}
+
 	bool NextActionsContainAction(const TSharedPtr<FJsonObject>& Result, const FString& ActionId)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* NextActions = nullptr;
@@ -76,6 +104,194 @@ namespace
 			return false;
 		}
 		return JsonArrayContainsStringField(NextActions, TEXT("action"), ActionId);
+	}
+
+	bool ValidationSectionStringFieldEquals(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& ValidationSection,
+		const FString& FieldName,
+		const FString& Expected)
+	{
+		const TSharedPtr<FJsonObject>* Validation = nullptr;
+		if (!Result.IsValid()
+			|| !Result->TryGetObjectField(TEXT("validation"), Validation)
+			|| !Validation
+			|| !Validation->IsValid())
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject>* Section = nullptr;
+		if (!(*Validation)->TryGetObjectField(ValidationSection, Section) || !Section || !Section->IsValid())
+		{
+			return false;
+		}
+
+		FString Actual;
+		return (*Section)->TryGetStringField(FieldName, Actual) && Actual == Expected;
+	}
+
+	bool UiMaterialAlphaMaskGraphSpecPlanned(const TSharedPtr<FJsonObject>& Result)
+	{
+		const TSharedPtr<FJsonObject> Params = FindActionParams(Result, TEXT("material.build_material_graph"));
+		if (!Params.IsValid())
+		{
+			return false;
+		}
+
+		bool bClearExisting = true;
+		if (!Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting) || bClearExisting)
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject>* GraphSpec = nullptr;
+		if (!Params->TryGetObjectField(TEXT("graph_spec"), GraphSpec) || !GraphSpec || !GraphSpec->IsValid())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+		if (!(*GraphSpec)->TryGetArrayField(TEXT("nodes"), Nodes) || !Nodes)
+		{
+			return false;
+		}
+
+		FString MaskNodeId;
+		for (const TSharedPtr<FJsonValue>& NodeValue : *Nodes)
+		{
+			const TSharedPtr<FJsonObject> Node = NodeValue.IsValid() ? NodeValue->AsObject() : nullptr;
+			FString ClassName;
+			if (!Node.IsValid() || !Node->TryGetStringField(TEXT("class"), ClassName) || ClassName != TEXT("ComponentMask"))
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>* Properties = nullptr;
+			if (!Node->TryGetObjectField(TEXT("properties"), Properties) || !Properties || !Properties->IsValid())
+			{
+				return false;
+			}
+
+			bool bR = true;
+			bool bG = true;
+			bool bB = true;
+			bool bA = false;
+			if (!(*Properties)->TryGetBoolField(TEXT("R"), bR)
+				|| !(*Properties)->TryGetBoolField(TEXT("G"), bG)
+				|| !(*Properties)->TryGetBoolField(TEXT("B"), bB)
+				|| !(*Properties)->TryGetBoolField(TEXT("A"), bA)
+				|| bR || bG || bB || !bA)
+			{
+				return false;
+			}
+
+			Node->TryGetStringField(TEXT("id"), MaskNodeId);
+			break;
+		}
+
+		if (MaskNodeId.IsEmpty())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Connections = nullptr;
+		if (!(*GraphSpec)->TryGetArrayField(TEXT("connections"), Connections) || !Connections)
+		{
+			return false;
+		}
+
+		bool bCustomToMask = false;
+		bool bMaskToOpacity = false;
+		for (const TSharedPtr<FJsonValue>& ConnectionValue : *Connections)
+		{
+			const TSharedPtr<FJsonObject> Connection = ConnectionValue.IsValid() ? ConnectionValue->AsObject() : nullptr;
+			if (!Connection.IsValid())
+			{
+				continue;
+			}
+
+			FString From;
+			FString To;
+			FString ToPin;
+			FString ToProperty;
+			Connection->TryGetStringField(TEXT("from"), From);
+			Connection->TryGetStringField(TEXT("to"), To);
+			Connection->TryGetStringField(TEXT("to_pin"), ToPin);
+			Connection->TryGetStringField(TEXT("to_property"), ToProperty);
+			if (From == TEXT("${custom_node.expression_name}") && To == MaskNodeId && ToPin == TEXT("Input"))
+			{
+				bCustomToMask = true;
+			}
+			if (From == MaskNodeId && ToProperty == TEXT("Opacity"))
+			{
+				bMaskToOpacity = true;
+			}
+		}
+		return bCustomToMask && bMaskToOpacity;
+	}
+
+	bool ActionParamsStringFieldEquals(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& ActionId,
+		const FString& FieldName,
+		const FString& Expected)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Actions = nullptr;
+		if (!Result.IsValid() || !Result->TryGetArrayField(TEXT("actions"), Actions) || !Actions)
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : *Actions)
+		{
+			const TSharedPtr<FJsonObject> Action = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString FoundActionId;
+			if (!Action.IsValid()
+				|| !Action->TryGetStringField(TEXT("action_id"), FoundActionId)
+				|| FoundActionId != ActionId)
+			{
+				continue;
+			}
+
+			const TSharedPtr<FJsonObject>* Params = nullptr;
+			if (!Action->TryGetObjectField(TEXT("params"), Params) || !Params || !Params->IsValid())
+			{
+				return false;
+			}
+
+			FString Actual;
+			return (*Params)->TryGetStringField(FieldName, Actual) && Actual == Expected;
+		}
+		return false;
+	}
+
+	bool ValidationFindingExists(
+		const TSharedPtr<FJsonObject>& Result,
+		const FString& ValidationSection,
+		const FString& RuleId)
+	{
+		const TSharedPtr<FJsonObject>* Validation = nullptr;
+		if (!Result.IsValid()
+			|| !Result->TryGetObjectField(TEXT("validation"), Validation)
+			|| !Validation
+			|| !Validation->IsValid())
+		{
+			return false;
+		}
+
+		const TSharedPtr<FJsonObject>* Section = nullptr;
+		if (!(*Validation)->TryGetObjectField(ValidationSection, Section) || !Section || !Section->IsValid())
+		{
+			return false;
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Findings = nullptr;
+		if (!(*Section)->TryGetArrayField(TEXT("findings"), Findings) || !Findings)
+		{
+			return false;
+		}
+		return JsonArrayContainsStringField(Findings, TEXT("rule_id"), RuleId);
 	}
 }
 
@@ -320,9 +536,98 @@ bool FMonolithWorkflowUiShippingWidgetBlueprintContractTest::RunTest(const FStri
 	bOk &= TestTrue(TEXT("UI plan has compile blocker"), PlanContainsStep(Result.Result, TEXT("compile_blocker")));
 	bOk &= TestTrue(TEXT("UI actions include widget tree"), ActionsContainActionId(Result.Result, TEXT("ui.get_widget_tree")));
 	bOk &= TestTrue(TEXT("UI actions include layout audit"), ActionsContainActionId(Result.Result, TEXT("ui.audit_widget_layout")));
+	bOk &= TestTrue(TEXT("UI layout audit defaults to shipping rule profile"),
+		ActionParamsStringFieldEquals(Result.Result, TEXT("ui.audit_widget_layout"), TEXT("rule_profile"), TEXT("shipping")));
 	bOk &= TestTrue(TEXT("UI next actions include compile log"), NextActionsContainAction(Result.Result, TEXT("ui.dump_blueprint_compile_log")));
 	bOk &= TestTrue(TEXT("UI next actions include preview"), NextActionsContainAction(Result.Result, TEXT("editor.capture_scene_preview")));
 	bOk &= TestTrue(TEXT("UI next actions include source control"), NextActionsContainAction(Result.Result, TEXT("source_control.checkout_or_add")));
+
+	TSharedPtr<FJsonObject> InvalidProfileParams = MakeShared<FJsonObject>();
+	InvalidProfileParams->SetStringField(TEXT("widget_asset_path"), TEXT("/Game/UI/WBP_HUD"));
+	InvalidProfileParams->SetStringField(TEXT("proof_profile"), TEXT("unsupported"));
+	const FMonolithActionResult InvalidProfile = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_shipping_widget_blueprint"),
+		InvalidProfileParams);
+	bOk &= TestFalse(TEXT("UI rejects invalid proof_profile"), InvalidProfile.bSuccess);
+	bOk &= TestEqual(TEXT("invalid proof_profile uses invalid params"), InvalidProfile.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	TSharedPtr<FJsonObject> InvalidLayoutProfileParams = MakeShared<FJsonObject>();
+	InvalidLayoutProfileParams->SetStringField(TEXT("widget_asset_path"), TEXT("/Game/UI/WBP_HUD"));
+	InvalidLayoutProfileParams->SetStringField(TEXT("layout_rule_profile"), TEXT("unsafe"));
+	const FMonolithActionResult InvalidLayoutProfile = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_shipping_widget_blueprint"),
+		InvalidLayoutProfileParams);
+	bOk &= TestFalse(TEXT("UI rejects invalid layout_rule_profile"), InvalidLayoutProfile.bSuccess);
+	bOk &= TestEqual(TEXT("invalid layout_rule_profile uses invalid params"), InvalidLayoutProfile.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	TSharedPtr<FJsonObject> VisualParams = MakeShared<FJsonObject>();
+	VisualParams->SetStringField(TEXT("widget_asset_path"), TEXT("/Game/UI/WBP_HUD"));
+	VisualParams->SetStringField(TEXT("proof_profile"), TEXT("visual"));
+	VisualParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult VisualResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_shipping_widget_blueprint"),
+		VisualParams);
+	bOk &= TestTrue(TEXT("UI visual dry-run succeeds"), VisualResult.bSuccess && VisualResult.Result.IsValid());
+	if (VisualResult.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("UI visual dry-run status planned"), VisualResult.Result->GetStringField(TEXT("status")), TEXT("planned"));
+		bOk &= TestEqual(TEXT("UI visual proof_profile echoed"), VisualResult.Result->GetStringField(TEXT("proof_profile")), TEXT("visual"));
+		bOk &= TestTrue(TEXT("UI visual actions include layout measure"), ActionsContainActionId(VisualResult.Result, TEXT("ui.measure_widget_layout")));
+		bOk &= TestTrue(TEXT("UI visual layout measure validation planned"),
+			ValidationSectionStringFieldEquals(VisualResult.Result, TEXT("layout_measure"), TEXT("status"), TEXT("planned")));
+		bOk &= TestTrue(TEXT("UI visual next actions include layout measure"), NextActionsContainAction(VisualResult.Result, TEXT("ui.measure_widget_layout")));
+		bOk &= TestTrue(TEXT("UI visual actions include artifact verifier"), ActionsContainActionId(VisualResult.Result, TEXT("ui.verify_widget_visual_artifacts")));
+		bOk &= TestTrue(TEXT("UI visual next actions include artifact verifier"), NextActionsContainAction(VisualResult.Result, TEXT("ui.verify_widget_visual_artifacts")));
+	}
+
+	TSharedPtr<FJsonObject> MobileProfile = MakeShared<FJsonObject>();
+	MobileProfile->SetStringField(TEXT("name"), TEXT("mobile"));
+	TArray<TSharedPtr<FJsonValue>> MobileResolution;
+	MobileResolution.Add(MakeShared<FJsonValueNumber>(1280));
+	MobileResolution.Add(MakeShared<FJsonValueNumber>(720));
+	MobileProfile->SetArrayField(TEXT("resolution"), MobileResolution);
+	TArray<TSharedPtr<FJsonValue>> MissingMobileProfiles;
+	MissingMobileProfiles.Add(MakeShared<FJsonValueObject>(MobileProfile));
+	TSharedPtr<FJsonObject> MissingMobileParams = MakeShared<FJsonObject>();
+	MissingMobileParams->SetStringField(TEXT("widget_asset_path"), TEXT("/Game/UI/WBP_HUD"));
+	MissingMobileParams->SetStringField(TEXT("proof_profile"), TEXT("visual"));
+	MissingMobileParams->SetBoolField(TEXT("dry_run"), true);
+	MissingMobileParams->SetArrayField(TEXT("visual_profiles"), MissingMobileProfiles);
+	const FMonolithActionResult MissingMobileResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_shipping_widget_blueprint"),
+		MissingMobileParams);
+	bOk &= TestTrue(TEXT("UI mobile visual proof succeeds as blocked envelope"), MissingMobileResult.bSuccess && MissingMobileResult.Result.IsValid());
+	if (MissingMobileResult.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("UI mobile visual proof missing profile data blocks"), MissingMobileResult.Result->GetStringField(TEXT("status")), TEXT("blocked"));
+		bOk &= TestTrue(TEXT("UI mobile visual proof reports DpiSafeZoneProfileMissing"),
+			ValidationFindingExists(MissingMobileResult.Result, TEXT("visual_profile"), TEXT("DpiSafeZoneProfileMissing")));
+	}
+
+	TSharedPtr<FJsonObject> RuntimeParams = MakeShared<FJsonObject>();
+	RuntimeParams->SetStringField(TEXT("widget_asset_path"), TEXT("/Game/UI/WBP_HUD"));
+	RuntimeParams->SetStringField(TEXT("proof_profile"), TEXT("runtime"));
+	RuntimeParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult RuntimeResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_shipping_widget_blueprint"),
+		RuntimeParams);
+	bOk &= TestTrue(TEXT("UI runtime profile succeeds as blocked envelope"), RuntimeResult.bSuccess && RuntimeResult.Result.IsValid());
+	if (RuntimeResult.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("UI runtime profile status blocked"), RuntimeResult.Result->GetStringField(TEXT("status")), TEXT("blocked"));
+		bOk &= TestTrue(TEXT("UI runtime layout audit defaults to strict rule profile"),
+			ActionParamsStringFieldEquals(RuntimeResult.Result, TEXT("ui.audit_widget_layout"), TEXT("rule_profile"), TEXT("strict")));
+		bOk &= TestTrue(TEXT("UI runtime profile includes layout measure proof"),
+			ActionsContainActionId(RuntimeResult.Result, TEXT("ui.measure_widget_layout")));
+		bOk &= TestTrue(TEXT("UI runtime next actions include frontend validation"), NextActionsContainAction(RuntimeResult.Result, TEXT("ui.validate_frontend_menu_flow")));
+		bOk &= TestTrue(TEXT("UI runtime next actions include PIE smoke"), NextActionsContainAction(RuntimeResult.Result, TEXT("editor.run_pie_smoke")));
+		bOk &= TestTrue(TEXT("UI runtime next actions include input injection"), NextActionsContainAction(RuntimeResult.Result, TEXT("editor.pie_inject_input_action")));
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* DirtyPackages = nullptr;
 	bOk &= TestTrue(TEXT("UI dirty_packages empty"),
@@ -440,6 +745,321 @@ bool FMonolithWorkflowLevelWorldBuilderBlockoutContractTest::RunTest(const FStri
 		Params);
 	bOk &= TestFalse(TEXT("seed zero rejected"), SeedRejected.bSuccess);
 	bOk &= TestEqual(TEXT("seed zero invalid params"), SeedRejected.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorkflowUiBindWidgetEventContractTest,
+	"Monolith.Workflow.UiBindWidgetEvent.Contract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorkflowUiBindWidgetEventContractTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("workflow"));
+	FMonolithWorkflowActions::RegisterAll();
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	bool bOk = true;
+	bOk &= TestTrue(TEXT("workflow.ui_bind_widget_event registers"),
+		Registry.HasAction(TEXT("workflow"), TEXT("ui_bind_widget_event")));
+
+	const FMonolithActionResult Missing = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		MakeShared<FJsonObject>());
+	bOk &= TestFalse(TEXT("missing UI event params fails"), Missing.bSuccess);
+	bOk &= TestEqual(TEXT("missing UI event params use invalid params"), Missing.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	TSharedPtr<FJsonObject> Intent = MakeShared<FJsonObject>();
+	Intent->SetStringField(TEXT("kind"), TEXT("viewmodel_command"));
+	Intent->SetStringField(TEXT("viewmodel_variable"), TEXT("ViewModel"));
+	Intent->SetStringField(TEXT("command"), TEXT("StartGame"));
+	Intent->SetStringField(TEXT("viewmodel_class"), TEXT("MainMenuViewModel"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_Menu"));
+	Params->SetStringField(TEXT("widget_name"), TEXT("StartButton"));
+	Params->SetStringField(TEXT("event"), TEXT("Clicked"));
+	Params->SetObjectField(TEXT("intent"), Intent);
+	Params->SetBoolField(TEXT("dry_run"), true);
+
+	const FMonolithActionResult Result = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		Params);
+	bOk &= TestTrue(TEXT("UI bind event dry-run succeeds"), Result.bSuccess && Result.Result.IsValid());
+	if (!Result.bSuccess || !Result.Result.IsValid())
+	{
+		return false;
+	}
+
+	bOk &= TestEqual(TEXT("UI bind event status planned"), Result.Result->GetStringField(TEXT("status")), TEXT("planned"));
+	bOk &= TestEqual(TEXT("UI bind event workflow_id"), Result.Result->GetStringField(TEXT("workflow_id")), TEXT("ui_event_binding"));
+	bOk &= TestTrue(TEXT("UI bind event plan has boundary policy"), PlanContainsStep(Result.Result, TEXT("boundary_policy")));
+	bOk &= TestTrue(TEXT("UI bind event plan has apply step"), PlanContainsStep(Result.Result, TEXT("event_binding_apply")));
+	bOk &= TestTrue(TEXT("UI bind event actions include resolve_node"), ActionsContainActionId(Result.Result, TEXT("blueprint.resolve_node")));
+	bOk &= TestTrue(TEXT("UI bind event actions include add_node"), ActionsContainActionId(Result.Result, TEXT("blueprint.add_node")));
+	bOk &= TestTrue(TEXT("UI bind event actions include connect_pins"), ActionsContainActionId(Result.Result, TEXT("blueprint.connect_pins")));
+	bOk &= TestTrue(TEXT("UI bind event actions include compile"), ActionsContainActionId(Result.Result, TEXT("blueprint.compile_blueprint")));
+	bOk &= TestTrue(TEXT("UI bind event next action includes shipping workflow"), NextActionsContainAction(Result.Result, TEXT("workflow.ui_shipping_widget_blueprint")));
+
+	const TSharedPtr<FJsonObject>* Input = nullptr;
+	bOk &= TestTrue(TEXT("UI bind event input exists"), Result.Result->TryGetObjectField(TEXT("input"), Input) && Input && Input->IsValid());
+	if (Input && Input->IsValid())
+	{
+		bOk &= TestEqual(TEXT("Clicked normalizes to OnClicked"), (*Input)->GetStringField(TEXT("delegate_property_name")), TEXT("OnClicked"));
+	}
+
+	TSharedPtr<FJsonObject> DirectIntent = MakeShared<FJsonObject>();
+	DirectIntent->SetStringField(TEXT("kind"), TEXT("direct_actor_call"));
+	DirectIntent->SetStringField(TEXT("actor_path"), TEXT("/Game/Characters/BP_Player"));
+	DirectIntent->SetStringField(TEXT("command"), TEXT("StartGame"));
+	TSharedPtr<FJsonObject> DirectParams = MakeShared<FJsonObject>();
+	DirectParams->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_Menu"));
+	DirectParams->SetStringField(TEXT("widget_name"), TEXT("StartButton"));
+	DirectParams->SetStringField(TEXT("event"), TEXT("OnClicked"));
+	DirectParams->SetObjectField(TEXT("intent"), DirectIntent);
+	const FMonolithActionResult DirectRejected = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		DirectParams);
+	bOk &= TestFalse(TEXT("UI bind event rejects direct actor intent"), DirectRejected.bSuccess);
+	bOk &= TestEqual(TEXT("direct actor rejection uses invalid params"), DirectRejected.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	Params->SetBoolField(TEXT("dry_run"), false);
+	Params->SetBoolField(TEXT("confirm"), false);
+	const FMonolithActionResult ConfirmBlocked = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_bind_widget_event"),
+		Params);
+	bOk &= TestTrue(TEXT("UI bind event confirm gate returns blocked envelope"), ConfirmBlocked.bSuccess && ConfirmBlocked.Result.IsValid());
+	if (ConfirmBlocked.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("UI bind event confirm gate status blocked"), ConfirmBlocked.Result->GetStringField(TEXT("status")), TEXT("blocked"));
+	}
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorkflowUiMaterialHlslEffectContractTest,
+	"Monolith.Workflow.UiMaterialHlslEffect.Contract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorkflowUiMaterialHlslEffectContractTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("workflow"));
+	FMonolithWorkflowActions::RegisterAll();
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	bool bOk = true;
+	bOk &= TestTrue(TEXT("workflow.ui_material_hlsl_effect registers"),
+		Registry.HasAction(TEXT("workflow"), TEXT("ui_material_hlsl_effect")));
+
+	const FMonolithActionResult Missing = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		MakeShared<FJsonObject>());
+	bOk &= TestFalse(TEXT("missing UI material params fails"), Missing.bSuccess);
+	bOk &= TestEqual(TEXT("missing UI material params use invalid params"), Missing.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	TSharedPtr<FJsonObject> BindTo = MakeShared<FJsonObject>();
+	BindTo->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_Menu"));
+	BindTo->SetStringField(TEXT("widget_name"), TEXT("GlowImage"));
+
+	TSharedPtr<FJsonObject> Parameter = MakeShared<FJsonObject>();
+	Parameter->SetStringField(TEXT("name"), TEXT("Glow"));
+	Parameter->SetStringField(TEXT("type"), TEXT("scalar"));
+	TArray<TSharedPtr<FJsonValue>> ParametersArray;
+	ParametersArray.Add(MakeShared<FJsonValueObject>(Parameter));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("material_path"), TEXT("/Game/UI/Materials/M_ButtonGlow"));
+	Params->SetStringField(TEXT("hlsl"), TEXT("return float4(Glow, Glow, Glow, 1);"));
+	Params->SetObjectField(TEXT("bind_to"), BindTo);
+	Params->SetArrayField(TEXT("parameters"), ParametersArray);
+	Params->SetBoolField(TEXT("create_material"), true);
+	Params->SetBoolField(TEXT("dry_run"), true);
+
+	const FMonolithActionResult Result = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		Params);
+	bOk &= TestTrue(TEXT("UI material HLSL dry-run succeeds"), Result.bSuccess && Result.Result.IsValid());
+	if (!Result.bSuccess || !Result.Result.IsValid())
+	{
+		return false;
+	}
+
+	bOk &= TestEqual(TEXT("UI material HLSL status planned"), Result.Result->GetStringField(TEXT("status")), TEXT("planned"));
+	bOk &= TestEqual(TEXT("UI material HLSL workflow_id"), Result.Result->GetStringField(TEXT("workflow_id")), TEXT("ui_material_hlsl_effect"));
+	bOk &= TestTrue(TEXT("UI material HLSL plan has material create"), PlanContainsStep(Result.Result, TEXT("material_create")));
+	bOk &= TestTrue(TEXT("UI material HLSL plan has widget binding"), PlanContainsStep(Result.Result, TEXT("widget_binding")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include create material"), ActionsContainActionId(Result.Result, TEXT("material.create_material")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include set material property"), ActionsContainActionId(Result.Result, TEXT("material.set_material_property")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include custom node"), ActionsContainActionId(Result.Result, TEXT("material.create_custom_hlsl_node")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include material output wiring"), ActionsContainActionId(Result.Result, TEXT("material.connect_expressions")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include material compile"), ActionsContainActionId(Result.Result, TEXT("material.recompile_material")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include material validation"), ActionsContainActionId(Result.Result, TEXT("material.validate_material")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include stats"), ActionsContainActionId(Result.Result, TEXT("material.get_compilation_stats")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include material properties"), ActionsContainActionId(Result.Result, TEXT("material.get_material_properties")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include connection graph readback"), ActionsContainActionId(Result.Result, TEXT("material.get_full_connection_graph")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include image binding"), ActionsContainActionId(Result.Result, TEXT("ui.set_image")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include widget compile log"), ActionsContainActionId(Result.Result, TEXT("ui.dump_blueprint_compile_log")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include material lifecycle audit"), ActionsContainActionId(Result.Result, TEXT("ui.audit_widget_material_lifecycle")));
+	bOk &= TestTrue(TEXT("UI material HLSL actions include shipping proof plan"), ActionsContainActionId(Result.Result, TEXT("workflow.ui_shipping_widget_blueprint")));
+	bOk &= TestTrue(TEXT("UI material HLSL next action includes shipping workflow"), NextActionsContainAction(Result.Result, TEXT("workflow.ui_shipping_widget_blueprint")));
+	bOk &= TestTrue(TEXT("UI material HLSL next action includes material lifecycle audit"), NextActionsContainAction(Result.Result, TEXT("ui.audit_widget_material_lifecycle")));
+
+	TSharedPtr<FJsonObject> AutoMaskParams = MakeShared<FJsonObject>();
+	AutoMaskParams->SetStringField(TEXT("material_path"), TEXT("/Game/UI/Materials/M_ButtonGlow"));
+	AutoMaskParams->SetStringField(TEXT("hlsl"), TEXT("return float4(Glow, Glow, Glow, 0.5);"));
+	AutoMaskParams->SetObjectField(TEXT("bind_to"), BindTo);
+	AutoMaskParams->SetArrayField(TEXT("parameters"), ParametersArray);
+	AutoMaskParams->SetBoolField(TEXT("create_material"), true);
+	AutoMaskParams->SetBoolField(TEXT("connect_opacity"), true);
+	AutoMaskParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult AutoMaskResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		AutoMaskParams);
+	bOk &= TestTrue(TEXT("UI material HLSL auto alpha-mask dry-run succeeds"), AutoMaskResult.bSuccess && AutoMaskResult.Result.IsValid());
+	if (AutoMaskResult.Result.IsValid())
+	{
+		bOk &= TestTrue(TEXT("UI material HLSL plan has alpha mask step"), PlanContainsStep(AutoMaskResult.Result, TEXT("opacity_component_mask")));
+		bOk &= TestTrue(TEXT("UI material HLSL alpha mask uses material build graph"), ActionsContainActionId(AutoMaskResult.Result, TEXT("material.build_material_graph")));
+		bOk &= TestTrue(TEXT("UI material HLSL alpha mask graph spec is merge-only ComponentMask A"), UiMaterialAlphaMaskGraphSpecPlanned(AutoMaskResult.Result));
+		bOk &= TestTrue(TEXT("UI material HLSL opacity validation reports component mask"),
+			ValidationSectionStringFieldEquals(AutoMaskResult.Result, TEXT("opacity_wiring"), TEXT("mode"), TEXT("component_mask")));
+		bOk &= TestTrue(TEXT("UI material HLSL auto alpha-mask still uses material owner wiring"),
+			ActionsContainActionId(AutoMaskResult.Result, TEXT("material.connect_expressions")));
+	}
+
+	TSharedPtr<FJsonObject> AlphaOutput = MakeShared<FJsonObject>();
+	AlphaOutput->SetStringField(TEXT("name"), TEXT("Alpha"));
+	AlphaOutput->SetStringField(TEXT("type"), TEXT("Float1"));
+	TArray<TSharedPtr<FJsonValue>> AdditionalOutputs;
+	AdditionalOutputs.Add(MakeShared<FJsonValueObject>(AlphaOutput));
+	TSharedPtr<FJsonObject> DirectAlphaParams = MakeShared<FJsonObject>();
+	DirectAlphaParams->SetStringField(TEXT("material_path"), TEXT("/Game/UI/Materials/M_ButtonGlow"));
+	DirectAlphaParams->SetStringField(TEXT("hlsl"), TEXT("return float4(Glow, Glow, Glow, 1);"));
+	DirectAlphaParams->SetObjectField(TEXT("bind_to"), BindTo);
+	DirectAlphaParams->SetArrayField(TEXT("parameters"), ParametersArray);
+	DirectAlphaParams->SetArrayField(TEXT("additional_outputs"), AdditionalOutputs);
+	DirectAlphaParams->SetBoolField(TEXT("connect_opacity"), true);
+	DirectAlphaParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult DirectAlphaResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		DirectAlphaParams);
+	bOk &= TestTrue(TEXT("UI material HLSL direct Alpha output dry-run succeeds"), DirectAlphaResult.bSuccess && DirectAlphaResult.Result.IsValid());
+	if (DirectAlphaResult.Result.IsValid())
+	{
+		bOk &= TestFalse(TEXT("UI material HLSL direct Alpha output skips component mask"),
+			ActionsContainActionId(DirectAlphaResult.Result, TEXT("material.build_material_graph")));
+		bOk &= TestTrue(TEXT("UI material HLSL direct Alpha validation reports direct output"),
+			ValidationSectionStringFieldEquals(DirectAlphaResult.Result, TEXT("opacity_wiring"), TEXT("mode"), TEXT("direct_custom_output")));
+	}
+
+	TSharedPtr<FJsonObject> RiskyParams = MakeShared<FJsonObject>();
+	RiskyParams->SetStringField(TEXT("material_path"), TEXT("/Game/UI/Materials/M_ButtonGlow"));
+	RiskyParams->SetStringField(TEXT("hlsl"), TEXT("float x = ddx(Glow); clip(x); return float4(x, x, x, 1);"));
+	RiskyParams->SetObjectField(TEXT("bind_to"), BindTo);
+	RiskyParams->SetArrayField(TEXT("parameters"), ParametersArray);
+	const FMonolithActionResult RiskyResult = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		RiskyParams);
+	bOk &= TestTrue(TEXT("UI material HLSL risky dry-run succeeds"), RiskyResult.bSuccess && RiskyResult.Result.IsValid());
+	if (RiskyResult.Result.IsValid())
+	{
+		bOk &= TestTrue(TEXT("UI material HLSL reports risky tokens"),
+			ValidationFindingExists(RiskyResult.Result, TEXT("hlsl"), TEXT("RiskyHlslToken")));
+	}
+
+	Params->SetBoolField(TEXT("dry_run"), false);
+	Params->SetBoolField(TEXT("confirm"), false);
+	const FMonolithActionResult ConfirmBlocked = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_material_hlsl_effect"),
+		Params);
+	bOk &= TestTrue(TEXT("UI material HLSL confirm gate returns blocked envelope"), ConfirmBlocked.bSuccess && ConfirmBlocked.Result.IsValid());
+	if (ConfirmBlocked.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("UI material HLSL confirm gate status blocked"), ConfirmBlocked.Result->GetStringField(TEXT("status")), TEXT("blocked"));
+	}
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithWorkflowUiRetainerEffectMaterialContractTest,
+	"Monolith.Workflow.UiRetainerEffectMaterial.Contract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithWorkflowUiRetainerEffectMaterialContractTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace Scope(TEXT("workflow"));
+	FMonolithWorkflowActions::RegisterAll();
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	bool bOk = true;
+	bOk &= TestTrue(TEXT("workflow.ui_retainer_effect_material registers"),
+		Registry.HasAction(TEXT("workflow"), TEXT("ui_retainer_effect_material")));
+
+	const FMonolithActionResult Missing = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_retainer_effect_material"),
+		MakeShared<FJsonObject>());
+	bOk &= TestFalse(TEXT("missing Retainer workflow params fails"), Missing.bSuccess);
+	bOk &= TestEqual(TEXT("missing Retainer workflow params use invalid params"), Missing.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+
+	TSharedPtr<FJsonObject> BindTo = MakeShared<FJsonObject>();
+	BindTo->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_Menu"));
+	BindTo->SetStringField(TEXT("retainer_widget_name"), TEXT("MenuRetainer"));
+	BindTo->SetStringField(TEXT("texture_parameter"), TEXT("Texture"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("material_path"), TEXT("/Game/UI/Materials/M_RetainerBlur"));
+	Params->SetObjectField(TEXT("bind_to"), BindTo);
+	Params->SetBoolField(TEXT("dry_run"), true);
+
+	const FMonolithActionResult Result = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_retainer_effect_material"),
+		Params);
+	bOk &= TestTrue(TEXT("Retainer effect dry-run succeeds"), Result.bSuccess && Result.Result.IsValid());
+	if (!Result.bSuccess || !Result.Result.IsValid())
+	{
+		return false;
+	}
+
+	bOk &= TestEqual(TEXT("Retainer effect status planned"), Result.Result->GetStringField(TEXT("status")), TEXT("planned"));
+	bOk &= TestEqual(TEXT("Retainer effect workflow_id"), Result.Result->GetStringField(TEXT("workflow_id")), TEXT("ui_retainer_effect_material"));
+	bOk &= TestTrue(TEXT("Retainer effect plan has parameter readback"), PlanContainsStep(Result.Result, TEXT("material_parameter_readback")));
+	bOk &= TestTrue(TEXT("Retainer effect plan has binding"), PlanContainsStep(Result.Result, TEXT("retainer_binding")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include material params"), ActionsContainActionId(Result.Result, TEXT("material.get_material_parameters")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include material properties"), ActionsContainActionId(Result.Result, TEXT("material.get_material_properties")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include owner binding"), ActionsContainActionId(Result.Result, TEXT("ui.set_retainer_effect_material")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include compile log"), ActionsContainActionId(Result.Result, TEXT("ui.dump_blueprint_compile_log")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include material lifecycle audit"), ActionsContainActionId(Result.Result, TEXT("ui.audit_widget_material_lifecycle")));
+	bOk &= TestTrue(TEXT("Retainer effect actions include shipping proof plan"), ActionsContainActionId(Result.Result, TEXT("workflow.ui_shipping_widget_blueprint")));
+	bOk &= TestTrue(TEXT("Retainer effect binding params keep exact texture parameter"),
+		ActionParamsStringFieldEquals(Result.Result, TEXT("ui.set_retainer_effect_material"), TEXT("texture_parameter"), TEXT("Texture")));
+	bOk &= TestTrue(TEXT("Retainer effect next action includes shipping workflow"),
+		NextActionsContainAction(Result.Result, TEXT("workflow.ui_shipping_widget_blueprint")));
+	bOk &= TestTrue(TEXT("Retainer effect next action includes material lifecycle audit"),
+		NextActionsContainAction(Result.Result, TEXT("ui.audit_widget_material_lifecycle")));
+
+	Params->SetBoolField(TEXT("dry_run"), false);
+	Params->SetBoolField(TEXT("confirm"), false);
+	const FMonolithActionResult ConfirmBlocked = Registry.ExecuteAction(
+		TEXT("workflow"),
+		TEXT("ui_retainer_effect_material"),
+		Params);
+	bOk &= TestTrue(TEXT("Retainer effect confirm gate returns blocked envelope"), ConfirmBlocked.bSuccess && ConfirmBlocked.Result.IsValid());
+	if (ConfirmBlocked.Result.IsValid())
+	{
+		bOk &= TestEqual(TEXT("Retainer effect confirm gate status blocked"), ConfirmBlocked.Result->GetStringField(TEXT("status")), TEXT("blocked"));
+	}
 
 	return bOk;
 }

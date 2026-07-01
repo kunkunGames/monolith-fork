@@ -105,6 +105,10 @@ bool FMonolithUIAllowlistTextBlockTextTest::RunTest(const FString& /*Parameters*
         Allowlist.IsAllowed(FName(TEXT("TextBlock")), TEXT("LineHeightPercentage")));
     TestTrue(TEXT("TextBlock.ApplyLineHeightToBottomLine is allowed"),
         Allowlist.IsAllowed(FName(TEXT("TextBlock")), TEXT("ApplyLineHeightToBottomLine")));
+    TestTrue(TEXT("TextBlock.RenderOpacity is allowed"),
+        Allowlist.IsAllowed(FName(TEXT("TextBlock")), TEXT("RenderOpacity")));
+    TestTrue(TEXT("TextBlock.Visibility is allowed"),
+        Allowlist.IsAllowed(FName(TEXT("TextBlock")), TEXT("Visibility")));
     TestFalse(TEXT("TextBlock.PrivateInternalCache is denied"),
         Allowlist.IsAllowed(FName(TEXT("TextBlock")), TEXT("PrivateInternalCache")));
 

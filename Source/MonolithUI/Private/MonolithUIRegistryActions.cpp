@@ -20,13 +20,454 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "EdGraphSchema_K2.h"
 #include "EdGraph/EdGraphPin.h"
+#include "Misc/Paths.h"
 #include "UObject/UnrealType.h"
 #include "MonolithUICommon.h"  // MonolithUI::LoadWidgetBlueprint
 #include "Components/Widget.h"
+#include "Components/PanelSlot.h"
 #include "Blueprint/WidgetTree.h"
 
 namespace MonolithUIRegistryPhase2
 {
+    static FString ContainerKindToString(EUIContainerKind Kind)
+    {
+        switch (Kind)
+        {
+            case EUIContainerKind::Panel: return TEXT("Panel");
+            case EUIContainerKind::Content: return TEXT("Content");
+            case EUIContainerKind::Leaf:
+            default: return TEXT("Leaf");
+        }
+    }
+
+    static void AddStringArray(TSharedPtr<FJsonObject> Obj, const TCHAR* FieldName, const TArray<FString>& Values)
+    {
+        TArray<TSharedPtr<FJsonValue>> JsonValues;
+        JsonValues.Reserve(Values.Num());
+        for (const FString& Value : Values)
+        {
+            JsonValues.Add(MakeShared<FJsonValueString>(Value));
+        }
+        Obj->SetArrayField(FieldName, JsonValues);
+    }
+
+    static TArray<TSharedPtr<FJsonValue>> MakeEnumValues(UEnum* EnumPtr)
+    {
+        TArray<TSharedPtr<FJsonValue>> Values;
+        if (!EnumPtr)
+        {
+            return Values;
+        }
+
+        const int32 NumEntries = EnumPtr->NumEnums();
+        Values.Reserve(NumEntries);
+        for (int32 Index = 0; Index < NumEntries; ++Index)
+        {
+            const FName NameByIndex = EnumPtr->GetNameByIndex(Index);
+            if (NameByIndex.ToString().EndsWith(TEXT("_MAX")) && Index == NumEntries - 1)
+            {
+                continue;
+            }
+
+            TSharedPtr<FJsonObject> ValueObj = MakeShared<FJsonObject>();
+            ValueObj->SetStringField(TEXT("name"), EnumPtr->GetNameStringByIndex(Index));
+            ValueObj->SetStringField(TEXT("display_name"), EnumPtr->GetDisplayNameTextByIndex(Index).ToString());
+            ValueObj->SetNumberField(TEXT("value"), static_cast<double>(EnumPtr->GetValueByIndex(Index)));
+            Values.Add(MakeShared<FJsonValueObject>(ValueObj));
+        }
+        return Values;
+    }
+
+    static UClass* ResolveWidgetClassFromToken(const FString& WidgetClassToken)
+    {
+        if (WidgetClassToken.IsEmpty())
+        {
+            return nullptr;
+        }
+
+        if (UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get())
+        {
+            const FUITypeRegistry& TypeRegistry = Sub->GetTypeRegistry();
+            if (const FUITypeRegistryEntry* Entry = TypeRegistry.FindByToken(FName(*WidgetClassToken)))
+            {
+                if (Entry->WidgetClass.IsValid())
+                {
+                    return Entry->WidgetClass.Get();
+                }
+            }
+        }
+
+        if (UClass* Loaded = StaticLoadClass(UWidget::StaticClass(), nullptr, *WidgetClassToken))
+        {
+            return Loaded;
+        }
+        if (UClass* Found = FindFirstObject<UClass>(*WidgetClassToken, EFindFirstObjectOptions::NativeFirst))
+        {
+            return Found;
+        }
+        if (!WidgetClassToken.StartsWith(TEXT("U")))
+        {
+            return FindFirstObject<UClass>(*(TEXT("U") + WidgetClassToken), EFindFirstObjectOptions::NativeFirst);
+        }
+        return nullptr;
+    }
+
+    static FProperty* ResolvePropertyPath(UStruct* RootStruct, const FString& PropertyPath)
+    {
+        if (!RootStruct || PropertyPath.IsEmpty())
+        {
+            return nullptr;
+        }
+
+        TArray<FString> Segments;
+        PropertyPath.ParseIntoArray(Segments, TEXT("."), /*bCullEmpty=*/true);
+        if (Segments.Num() == 0)
+        {
+            return nullptr;
+        }
+
+        UStruct* CurrentStruct = RootStruct;
+        FProperty* CurrentProperty = nullptr;
+        for (int32 Index = 0; Index < Segments.Num(); ++Index)
+        {
+            CurrentProperty = CurrentStruct ? CurrentStruct->FindPropertyByName(FName(*Segments[Index])) : nullptr;
+            if (!CurrentProperty)
+            {
+                return nullptr;
+            }
+
+            if (Index == Segments.Num() - 1)
+            {
+                return CurrentProperty;
+            }
+
+            if (FStructProperty* StructProperty = CastField<FStructProperty>(CurrentProperty))
+            {
+                CurrentStruct = StructProperty->Struct;
+            }
+            else if (FObjectProperty* ObjectProperty = CastField<FObjectProperty>(CurrentProperty))
+            {
+                CurrentStruct = ObjectProperty->PropertyClass;
+            }
+            else
+            {
+                return nullptr;
+            }
+        }
+
+        return CurrentProperty;
+    }
+
+    static FString GetPropertyCppType(const FProperty* Property)
+    {
+        return Property ? Property->GetCPPType() : FString();
+    }
+
+    static UEnum* GetPropertyEnum(const FProperty* Property)
+    {
+        if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
+        {
+            return EnumProperty->GetEnum();
+        }
+        if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
+        {
+            return ByteProperty->Enum;
+        }
+        return nullptr;
+    }
+
+    static FString GetSetterName(const UClass* OwnerClass, const FString& LeafPropertyName)
+    {
+        if (!OwnerClass || LeafPropertyName.IsEmpty())
+        {
+            return FString();
+        }
+
+        const FName SetterName(*FString::Printf(TEXT("Set%s"), *LeafPropertyName));
+        if (OwnerClass->FindFunctionByName(SetterName))
+        {
+            return SetterName.ToString();
+        }
+        return FString();
+    }
+
+    static TSharedPtr<FJsonObject> MakePropertySchemaEntry(
+        const FUIPropertyMapping& Mapping,
+        const UClass* WidgetClass,
+        const UClass* LiveSlotClass,
+        const FString& AllowlistStatus,
+        bool bSettable)
+    {
+        const bool bSlotPath = Mapping.JsonPath.StartsWith(TEXT("Slot."));
+        FString ResolutionPath = Mapping.EnginePath.IsEmpty() ? Mapping.JsonPath : Mapping.EnginePath;
+        UClass* ResolutionClass = const_cast<UClass*>(WidgetClass);
+        if (bSlotPath && LiveSlotClass)
+        {
+            ResolutionClass = const_cast<UClass*>(LiveSlotClass);
+            if (ResolutionPath.StartsWith(TEXT("Slot.")))
+            {
+                ResolutionPath.RightChopInline(5);
+            }
+        }
+
+        FProperty* Property = ResolvePropertyPath(ResolutionClass, ResolutionPath);
+        const FString LeafName = Property ? Property->GetName() : FPaths::GetCleanFilename(ResolutionPath);
+
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        Entry->SetStringField(TEXT("path"), Mapping.JsonPath);
+        Entry->SetStringField(TEXT("json_path"), Mapping.JsonPath);
+        Entry->SetStringField(TEXT("engine_path"), Mapping.EnginePath);
+        Entry->SetStringField(TEXT("cpp_type"), GetPropertyCppType(Property));
+        Entry->SetBoolField(TEXT("settable"), bSettable);
+        Entry->SetStringField(TEXT("allowlist_status"), AllowlistStatus);
+        Entry->SetStringField(TEXT("tooltip"), Mapping.Description);
+        Entry->SetStringField(TEXT("description"), Mapping.Description);
+        AddStringArray(Entry, TEXT("aliases"), TArray<FString>());
+
+        if (Property)
+        {
+            Entry->SetStringField(TEXT("property_class"), Property->GetClass()->GetName());
+            Entry->SetBoolField(TEXT("deprecated_direct_access"),
+                Property->HasAnyPropertyFlags(CPF_Deprecated) || Property->HasMetaData(TEXT("DeprecatedProperty")));
+            if (UEnum* EnumPtr = GetPropertyEnum(Property))
+            {
+                Entry->SetStringField(TEXT("enum_name"), EnumPtr->GetName());
+                Entry->SetArrayField(TEXT("enum_values"), MakeEnumValues(EnumPtr));
+            }
+            else
+            {
+                Entry->SetArrayField(TEXT("enum_values"), TArray<TSharedPtr<FJsonValue>>());
+            }
+
+            const UClass* SetterOwner = (bSlotPath && LiveSlotClass) ? LiveSlotClass : WidgetClass;
+            Entry->SetStringField(TEXT("setter"), GetSetterName(SetterOwner, LeafName));
+        }
+        else
+        {
+            Entry->SetBoolField(TEXT("deprecated_direct_access"), false);
+            Entry->SetArrayField(TEXT("enum_values"), TArray<TSharedPtr<FJsonValue>>());
+            Entry->SetStringField(TEXT("setter"), FString());
+        }
+
+        if (bSlotPath)
+        {
+            Entry->SetStringField(TEXT("slot_class"), LiveSlotClass ? LiveSlotClass->GetPathName() : FString());
+            Entry->SetStringField(TEXT("slot_context"),
+                LiveSlotClass
+                    ? TEXT("settable for the supplied live widget slot class")
+                    : TEXT("contextual; settable only when the live parent creates a compatible slot class"));
+        }
+
+        return Entry;
+    }
+
+    static TSharedPtr<FJsonObject> MakeUnsafeReflectedPropertyEntry(const FProperty* Property)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        const FString PropertyName = Property ? Property->GetName() : FString();
+        Entry->SetStringField(TEXT("path"), PropertyName);
+        Entry->SetStringField(TEXT("json_path"), PropertyName);
+        Entry->SetStringField(TEXT("engine_path"), PropertyName);
+        Entry->SetStringField(TEXT("cpp_type"), GetPropertyCppType(Property));
+        Entry->SetBoolField(TEXT("settable"), false);
+        Entry->SetStringField(TEXT("allowlist_status"), TEXT("requires_raw_mode"));
+        Entry->SetStringField(TEXT("tooltip"), TEXT("Reflected property is not in the curated Monolith UI allowlist."));
+        Entry->SetStringField(TEXT("description"), TEXT("Reflected property is not in the curated Monolith UI allowlist."));
+        AddStringArray(Entry, TEXT("aliases"), TArray<FString>());
+        Entry->SetBoolField(TEXT("deprecated_direct_access"),
+            Property && (Property->HasAnyPropertyFlags(CPF_Deprecated) || Property->HasMetaData(TEXT("DeprecatedProperty"))));
+        if (UEnum* EnumPtr = GetPropertyEnum(Property))
+        {
+            Entry->SetStringField(TEXT("enum_name"), EnumPtr->GetName());
+            Entry->SetArrayField(TEXT("enum_values"), MakeEnumValues(EnumPtr));
+        }
+        else
+        {
+            Entry->SetArrayField(TEXT("enum_values"), TArray<TSharedPtr<FJsonValue>>());
+        }
+        return Entry;
+    }
+
+    static FMonolithActionResult HandleDescribeWidgetTypeSchema(const TSharedPtr<FJsonObject>& Params)
+    {
+        if (!Params.IsValid())
+        {
+            return FMonolithActionResult::Error(TEXT("Missing parameters object."), -32602);
+        }
+
+        UMonolithUIRegistrySubsystem* Sub = UMonolithUIRegistrySubsystem::Get();
+        if (!Sub)
+        {
+            return FMonolithActionResult::Error(
+                TEXT("UMonolithUIRegistrySubsystem not available — editor not initialised?"), -32603);
+        }
+
+        FString WidgetClassToken;
+        FString AssetPath;
+        FString WidgetName;
+        Params->TryGetStringField(TEXT("widget_class"), WidgetClassToken);
+        Params->TryGetStringField(TEXT("asset_path"), AssetPath);
+        Params->TryGetStringField(TEXT("widget_name"), WidgetName);
+
+        bool bIncludeUnsafe = false;
+        Params->TryGetBoolField(TEXT("include_unsafe"), bIncludeUnsafe);
+
+        UClass* WidgetClass = nullptr;
+        UClass* LiveSlotClass = nullptr;
+        FString ResolvedFrom;
+
+        if (!AssetPath.IsEmpty() && !WidgetName.IsEmpty())
+        {
+            FMonolithActionResult LoadErr;
+            UWidgetBlueprint* WBP = MonolithUI::LoadWidgetBlueprint(AssetPath, LoadErr);
+            if (!WBP)
+            {
+                return LoadErr;
+            }
+            if (!WBP->WidgetTree)
+            {
+                return FMonolithActionResult::Error(TEXT("WidgetTree is null."), -32603);
+            }
+            UWidget* LiveWidget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
+            if (!LiveWidget)
+            {
+                return FMonolithActionResult::Error(
+                    FString::Printf(TEXT("Widget '%s' not found in '%s'."), *WidgetName, *AssetPath),
+                    -32602);
+            }
+            WidgetClass = LiveWidget->GetClass();
+            if (LiveWidget->Slot)
+            {
+                LiveSlotClass = LiveWidget->Slot->GetClass();
+            }
+            ResolvedFrom = TEXT("live_widget");
+        }
+
+        if (!WidgetClass && !WidgetClassToken.IsEmpty())
+        {
+            WidgetClass = ResolveWidgetClassFromToken(WidgetClassToken);
+            ResolvedFrom = TEXT("widget_class");
+        }
+
+        if (!WidgetClass)
+        {
+            return FMonolithActionResult::Error(
+                TEXT("Provide widget_class, or provide asset_path + widget_name for a live widget instance."),
+                -32602);
+        }
+
+        const FUITypeRegistry& TypeRegistry = Sub->GetTypeRegistry();
+        const FUITypeRegistryEntry* Entry = TypeRegistry.FindByClass(WidgetClass);
+        const FName WidgetToken = Entry ? Entry->Token : MonolithUI::MakeTokenFromClassName(WidgetClass);
+
+        TArray<TSharedPtr<FJsonValue>> Properties;
+        TArray<TSharedPtr<FJsonValue>> SlotProperties;
+        TSet<FString> MappedJsonPaths;
+
+        if (Entry)
+        {
+            for (const FUIPropertyMapping& Mapping : Entry->PropertyMappings)
+            {
+                MappedJsonPaths.Add(Mapping.JsonPath);
+                const bool bSlotPath = Mapping.JsonPath.StartsWith(TEXT("Slot."));
+                const bool bSlotSettable = !bSlotPath || LiveSlotClass != nullptr;
+                const FString Status = bSlotPath ? TEXT("slot_only") : TEXT("allowed");
+                TSharedPtr<FJsonObject> PropertyEntry = MakePropertySchemaEntry(
+                    Mapping,
+                    WidgetClass,
+                    LiveSlotClass,
+                    Status,
+                    bSlotSettable);
+                Properties.Add(MakeShared<FJsonValueObject>(PropertyEntry));
+                if (bSlotPath)
+                {
+                    SlotProperties.Add(MakeShared<FJsonValueObject>(PropertyEntry));
+                }
+            }
+        }
+
+        if (bIncludeUnsafe)
+        {
+            for (TFieldIterator<FProperty> It(WidgetClass, EFieldIteratorFlags::IncludeSuper); It; ++It)
+            {
+                FProperty* Property = *It;
+                if (!Property || MappedJsonPaths.Contains(Property->GetName()))
+                {
+                    continue;
+                }
+                if (!Property->HasAnyPropertyFlags(CPF_Edit | CPF_BlueprintVisible))
+                {
+                    continue;
+                }
+                Properties.Add(MakeShared<FJsonValueObject>(MakeUnsafeReflectedPropertyEntry(Property)));
+            }
+        }
+
+        TArray<TSharedPtr<FJsonValue>> Warnings;
+        if (!Entry)
+        {
+            Warnings.Add(MakeShared<FJsonValueString>(
+                TEXT("Widget class is not registered in Monolith's UI type registry; safe property mappings are unavailable.")));
+        }
+        else if (Entry->PropertyMappings.Num() == 0)
+        {
+            Warnings.Add(MakeShared<FJsonValueString>(
+                TEXT("Widget type is registered but has no curated safe property mappings; use existing owner actions or add allowlist mappings before broad writes.")));
+        }
+        if (!AssetPath.IsEmpty() && !WidgetName.IsEmpty() && !LiveSlotClass)
+        {
+            Warnings.Add(MakeShared<FJsonValueString>(
+                TEXT("Live widget has no parent slot, so Slot.* paths are not settable in this context.")));
+        }
+
+        TArray<TSharedPtr<FJsonValue>> NextActions;
+        auto AddNextAction = [&NextActions](const FString& ToolName, bool bAvailable)
+        {
+            TSharedPtr<FJsonObject> Action = MakeShared<FJsonObject>();
+            Action->SetStringField(TEXT("tool"), ToolName);
+            Action->SetBoolField(TEXT("available"), bAvailable);
+            NextActions.Add(MakeShared<FJsonValueObject>(Action));
+        };
+        AddNextAction(TEXT("ui.set_widget_property"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("set_widget_property")));
+        AddNextAction(TEXT("ui.set_slot_property"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("set_slot_property")));
+        AddNextAction(TEXT("ui.dump_property_allowlist"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("dump_property_allowlist")));
+        AddNextAction(TEXT("ui.list_widget_property_enums"), FMonolithToolRegistry::Get().HasAction(TEXT("ui"), TEXT("list_widget_property_enums")));
+
+        TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+        Result->SetBoolField(TEXT("ok"), true);
+        Result->SetStringField(TEXT("schema_version"), TEXT("ui_widget_type_schema.v1"));
+        Result->SetStringField(TEXT("widget_class"), WidgetClass->GetPathName());
+        Result->SetStringField(TEXT("widget_token"), WidgetToken.ToString());
+        Result->SetStringField(TEXT("resolved_from"), ResolvedFrom);
+        Result->SetStringField(TEXT("engine_path"), WidgetClass->GetPathName());
+        Result->SetBoolField(TEXT("registered"), Entry != nullptr);
+        if (Entry)
+        {
+            Result->SetStringField(TEXT("container_kind"), ContainerKindToString(Entry->ContainerKind));
+            Result->SetNumberField(TEXT("max_children"), Entry->MaxChildren);
+            if (Entry->SlotClass.IsValid())
+            {
+                Result->SetStringField(TEXT("default_slot_class"), Entry->SlotClass->GetPathName());
+            }
+        }
+        if (!AssetPath.IsEmpty())
+        {
+            Result->SetStringField(TEXT("asset_path"), AssetPath);
+        }
+        if (!WidgetName.IsEmpty())
+        {
+            Result->SetStringField(TEXT("widget_name"), WidgetName);
+        }
+        Result->SetStringField(TEXT("live_slot_class"), LiveSlotClass ? LiveSlotClass->GetPathName() : FString());
+        Result->SetArrayField(TEXT("properties"), Properties);
+        Result->SetArrayField(TEXT("slot_properties"), SlotProperties);
+        Result->SetNumberField(TEXT("property_count"), Properties.Num());
+        Result->SetNumberField(TEXT("slot_property_count"), SlotProperties.Num());
+        Result->SetArrayField(TEXT("warnings"), Warnings);
+        Result->SetArrayField(TEXT("next_actions"), NextActions);
+        return FMonolithActionResult::Success(Result);
+    }
+
     // ---- Phase 2 Item #8 helpers ---------------------------------------------
     //
     // ParsePinTypeFromString mirrors the canonical MCP-friendly token grammar
@@ -557,6 +998,23 @@ void FMonolithUIRegistryActions::RegisterActions(FMonolithToolRegistry& Registry
             .Required(TEXT("widget_type"), TEXT("string"),
                 TEXT("Widget token (e.g. \"VerticalBox\", \"TextBlock\", \"RoundedBorder\")."))
             .Build()
+    );
+
+    Registry.RegisterAction(
+        TEXT("ui"), TEXT("describe_widget_type_schema"),
+        TEXT("Describe a UMG widget type or live widget instance using Monolith's existing type registry, "
+             "property allowlist, reflected cpp types, enum values, slot context, and next owner actions. "
+             "Use before set_widget_property/set_slot_property to avoid raw-mode guesses."),
+        FMonolithActionHandler::CreateStatic(&MonolithUIRegistryPhase2::HandleDescribeWidgetTypeSchema),
+        FParamSchemaBuilder()
+            .Optional(TEXT("widget_class"), TEXT("string"), TEXT("Widget token or class path, e.g. TextBlock, Button, /Script/UMG.Button"))
+            .OptionalAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint path. Combine with widget_name to describe a live widget instance."))
+            .Optional(TEXT("widget_name"), TEXT("string"), TEXT("Widget name inside asset_path. When supplied, live slot context is included."))
+            .Optional(TEXT("include_inherited"), TEXT("bool"), TEXT("Reserved; inherited reflected fields are included for include_unsafe=true."), TEXT("false"))
+            .Optional(TEXT("include_unsafe"), TEXT("bool"), TEXT("Also include reflected editable properties that require raw_mode and are not in the curated allowlist."), TEXT("false"))
+            .Optional(TEXT("include_examples"), TEXT("bool"), TEXT("Reserved for future examples; current result returns next_actions and schema metadata."), TEXT("true"))
+            .Build(),
+        TEXT("Registry")
     );
 
     // Phase 2 Item #8 (2026-05-16 UI gap audit): add_widget_variable.

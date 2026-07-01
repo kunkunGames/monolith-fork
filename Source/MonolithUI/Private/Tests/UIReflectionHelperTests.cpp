@@ -72,14 +72,12 @@ bool FMonolithUIReflectionSetVisibilityTest::RunTest(const FString& /*Parameters
         return false;
     }
 
-    // Visibility curated mapping isn't wired by Phase B (no entry on TextBlock
-    // for "Visibility"). To keep this test allowlist-honest, run with
-    // bRawMode=true. The dedicated allowlist gate test below confirms the
-    // gate path with a known-curated path (Text).
+    // Visibility is a common UWidget style path curated for TextBlock, so this
+    // must pass through the default allowlist-gated path.
     FUIReflectionHelper Helper = MakeSubsystemHelper();
     const TSharedPtr<FJsonValue> Value = MakeShared<FJsonValueString>(TEXT("Hidden"));
 
-    const FUIReflectionApplyResult Res = Helper.Apply(Widget, TEXT("Visibility"), Value, /*bRawMode=*/true);
+    const FUIReflectionApplyResult Res = Helper.Apply(Widget, TEXT("Visibility"), Value, /*bRawMode=*/false);
 
     TestTrue(FString::Printf(TEXT("Apply succeeded: %s/%s"), *Res.FailureReason, *Res.Detail), Res.bSuccess);
     TestTrue(TEXT("Widget visibility flipped to Hidden"),

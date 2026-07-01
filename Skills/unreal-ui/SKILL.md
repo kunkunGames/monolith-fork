@@ -19,13 +19,13 @@ monolith_discover({ namespace: "ui", action: "add_widget", mode: "schema" })  //
 monolith_find("make a health bar HUD")                                  // jump straight to the right action
 ```
 
-The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A-L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, `validate_frontend_menu_flow`), Slot, Templates, Styling, UI post-copy repair, Animation v1/v2, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder (`build_ui_from_spec`, `build_menu_from_spec`, `apply_common_menu_transform_spec`), and Type Registry diagnostics.
+The `ui` live catalog is large and build-flag dependent; confirm the exact count with `monolith_discover`. Always-on UMG authoring plus CommonUI-plugin-conditional actions plus GAS attribute-binding aliases are available in the typical Speed editor build (post Phase A-L MonolithUI architecture expansion; texture/font ingest moved to `asset`). Always-on surface includes Widget CRUD, explicit work context (`set_widget_context`, `get_widget_context`, `clear_widget_context`), UIExtension point setup, CommonFramework diagnostics/authoring (`get_common_framework_status`, `add_primary_game_layout_layer`, `describe_common_widget_blueprint`, `describe_common_messaging_flow`, `validate_common_dialog_contract`, `validate_common_layer_push_contract`, `validate_frontend_menu_flow`), Slot, Templates, Styling, UI post-copy repair, Animation v1/v2 plus read-only overview/timeline/time-slice inspection, Bindings, Settings scaffolds, Accessibility, Hoisted Design Import effects, EffectSurface, Spec Builder (`build_ui_from_spec`, `convert_markup_to_ui_spec`, `diff_ui_spec`, `apply_ui_spec_patch`, `measure_widget_layout`, `build_menu_from_spec`, `apply_common_menu_transform_spec`), and Type Registry diagnostics (`describe_widget_type_schema`, `dump_property_allowlist`, enum/property helpers).
 
 **CommonUI actions require the CommonUI engine plugin** (stock UE 5.7, `Engine/Plugins/Runtime/CommonUI/`). When absent, the `WITH_COMMONUI` action pack unregisters; detect the live surface via `monolith_discover`.
 
 ## When to use / Use a different skill for
 
-Use **unreal-ui** for runtime UMG widgets — Widget Blueprints, HUDs, menus, settings/save panels, widget tree CRUD, slots/anchors, styling, animations, data binding, CommonUI, and accessibility on the UI side.
+Use **unreal-ui** for runtime UMG widgets — Widget Blueprints, HUDs, menus, settings/save panels, widget tree CRUD, slots/anchors, styling, animations, animation read/delta evidence, data binding, CommonUI, and accessibility on the UI side.
 
 - **unreal-blueprints** — the graph is an actor/component Blueprint or generic Blueprint variables/functions, not a Widget Blueprint / UMG layout.
 - **unreal-slate** — the UI is editor Slate / an Editor Utility Widget or editor-side tooling, not a runtime UMG widget/HUD/menu.
@@ -68,6 +68,10 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `list_widget_types` | `filter?` (panel/leaf/input/display/layout) | Available widget classes |
 | `[w] rename_widget` | `wbp_path*` (alias `asset_path`), `old_name*`, `new_name*` | Rename widget FName (must be unique) |
 | `[w] dump_blueprint_compile_log` | `asset_path*` | Fresh compile + errors[]/warnings[]/notes[] |
+| **Context (3, diagnostic only)** | | |
+| `set_widget_context` | `asset_path?`, `widget_name?`, `animation_name?`, `scope=session/request`, `ttl_seconds=900` | Remember explicit UMG focus for this session/request; never auto-creates assets and never becomes a hidden write default |
+| `get_widget_context` | `scope=auto/session/request`, `include_recent=true`, `recent_limit=5` | Read context with freshness and asset/widget/animation existence; result includes `usable_as_default_for_mutation=false` |
+| `clear_widget_context` | `scope=all/session/request` | Clear current session/request UI context without touching assets |
 | `[w] add_widget_variable` | `wbp_path*` (alias `asset_path`), `var_name*`, `var_type*` (token grammar — see action desc), `default_value?`, `var_category?` | Add member variable to WBP |
 | `[w] set_widget_is_variable` | `wbp_path*` (alias `asset_path`), `widget_name*`, `is_variable*` | Toggle widget's bIsVariable flag |
 | `list_widget_property_enums` | `wbp_path?`, `widget_class?`, `property_name?` | Enum-typed props + valid values |
@@ -95,16 +99,26 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] create_loading_screen` | `save_path*`, `show_progress=true`, `show_tips=true`, `show_spinner=true` | Loading screen |
 | `[w] create_inventory_grid` | `save_path*`, `columns=5`, `rows=4`, `slot_size=64` | Inventory grid |
 | `[w] create_save_slot_list` | `save_path*`, `max_slots=3` | Save slot selector |
-| **Styling (6)** | | |
+| **Styling (7)** | | |
 | `[w] set_brush` | `asset_path*`, `widget_name*`, `property_name*`, `draw_type=Image` (Image/Box/Border/RoundedBox/NoDrawType), `tint_color?`, `image_size?`, `margin?`, `corner_radius?`, `outline_color?`, `outline_width?`, `texture_path?`, `material_path?`, `compile=false` | Configure brush |
 | `[w] set_font` | `asset_path*`, `widget_name*`, `font_size?`, `font_family?`, `typeface=Regular` (Regular/Bold/Italic/Light), `letter_spacing?`, `outline_size?`, `outline_color?`, `compile=false` | Font on text widgets |
 | `[w] set_color_scheme` | `colors*` (map e.g. {"User1":"#0A0A14",...}) | EStyleColor User1-16 palette |
 | `[w] batch_style` | `asset_path*`, `widget_class*`, `property_name*`, `value*`, `compile=false` | Apply to all widgets of class |
 | `[w] set_text` | `asset_path*`, `widget_name*`, `text?`, `text_color?`, `font_size?`, `justification?` (Left/Center/Right), `compile=false` | Convenience text setter |
 | `[w] set_image` | `asset_path*`, `widget_name*`, `texture_path?`, `material_path?`, `tint_color?`, `size?`, `compile=false` | Convenience image setter |
+| `[w] set_retainer_effect_material` | `asset_path*`, `widget_name*`, `material_path*`, `texture_parameter=Texture`, `request_render=false`, `compile=false` | RetainerBox effect material binding with exact texture-parameter/UI-domain proof |
 | `[w] set_rounded_corners` | `asset_path*`, `widget_name*`, `corner_radii?` [TL,TR,BR,BL], `outline_color?`, `outline_width?`, `fill_color?`, `compile=true` | Reflection writer for corner/outline/fill (≥1 optional required) |
-| **Spec Builder + Menu Transform (6)** | | |
+| **Spec Builder + Menu Transform (10)** | | |
+| `[w] build_ui_from_spec` | `asset_path*`, `spec*`, `overwrite=true`, `dry_run=false`, `treat_warnings_as_errors=false`, `raw_mode=false`, `request_id?` | Transactional canonical `FUISpecDocument` to Widget Blueprint builder. |
+| `dump_ui_spec_schema` | none | Read the canonical `FUISpecDocument` schema plus live allowlist projection. |
+| `convert_markup_to_ui_spec` | `markup*`, `dialect=umg_xml_v1`, `strict=true`, `root_save_path?`, `spec_name?`, `parent_class?`, `source_name?`, `treat_warnings_as_errors=false`, `request_id?` | Read-only XML/HTML-like UMG markup to canonical `FUISpecDocument` JSON. Does not create or modify assets; feed returned `spec` into `build_ui_from_spec`. |
+| `diff_ui_spec` | `asset_path*`, `desired_spec*`, `compare_mode=structural/properties/full`, `request_id?` | Read-only live-WBP vs desired `FUISpecDocument` diff. Emits stable-name patch candidates, reports existing `FDelegateEditorBinding` preservation/at-risk evidence, and reports unsupported fields instead of falling back to raw writes. |
+| `[w] apply_ui_spec_patch` | `asset_path*`, `patch*`, `dry_run=true`, `confirm=false`, `compile=true`, `save=false`, `read_back=true`, `continue_on_error=false`, `request_id?` | Confirm-gated existing-WBP patch workflow. Routes add/remove/move/explicit replace/slot/property/text/image/Border-brush/common-style/type-specific-style/CommonUI-style/EffectSurface changes through existing owner actions, decomposes `replace_widget` to `remove_widget` + `add_widget` plus content/style/effect owner-action steps, maps text `fontColor` via `set_text`, maps Image `brushPath` via `set_image`, maps Border `brushPath` via `set_brush(Background)`, decomposes `set_style` opacity/visibility plus SizeBox size constraints, Border brush color/padding, and ProgressBar fill color to allowlist-gated `set_widget_property`, routes `apply_style_to_widget` through the existing CommonUI owner action, decomposes canonical `FUISpecEffect` fields to existing `set_effect_surface_*` actions, decomposes `slot.anchorPreset` to `set_anchor_preset`, preflights slot-class compatibility, compiles once, optionally saves, and returns round-trip dump proof. |
+| `dump_ui_spec` | `asset_path*`, `emit_defaults=false`, `request_id?` | Read an existing Widget Blueprint back into canonical `FUISpecDocument` JSON for round-trip/diff workflows. |
+| `audit_widget_layout` | `asset_paths?`, `path_prefix=/Game/UI`, `allowed_canvas_slots?`, `include_tests=false`, `rule_profile=shipping`, `suppress_rule_ids?`, `treat_warnings_as_errors=false` | Read-only structural layout lint over dumped UISpec data, including Canvas overuse, one-child Canvas wrappers, SafeZone ancestry, decorative hit-test blockers, hidden interactive space, and large static list heuristics. |
+| `measure_widget_layout` | `asset_path*`, `profiles?`, `check_overlap=true`, `check_safe_zone=true`, `max_allowed_overlap_ratio=0.0` | Read-only authored layout evidence from canonical UISpec slot/style data. Reports bounds, sibling overlaps, and explicit safe-zone violations; render bounds are marked unavailable until paired with visual capture proof. |
 | `[w] apply_common_menu_transform_spec` | `spec?`, `screens?`, `layout_asset_path?`, `layout_layers?`, `layers?`, `extension_points?`, `widget_properties?`, `remove_widgets?`, `variable_defaults?`, `focus_table?`, `initial_focus?`, `desired_focus?`, `nav_overrides?`, `navigation_bulk?`, `widget_subtrees?`, `blueprint_graphs?`, `font_repairs?`, `frontend_validation?`, shared remaps, `dry_run=true`, `confirm=false`, `compile=true`, `save=false`, `continue_on_error=false` | Apply the menu-level transform counterpart to `build_menu_from_spec`: dry-run plan by default, then orchestrate existing layer, UIExtension, widget property/removal, Blueprint variable default, initial focus, navigation bulk, subtree copy, graph clone, font repair, and frontend validation actions. Writes require `dry_run=false` and `confirm=true`. |
+| `[w] build_menu_from_spec` | `screens*`, `layers?`, `focus_table?`, `nav_overrides?`, `overwrite=true`, `dry_run=false`, `treat_warnings_as_errors=false`, `raw_mode=false`, `request_id?` | Multi-screen menu document builder; full per-screen specs route through `build_ui_from_spec`, cross-screen aggregation is echoed for follow-up transform workflows. |
 | **Post-Copy Repair (3)** | | |
 | `[w] copy_widget_subtree_with_class_remap` | `source_asset_path*`, `destination_asset_path*`, `source_widget_name?`, `source_widget_names?`, `destination_widget_name?`, `destination_parent_name?`, `class_remaps?`, `object_remaps?`, `root_remaps?`, `source_root?`, `dest_root?`, `existing_policy=fail/replace/skip`, `insert_policy=source_index/append`, `require_remapped_classes=false`, `compile=true`, `dry_run=true`, `confirm=false`, `save=false` | Copy one or more WBP widget subtrees into another WBP while remapping widget classes plus hard/soft object references. Dry-run plans by default; writes require `dry_run=false` and `confirm=true`; collisions default to fail. |
 | `[w] clone_composite_font_with_remapped_faces` | `source_font_path*`, `destination_font_path*`, `root_remaps?`, `source_root?`, `dest_root?`, `font_face_remaps?`, `dry_run=true`, `confirm=false`, `save=false` | Clone a composite `UFont` to a new destination asset while remapping `UFontFace` references. Fails on destination collision or missing remapped faces; writes require `dry_run=false` and `confirm=true`. |
@@ -121,6 +135,12 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] bake_spring_animation` | `asset_path*`, `animation_name*`, `widget_name*`, `property*`, `from_value*`, `to_value*`, `stiffness=100`, `damping=10`, `mass=1`, `fps=60`, `duration=2.0`, `compile_once=true` | Bake damped spring into keys |
 | `[w] add_animation_event_track` | `asset_path*`, `animation_name*`, `events*` (array of {time,event_name}) | Add event track to animation |
 | `[w] bind_animation_to_event` | `asset_path*`, `animation_name*`, `widget_event*` (OnHovered/OnUnhovered/OnPressed/OnReleased/OnFocusReceived/OnFocusLost), `animation_event=Started` (Started/Finished) | Wire widget event to animation |
+| **Animation read inspection (3)** | | |
+| `get_animation_overview` | `asset_path*`, `animation_name?`, `include_all=false` | Read-only compact inventory for UWidgetAnimation timing, MovieScene bindings/tracks, key counts, event summaries, and delegate binding rows. External MCP names such as `animation_overview` are search aliases only, not registered actions. |
+| `get_animation_timeline` | `asset_path*`, `animation_name*`, `widget_name?`, `property_path?`, `include_events=true`, `max_rows=1000` | Read-only sorted property-key and event-key rows for animation QA and round-trip evidence. |
+| `get_animation_time_slice` | `asset_path*`, `animation_name*`, `time?`, `times?`, `widget_name?`, `property_path?`, `event_tolerance_frames=0` | Read-only sampled float-track values at one or more times, plus exact-frame event matches. |
+| **Animation delta (1)** | | |
+| `[w] apply_animation_delta` | `asset_path*`, `animation_name*`, `operations*` (array of {op:upsert_float_key/delete_float_key, widget_name? or binding_guid?, property_path/property, time, value?}), `dry_run=true`, `confirm=false`, `confirm_delete=false`, `compile=true`, `read_back=true` | Confirm-gated scalar float-key merge/upsert/delete on existing animations. Use `create_animation_v2` for new/full animation authoring; external Sequencer write names are search aliases only. |
 | **Data Binding (4)** | | |
 | `list_widget_events` | `asset_path*`, `widget_name?` | Bindable events |
 | `list_widget_properties` | `asset_path*`, `widget_name*` | Settable properties with types |
@@ -164,6 +184,109 @@ Create the WBP, add the widget tree and slots, expose state as ViewModel-facing 
 ```
 
 Step 5's `ViewModel` member variable is the binding seam: bind widget text/visibility/progress to ViewModel-facing state (steps 6-7 inspect the settable properties and existing bindings), and route user intent from widgets to the ViewModel rather than to gameplay Actors. The GAS attribute (e.g. health/mana) that feeds this HUD is authored in **unreal-gas**, then surfaced through the ViewModel and bound here. Confirm `var_type` token grammar and exact params with `monolith_discover({ namespace: "ui", action: "<action>", mode: "schema" })` before calling.
+
+For widget event intent, use the workflow wrapper instead of inventing UI-local Blueprint graph actions. Start with dry-run; apply only after the returned `actions[]` shows the expected `blueprint.resolve_node`, `blueprint.add_node`, `blueprint.connect_pins`, and compile/read-back steps.
+
+```
+1. workflow_query("ui_bind_widget_event", {
+     "asset_path": "/Game/UI/WBP_MainMenu",
+     "widget_name": "StartButton",
+     "event": "Clicked",
+     "intent": {
+       "kind": "viewmodel_command",
+       "viewmodel_variable": "ViewModel",
+       "viewmodel_class": "MainMenuViewModel",
+       "command": "StartGame"
+     },
+     "dry_run": true
+   })
+2. workflow_query("ui_bind_widget_event", {
+     "asset_path": "/Game/UI/WBP_MainMenu",
+     "widget_name": "StartButton",
+     "event": "Clicked",
+     "intent": {
+       "kind": "viewmodel_command",
+       "viewmodel_variable": "ViewModel",
+       "viewmodel_class": "MainMenuViewModel",
+       "command": "StartGame"
+     },
+     "dry_run": false,
+     "confirm": true,
+     "compile": true,
+     "run_read_back": true
+   })
+3. workflow_query("ui_shipping_widget_blueprint", {"widget_asset_path": "/Game/UI/WBP_MainMenu", "proof_profile": "visual"})
+```
+
+`workflow.ui_bind_widget_event` accepts runtime UI intent only through `intent.kind="viewmodel_command"` and rejects direct Actor/Pawn/Controller/component targets. If pin inference is ambiguous, supply `intent.event_exec_pin`, `intent.command_exec_pin`, `intent.viewmodel_value_pin`, and `intent.command_target_pin` rather than bypassing the workflow.
+
+For UI material effects, keep material graph work in the `material` owner namespace and use the workflow wrapper for proof and binding. Do not call or invent `hlsl_*` / external `material_*` compatibility APIs.
+
+```
+1. workflow_query("ui_material_hlsl_effect", {
+     "material_path": "/Game/UI/Materials/M_ButtonGlow",
+     "hlsl": "return float4(Glow, Glow, Glow, Glow);",
+     "parameters": [
+       {"name": "Glow", "type": "scalar", "default": 1.0}
+     ],
+     "create_material": true,
+     "connect_opacity": true,
+     "bind_to": {
+       "asset_path": "/Game/UI/WBP_MainMenu",
+       "widget_name": "GlowImage",
+       "binding_action": "set_image"
+     },
+     "dry_run": true
+   })
+2. workflow_query("ui_material_hlsl_effect", {
+     "material_path": "/Game/UI/Materials/M_ButtonGlow",
+     "hlsl": "return float4(Glow, Glow, Glow, Glow);",
+     "parameters": [
+       {"name": "Glow", "type": "scalar", "default": 1.0}
+     ],
+     "connect_opacity": true,
+     "bind_to": {
+       "asset_path": "/Game/UI/WBP_MainMenu",
+       "widget_name": "GlowImage",
+       "binding_action": "set_image"
+     },
+     "dry_run": false,
+     "confirm": true,
+     "compile": true
+   })
+3. workflow_query("ui_shipping_widget_blueprint", {"widget_asset_path": "/Game/UI/WBP_MainMenu", "proof_profile": "visual"})
+```
+
+For float4 Custom HLSL outputs, `connect_opacity=true` automatically selects the ComponentMask alpha path unless a matching explicit Custom additional output such as `Alpha` is supplied. That mask is composed through `material.build_material_graph(clear_existing=false)`, not through a duplicate UI or HLSL action.
+
+For RetainerBox effect materials, use the Retainer owner action or the workflow wrapper; do not route `EffectMaterial`/`TextureParameter` through raw `set_widget_property`.
+
+```
+1. workflow_query("ui_retainer_effect_material", {
+     "material_path": "/Game/UI/Materials/M_RetainerBlur",
+     "bind_to": {
+       "asset_path": "/Game/UI/WBP_MainMenu",
+       "retainer_widget_name": "MenuRetainer",
+       "texture_parameter": "Texture"
+     },
+     "dry_run": true
+   })
+2. workflow_query("ui_retainer_effect_material", {
+     "material_path": "/Game/UI/Materials/M_RetainerBlur",
+     "bind_to": {
+       "asset_path": "/Game/UI/WBP_MainMenu",
+       "retainer_widget_name": "MenuRetainer",
+       "texture_parameter": "Texture"
+     },
+     "dry_run": false,
+     "confirm": true,
+     "request_render": true,
+     "compile": true
+   })
+3. workflow_query("ui_shipping_widget_blueprint", {"widget_asset_path": "/Game/UI/WBP_MainMenu", "proof_profile": "visual"})
+```
+
+`workflow.ui_material_hlsl_effect` composes `material.set_material_property`, Custom HLSL node creation/update, material output wiring, optional ComponentMask alpha wiring through `material.build_material_graph`, material compile/stat/domain/connection proof, `ui.set_image`/`ui.set_brush`, and Widget Blueprint compile log proof. `workflow.ui_retainer_effect_material` composes `material.get_material_parameters`, `material.get_material_properties`, `ui.set_retainer_effect_material`, and optional widget visual proof. Neither workflow proves Retainer runtime performance; do not claim Retainer/Invalidation optimization evidence without a measured profile.
 
 Pre-built HUD elements are also available — `create_hud_element` stamps a `health_bar`/`crosshair`/`ammo_counter`/etc. element instead of hand-building the tree:
 
@@ -223,6 +346,25 @@ This action owns WBP tree repair only. Actor/component Blueprint graph cloning s
 ## Capturing UMG Widgets to PNG (editor:: action)
 
 `editor_query("capture_scene_preview", { asset_path: "/Game/UI/WBP_Foo", asset_type: "widget", scale: 1.5 })` renders a Widget Blueprint offscreen via `FWidgetRenderer` and writes a PNG. Optional `scale` is a DPI multiplier. Useful for design reviews, accessibility audits, and verifying menu scaffolds before PIE. See `monolith_guide(section="recipes")` entry "Visual introspection -- going beyond thumbnails".
+
+For shippable UI proof, prefer the workflow wrapper over ad hoc capture calls:
+
+```
+workflow_query("ui_shipping_widget_blueprint", {
+  "widget_asset_path": "/Game/UI/WBP_Foo",
+  "proof_profile": "visual",
+  "dry_run": false,
+  "run_read_only_checks": true,
+  "layout_rule_profile": "shipping",
+  "suppress_layout_rule_ids": [],
+  "visual_profiles": [
+    {"name": "desktop", "resolution": [1280, 720], "dpi_scale": 1.0},
+    {"name": "mobile", "resolution": [1280, 720], "dpi_scale": 1.0, "safe_zone": {"left": 48, "top": 24, "right": 48, "bottom": 24}}
+  ]
+})
+```
+
+`proof_profile="visual"` composes compile read-back, `editor.capture_scene_preview(asset_type="widget")`, and `ui.verify_widget_visual_artifacts`. The verifier checks PNG existence, byte size, dimensions, hash, transparency, and nonblank pixel evidence, then writes a manifest under `Saved/Monolith`. `layout_rule_profile` and `suppress_layout_rule_ids` are forwarded to `ui.audit_widget_layout`; mobile/console visual profiles must include both `dpi_scale` and `safe_zone` or the workflow reports `DpiSafeZoneProfileMissing`. `proof_profile="runtime"` is intentionally blocked until an async PIE/CommonUI proof chain is supplied; use the returned next actions instead of claiming runtime interaction proof.
 
 ## Horror UI + Accessibility Guidelines
 

@@ -8,7 +8,7 @@
 
 namespace
 {
-	FMonolithActionResult ExecuteQualityAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	FMonolithActionResult ExecuteLevelDesignQualityAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 		if (!Registry.HasAction(TEXT("leveldesign"), Action))
@@ -34,7 +34,7 @@ bool FMonolithLevelDesignEvaluateMonsterRevealTest::RunTest(const FString& Param
 		Params->SetArrayField(TEXT("player_rotation"), ValidRot);
 		Params->SetStringField(TEXT("monster_actor"), TEXT("TestMonster"));
 
-		FMonolithActionResult Result = ExecuteQualityAction(TEXT("evaluate_monster_reveal"), Params);
+		FMonolithActionResult Result = ExecuteLevelDesignQualityAction(TEXT("evaluate_monster_reveal"), Params);
 		TestFalse(TEXT("Missing player_location should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention player_location"), Result.ErrorMessage.Contains(TEXT("player_location")));
 	}
@@ -49,7 +49,7 @@ bool FMonolithLevelDesignEvaluateMonsterRevealTest::RunTest(const FString& Param
 		Params->SetArrayField(TEXT("player_location"), ValidLoc);
 		Params->SetStringField(TEXT("monster_actor"), TEXT("TestMonster"));
 
-		FMonolithActionResult Result = ExecuteQualityAction(TEXT("evaluate_monster_reveal"), Params);
+		FMonolithActionResult Result = ExecuteLevelDesignQualityAction(TEXT("evaluate_monster_reveal"), Params);
 		TestFalse(TEXT("Missing player_rotation should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention player_rotation"), Result.ErrorMessage.Contains(TEXT("player_rotation")));
 	}
@@ -64,7 +64,7 @@ bool FMonolithLevelDesignEvaluateMonsterRevealTest::RunTest(const FString& Param
 		Params->SetArrayField(TEXT("player_location"), ValidLocRot);
 		Params->SetArrayField(TEXT("player_rotation"), ValidLocRot);
 
-		FMonolithActionResult Result = ExecuteQualityAction(TEXT("evaluate_monster_reveal"), Params);
+		FMonolithActionResult Result = ExecuteLevelDesignQualityAction(TEXT("evaluate_monster_reveal"), Params);
 		TestFalse(TEXT("Missing monster_actor should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention monster_actor"), Result.ErrorMessage.Contains(TEXT("monster_actor")));
 	}
@@ -80,7 +80,7 @@ bool FMonolithLevelDesignEvaluateMonsterRevealTest::RunTest(const FString& Param
 		Params->SetArrayField(TEXT("player_rotation"), ValidLocRot);
 		Params->SetStringField(TEXT("monster_actor"), TEXT("TestMonster"));
 
-		FMonolithActionResult Result = ExecuteQualityAction(TEXT("evaluate_monster_reveal"), Params);
+		FMonolithActionResult Result = ExecuteLevelDesignQualityAction(TEXT("evaluate_monster_reveal"), Params);
 		bool bIsExpectedResult =
 			Result.bSuccess ||
 			Result.ErrorMessage.Contains(TEXT("No editor world available")) ||

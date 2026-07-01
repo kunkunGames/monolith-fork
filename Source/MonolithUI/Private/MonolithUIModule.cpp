@@ -36,6 +36,7 @@
 // The centerpiece LLM-facing entry point: takes a FUISpecDocument JSON and
 // produces a working UWidgetBlueprint in one MCP call. Composes everything
 // from Phases A-G+I.
+#include "Actions/MonolithUIContextActions.h"
 #include "Actions/MonolithUISpecActions.h"
 
 // Phase 4 (2026-05-11) — bulk_fill / describe adapter for target_namespace="ui".
@@ -102,6 +103,7 @@ void FMonolithUIModule::StartupModule()
 
         // Phase H (2026-04-26) -- transactional spec builder + schema dump.
         // 2 actions: ui::build_ui_from_spec (the centerpiece) + ui::dump_ui_spec_schema.
+        MonolithUI::FContextActions::Register(OwnedRegistry);
         MonolithUI::FSpecActions::Register(OwnedRegistry);
 #if WITH_COMMONUI
         FMonolithCommonUIActions::RegisterAll(OwnedRegistry);
