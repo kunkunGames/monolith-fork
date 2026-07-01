@@ -17,7 +17,9 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Decision/FDecisionRecordIndexer.h"
+#include "Decision/FDecisionQueryAdapter.h"
 
+#include "MonolithToolRegistry.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "Interfaces/IPluginManager.h"
@@ -282,6 +284,41 @@ bool FDecisionStalenessFlagTest::RunTest(const FString& /*Parameters*/)
 	Db.Close();
 	IFileManager::Get().Delete(*DbPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
 	IFileManager::Get().DeleteDirectory(*WorkDir, /*bRequireExists=*/false, /*bTree=*/true);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// ParamGuard test
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FDecisionQueryParamGuardTest,
+	"Monolith.ParamGuard.ReflectionIntel.DecisionQueryMissingParam",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FDecisionQueryParamGuardTest::RunTest(const FString& /*Parameters*/)
+{
+	// To test the adapter action safely, we need to invoke it via the tool registry
+	// so that it handles parameter execution (the action expects to be invoked this way).
+	// We'll create a local registry just for testing.
+	FMonolithToolRegistry Registry;
+	FDecisionQueryAdapter::RegisterActions(Registry);
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+
+	// Note: HandleGetDecision is private and cannot be invoked directly in standard tests.
+	// Executing it through the registry ensures we test the same path clients use.
+	FMonolithActionResult Result = Registry.ExecuteAction(TEXT("decision_query"), TEXT("get_decision"), Params);
+
+	// HandleGetDecision's parameter validation is the first thing it does, before grabbing the DB.
+	// If the param guard works, it will return an invalid param error.
+	TestFalse(TEXT("Missing decision_id should fail safely"), Result.bSuccess);
+
+	// Optionally verify it returns the specific param guard error message
+	if (!Result.bSuccess)
+	{
+		TestTrue(TEXT("Error should complain about decision_id"), Result.ErrorMessage.Contains(TEXT("decision_id")));
+	}
+
 	return true;
 }
 

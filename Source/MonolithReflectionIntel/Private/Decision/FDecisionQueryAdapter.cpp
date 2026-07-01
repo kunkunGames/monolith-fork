@@ -429,8 +429,8 @@ FMonolithActionResult FDecisionQueryAdapter::HandleGetDecision(const TSharedPtr<
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString DecisionId = Params->GetStringField(TEXT("decision_id"));
-	if (DecisionId.IsEmpty())
+	FString DecisionId;
+	if (!Params->TryGetStringField(TEXT("decision_id"), DecisionId) || DecisionId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`decision_id` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
@@ -566,8 +566,8 @@ FMonolithActionResult FDecisionQueryAdapter::HandleFindSupersessionChain(const T
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString StartId = Params->GetStringField(TEXT("decision_id"));
-	if (StartId.IsEmpty())
+	FString StartId;
+	if (!Params->TryGetStringField(TEXT("decision_id"), StartId) || StartId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`decision_id` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
@@ -641,8 +641,8 @@ FMonolithActionResult FDecisionQueryAdapter::HandleFindReferentDecisions(const T
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB) { return FMonolithActionResult::Error(TEXT("EngineSource.db not available.")); }
 
-	const FString DecisionId = Params->GetStringField(TEXT("decision_id"));
-	if (DecisionId.IsEmpty())
+	FString DecisionId;
+	if (!Params->TryGetStringField(TEXT("decision_id"), DecisionId) || DecisionId.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("`decision_id` is required."),
 			FMonolithJsonUtils::ErrInvalidParams);
