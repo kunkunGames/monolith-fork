@@ -9494,12 +9494,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleCompareSkeletons(const TS
 
 	// Missing in A (bones that B has but A doesn't)
 	TArray<TSharedPtr<FJsonValue>> MissingInAArr;
+	MissingInAArr.Reserve(MissingInA.Num());
 	for (const FName& Bone : MissingInA)
 		MissingInAArr.Add(MakeShared<FJsonValueString>(Bone.ToString()));
 	Root->SetArrayField(TEXT("missing_in_a"), MissingInAArr);
 
 	// Missing in B (bones that A has but B doesn't)
 	TArray<TSharedPtr<FJsonValue>> MissingInBArr;
+	MissingInBArr.Reserve(MissingInB.Num());
 	for (const FName& Bone : MissingInB)
 		MissingInBArr.Add(MakeShared<FJsonValueString>(Bone.ToString()));
 	Root->SetArrayField(TEXT("missing_in_b"), MissingInBArr);
