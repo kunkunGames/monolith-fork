@@ -1444,7 +1444,14 @@ Actor/scene manipulation, spatial queries, volumes, lighting, decals, and editor
 
 See `Docs/specs/SPEC_MonolithScene.md` for the deep dive.
 
---
+---
+
+## worldgen
+
+Procedural building/city/facade/roof/terrain generation, floor-plan generation, furnishing, blockout authoring, room/genre templates, asset presets, and context-prop placement. (Split out of `mesh` on 2026-05-20).
+
+See `Docs/specs/SPEC_MonolithWorldGen.md` for the deep dive.
+
 ---
 
 ## mesh
