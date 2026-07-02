@@ -36,6 +36,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/Material.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithParamUtils.h"
 #include "Materials/MaterialInstance.h"
 #include "Materials/MaterialInstanceConstant.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -181,15 +182,11 @@ namespace
 
 FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params.IsValid())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing params"));
-	}
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	FString ErrorParam;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorParam))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(ErrorParam, -32602);
 	}
 
 	UMaterialInterface* Material = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(AssetPath);
@@ -354,19 +351,18 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectMaterialPBR(const TSh
 
 FMonolithActionResult FMonolithEditorActions::HandleInspectTextureChannels(const TSharedPtr<FJsonObject>& Params)
 {
-	if (!Params.IsValid())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing params"));
-	}
-
 	FString AssetPath;
-	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	FString ErrorParam;
+	if (!MonolithParamUtils::GetRequiredStringParam(Params, TEXT("asset_path"), AssetPath, ErrorParam))
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(ErrorParam, -32602);
 	}
 
 	bool bEmitSplits = false;
-	Params->TryGetBoolField(TEXT("emit_splits"), bEmitSplits);
+	if (!MonolithParamUtils::GetOptionalBoolParam(Params, TEXT("emit_splits"), bEmitSplits, ErrorParam, false))
+	{
+		return FMonolithActionResult::Error(ErrorParam, -32602);
+	}
 
 	UTexture2D* Texture = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(AssetPath);
 	if (!Texture)
@@ -488,7 +484,11 @@ FMonolithActionResult FMonolithEditorActions::HandleInspectTextureChannels(const
 	if (bEmitSplits)
 	{
 		FString OutputDir;
-		Params->TryGetStringField(TEXT("output_dir"), OutputDir);
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("output_dir"), OutputDir, ErrorParam))
+		{
+			return FMonolithActionResult::Error(ErrorParam, -32602);
+		}
+
 		if (OutputDir.IsEmpty())
 		{
 			OutputDir = FPaths::ProjectDir()
