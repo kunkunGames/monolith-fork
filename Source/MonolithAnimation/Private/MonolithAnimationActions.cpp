@@ -13273,12 +13273,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	using namespace Monolith::FootSync;
 
 	// --- Parse params ---
+	if (!Params.IsValid())
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
 	FString LeftMarkerName = TEXT("L_Foot");
 	FString RightMarkerName = TEXT("R_Foot");
-	if (Params->HasField(TEXT("left_marker_name")) && !Params->TryGetStringField(TEXT("left_marker_name"), LeftMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'left_marker_name' must be a string"));
-	if (Params->HasField(TEXT("right_marker_name")) && !Params->TryGetStringField(TEXT("right_marker_name"), RightMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'right_marker_name' must be a string"));
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("left_marker_name")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(LeftMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'left_marker_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("right_marker_name")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(RightMarkerName)) return FMonolithActionResult::Error(TEXT("Parameter 'right_marker_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	int32 TrackIndex = 0;
 	{
@@ -13292,7 +13294,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	}
 
 	FString Method = TEXT("auto");
-	if (Params->HasField(TEXT("method")) && !Params->TryGetStringField(TEXT("method"), Method)) return FMonolithActionResult::Error(TEXT("Parameter 'method' must be a string"));
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("method")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(Method)) return FMonolithActionResult::Error(TEXT("Parameter 'method' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	Method = Method.ToLower();
 	if (Method != TEXT("auto") && Method != TEXT("existing") && Method != TEXT("notifies")
 		&& Method != TEXT("contact") && Method != TEXT("phase") && Method != TEXT("footspeed")
@@ -13303,13 +13305,13 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 	}
 
 	bool bPhaseInvert = false;
-	if (Params->HasField(TEXT("phase_invert")) && !Params->TryGetBoolField(TEXT("phase_invert"), bPhaseInvert)) return FMonolithActionResult::Error(TEXT("Parameter 'phase_invert' must be a boolean"));
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("phase_invert")); Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(bPhaseInvert)) return FMonolithActionResult::Error(TEXT("Parameter 'phase_invert' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 
 	bool bClearExisting = true;
-	if (Params->HasField(TEXT("clear_existing")) && !Params->TryGetBoolField(TEXT("clear_existing"), bClearExisting)) return FMonolithActionResult::Error(TEXT("Parameter 'clear_existing' must be a boolean"));
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("clear_existing")); Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(bClearExisting)) return FMonolithActionResult::Error(TEXT("Parameter 'clear_existing' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 
 	bool bDryRun = false;
-	if (Params->HasField(TEXT("dry_run")) && !Params->TryGetBoolField(TEXT("dry_run"), bDryRun)) return FMonolithActionResult::Error(TEXT("Parameter 'dry_run' must be a boolean"));
+	if (const TSharedPtr<FJsonValue> Field = Params->TryGetField(TEXT("dry_run")); Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(bDryRun)) return FMonolithActionResult::Error(TEXT("Parameter 'dry_run' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 
 	// Thresholds (per-signal defaults; each individually overridable).
 	FFootSyncConfig Cfg;
@@ -13321,22 +13323,22 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 			if (ThreshObj && *ThreshObj)
 			{
 				double V;
-				if ((*ThreshObj)->HasField(TEXT("contact_mid")) && !(*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'contact_mid' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("contact_mid")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'contact_mid' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("contact_mid"), V)) Cfg.ContactMid = static_cast<float>(V);
 
-				if ((*ThreshObj)->HasField(TEXT("contact_low")) && !(*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'contact_low' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("contact_low")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'contact_low' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("contact_low"), V)) Cfg.ContactLow = static_cast<float>(V);
 
-				if ((*ThreshObj)->HasField(TEXT("speed_threshold")) && !(*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V))   return FMonolithActionResult::Error(TEXT("Parameter 'speed_threshold' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("speed_threshold")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'speed_threshold' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("speed_threshold"), V)) Cfg.SpeedThreshold = static_cast<float>(V);
 
-				if ((*ThreshObj)->HasField(TEXT("sample_rate")) && !(*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V))       return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("sample_rate")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'sample_rate' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("sample_rate"), V)) Cfg.SampleRate = static_cast<float>(V);
 
-				if ((*ThreshObj)->HasField(TEXT("debounce_fraction")) && !(*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) return FMonolithActionResult::Error(TEXT("Parameter 'debounce_fraction' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("debounce_fraction")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'debounce_fraction' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("debounce_fraction"), V)) Cfg.DebounceFraction = static_cast<float>(V);
 
-				if ((*ThreshObj)->HasField(TEXT("ground_threshold")) && !(*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V))  return FMonolithActionResult::Error(TEXT("Parameter 'ground_threshold' in thresholds must be a number"));
+				if (const TSharedPtr<FJsonValue> Field = (*ThreshObj)->TryGetField(TEXT("ground_threshold")); Field.IsValid() && !Field->IsNull() && !Field->TryGetNumber(V)) return FMonolithActionResult::Error(TEXT("Parameter 'ground_threshold' in thresholds must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 				else if ((*ThreshObj)->TryGetNumberField(TEXT("ground_threshold"), V)) Cfg.GroundThreshold = static_cast<float>(V);
 			}
 		}
@@ -13365,8 +13367,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 			if (!Params->TryGetObjectField(TEXT("notify_track_patterns"), PatObj)) return FMonolithActionResult::Error(TEXT("Parameter 'notify_track_patterns' must be an object"));
 			if (PatObj && *PatObj)
 			{
-				if ((*PatObj)->HasField(TEXT("left")) && !(*PatObj)->TryGetStringField(TEXT("left"), NotifyLeftPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in notify_track_patterns must be a string"));
-				if ((*PatObj)->HasField(TEXT("right")) && !(*PatObj)->TryGetStringField(TEXT("right"), NotifyRightPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in notify_track_patterns must be a string"));
+				if (const TSharedPtr<FJsonValue> Field = (*PatObj)->TryGetField(TEXT("left")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(NotifyLeftPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in notify_track_patterns must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+				if (const TSharedPtr<FJsonValue> Field = (*PatObj)->TryGetField(TEXT("right")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(NotifyRightPattern)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in notify_track_patterns must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 	}
@@ -13380,8 +13382,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeriveFootSyncMarkers(con
 			if (!Params->TryGetObjectField(TEXT("foot_bones"), BonesObj)) return FMonolithActionResult::Error(TEXT("Parameter 'foot_bones' must be an object"));
 			if (BonesObj && *BonesObj)
 			{
-				if ((*BonesObj)->HasField(TEXT("left")) && !(*BonesObj)->TryGetStringField(TEXT("left"), ExplicitLeftBone)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in foot_bones must be a string"));
-				if ((*BonesObj)->HasField(TEXT("right")) && !(*BonesObj)->TryGetStringField(TEXT("right"), ExplicitRightBone)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in foot_bones must be a string"));
+				if (const TSharedPtr<FJsonValue> Field = (*BonesObj)->TryGetField(TEXT("left")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(ExplicitLeftBone)) return FMonolithActionResult::Error(TEXT("Parameter 'left' in foot_bones must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+				if (const TSharedPtr<FJsonValue> Field = (*BonesObj)->TryGetField(TEXT("right")); Field.IsValid() && !Field->IsNull() && !Field->TryGetString(ExplicitRightBone)) return FMonolithActionResult::Error(TEXT("Parameter 'right' in foot_bones must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 	}
