@@ -599,12 +599,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		FMonolithActionHandler::CreateStatic(&HandleGetCrashContext),
 		MakeShared<FJsonObject>());
 
-	Registry.RegisterAction(TEXT("editor"), TEXT("run_console_command"),
-		TEXT("Execute a console command. Routes to the first PIE PlayerController found (multi-client PIE not disambiguated); falls back to GEngine->Exec when no PIE session is active."),
-		FMonolithActionHandler::CreateStatic(&HandleRunConsoleCommand),
-		FParamSchemaBuilder()
-			.Required(TEXT("command"), TEXT("string"), TEXT("Console command string (e.g. 'BowLoop 1', 'WalkLoop', 'Cam3P 1')"))
-			.Build());
+	// Security hardening: do not expose arbitrary console command execution over MCP.
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("start_pie"),
 		TEXT("Start a Play-In-Editor session (equivalent to pressing Cmd+P in the editor)."),
