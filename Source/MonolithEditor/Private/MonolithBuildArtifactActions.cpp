@@ -151,6 +151,51 @@ namespace MonolithBuildArtifact
 		return Joined;
 	}
 
+	static bool ContainsCommandLineControlChar(const FString& Value)
+	{
+		for (int32 Index = 0; Index < Value.Len(); ++Index)
+		{
+			const TCHAR Ch = Value[Index];
+			if (Ch == TEXT('"') || Ch == TEXT('\'') || Ch == TEXT('&') || Ch == TEXT('|') ||
+				Ch == TEXT('<') || Ch == TEXT('>') || Ch == TEXT('^') || Ch == TEXT('%') ||
+				Ch == TEXT(';') || Ch == TEXT('`') || Ch == TEXT('$') || Ch == TEXT('\n') ||
+				Ch == TEXT('\r') || Ch == TEXT('\t'))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static bool IsSafeBuildCookRunToken(const FString& Value)
+	{
+		if (Value.IsEmpty() || ContainsCommandLineControlChar(Value))
+		{
+			return false;
+		}
+		for (int32 Index = 0; Index < Value.Len(); ++Index)
+		{
+			const TCHAR Ch = Value[Index];
+			if (!(FChar::IsAlnum(Ch) || Ch == TEXT('_') || Ch == TEXT('-') || Ch == TEXT('.') ||
+				Ch == TEXT('+') || Ch == TEXT('/') || Ch == TEXT('\\') || Ch == TEXT(':') ||
+				Ch == TEXT('=') || Ch == TEXT(',') || Ch == TEXT(' ')))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	static bool ValidateBuildCookRunValue(const TCHAR* FieldName, const FString& Value, FString& OutError)
+	{
+		if (!Value.IsEmpty() && !IsSafeBuildCookRunToken(Value))
+		{
+			OutError = FString::Printf(TEXT("%s contains characters that are not safe for a guarded UAT command line."), FieldName);
+			return false;
+		}
+		return true;
+	}
+
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
@@ -437,6 +482,13 @@ FMonolithActionResult FMonolithBuildArtifactActions::RunBuildCookRun(const TShar
 	}
 
 	const FString ProjectPath = NormalizeDiskPath(ReadString(Params, TEXT("project_path"), DefaultProjectPath()));
+	FString ValidationError;
+	if (!ValidateBuildCookRunValue(TEXT("project_path"), ProjectPath, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
+
 	const FString EngineRoot = EngineRootFromCurrentProcess();
 	const FString RunUatPath = RunUatPathFromEngineRoot(EngineRoot);
 	if (!FPaths::FileExists(RunUatPath))
@@ -463,18 +515,53 @@ FMonolithActionResult FMonolithBuildArtifactActions::RunBuildCookRun(const TShar
 	if (ReadBool(Params, TEXT("stage"), true)) { Args.Add(TEXT("-stage")); }
 	if (ReadBool(Params, TEXT("pak"), true)) { Args.Add(TEXT("-pak")); }
 	const FString Platform = ReadString(Params, TEXT("platform"), TEXT("Win64"));
+	if (!ValidateBuildCookRunValue(TEXT("platform"), Platform, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!Platform.IsEmpty()) { Args.Add(FString::Printf(TEXT("-platform=%s"), *Platform)); }
 	const FString ClientConfig = ReadString(Params, TEXT("client_config"), TEXT("Development"));
+	if (!ValidateBuildCookRunValue(TEXT("client_config"), ClientConfig, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!ClientConfig.IsEmpty()) { Args.Add(FString::Printf(TEXT("-clientconfig=%s"), *ClientConfig)); }
 	const FString ServerConfig = ReadString(Params, TEXT("server_config"));
+	if (!ValidateBuildCookRunValue(TEXT("server_config"), ServerConfig, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!ServerConfig.IsEmpty()) { Args.Add(FString::Printf(TEXT("-serverconfig=%s"), *ServerConfig)); }
 	const FString Target = ReadString(Params, TEXT("target"));
+	if (!ValidateBuildCookRunValue(TEXT("target"), Target, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!Target.IsEmpty()) { Args.Add(FString::Printf(TEXT("-target=%s"), *Target)); }
 	const FString Map = ReadString(Params, TEXT("map"));
+	if (!ValidateBuildCookRunValue(TEXT("map"), Map, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!Map.IsEmpty()) { Args.Add(FString::Printf(TEXT("-map=%s"), *Map)); }
 	const FString CustomConfig = ReadString(Params, TEXT("custom_config"));
+	if (!ValidateBuildCookRunValue(TEXT("custom_config"), CustomConfig, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!CustomConfig.IsEmpty()) { Args.Add(FString::Printf(TEXT("-CustomConfig=%s"), *CustomConfig)); }
 	const FString ArchiveDirectory = NormalizeDiskPath(ReadString(Params, TEXT("archive_directory")));
+	if (!ValidateBuildCookRunValue(TEXT("archive_directory"), ArchiveDirectory, ValidationError))
+	{
+		return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+	}
 	if (!ArchiveDirectory.IsEmpty())
 	{
 		if (ReadBool(Params, TEXT("archive"), true))
@@ -483,7 +570,16 @@ FMonolithActionResult FMonolithBuildArtifactActions::RunBuildCookRun(const TShar
 		}
 		Args.Add(FString::Printf(TEXT("-archivedirectory=%s"), *QuoteArg(ArchiveDirectory)));
 	}
-	Args.Append(ReadStringArray(Params, TEXT("additional_args")));
+	const TArray<FString> AdditionalArgs = ReadStringArray(Params, TEXT("additional_args"));
+	for (const FString& AdditionalArg : AdditionalArgs)
+	{
+		if (!ValidateBuildCookRunValue(TEXT("additional_args"), AdditionalArg, ValidationError))
+		{
+			return FMonolithActionResult::Error(ValidationError, ErrInvalidParams)
+				.WithErrorData(ErrorData(TEXT("unsafe_buildcookrun_argument"), ValidationError));
+		}
+	}
+	Args.Append(AdditionalArgs);
 
 	const FString ArgLine = JoinCommandLine(Args);
 

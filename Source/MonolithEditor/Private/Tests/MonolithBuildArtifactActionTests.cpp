@@ -100,6 +100,21 @@ bool FMonolithBuildArtifactRegistryAndGuardTest::RunTest(const FString& /*Parame
 	TestFalse(TEXT("run_buildcookrun rejects dry_run=false without confirm"), BuildNoConfirm.bSuccess);
 	TestTrue(TEXT("run_buildcookrun error mentions confirm"), BuildNoConfirm.ErrorMessage.Contains(TEXT("confirm=true")));
 
+	TSharedPtr<FJsonObject> BuildUnsafePlatformParams = MakeParams();
+	BuildUnsafePlatformParams->SetBoolField(TEXT("dry_run"), true);
+	BuildUnsafePlatformParams->SetStringField(TEXT("platform"), TEXT("Win64&whoami"));
+	const FMonolithActionResult BuildUnsafePlatform = FMonolithBuildArtifactActions::RunBuildCookRun(BuildUnsafePlatformParams);
+	TestFalse(TEXT("run_buildcookrun rejects shell metacharacters in platform"), BuildUnsafePlatform.bSuccess);
+	TestTrue(TEXT("run_buildcookrun unsafe platform error mentions guarded command line"), BuildUnsafePlatform.ErrorMessage.Contains(TEXT("guarded UAT command line")));
+
+	TSharedPtr<FJsonObject> BuildUnsafeAdditionalArgsParams = MakeParams();
+	BuildUnsafeAdditionalArgsParams->SetBoolField(TEXT("dry_run"), true);
+	TArray<TSharedPtr<FJsonValue>> UnsafeAdditionalArgs;
+	UnsafeAdditionalArgs.Add(MakeShared<FJsonValueString>(TEXT("-utf8output&whoami")));
+	BuildUnsafeAdditionalArgsParams->SetArrayField(TEXT("additional_args"), UnsafeAdditionalArgs);
+	const FMonolithActionResult BuildUnsafeAdditionalArgs = FMonolithBuildArtifactActions::RunBuildCookRun(BuildUnsafeAdditionalArgsParams);
+	TestFalse(TEXT("run_buildcookrun rejects shell metacharacters in additional_args"), BuildUnsafeAdditionalArgs.bSuccess);
+
 	const FString Root = FixtureRoot();
 	IFileManager::Get().DeleteDirectory(*Root, false, true);
 	const FString ArchiveDir = FPaths::Combine(Root, TEXT("Archive"));
