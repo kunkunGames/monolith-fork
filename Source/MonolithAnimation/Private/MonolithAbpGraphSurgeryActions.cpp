@@ -1,5 +1,6 @@
 #include "MonolithAbpGraphSurgeryActions.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 
 #include "Animation/AnimBlueprint.h"
