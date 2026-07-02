@@ -5646,6 +5646,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 	TArray<TSharedPtr<FJsonValue>> ImpactedEntities;
 	if (bStandard)
 	{
+		ImpactedEntities.Reserve(FMath::Min(ImpactedIds.Num(), 200));
 		int32 Emitted = 0;
 		for (int64 Id : ImpactedIds)
 		{
@@ -5662,6 +5663,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 	}
 
 	TArray<TSharedPtr<FJsonValue>> TestGaps;
+	TestGaps.Reserve(ChangedEntities.Num());
 	for (const TSharedPtr<FJsonValue>& ChangedValue : ChangedEntities)
 	{
 		const TSharedPtr<FJsonObject> Changed = ChangedValue->AsObject();
@@ -5697,6 +5699,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::DetectChanges(
 
 	TArray<TSharedPtr<FJsonValue>> Priorities;
 	const int32 PriorityLimit = bStandard ? FMath::Min(ChangedEntities.Num(), 10) : FMath::Min(ChangedEntities.Num(), 3);
+	Priorities.Reserve(PriorityLimit);
 	for (int32 Index = 0; Index < PriorityLimit; ++Index)
 	{
 		const TSharedPtr<FJsonObject> O = ChangedEntities[Index]->AsObject();
