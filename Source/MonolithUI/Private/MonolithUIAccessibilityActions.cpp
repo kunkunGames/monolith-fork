@@ -21,6 +21,20 @@
 #include "Rendering/SlateRenderer.h"
 
 #include "MonolithUIInternal.h"
+
+namespace
+{
+bool IsSafeIdentifier(const FString& Value)
+{
+    if (Value.IsEmpty()) return false;
+    if (!(FChar::IsAlpha(Value[0]) || Value[0] == TEXT('_'))) return false;
+    for (TCHAR C : Value)
+    {
+        if (!(FChar::IsAlnum(C) || C == TEXT('_'))) return false;
+    }
+    return true;
+}
+}
 // ============================================================================
 // Registration
 // ============================================================================
@@ -81,6 +95,10 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibili
     {
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
     }
+    if (!IsSafeIdentifier(ClassName) || !IsSafeIdentifier(ModuleName))
+    {
+        return FMonolithActionResult::Error(TEXT("Invalid class_name/module_name: must be C++ identifiers"));
+    }
 
     FString CleanName = ClassName;
     if (CleanName.StartsWith(TEXT("U"))) CleanName = CleanName.RightChop(1);
@@ -89,7 +107,12 @@ FMonolithActionResult FMonolithUIAccessibilityActions::HandleScaffoldAccessibili
 
     // Resolve source dir
     FString ProjectDir = FPaths::ProjectDir();
-    FString SourceDir = FPaths::Combine(ProjectDir, TEXT("Source"), ModuleName);
+    const FString SourceRoot = FPaths::ConvertRelativePathToFull(FPaths::Combine(ProjectDir, TEXT("Source")));
+    const FString SourceDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(SourceRoot, ModuleName));
+    if (!SourceDir.StartsWith(SourceRoot))
+    {
+        return FMonolithActionResult::Error(TEXT("Invalid module_name: path escapes Source directory"));
+    }
     if (!FPaths::DirectoryExists(SourceDir))
     {
         return FMonolithActionResult::Error(

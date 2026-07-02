@@ -8,14 +8,41 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformFileManager.h"
 
+namespace
+{
+bool IsSafeIdentifier(const FString& Value)
+{
+    if (Value.IsEmpty()) return false;
+    if (!(FChar::IsAlpha(Value[0]) || Value[0] == TEXT('_'))) return false;
+    for (TCHAR C : Value)
+    {
+        if (!(FChar::IsAlnum(C) || C == TEXT('_'))) return false;
+    }
+    return true;
+}
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
 
 FString FMonolithUISettingsActions::ResolveSourceDir(const FString& ModuleName, FMonolithActionResult& OutError)
 {
+    if (!IsSafeIdentifier(ModuleName))
+    {
+        OutError = FMonolithActionResult::Error(TEXT("Invalid module_name: must be a C++ identifier"));
+        return FString();
+    }
+
     FString ProjectDir = FPaths::ProjectDir();
-    FString SourceDir = FPaths::Combine(ProjectDir, TEXT("Source"), ModuleName);
+    const FString SourceRoot = FPaths::ConvertRelativePathToFull(FPaths::Combine(ProjectDir, TEXT("Source")));
+    const FString SourceDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(SourceRoot, ModuleName));
+
+    if (!SourceDir.StartsWith(SourceRoot))
+    {
+        OutError = FMonolithActionResult::Error(TEXT("Invalid module_name: path escapes Source directory"));
+        return FString();
+    }
 
     // Verify the module directory exists
     if (!FPaths::DirectoryExists(SourceDir))
@@ -32,6 +59,12 @@ bool FMonolithUISettingsActions::WriteSourceFiles(const FString& Dir, const FStr
     const FString& HeaderContent, const FString& CppContent,
     TSharedPtr<FJsonObject>& OutResult, FMonolithActionResult& OutError)
 {
+    if (!IsSafeIdentifier(ClassName))
+    {
+        OutError = FMonolithActionResult::Error(TEXT("Invalid class_name: must be a C++ identifier"));
+        return false;
+    }
+
     FString HeaderPath = FPaths::Combine(Dir, ClassName + TEXT(".h"));
     FString CppPath = FPaths::Combine(Dir, ClassName + TEXT(".cpp"));
 
@@ -136,6 +169,10 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldGameUserSettings
     FString ModuleName;
     if (!MonolithUIInternal::TryGetRequiredString(Params, TEXT("module_name"), ModuleName, Err))
         return FMonolithActionResult::Error(TEXT("Missing required params: class_name, module_name"));
+    if (!IsSafeIdentifier(ClassName))
+    {
+        return FMonolithActionResult::Error(TEXT("Invalid class_name: must be a C++ identifier"));
+    }
 
     // Strip leading U if present for file naming
     FString CleanName = ClassName;
@@ -391,6 +428,10 @@ FMonolithActionResult FMonolithUISettingsActions::HandleScaffoldSaveGame(const T
                 PropObj->TryGetStringField(TEXT("default_value"), P.Default);
                 if (!P.Name.IsEmpty() && !P.Type.IsEmpty())
                 {
+                    if (!IsSafeIdentifier(P.Name))
+                    {
+                        return FMonolithActionResult::Error(TEXT("Invalid property name: must be a C++ identifier"));
+                    }
                     Properties.Add(P);
                 }
             }
