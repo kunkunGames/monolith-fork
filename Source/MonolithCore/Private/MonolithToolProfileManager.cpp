@@ -225,13 +225,6 @@ bool FMonolithToolProfileManager::IsProfileManagementAction(const FString& Names
 		|| Action == TEXT("status")
 		|| Action == TEXT("list_tool_profiles")
 		|| Action == TEXT("get_tool_profile")
-		|| Action == TEXT("create_tool_profile")
-		|| Action == TEXT("update_tool_profile")
-		|| Action == TEXT("delete_tool_profile")
-		|| Action == TEXT("set_active_tool_profile")
-		|| Action == TEXT("set_action_enabled")
-		|| Action == TEXT("set_namespace_enabled")
-		|| Action == TEXT("set_action_description_override")
 		|| Action == TEXT("get_effective_discovery")
 		|| Action == TEXT("get_action_metadata_coverage")
 		|| Action == TEXT("validate_tool_profile");
