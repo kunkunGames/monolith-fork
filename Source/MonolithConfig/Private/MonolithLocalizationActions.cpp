@@ -89,13 +89,20 @@ namespace
 
 	bool ReadRequiredStringParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutValue, FString& OutError, bool bAllowEmpty = false)
 	{
-		if (!Params.IsValid() || !Params->HasField(FieldName))
+		if (!Params.IsValid())
 		{
 			OutError = FString::Printf(TEXT("Missing required param '%s'"), FieldName);
 			return false;
 		}
 
-		if (!Params->TryGetStringField(FieldName, OutValue))
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->IsNull())
+		{
+			OutError = FString::Printf(TEXT("Missing required param '%s'"), FieldName);
+			return false;
+		}
+
+		if (!Field->TryGetString(OutValue))
 		{
 			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a string"), FieldName);
 			return false;
@@ -111,10 +118,14 @@ namespace
 
 	bool ReadOptionalBoolParam(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& OutValue, FString& OutError)
 	{
-		if (Params.IsValid() && Params->HasField(FieldName) && !Params->TryGetBoolField(FieldName, OutValue))
+			if (Params.IsValid())
 		{
-			OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
-			return false;
+				const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+				if (Field.IsValid() && !Field->IsNull() && !Field->TryGetBool(OutValue))
+				{
+					OutError = FString::Printf(TEXT("Malformed parameter: %s must be a boolean"), FieldName);
+					return false;
+				}
 		}
 		return true;
 	}
@@ -909,9 +920,13 @@ FMonolithActionResult FMonolithLocalizationActions::CreateStringTable(const TSha
 	}
 
 	FString Namespace = AssetName;
-	if (Params.IsValid() && Params->HasField(TEXT("namespace")) && !Params->TryGetStringField(TEXT("namespace"), Namespace))
+	if (Params.IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: namespace must be a string"));
+		const TSharedPtr<FJsonValue> NamespaceField = Params->TryGetField(TEXT("namespace"));
+		if (NamespaceField.IsValid() && !NamespaceField->IsNull() && !NamespaceField->TryGetString(Namespace))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: namespace must be a string"));
+		}
 	}
 	if (Namespace.TrimStartAndEnd().IsEmpty())
 	{
@@ -1006,9 +1021,13 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 	}
 
 	const TSharedPtr<FJsonObject>* MetadataObject = nullptr;
-	if (Params.IsValid() && Params->HasField(TEXT("metadata")) && !Params->TryGetObjectField(TEXT("metadata"), MetadataObject))
+	if (Params.IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata must be an object"));
+		const TSharedPtr<FJsonValue> MetadataField = Params->TryGetField(TEXT("metadata"));
+		if (MetadataField.IsValid() && !MetadataField->IsNull() && !Params->TryGetObjectField(TEXT("metadata"), MetadataObject))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata must be an object"));
+		}
 	}
 
 	FString ExistingSource;
@@ -1178,9 +1197,13 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringMetadata(const TSha
 	{
 		return FMonolithActionResult::Error(Error);
 	}
-	if (bRemove && Params.IsValid() && Params->HasField(TEXT("metadata_value")) && !Params->TryGetStringField(TEXT("metadata_value"), MetadataValue))
+	if (bRemove && Params.IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata_value must be a string"));
+		const TSharedPtr<FJsonValue> MetadataValueField = Params->TryGetField(TEXT("metadata_value"));
+		if (MetadataValueField.IsValid() && !MetadataValueField->IsNull() && !MetadataValueField->TryGetString(MetadataValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata_value must be a string"));
+		}
 	}
 
 	FString AssetPath;

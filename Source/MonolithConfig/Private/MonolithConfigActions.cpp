@@ -291,7 +291,8 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 	}
 
 	FString Category;
-	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
+	const TSharedPtr<FJsonValue> FileField = Params->TryGetField(TEXT("file"));
+	if (!FileField.IsValid() || FileField->IsNull() || !FileField->TryGetString(Category) || Category.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -301,13 +302,15 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 	}
 
 	FString Section;
-	if (!Params->TryGetStringField(TEXT("section"), Section) || Section.IsEmpty())
+	const TSharedPtr<FJsonValue> SectionField = Params->TryGetField(TEXT("section"));
+	if (!SectionField.IsValid() || SectionField->IsNull() || !SectionField->TryGetString(Section) || Section.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
 	}
 
 	FString Key;
-	if (!Params->TryGetStringField(TEXT("key"), Key) || Key.IsEmpty())
+	const TSharedPtr<FJsonValue> KeyField = Params->TryGetField(TEXT("key"));
+	if (!KeyField.IsValid() || KeyField->IsNull() || !KeyField->TryGetString(Key) || Key.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'key' parameter"));
 	}
@@ -343,7 +346,8 @@ FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJ
 	}
 
 	FString Category, Section, Key;
-	if (Params->HasField(TEXT("file")) && !Params->TryGetStringField(TEXT("file"), Category))
+	const TSharedPtr<FJsonValue> FileField = Params->TryGetField(TEXT("file"));
+	if (FileField.IsValid() && !FileField->IsNull() && !FileField->TryGetString(Category))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: file must be a string"));
 	}
@@ -351,11 +355,13 @@ FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJ
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid 'file' parameter. Cannot contain path traversal characters."));
 	}
-	if (Params->HasField(TEXT("section")) && !Params->TryGetStringField(TEXT("section"), Section))
+	const TSharedPtr<FJsonValue> SectionField = Params->TryGetField(TEXT("section"));
+	if (SectionField.IsValid() && !SectionField->IsNull() && !SectionField->TryGetString(Section))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: section must be a string"));
 	}
-	if (Params->HasField(TEXT("key")) && !Params->TryGetStringField(TEXT("key"), Key))
+	const TSharedPtr<FJsonValue> KeyField = Params->TryGetField(TEXT("key"));
+	if (KeyField.IsValid() && !KeyField->IsNull() && !KeyField->TryGetString(Key))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: key must be a string"));
 	}
@@ -364,7 +370,8 @@ FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJ
 	if (Category.IsEmpty() && Section.IsEmpty() && Key.IsEmpty())
 	{
 		FString Setting;
-		if (Params->HasField(TEXT("setting")) && !Params->TryGetStringField(TEXT("setting"), Setting))
+		const TSharedPtr<FJsonValue> SettingField = Params->TryGetField(TEXT("setting"));
+		if (SettingField.IsValid() && !SettingField->IsNull() && !SettingField->TryGetString(Setting))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: setting must be a string"));
 		}
@@ -602,7 +609,8 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 	}
 
 	FString Category;
-	if (!Params->TryGetStringField(TEXT("file"), Category) || Category.IsEmpty())
+	const TSharedPtr<FJsonValue> FileField = Params->TryGetField(TEXT("file"));
+	if (!FileField.IsValid() || FileField->IsNull() || !FileField->TryGetString(Category) || Category.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -612,7 +620,8 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 	}
 
 	FString FilterSection;
-	if (Params->HasField(TEXT("section")) && !Params->TryGetStringField(TEXT("section"), FilterSection))
+	const TSharedPtr<FJsonValue> FilterSectionField = Params->TryGetField(TEXT("section"));
+	if (FilterSectionField.IsValid() && !FilterSectionField->IsNull() && !FilterSectionField->TryGetString(FilterSection))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: section must be a string"));
 	}
@@ -719,13 +728,15 @@ FMonolithActionResult FMonolithConfigActions::SearchConfig(const TSharedPtr<FJso
 	}
 
 	FString Query;
-	if (!Params->TryGetStringField(TEXT("query"), Query) || Query.IsEmpty())
+	const TSharedPtr<FJsonValue> QueryField = Params->TryGetField(TEXT("query"));
+	if (!QueryField.IsValid() || QueryField->IsNull() || !QueryField->TryGetString(Query) || Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'query' parameter"));
 	}
 
 	FString FilterCategory;
-	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
+	const TSharedPtr<FJsonValue> FilterCategoryField = Params->TryGetField(TEXT("category"));
+	if (FilterCategoryField.IsValid() && !FilterCategoryField->IsNull() && !FilterCategoryField->TryGetString(FilterCategory))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: category must be a string"));
 	}
@@ -825,7 +836,8 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 	}
 
 	FString FileShortName;
-	if (!Params->TryGetStringField(TEXT("file"), FileShortName) || FileShortName.IsEmpty())
+	const TSharedPtr<FJsonValue> FileField = Params->TryGetField(TEXT("file"));
+	if (!FileField.IsValid() || FileField->IsNull() || !FileField->TryGetString(FileShortName) || FileShortName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
 	}
@@ -835,7 +847,8 @@ FMonolithActionResult FMonolithConfigActions::GetSection(const TSharedPtr<FJsonO
 	}
 
 	FString Section;
-	if (!Params->TryGetStringField(TEXT("section"), Section) || Section.IsEmpty())
+	const TSharedPtr<FJsonValue> SectionField = Params->TryGetField(TEXT("section"));
+	if (!SectionField.IsValid() || SectionField->IsNull() || !SectionField->TryGetString(Section) || Section.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid 'section' parameter"));
 	}
@@ -943,7 +956,8 @@ FMonolithActionResult FMonolithConfigActions::GetConfigFiles(const TSharedPtr<FJ
 	}
 
 	FString FilterCategory;
-	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), FilterCategory))
+	const TSharedPtr<FJsonValue> FilterCategoryField = Params->TryGetField(TEXT("category"));
+	if (FilterCategoryField.IsValid() && !FilterCategoryField->IsNull() && !FilterCategoryField->TryGetString(FilterCategory))
 	{
 		return FMonolithActionResult::Error(TEXT("Malformed parameter: category must be a string"));
 	}
@@ -1009,18 +1023,21 @@ FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJson
 	int32 Limit = 200;
 	if (Params.IsValid())
 	{
-		if (Params->HasField(TEXT("name_contains")) && !Params->TryGetStringField(TEXT("name_contains"), NameContains))
+			const TSharedPtr<FJsonValue> NameContainsField = Params->TryGetField(TEXT("name_contains"));
+			if (NameContainsField.IsValid() && !NameContainsField->IsNull() && !NameContainsField->TryGetString(NameContains))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: name_contains must be a string"));
 		}
-		if (Params->HasField(TEXT("enabled_only")) && !Params->TryGetBoolField(TEXT("enabled_only"), bEnabledOnly))
+			const TSharedPtr<FJsonValue> EnabledOnlyField = Params->TryGetField(TEXT("enabled_only"));
+			if (EnabledOnlyField.IsValid() && !EnabledOnlyField->IsNull() && !EnabledOnlyField->TryGetBool(bEnabledOnly))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: enabled_only must be a boolean"));
 		}
-		if (Params->HasField(TEXT("limit")))
+			const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+			if (LimitField.IsValid() && !LimitField->IsNull())
 		{
 			double LimitValue = 0.0;
-			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				if (!LimitField->TryGetNumber(LimitValue))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
@@ -1068,8 +1085,14 @@ FMonolithActionResult FMonolithConfigActions::ListPlugins(const TSharedPtr<FJson
 
 FMonolithActionResult FMonolithConfigActions::GetPlugin(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+	}
+
 	FString Name;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+	const TSharedPtr<FJsonValue> NameField = Params->TryGetField(TEXT("name"));
+	if (!NameField.IsValid() || NameField->IsNull() || !NameField->TryGetString(Name) || Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
 	}
@@ -1087,8 +1110,14 @@ FMonolithActionResult FMonolithConfigActions::GetPlugin(const TSharedPtr<FJsonOb
 
 FMonolithActionResult FMonolithConfigActions::GetCVar(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
+	}
+
 	FString Name;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("name"), Name) || Name.IsEmpty())
+	const TSharedPtr<FJsonValue> NameField = Params->TryGetField(TEXT("name"));
+	if (!NameField.IsValid() || NameField->IsNull() || !NameField->TryGetString(Name) || Name.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Required parameter: name"));
 	}
@@ -1104,18 +1133,21 @@ FMonolithActionResult FMonolithConfigActions::FindCVars(const TSharedPtr<FJsonOb
 	int32 Limit = 100;
 	if (Params.IsValid())
 	{
-		if (Params->HasField(TEXT("query")) && !Params->TryGetStringField(TEXT("query"), Query))
+			const TSharedPtr<FJsonValue> QueryField = Params->TryGetField(TEXT("query"));
+			if (QueryField.IsValid() && !QueryField->IsNull() && !QueryField->TryGetString(Query))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: query must be a string"));
 		}
-		if (Params->HasField(TEXT("mode")) && !Params->TryGetStringField(TEXT("mode"), Mode))
+			const TSharedPtr<FJsonValue> ModeField = Params->TryGetField(TEXT("mode"));
+			if (ModeField.IsValid() && !ModeField->IsNull() && !ModeField->TryGetString(Mode))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: mode must be a string"));
 		}
-		if (Params->HasField(TEXT("limit")))
+			const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+			if (LimitField.IsValid() && !LimitField->IsNull())
 		{
 			double LimitValue = 0.0;
-			if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+				if (!LimitField->TryGetNumber(LimitValue))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid param: 'limit' must be a number"), -32602);
 			}
@@ -1201,25 +1233,29 @@ FMonolithActionResult FMonolithConfigActions::SetDeveloperSetting(const TSharedP
 	}
 
 	FString ClassName;
-	if (!Params->TryGetStringField(TEXT("class"), ClassName) || ClassName.IsEmpty())
+	const TSharedPtr<FJsonValue> ClassField = Params->TryGetField(TEXT("class"));
+	if (!ClassField.IsValid() || ClassField->IsNull() || !ClassField->TryGetString(ClassName) || ClassName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'class' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString PropertyName;
-	if (!Params->TryGetStringField(TEXT("property"), PropertyName) || PropertyName.IsEmpty())
+	const TSharedPtr<FJsonValue> PropertyField = Params->TryGetField(TEXT("property"));
+	if (!PropertyField.IsValid() || PropertyField->IsNull() || !PropertyField->TryGetString(PropertyName) || PropertyName.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'property' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString NewValueText;
-	if (!Params->TryGetStringField(TEXT("value"), NewValueText))
+	const TSharedPtr<FJsonValue> ValueField = Params->TryGetField(TEXT("value"));
+	if (!ValueField.IsValid() || ValueField->IsNull() || !ValueField->TryGetString(NewValueText))
 	{
 		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'value' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	bool bSaveConfig = false;
-	if (Params->HasField(TEXT("save_config")) && !Params->TryGetBoolField(TEXT("save_config"), bSaveConfig))
+	const TSharedPtr<FJsonValue> SaveConfigField = Params->TryGetField(TEXT("save_config"));
+	if (SaveConfigField.IsValid() && !SaveConfigField->IsNull() && !SaveConfigField->TryGetBool(bSaveConfig))
 	{
 		return FMonolithActionResult::Error(TEXT("set_developer_setting: 'save_config' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
