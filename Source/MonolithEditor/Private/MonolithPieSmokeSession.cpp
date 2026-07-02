@@ -20,6 +20,7 @@
 #include "Navigation/PathFollowingComponent.h" // EPathFollowingRequestResult tokens
 #include "UObject/UObjectGlobals.h"  // LoadObject / LoadClass
 #include "UObject/Class.h"           // FProperty iteration / SameType / CopyCompleteValue
+#include "MonolithAssetUtils.h"
 
 #include "UnrealClient.h"        // FViewport (PIE frame capture)
 #include "RenderingThread.h"     // FlushRenderingCommands (render-flush before first ReadPixels)
@@ -566,7 +567,7 @@ namespace
 			UClass* ActorClass = LoadClass<AActor>(nullptr, *Entry.ClassPath);
 			if (!ActorClass)
 			{
-				ActorClass = LoadObject<UClass>(nullptr, *Entry.ClassPath);
+				ActorClass = FMonolithAssetUtils::LoadAssetByPath<UClass>(Entry.ClassPath);
 			}
 			Result.bClassResolved = (ActorClass != nullptr);
 
@@ -574,7 +575,7 @@ namespace
 			UObject* DataAsset = nullptr;
 			if (!Entry.ApplyDataAssetPath.IsEmpty())
 			{
-				DataAsset = LoadObject<UObject>(nullptr, *Entry.ApplyDataAssetPath);
+				DataAsset = FMonolithAssetUtils::LoadAssetByPath(Entry.ApplyDataAssetPath);
 				Result.bDataAssetLoaded = (DataAsset != nullptr);
 				if (!DataAsset)
 				{
