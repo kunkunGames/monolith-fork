@@ -1015,6 +1015,208 @@ bool FMonolithUISpecPatchReplaceRoutingDryRunTest::RunTest(const FString& /*Para
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUISpecPatchReplacePreserveChildrenTest,
+	"MonolithUI.SpecMarkup.PatchReplacePreserveChildren",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUISpecPatchReplacePreserveChildrenTest::RunTest(const FString& /*Parameters*/)
+{
+	if (!TestNotNull(TEXT("UMonolithUIRegistrySubsystem available"), UMonolithUIRegistrySubsystem::Get()))
+	{
+		return false;
+	}
+
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	MonolithUI::FSpecActions::Register(Registry);
+	FMonolithUIActions::RegisterActions(Registry);
+	FMonolithUISlotActions::RegisterActions(Registry);
+	FMonolithUIStylingActions::RegisterActions(Registry);
+
+	const FString AssetPath = TEXT("/Game/Tests/Monolith/UI/WBP_ReplacePreserveChildrenPatch");
+
+	TSharedPtr<FJsonObject> CurrentConvertParams = MakeShared<FJsonObject>();
+	CurrentConvertParams->SetStringField(
+		TEXT("markup"),
+		TEXT("<CanvasPanel Name=\"RootCanvas\">"
+			 "<CanvasPanel Name=\"OldPanel\" slot.position=\"24,32\" slot.size=\"300,120\">"
+			 "<TextBlock Name=\"ChildText\" Text=\"Keep\" slot.position=\"4,4\" slot.size=\"120,32\" />"
+			 "</CanvasPanel>"
+			 "</CanvasPanel>"));
+	CurrentConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+	const FMonolithActionResult CurrentConvertResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), CurrentConvertParams);
+	if (!TestTrue(TEXT("current convert action succeeds"), CurrentConvertResult.bSuccess && CurrentConvertResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> BuildParams = MakeShared<FJsonObject>();
+	BuildParams->SetStringField(TEXT("asset_path"), AssetPath);
+	BuildParams->SetObjectField(TEXT("spec"), CurrentConvertResult.Result->GetObjectField(TEXT("spec")));
+	BuildParams->SetBoolField(TEXT("overwrite"), true);
+	BuildParams->SetBoolField(TEXT("dry_run"), false);
+	const FMonolithActionResult BuildResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("build_ui_from_spec"), BuildParams);
+	if (!TestTrue(TEXT("build action succeeds"), BuildResult.bSuccess && BuildResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("build payload bSuccess"), BuildResult.Result->GetBoolField(TEXT("bSuccess")));
+
+	TSharedPtr<FJsonObject> DesiredConvertParams = MakeShared<FJsonObject>();
+	DesiredConvertParams->SetStringField(
+		TEXT("markup"),
+		TEXT("<CanvasPanel Name=\"RootCanvas\">"
+			 "<VerticalBox Name=\"OldPanel\" slot.position=\"24,32\" slot.size=\"300,120\">"
+			 "<TextBlock Name=\"ChildText\" Text=\"Keep\" />"
+			 "</VerticalBox>"
+			 "</CanvasPanel>"));
+	DesiredConvertParams->SetStringField(TEXT("root_save_path"), AssetPath);
+	const FMonolithActionResult DesiredConvertResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("convert_markup_to_ui_spec"), DesiredConvertParams);
+	if (!TestTrue(TEXT("desired convert action succeeds"), DesiredConvertResult.bSuccess && DesiredConvertResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> DiffParams = MakeShared<FJsonObject>();
+	DiffParams->SetStringField(TEXT("asset_path"), AssetPath);
+	DiffParams->SetObjectField(TEXT("desired_spec"), DesiredConvertResult.Result->GetObjectField(TEXT("spec")));
+	DiffParams->SetStringField(TEXT("compare_mode"), TEXT("structural"));
+	const FMonolithActionResult DiffResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("diff_ui_spec"), DiffParams);
+	if (!TestTrue(TEXT("diff action succeeds"), DiffResult.bSuccess && DiffResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* PatchCandidates = nullptr;
+	if (!TestTrue(TEXT("diff patch candidates array"), DiffResult.Result->TryGetArrayField(TEXT("patch_candidates"), PatchCandidates) && PatchCandidates))
+	{
+		return false;
+	}
+
+	bool bFoundPreserveCandidate = false;
+	for (const TSharedPtr<FJsonValue>& CandidateValue : *PatchCandidates)
+	{
+		const TSharedPtr<FJsonObject> Candidate = CandidateValue.IsValid() ? CandidateValue->AsObject() : nullptr;
+		if (!Candidate.IsValid())
+		{
+			continue;
+		}
+
+		FString Op;
+		FString WidgetName;
+		if (Candidate->TryGetStringField(TEXT("op"), Op)
+			&& Candidate->TryGetStringField(TEXT("widget_name"), WidgetName)
+			&& Op == TEXT("replace_widget")
+			&& WidgetName == TEXT("OldPanel"))
+		{
+			bFoundPreserveCandidate = Candidate->GetBoolField(TEXT("preserve_children"));
+			const TArray<TSharedPtr<FJsonValue>>* CandidateChildNames = nullptr;
+			bFoundPreserveCandidate &= Candidate->TryGetArrayField(TEXT("child_widget_names"), CandidateChildNames)
+				&& CandidateChildNames
+				&& CandidateChildNames->Num() == 1
+				&& (*CandidateChildNames)[0]->AsString() == TEXT("ChildText");
+			break;
+		}
+	}
+	TestTrue(TEXT("diff replace candidate offers preserve_children for same direct child ids"), bFoundPreserveCandidate);
+
+	TSharedPtr<FJsonObject> ReplaceOp = MakeShared<FJsonObject>();
+	ReplaceOp->SetStringField(TEXT("op"), TEXT("replace_widget"));
+	ReplaceOp->SetStringField(TEXT("widget_name"), TEXT("OldPanel"));
+	ReplaceOp->SetStringField(TEXT("parent_name"), TEXT("RootCanvas"));
+	ReplaceOp->SetStringField(TEXT("widget_class"), TEXT("VerticalBox"));
+	ReplaceOp->SetBoolField(TEXT("preserve_children"), true);
+	ReplaceOp->SetBoolField(TEXT("confirm_replace"), true);
+	TArray<TSharedPtr<FJsonValue>> ChildNames;
+	ChildNames.Add(MakeShared<FJsonValueString>(TEXT("ChildText")));
+	ReplaceOp->SetArrayField(TEXT("child_widget_names"), ChildNames);
+
+	TSharedPtr<FJsonObject> Slot = MakeShared<FJsonObject>();
+	TSharedPtr<FJsonObject> Position = MakeShared<FJsonObject>();
+	Position->SetNumberField(TEXT("x"), 24.0);
+	Position->SetNumberField(TEXT("y"), 32.0);
+	Slot->SetObjectField(TEXT("position"), Position);
+	TSharedPtr<FJsonObject> Size = MakeShared<FJsonObject>();
+	Size->SetNumberField(TEXT("x"), 300.0);
+	Size->SetNumberField(TEXT("y"), 120.0);
+	Slot->SetObjectField(TEXT("size"), Size);
+	ReplaceOp->SetObjectField(TEXT("slot"), Slot);
+
+	TArray<TSharedPtr<FJsonValue>> PatchOps;
+	PatchOps.Add(MakeShared<FJsonValueObject>(ReplaceOp));
+
+	TSharedPtr<FJsonObject> DryRunParams = MakeShared<FJsonObject>();
+	DryRunParams->SetStringField(TEXT("asset_path"), AssetPath);
+	DryRunParams->SetArrayField(TEXT("patch"), PatchOps);
+	DryRunParams->SetBoolField(TEXT("dry_run"), true);
+	const FMonolithActionResult DryRunResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), DryRunParams);
+	if (!TestTrue(TEXT("preserve replace dry-run succeeds"), DryRunResult.bSuccess && DryRunResult.Result.IsValid()))
+	{
+		return false;
+	}
+	TestTrue(TEXT("preserve replace dry-run ok"), DryRunResult.Result->GetBoolField(TEXT("ok")));
+
+	const TArray<TSharedPtr<FJsonValue>>* DryRunSteps = nullptr;
+	if (!TestTrue(TEXT("preserve dry-run steps array"), DryRunResult.Result->TryGetArrayField(TEXT("steps"), DryRunSteps) && DryRunSteps))
+	{
+		return false;
+	}
+	TestEqual(TEXT("plans one add_widget"), CountStepAction(DryRunSteps, TEXT("add_widget")), 1);
+	TestEqual(TEXT("plans one move_widget"), CountStepAction(DryRunSteps, TEXT("move_widget")), 1);
+	TestEqual(TEXT("plans one remove_widget"), CountStepAction(DryRunSteps, TEXT("remove_widget")), 1);
+	TestEqual(TEXT("plans one rename_widget"), CountStepAction(DryRunSteps, TEXT("rename_widget")), 1);
+	TestFalse(TEXT("does not call duplicate replace action"), ContainsStepAction(DryRunSteps, TEXT("replace_widget")));
+
+	TSharedPtr<FJsonObject> ApplyParams = MakeShared<FJsonObject>();
+	ApplyParams->SetStringField(TEXT("asset_path"), AssetPath);
+	ApplyParams->SetArrayField(TEXT("patch"), PatchOps);
+	ApplyParams->SetBoolField(TEXT("dry_run"), false);
+	ApplyParams->SetBoolField(TEXT("confirm"), true);
+	ApplyParams->SetBoolField(TEXT("compile"), true);
+	ApplyParams->SetBoolField(TEXT("save"), false);
+	ApplyParams->SetBoolField(TEXT("read_back"), true);
+	const FMonolithActionResult ApplyResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("apply_ui_spec_patch"), ApplyParams);
+	if (!TestTrue(TEXT("preserve replace apply succeeds"), ApplyResult.bSuccess && ApplyResult.Result.IsValid()))
+	{
+		return false;
+	}
+	if (!ApplyResult.Result->GetBoolField(TEXT("ok")))
+	{
+		AddError(TEXT("preserve replace apply returned ok=false"));
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> DumpParams = MakeShared<FJsonObject>();
+	DumpParams->SetStringField(TEXT("asset_path"), AssetPath);
+	const FMonolithActionResult DumpResult =
+		Registry.ExecuteAction(TEXT("ui"), TEXT("dump_ui_spec"), DumpParams);
+	if (!TestTrue(TEXT("dump action succeeds after preserve replace"), DumpResult.bSuccess && DumpResult.Result.IsValid()))
+	{
+		return false;
+	}
+
+	const TSharedPtr<FJsonObject> DumpedSpec = DumpResult.Result->GetObjectField(TEXT("spec"));
+	const TSharedPtr<FJsonObject> DumpedRoot = DumpedSpec->GetObjectField(TEXT("rootWidget"));
+	TSharedPtr<FJsonObject> ReplacedPanel;
+	TestTrue(TEXT("OldPanel stable name remains after replacement"), FindNodeById(DumpedRoot, TEXT("OldPanel"), ReplacedPanel));
+	if (ReplacedPanel.IsValid())
+	{
+		TestEqual(TEXT("OldPanel replacement type"), ReplacedPanel->GetStringField(TEXT("type")), TEXT("VerticalBox"));
+		const TArray<TSharedPtr<FJsonValue>>* ReplacedChildren = nullptr;
+		TestTrue(TEXT("OldPanel still has children"), ReplacedPanel->TryGetArrayField(TEXT("children"), ReplacedChildren) && ReplacedChildren && ReplacedChildren->Num() == 1);
+		TSharedPtr<FJsonObject> ChildText;
+		TestTrue(TEXT("ChildText remains under replaced OldPanel"), FindNodeById(ReplacedPanel, TEXT("ChildText"), ChildText));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithUISpecPatchBorderBrushRoutingDryRunTest,
 	"MonolithUI.SpecMarkup.PatchBorderBrushRoutingDryRun",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

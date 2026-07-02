@@ -4650,6 +4650,59 @@ namespace MonolithUI::SpecActionsInternal
         return FString();
     }
 
+    static bool TryGetStringArrayField(
+        const TSharedPtr<FJsonObject>& Obj,
+        const TCHAR* FieldName,
+        TArray<FString>& OutValues,
+        FString& OutError)
+    {
+        OutValues.Reset();
+        if (!Obj.IsValid() || !FieldName || !Obj->HasField(FieldName))
+        {
+            return true;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+        if (!Obj->TryGetArrayField(FieldName, Values) || !Values)
+        {
+            OutError = FString::Printf(TEXT("%s must be an array of strings."), FieldName);
+            return false;
+        }
+
+        for (int32 Index = 0; Index < Values->Num(); ++Index)
+        {
+            FString Value;
+            if (!(*Values)[Index].IsValid() || !(*Values)[Index]->TryGetString(Value) || Value.IsEmpty())
+            {
+                OutError = FString::Printf(TEXT("%s[%d] must be a non-empty string."), FieldName, Index);
+                return false;
+            }
+            OutValues.Add(Value);
+        }
+        return true;
+    }
+
+    static bool TryGetFirstStringArrayField(
+        const TSharedPtr<FJsonObject>& Obj,
+        TArray<FString>& OutValues,
+        FString& OutError,
+        const TCHAR* FieldA,
+        const TCHAR* FieldB = nullptr,
+        const TCHAR* FieldC = nullptr)
+    {
+        OutValues.Reset();
+        const TCHAR* Candidates[3] = { FieldA, FieldB, FieldC };
+        for (const TCHAR* Candidate : Candidates)
+        {
+            if (!Obj.IsValid() || !Candidate || !Obj->HasField(Candidate))
+            {
+                continue;
+            }
+            return TryGetStringArrayField(Obj, Candidate, OutValues, OutError);
+        }
+        return true;
+    }
+
     static bool TryGetObjectArray(
         const TSharedPtr<FJsonObject>& Spec,
         const FString& FieldName,
@@ -4912,6 +4965,97 @@ namespace MonolithUI::SpecActionsInternal
             const FString ChildPath = FString::Printf(TEXT("%s/children/%d"), *Path, Index);
             BuildNodeRefMap(Node->Children[Index], Node->Id, ChildPath, Index, OutNodes, OutUnsupported);
         }
+    }
+
+    static TArray<FString> GetDirectChildWidgetNames(const FUISpecNode& Node)
+    {
+        TArray<FString> Names;
+        Names.Reserve(Node.Children.Num());
+        for (const TSharedPtr<FUISpecNode>& Child : Node.Children)
+        {
+            if (Child.IsValid() && !Child->Id.IsNone())
+            {
+                Names.Add(Child->Id.ToString());
+            }
+        }
+        return Names;
+    }
+
+    static bool DirectChildWidgetNamesEqual(const FUISpecNode& A, const FUISpecNode& B)
+    {
+        const TArray<FString> AChildren = GetDirectChildWidgetNames(A);
+        const TArray<FString> BChildren = GetDirectChildWidgetNames(B);
+        if (AChildren.Num() != BChildren.Num())
+        {
+            return false;
+        }
+        for (int32 Index = 0; Index < AChildren.Num(); ++Index)
+        {
+            if (AChildren[Index] != BChildren[Index])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static void SetStringArrayField(
+        const TSharedPtr<FJsonObject>& Obj,
+        const FString& FieldName,
+        const TArray<FString>& Strings)
+    {
+        if (!Obj.IsValid())
+        {
+            return;
+        }
+
+        TArray<TSharedPtr<FJsonValue>> Values;
+        Values.Reserve(Strings.Num());
+        for (const FString& String : Strings)
+        {
+            Values.Add(MakeShared<FJsonValueString>(String));
+        }
+        Obj->SetArrayField(FieldName, Values);
+    }
+
+    static FString MakeReplacementTempWidgetName(const FString& WidgetName)
+    {
+        return WidgetName + TEXT("__ReplacementTmp");
+    }
+
+    static bool ReplacementClassCanHostPreservedChildren(
+        const FString& WidgetClass,
+        int32 ChildCount,
+        FString& OutReason)
+    {
+        UClass* ResolvedClass = MonolithUI::WidgetClassFromName(WidgetClass);
+        if (!ResolvedClass)
+        {
+            OutReason = FString::Printf(
+                TEXT("replace_widget preserve_children could not resolve replacement widget_class '%s'."),
+                *WidgetClass);
+            return false;
+        }
+
+        UPanelWidget* PanelCDO = Cast<UPanelWidget>(ResolvedClass->GetDefaultObject());
+        if (!PanelCDO)
+        {
+            OutReason = FString::Printf(
+                TEXT("replace_widget preserve_children requires replacement widget_class '%s' to be a UPanelWidget subclass."),
+                *WidgetClass);
+            return false;
+        }
+
+        if (ChildCount > 1 && !PanelCDO->CanHaveMultipleChildren())
+        {
+            OutReason = FString::Printf(
+                TEXT("replace_widget preserve_children cannot move %d children into single-child replacement widget_class '%s'."),
+                ChildCount,
+                *WidgetClass);
+            return false;
+        }
+
+        return true;
     }
 
     static TSharedPtr<FJsonObject> MakePatchCandidate(
@@ -5208,6 +5352,7 @@ namespace MonolithUI::SpecActionsInternal
     }
 
     static TSharedPtr<FJsonObject> MakeReplaceWidgetPatchCandidate(
+        const FUISpecNodeRef& CurrentRef,
         const FUISpecNodeRef& DesiredRef,
         const FName& DesiredParent,
         const FName& CurrentType)
@@ -5216,24 +5361,53 @@ namespace MonolithUI::SpecActionsInternal
         Patch->SetStringField(TEXT("op"), TEXT("replace_widget"));
         Patch->SetStringField(TEXT("reason"), TEXT("desired_spec widget type differs from the live WBP; explicit confirm-gated replacement is required"));
         Patch->SetStringField(TEXT("current_widget_class"), CurrentType.ToString());
-        Patch->SetStringField(TEXT("replacement_strategy"), TEXT("remove_then_add_via_existing_owner_actions"));
         Patch->SetBoolField(TEXT("requires_confirm_replace"), true);
-        Patch->SetBoolField(TEXT("preserve_children"), false);
+
+        const TArray<FString> PreservedChildNames = CurrentRef.Node ? GetDirectChildWidgetNames(*CurrentRef.Node) : TArray<FString>();
+        FString PreservationReason;
+        const bool bCanPreserveChildren =
+            CurrentRef.Node
+            && DesiredRef.Node
+            && PreservedChildNames.Num() > 0
+            && DirectChildWidgetNamesEqual(*CurrentRef.Node, *DesiredRef.Node)
+            && ReplacementClassCanHostPreservedChildren(DesiredRef.Node->Type.ToString(), PreservedChildNames.Num(), PreservationReason);
+
+        Patch->SetBoolField(TEXT("preserve_children"), bCanPreserveChildren);
+        if (bCanPreserveChildren)
+        {
+            Patch->SetStringField(TEXT("replacement_strategy"), TEXT("add_temp_move_children_remove_rename_via_existing_owner_actions"));
+            Patch->SetStringField(TEXT("temporary_widget_name"), MakeReplacementTempWidgetName(DesiredRef.Node->Id.ToString()));
+            SetStringArrayField(Patch, TEXT("child_widget_names"), PreservedChildNames);
+        }
+        else
+        {
+            Patch->SetStringField(TEXT("replacement_strategy"), TEXT("remove_then_add_via_existing_owner_actions"));
+            if (PreservedChildNames.Num() > 0)
+            {
+                if (PreservationReason.IsEmpty())
+                {
+                    PreservationReason = TEXT("direct child ids differ between current and desired specs; implicit child preservation would hide a structural delete/reparent.");
+                }
+                Patch->SetStringField(TEXT("preserve_children_unavailable_reason"), PreservationReason);
+            }
+        }
         return Patch;
     }
 
     static TSharedPtr<FJsonObject> MakeReplaceDecompositionEvidence()
     {
         TSharedPtr<FJsonObject> Evidence = MakeShared<FJsonObject>();
-        Evidence->SetStringField(TEXT("schema_version"), TEXT("ui_replace_decomposition.v1"));
+        Evidence->SetStringField(TEXT("schema_version"), TEXT("ui_replace_decomposition.v2"));
         Evidence->SetStringField(TEXT("op"), TEXT("replace_widget"));
         Evidence->SetBoolField(TEXT("requires_confirm_replace"), true);
-        Evidence->SetBoolField(TEXT("preserve_children_supported"), false);
-        Evidence->SetStringField(TEXT("strategy"), TEXT("Decompose explicit replacement through existing owner actions; no duplicate public replace action is registered."));
+        Evidence->SetBoolField(TEXT("preserve_children_supported"), true);
+        Evidence->SetStringField(TEXT("strategy"), TEXT("Decompose explicit replacement through existing owner actions; preserve_children uses a temporary replacement widget, ui.move_widget for direct children, ui.remove_widget for the old node, and ui.rename_widget to restore the stable name."));
 
         TArray<TSharedPtr<FJsonValue>> OwnerActions;
-        OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.remove_widget")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.add_widget")));
+        OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.move_widget")));
+        OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.remove_widget")));
+        OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.rename_widget")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_text")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_image")));
         OwnerActions.Add(MakeShared<FJsonValueString>(TEXT("ui.set_widget_property")));
@@ -5978,7 +6152,7 @@ namespace MonolithUI::SpecActionsInternal
 
             if (CurrentRef->Node->Type != DesiredRef.Node->Type)
             {
-                TSharedPtr<FJsonObject> Patch = MakeReplaceWidgetPatchCandidate(DesiredRef, DesiredRef.ParentId, CurrentRef->Node->Type);
+                TSharedPtr<FJsonObject> Patch = MakeReplaceWidgetPatchCandidate(*CurrentRef, DesiredRef, DesiredRef.ParentId, CurrentRef->Node->Type);
                 TSharedPtr<FJsonObject> UnsupportedRow = MakeShared<FJsonObject>();
                 UnsupportedRow->SetStringField(TEXT("widget_name"), WidgetId.ToString());
                 UnsupportedRow->SetStringField(TEXT("field"), TEXT("type"));
@@ -7032,6 +7206,130 @@ namespace MonolithUI::SpecActionsInternal
         }
     }
 
+    static void PreflightAddReplacementWidgetStep(
+        UWidgetBlueprint* WBP,
+        const FUISpecPatchStep& Step,
+        TArray<TSharedPtr<FJsonValue>>& Unsupported)
+    {
+        if (!WBP || !WBP->WidgetTree || !Step.Params.IsValid())
+        {
+            return;
+        }
+
+        const FString TempWidgetName = GetFirstStringField(Step.Params, TEXT("widget_name"), TEXT("name"), TEXT("id"));
+        if (TempWidgetName.IsEmpty())
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                TEXT("preserve_children replacement add step is missing a temporary widget_name."),
+                TEXT("temporary_widget_name"));
+            return;
+        }
+
+        if (WBP->WidgetTree->FindWidget(FName(*TempWidgetName)))
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("Temporary replacement widget name '%s' already exists in the WBP."), *TempWidgetName),
+                TEXT("temporary_widget_name"),
+                TempWidgetName);
+        }
+    }
+
+    static void PreflightMovePreservedChildStep(
+        UWidgetBlueprint* WBP,
+        const FUISpecPatchStep& Step,
+        TArray<TSharedPtr<FJsonValue>>& Unsupported)
+    {
+        if (!WBP || !WBP->WidgetTree || !Step.Params.IsValid())
+        {
+            return;
+        }
+
+        const FString ChildName = GetFirstStringField(Step.Params, TEXT("widget_name"), TEXT("widget"), TEXT("name"));
+        const FString ExpectedParentName = GetFirstStringField(Step.Params, TEXT("expected_parent_name"), TEXT("preserved_from_parent"));
+        if (ChildName.IsEmpty() || ExpectedParentName.IsEmpty())
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                TEXT("preserve_children move step requires widget_name and expected_parent_name."),
+                ChildName.IsEmpty() ? TEXT("widget_name") : TEXT("expected_parent_name"),
+                ChildName);
+            return;
+        }
+
+        UWidget* Child = WBP->WidgetTree->FindWidget(FName(*ChildName));
+        if (!Child)
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("Preserved child widget '%s' does not exist in the WBP."), *ChildName),
+                TEXT("child_widget_names"),
+                ChildName);
+            return;
+        }
+
+        int32 ChildIndex = INDEX_NONE;
+        UPanelWidget* CurrentParent = UWidgetTree::FindWidgetParent(Child, ChildIndex);
+        if (!CurrentParent || CurrentParent->GetFName() != FName(*ExpectedParentName))
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(
+                    TEXT("Preserved child widget '%s' is not a direct child of '%s'."),
+                    *ChildName,
+                    *ExpectedParentName),
+                TEXT("child_widget_names"),
+                ChildName,
+                CurrentParent ? CurrentParent->GetClass()->GetName() : TEXT("none"));
+        }
+    }
+
+    static void PreflightRenameReplacementWidgetStep(
+        UWidgetBlueprint* WBP,
+        const FUISpecPatchStep& Step,
+        TArray<TSharedPtr<FJsonValue>>& Unsupported)
+    {
+        if (!WBP || !WBP->WidgetTree || !Step.Params.IsValid())
+        {
+            return;
+        }
+
+        const FString OldName = GetFirstStringField(Step.Params, TEXT("old_name"));
+        const FString NewName = GetFirstStringField(Step.Params, TEXT("new_name"));
+        if (OldName.IsEmpty() || NewName.IsEmpty())
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                TEXT("preserve_children replacement rename step requires old_name and new_name."),
+                OldName.IsEmpty() ? TEXT("old_name") : TEXT("new_name"));
+            return;
+        }
+
+        if (!WBP->WidgetTree->FindWidget(FName(*NewName)))
+        {
+            AddUnsupportedPatchField(
+                Unsupported,
+                Step.SourceIndex,
+                Step.Type,
+                FString::Printf(TEXT("Original widget '%s' does not exist before replacement."), *NewName),
+                TEXT("widget_name"),
+                NewName);
+        }
+    }
+
     static bool PreflightUISpecPatchSteps(
         const FString& AssetPath,
         const TArray<FUISpecPatchStep>& Steps,
@@ -7039,17 +7337,24 @@ namespace MonolithUI::SpecActionsInternal
         FString& OutError)
     {
         bool bHasSlotSensitiveStep = false;
+        bool bHasPreserveReplacementStep = false;
         for (const FUISpecPatchStep& Step : Steps)
         {
             if (Step.Namespace == TEXT("ui") &&
                 (Step.Action == TEXT("set_slot_property") || Step.Action == TEXT("set_anchor_preset")))
             {
                 bHasSlotSensitiveStep = true;
-                break;
+            }
+            if (Step.Namespace == TEXT("ui") &&
+                (Step.Type == TEXT("add_replacement_widget")
+                    || Step.Type == TEXT("move_preserved_child")
+                    || Step.Type == TEXT("rename_replacement_widget")))
+            {
+                bHasPreserveReplacementStep = true;
             }
         }
 
-        if (!bHasSlotSensitiveStep)
+        if (!bHasSlotSensitiveStep && !bHasPreserveReplacementStep)
         {
             return true;
         }
@@ -7066,7 +7371,23 @@ namespace MonolithUI::SpecActionsInternal
 
         for (const FUISpecPatchStep& Step : Steps)
         {
-            PreflightSetSlotPatchStep(WBP, Step, Unsupported);
+            if (Step.Namespace == TEXT("ui") &&
+                (Step.Action == TEXT("set_slot_property") || Step.Action == TEXT("set_anchor_preset")))
+            {
+                PreflightSetSlotPatchStep(WBP, Step, Unsupported);
+            }
+            if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("add_replacement_widget"))
+            {
+                PreflightAddReplacementWidgetStep(WBP, Step, Unsupported);
+            }
+            else if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("move_preserved_child"))
+            {
+                PreflightMovePreservedChildStep(WBP, Step, Unsupported);
+            }
+            else if (Step.Namespace == TEXT("ui") && Step.Type == TEXT("rename_replacement_widget"))
+            {
+                PreflightRenameReplacementWidgetStep(WBP, Step, Unsupported);
+            }
         }
         return true;
     }
@@ -7093,9 +7414,16 @@ namespace MonolithUI::SpecActionsInternal
         Params->RemoveField(TEXT("confirmReplace"));
         Params->RemoveField(TEXT("preserve_children"));
         Params->RemoveField(TEXT("preserveChildren"));
+        Params->RemoveField(TEXT("child_widget_names"));
+        Params->RemoveField(TEXT("preserve_child_names"));
+        Params->RemoveField(TEXT("temporary_widget_name"));
+        Params->RemoveField(TEXT("temporaryWidgetName"));
+        Params->RemoveField(TEXT("temp_widget_name"));
+        Params->RemoveField(TEXT("tempWidgetName"));
         Params->RemoveField(TEXT("requires_confirm_replace"));
         Params->RemoveField(TEXT("current_widget_class"));
         Params->RemoveField(TEXT("replacement_strategy"));
+        Params->RemoveField(TEXT("preserve_children_unavailable_reason"));
         SetBoolIfMissing(Params, TEXT("compile"), bCompileEachMutation);
         AddPatchStep(OutSteps, TEXT("add_widget"), TEXT("ui"), TEXT("add_widget"), Index, Params);
 
@@ -7273,10 +7601,64 @@ namespace MonolithUI::SpecActionsInternal
                 {
                     Entry->TryGetBoolField(TEXT("preserveChildren"), bPreserveChildren);
                 }
+
+                TArray<FString> ChildWidgetNames;
+                FString ChildNamesError;
+                if (bPreserveChildren
+                    && !TryGetFirstStringArrayField(
+                        Entry,
+                        ChildWidgetNames,
+                        ChildNamesError,
+                        TEXT("child_widget_names"),
+                        TEXT("preserve_child_names")))
+                {
+                    AddUnsupportedPatchField(OutUnsupported, Index, Op, ChildNamesError, TEXT("child_widget_names"), WidgetName);
+                    bUnsupportedReplace = true;
+                }
+                if (bPreserveChildren && ChildWidgetNames.Num() == 0)
+                {
+                    AddUnsupportedPatchField(
+                        OutUnsupported,
+                        Index,
+                        Op,
+                        TEXT("replace_widget preserve_children=true requires child_widget_names[] so the plan can move only explicitly preserved direct children."),
+                        TEXT("child_widget_names"),
+                        WidgetName);
+                    bUnsupportedReplace = true;
+                }
                 if (bPreserveChildren)
                 {
-                    AddUnsupportedPatchField(OutUnsupported, Index, Op, TEXT("replace_widget does not preserve or reparent existing children yet; provide explicit child add/move ops after replacement."));
-                    bUnsupportedReplace = true;
+                    FString PreserveReason;
+                    if (!ReplacementClassCanHostPreservedChildren(WidgetClass, ChildWidgetNames.Num(), PreserveReason))
+                    {
+                        AddUnsupportedPatchField(OutUnsupported, Index, Op, PreserveReason, TEXT("widget_class"), WidgetName);
+                        bUnsupportedReplace = true;
+                    }
+                }
+
+                FString TemporaryWidgetName = GetFirstStringField(
+                    Entry,
+                    TEXT("temporary_widget_name"),
+                    TEXT("temporaryWidgetName"),
+                    TEXT("temp_widget_name"),
+                    TEXT("tempWidgetName"));
+                if (bPreserveChildren)
+                {
+                    if (TemporaryWidgetName.IsEmpty())
+                    {
+                        TemporaryWidgetName = MakeReplacementTempWidgetName(WidgetName);
+                    }
+                    if (TemporaryWidgetName == WidgetName)
+                    {
+                        AddUnsupportedPatchField(
+                            OutUnsupported,
+                            Index,
+                            Op,
+                            TEXT("replace_widget preserve_children requires a temporary widget name different from widget_name."),
+                            TEXT("temporary_widget_name"),
+                            WidgetName);
+                        bUnsupportedReplace = true;
+                    }
                 }
 
                 bool bConfirmReplace = false;
@@ -7293,6 +7675,57 @@ namespace MonolithUI::SpecActionsInternal
 
                 if (bUnsupportedReplace)
                 {
+                    continue;
+                }
+
+                if (bPreserveChildren)
+                {
+                    TSharedPtr<FJsonObject> AddEntry = CloneJsonObject(Entry);
+                    AddEntry->SetStringField(TEXT("widget_name"), TemporaryWidgetName);
+                    AppendAddWidgetPatchSteps(
+                        AssetPath,
+                        AddEntry,
+                        Index,
+                        bCompileEachMutation,
+                        OutSteps,
+                        OutUnsupported,
+                        TEXT("replace_widget"));
+
+                    if (OutSteps.Num() > 0 && OutSteps.Last().SourceIndex == Index)
+                    {
+                        for (int32 StepIndex = OutSteps.Num() - 1; StepIndex >= 0; --StepIndex)
+                        {
+                            if (OutSteps[StepIndex].SourceIndex != Index || OutSteps[StepIndex].Type != TEXT("add_widget"))
+                            {
+                                continue;
+                            }
+                            OutSteps[StepIndex].Type = TEXT("add_replacement_widget");
+                            break;
+                        }
+                    }
+
+                    for (const FString& ChildWidgetName : ChildWidgetNames)
+                    {
+                        TSharedPtr<FJsonObject> MoveParams = MakeShared<FJsonObject>();
+                        MoveParams->SetStringField(TEXT("asset_path"), AssetPath);
+                        MoveParams->SetStringField(TEXT("widget_name"), ChildWidgetName);
+                        MoveParams->SetStringField(TEXT("new_parent_name"), TemporaryWidgetName);
+                        MoveParams->SetStringField(TEXT("expected_parent_name"), WidgetName);
+                        MoveParams->SetBoolField(TEXT("compile"), bCompileEachMutation);
+                        AddPatchStep(OutSteps, TEXT("move_preserved_child"), TEXT("ui"), TEXT("move_widget"), Index, MoveParams);
+                    }
+
+                    TSharedPtr<FJsonObject> RemoveParams = MakeShared<FJsonObject>();
+                    RemoveParams->SetStringField(TEXT("asset_path"), AssetPath);
+                    RemoveParams->SetStringField(TEXT("widget_name"), WidgetName);
+                    RemoveParams->SetBoolField(TEXT("compile"), bCompileEachMutation);
+                    AddPatchStep(OutSteps, TEXT("remove_replaced_widget"), TEXT("ui"), TEXT("remove_widget"), Index, RemoveParams);
+
+                    TSharedPtr<FJsonObject> RenameParams = MakeShared<FJsonObject>();
+                    RenameParams->SetStringField(TEXT("asset_path"), AssetPath);
+                    RenameParams->SetStringField(TEXT("old_name"), TemporaryWidgetName);
+                    RenameParams->SetStringField(TEXT("new_name"), WidgetName);
+                    AddPatchStep(OutSteps, TEXT("rename_replacement_widget"), TEXT("ui"), TEXT("rename_widget"), Index, RenameParams);
                     continue;
                 }
 
@@ -7456,7 +7889,7 @@ namespace MonolithUI::SpecActionsInternal
             }
             else
             {
-                AddUnsupportedPatchField(OutUnsupported, Index, Op, TEXT("Unsupported ui.apply_ui_spec_patch op. Supported: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions."));
+                AddUnsupportedPatchField(OutUnsupported, Index, Op, TEXT("Unsupported ui.apply_ui_spec_patch op. Supported: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions. replace_widget preserve_children composes ui.add_widget, ui.move_widget, ui.remove_widget, and ui.rename_widget."));
             }
         }
         return true;
@@ -8383,13 +8816,13 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
         TEXT("ui"), TEXT("apply_ui_spec_patch"),
         TEXT("Confirm-gated UISpec patch workflow for existing Widget Blueprints. Accepts explicit stable-widget-name "
              "patch ops and routes them through existing Monolith owner actions such as ui.add_widget, ui.remove_widget, "
-             "ui.move_widget, confirm-gated replace_widget decomposition through ui.remove_widget + ui.add_widget, ui.set_slot_property, ui.set_widget_property, ui.set_text, ui.set_image, ui.set_brush for supported non-Image brush resources, common and typed style routing via ui.set_widget_property, ui.apply_style_to_widget, ui.set_effect_surface_* owner actions, "
+             "ui.move_widget, confirm-gated replace_widget decomposition through ui.remove_widget + ui.add_widget or preserve_children temp-add + ui.move_widget + ui.remove_widget + ui.rename_widget, ui.set_slot_property, ui.set_widget_property, ui.set_text, ui.set_image, ui.set_brush for supported non-Image brush resources, common and typed style routing via ui.set_widget_property, ui.apply_style_to_widget, ui.set_effect_surface_* owner actions, "
              "ui.compile_widget, and asset.save_asset. "
              "Dry-run is the default; mutating calls require confirm=true. Unsupported ops are reported, not converted to raw writes."),
         FMonolithActionHandler::CreateStatic(&HandleApplyUISpecPatch),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint long-package path to patch."))
-            .Required(TEXT("patch"), TEXT("array"), TEXT("Array of patch op objects. Supported op values: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions."))
+            .Required(TEXT("patch"), TEXT("array"), TEXT("Array of patch op objects. Supported op values: add_widget, replace_widget, remove_widget, move_widget, set_slot_property, set_widget_property, set_text, set_image, set_brush, set_style, apply_style_to_widget, and existing set_effect_surface_* owner actions. replace_widget accepts confirm_replace=true and optional preserve_children=true with child_widget_names[]."))
             .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan patch steps without mutation. Default true."), TEXT("true"))
             .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false."), TEXT("false"))
             .Optional(TEXT("compile"), TEXT("boolean"), TEXT("Compile once after applying patch steps. Default true."), TEXT("true"))
