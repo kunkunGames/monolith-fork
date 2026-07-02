@@ -609,6 +609,7 @@ FMonolithActionResult FMonolithMeshPerformanceActions::FindOverdrawHotspots(cons
 
 	// Build translucent actor list
 	TArray<TSharedPtr<FJsonValue>> ActorArr;
+	ActorArr.Reserve(TranslucentActors.Num());
 	for (const FTranslucentActorInfo& Info : TranslucentActors)
 	{
 		auto ActorObj = MakeShared<FJsonObject>();
@@ -799,6 +800,7 @@ FMonolithActionResult FMonolithMeshPerformanceActions::AnalyzeShadowCost(const T
 
 	// Build issues JSON
 	TArray<TSharedPtr<FJsonValue>> IssuesArr;
+	IssuesArr.Reserve(Issues.Num());
 	for (const FShadowIssue& Issue : Issues)
 	{
 		auto IssueObj = MakeShared<FJsonObject>();
@@ -1034,6 +1036,7 @@ FMonolithActionResult FMonolithMeshPerformanceActions::GetTriangleBudget(const T
 	// Top 20 contributors
 	TArray<TSharedPtr<FJsonValue>> TopArr;
 	int32 TopCount = FMath::Min(Contributors.Num(), 20);
+	TopArr.Reserve(TopCount);
 	for (int32 i = 0; i < TopCount; ++i)
 	{
 		auto ContribObj = MakeShared<FJsonObject>();
