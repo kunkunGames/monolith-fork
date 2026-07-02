@@ -196,3 +196,9 @@
 **Learning:** Task agents and domain agents will race to touch the same files and create overlapping PRs unless their individual prompts have specific instructions regarding cross-agent duplicate checks.
 **Prevention:** Added a `Duplicate / Collision Guard` section to `.jules/paramguard.md` to instruct ParamGuard agents to explicitly check for open branches from domain agents targeting the intended module before starting work.
 **Avoid:** Running cross-cutting task agents without explicit collision avoidance instructions regarding domain agents.
+
+## 2026-06-20 - Forbid announcing no-ops via branches/PRs
+**Coordination issue:** The PR queue and branch list continue to fill with no-op announcements (e.g., branches named `no-op-15180685759364971520`, `no-op-4474653514809561051`) created simply to report that no work was needed.
+**Learning:** General instructions in `AGENTS.md` to "never push a branch or open a PR to announce a no-op" are sometimes missed or ignored by agents when they want to log their completion. Pushing no-op branches clutters the repository and triggers unnecessary CI runs.
+**Prevention:** When ownership is elsewhere, the queue already covers it, or no safe non-overlapping candidate exists, you must stop without creating a branch or PR. Report your findings in the task log using the `done` tool.
+**Avoid:** Pushing any branch or PR (such as `jules/agent/no-op`) to announce a no-op.

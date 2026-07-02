@@ -59,6 +59,9 @@ Agents must avoid creating PRs that only contain style, formatting, or trivial w
 ## 10b. PR Body Hygiene and Sensitive Information
 Agents must keep PR descriptions focused and professional. Do not dump raw task execution logs, internal agent reasoning traces, or sensitive project findings into PR bodies or commit messages. Only include the required structured fields (like WorkFingerprint and Duplicate check) and a concise summary of the change.
 
+## 10c. Forbid Announcing No-ops via Branches/PRs
+The PR queue and branch list must not be used for task logging. When ownership is elsewhere, the queue already covers it, or no safe non-overlapping candidate exists, you must stop without creating a branch or PR. Do not push any branch (e.g., `no-op-15180685759364971520`) or create a PR to announce that no work was needed. Report your findings in the task log using the `done` tool instead.
+
 ## 11. External CI Limits
 If a GitHub Actions CI check fails with a billing-related error (e.g., "recent account payments have failed" or "spending limit needs to be increased"), recognize that this is an external repository limit, not a code defect. Do not attempt to fix it via code changes; simply inform the user.
 
