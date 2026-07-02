@@ -650,12 +650,11 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("sample_vars"), TEXT("array"), TEXT("AnimInstance variable names sampled each frame. Default [GroundSpeed, bShouldMove, DesiredYawDelta]."))
 			.Optional(TEXT("pawn_class"), TEXT("string"), TEXT("Substring of the target pawn's class name to sample (resolves a matching pawn). Omit to use the first player controller's pawn."))
 			.Optional(TEXT("console_script"), TEXT("array"), TEXT("Console command strings run on the PIE world at start (e.g. [\"WalkLoop\"])."))
-			.Optional(TEXT("python_script"), TEXT("string"), TEXT("Python source run via IPythonScriptPlugin at start."))
 			.Optional(TEXT("log_patterns"), TEXT("array|object"), TEXT("Post-marker patterns. FLAT ARRAY (legacy) = must_absent substrings. OBJECT (grouped) = {must_absent:[...], must_present:[...], observe_only:[...], warn:[...]}: must_absent any-match fails ok; must_present each must match >=1 for ok; observe_only counted only; warn surfaces a warnings list. Default-set substrings are always added to must_absent."))
 			.Optional(TEXT("ignore_after_pattern"), TEXT("string"), TEXT("Substring marking the teardown boundary; post-marker entries split into active-runtime (before, ok-bearing) + teardown buckets. Default \"BeginTearingDown\". Empty disables the split."), TEXT("BeginTearingDown"))
 			.Optional(TEXT("teardown_allowed"), TEXT("bool"), TEXT("If true (default), must_absent hits in the teardown bucket NEVER affect ok (e.g. RecastNavMesh teardown warnings). Set false to also fail ok on teardown-bucket hits."), TEXT("true"))
-			.Optional(TEXT("probe_scripts"), TEXT("array"), TEXT("Delayed in-session probes: [{at_seconds:number, python?:string, console?:[string]}]. Each fires ONCE against the LIVE PIE world from the frame observer when session elapsed reaches at_seconds (avoids the start-time teardown race). Results reported under 'probes'."))
-			.Optional(TEXT("stages"), TEXT("object"), TEXT("Staged startup hooks fired at lifecycle moments: {pre_pie:{python?,console?:[...]} (runs synchronously BEFORE PIE start, against the editor), on_begin_play:{...} (first observer tick after HasBegunPlay), after_n_ticks:{n:int, python?,console?:[...]} (after N observer ticks), before_capture:{...} (clip variant: before first frame grab)}. Complements python_script (start-time, kept for back-compat). Results reported under 'stages'."))
+			.Optional(TEXT("probe_scripts"), TEXT("array"), TEXT("Delayed in-session probes: [{at_seconds:number, console?:[string]}]. Each fires ONCE against the LIVE PIE world from the frame observer when session elapsed reaches at_seconds (avoids the start-time teardown race). Results reported under 'probes'."))
+			.Optional(TEXT("stages"), TEXT("object"), TEXT("Staged startup hooks fired at lifecycle moments with console payloads only: {pre_pie:{console?:[...]} (runs synchronously BEFORE PIE start, against the editor), on_begin_play:{...} (first observer tick after HasBegunPlay), after_n_ticks:{n:int, console?:[...]} (after N observer ticks), before_capture:{...} (clip variant: before first frame grab)}. Results reported under 'stages'."))
 			.Optional(TEXT("on_compile_errors"), TEXT("string"), TEXT("Policy when loaded Blueprints have unresolved compile errors: \"refuse\" (default, safe) returns an error + the offending {name,path} list and does NOT start PIE; \"suppress\" starts PIE anyway and silences the engine's blocking compile-error modal (which would otherwise freeze the editor + MCP server)."), TEXT("refuse"))
 			.Optional(TEXT("actor_setup"), TEXT("array"), TEXT("Declarative spawn/apply/move block executed ONCE against the live PIE world on the first ready tick (after BeginPlay). [{class:\"/Game/.../BP_Foo\" (BP or native class path; _C suffix optional), count:<int, default 1>, locations:[[x,y,z],...] (per-actor spawn; index falls back to origin), apply_data_asset:\"/Game/.../DA_Bar\" (optional — copies the DataAsset's reflected fields onto matching-named actor properties of a COMPATIBLE type; the field->prop map is NOT 1:1), move_to:[x,y,z] (optional — AAIController::MoveToLocation via the spawned pawn's controller)}]. Reported under 'actor_setup' as {class, class_resolved, requested_count, spawned_count, data_asset_loaded?, actors:[{spawned, name, runtime_class, applied:[...], unmatched:[...], move_to:{issued,result}}]} so partial-vs-full apply is programmatically distinguishable."))
 			.Optional(TEXT("csv_profile"), TEXT("bool"), TEXT("If true, start the engine CSV profiler on session start (first post-BeginPlay tick) and stop it on completion, bracketing the capture to EXACTLY the PIE window. The .csv is written to <project>/Saved/Profiling and its path is reported under 'profiling.csv_path'. Stopped on EVERY end path (success/failure/abort). Reports profiling.csv.available=false when the build config disables the CSV profiler (CSV_PROFILER off). Default false."), TEXT("false"))
@@ -693,13 +692,12 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Optional(TEXT("sample_vars"), TEXT("array"), TEXT("AnimInstance variable names sampled each frame. Default [GroundSpeed, bShouldMove, DesiredYawDelta]."))
 			.Optional(TEXT("pawn_class"), TEXT("string"), TEXT("Substring of the target pawn's class name to sample. Omit to use the first player controller's pawn."))
 			.Optional(TEXT("console_script"), TEXT("array"), TEXT("Console commands run on the PIE world at start (drive the movement)."))
-			.Optional(TEXT("python_script"), TEXT("string"), TEXT("Python source run at start."))
 			.OptionalDiskPath(TEXT("output_path"), TEXT("Directory for frame PNGs. Disk-relative, absolute, OR a virtual /Game/... path (resolved to <project>/Content/...). Default Saved/Screenshots/Monolith/PieClip/<timestamp>/. The resolved absolute dir is echoed as resolved_output_dir; a virtual path that can't be written is a hard error (no silent no-op)."))
 			.Optional(TEXT("log_patterns"), TEXT("array|object"), TEXT("Post-marker patterns. FLAT ARRAY (legacy) = must_absent. OBJECT = {must_absent, must_present, observe_only, warn} (see run_pie_smoke)."))
 			.Optional(TEXT("ignore_after_pattern"), TEXT("string"), TEXT("Teardown-boundary substring; splits post-marker entries into active-runtime + teardown buckets. Default \"BeginTearingDown\"."), TEXT("BeginTearingDown"))
 			.Optional(TEXT("teardown_allowed"), TEXT("bool"), TEXT("If true (default), teardown-bucket must_absent hits never affect ok."), TEXT("true"))
-			.Optional(TEXT("probe_scripts"), TEXT("array"), TEXT("Delayed in-session probes [{at_seconds, python?, console?:[...]}] fired once against the live PIE world (see run_pie_smoke)."))
-			.Optional(TEXT("stages"), TEXT("object"), TEXT("Staged startup hooks {pre_pie, on_begin_play, after_n_ticks:{n,...}, before_capture} (see run_pie_smoke). before_capture fires immediately before the first frame grab. Reported under 'stages'."))
+			.Optional(TEXT("probe_scripts"), TEXT("array"), TEXT("Delayed in-session probes [{at_seconds, console?:[...]}] fired once against the live PIE world (see run_pie_smoke)."))
+			.Optional(TEXT("stages"), TEXT("object"), TEXT("Staged startup hooks {pre_pie, on_begin_play, after_n_ticks:{n,...}, before_capture} with console payloads only (see run_pie_smoke). before_capture fires immediately before the first frame grab. Reported under 'stages'."))
 			.Optional(TEXT("view_target_actor"), TEXT("string"), TEXT("Outliner-label-, object-name- or class-substring of a PIE actor to APlayerController::SetViewTarget on at session begin, so captured frames frame the intended subject. Label (GetActorLabel) is matched first, then object name, then class name. Reported (with the active view target + per-frame validity) under 'view_target' / 'capture_validity'."))
 			.Optional(TEXT("discard_first_frames"), TEXT("number"), TEXT("Warm-up policy: the first N captured frames are still saved to disk (the clip stays complete) but are EXCLUDED from valid/invalid frame accounting. Prevents an un-warmed/uniform first frame from false-failing captured_ok. Clamped 0-16. Default 1; 0 disables the warm-up. A render-flush is also issued before the first ReadPixels."), TEXT("1"))
 			.Optional(TEXT("expected_anim_class"), TEXT("string"), TEXT("If set, assert the live mesh AnimClass path CONTAINS this substring each sampled tick; mismatch is reported under runtime_identity.expected_mismatch (never crashes)."))
@@ -7274,7 +7272,7 @@ namespace MonolithEditorPieSmoke
 		return bAbsentOk && bPresentOk;
 	}
 
-	// Run the caller's optional console + python scripts on the ready PIE world.
+	// Run the caller's optional console commands on the ready PIE world.
 	static void RunScripts(const TSharedPtr<FJsonObject>& Params, UWorld* PieWorld)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* ConsoleArr = nullptr;
@@ -7288,21 +7286,6 @@ namespace MonolithEditorPieSmoke
 				{
 					if (PC) { PC->ConsoleCommand(Command, /*bWriteToLog=*/true); }
 					else if (GEngine) { GEngine->Exec(PieWorld, *Command); }
-				}
-			}
-		}
-
-		FString PythonScript;
-		if (Params.IsValid() && Params->TryGetStringField(TEXT("python_script"), PythonScript) && !PythonScript.IsEmpty())
-		{
-			if (IPythonScriptPlugin* Python = IPythonScriptPlugin::Get())
-			{
-				if (Python->IsPythonAvailable())
-				{
-					FPythonCommandEx Cmd;
-					Cmd.Command = PythonScript;
-					Cmd.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
-					Python->ExecPythonCommandEx(Cmd);
 				}
 			}
 		}
@@ -7361,7 +7344,7 @@ namespace MonolithEditorPieSmoke
 		return Vars;
 	}
 
-	// #4 parse optional probe_scripts: [{ at_seconds, python?, console?:[...] }, ...].
+	// #4 parse optional probe_scripts: [{ at_seconds, console?:[...] }, ...].
 	// Probes fire ONCE against the LIVE PIE world from the per-frame observer when the
 	// session elapsed reaches at_seconds (avoids the start-time RunScripts teardown race).
 	static TArray<FPieSmokeProbe> ResolveProbes(const TSharedPtr<FJsonObject>& Params)
@@ -7381,9 +7364,8 @@ namespace MonolithEditorPieSmoke
 				double At = 0.0;
 				(*Obj)->TryGetNumberField(TEXT("at_seconds"), At);
 				Probe.AtSeconds = FMath::Max(0.0, At);
-				(*Obj)->TryGetStringField(TEXT("python"), Probe.Python);
 				ReadStringArrayField(*Obj, TEXT("console"), Probe.Console);
-				if (!Probe.Python.IsEmpty() || Probe.Console.Num() > 0)
+				if (Probe.Console.Num() > 0)
 				{
 					Probes.Add(MoveTemp(Probe));
 				}
@@ -7522,7 +7504,7 @@ namespace MonolithEditorPieSmoke
 		return Setups;
 	}
 
-	// #8 parse one stage payload object {python?, console?:[...]} into a stage. The
+	// #8 parse one stage payload object {console?:[...]} into a stage. The
 	// caller supplies any extra parsing (e.g. after_n_ticks 'n'). Returns true if the
 	// stage carries a runnable payload.
 	static bool ParseStagePayload(const TSharedPtr<FJsonObject>& Obj, FPieSmokeStage& Stage)
@@ -7531,17 +7513,16 @@ namespace MonolithEditorPieSmoke
 		{
 			return false;
 		}
-		Obj->TryGetStringField(TEXT("python"), Stage.Python);
 		ReadStringArrayField(Obj, TEXT("console"), Stage.Console);
-		return !Stage.Python.IsEmpty() || Stage.Console.Num() > 0;
+		return Stage.Console.Num() > 0;
 	}
 
 	// #8 resolve the optional `stages` object onto a session.
 	//   stages = {
-	//     pre_pie:        {python?, console?:[...]},   // fired synchronously BEFORE PIE
-	//     on_begin_play:  {python?, console?:[...]},   // first ready observer tick
-	//     after_n_ticks:  {n:int, python?, console?:[...]},
-	//     before_capture: {python?, console?:[...]}    // clip variant: before first frame
+	//     pre_pie:        {console?:[...]},   // fired synchronously BEFORE PIE
+	//     on_begin_play:  {console?:[...]},   // first ready observer tick
+	//     after_n_ticks:  {n:int, console?:[...]},
+	//     before_capture: {console?:[...]}    // clip variant: before first frame
 	//   }
 	static void ResolveStages(const TSharedPtr<FJsonObject>& Params, FPieSmokeStages& Stages)
 	{
@@ -7637,14 +7618,14 @@ namespace MonolithEditorPieSmoke
 	}
 
 	// #8 fire the pre_pie stage synchronously, BEFORE StartPieInternal. No PIE world yet,
-	// so python runs against the editor; console is best-effort (no PIE PC). Stamps outcome.
+	// so console is best-effort (no PIE PC). Stamps outcome.
 	static void FirePrePieStage(FPieSmokeStages& Stages)
 	{
 		if (!Stages.bAny || Stages.PrePie.bFired)
 		{
 			return;
 		}
-		if (Stages.PrePie.Python.IsEmpty() && Stages.PrePie.Console.Num() == 0)
+		if (Stages.PrePie.Console.Num() == 0)
 		{
 			return;
 		}
@@ -7659,25 +7640,7 @@ namespace MonolithEditorPieSmoke
 			{
 				if (!Command.IsEmpty()) { GEngine->Exec(EditorWorld, *Command); }
 			}
-		}
-		// Python against the editor (project definitions / fixtures before BeginPlay).
-		if (!Stages.PrePie.Python.IsEmpty())
-		{
-			if (IPythonScriptPlugin* Python = IPythonScriptPlugin::Get())
-			{
-				if (Python->IsPythonAvailable())
-				{
-					FPythonCommandEx Cmd;
-					Cmd.Command = Stages.PrePie.Python;
-					Cmd.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
-					Stages.PrePie.bPythonOk = Python->ExecPythonCommandEx(Cmd);
-					Stages.PrePie.PythonOutput = Cmd.CommandResult;
-				}
-				else { Stages.PrePie.PythonOutput = TEXT("Python not available in this build."); }
-			}
-			else { Stages.PrePie.PythonOutput = TEXT("IPythonScriptPlugin unavailable."); }
-		}
-	}
+		}	}
 
 	static const TCHAR* StatusToString(EPieSmokeStatus Status)
 	{
@@ -7874,11 +7837,6 @@ namespace MonolithEditorPieSmoke
 				TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
 				O->SetBoolField(TEXT("fired"), St.bFired);
 				O->SetNumberField(TEXT("fired_at_seconds"), St.FiredAtSeconds);
-				if (!St.Python.IsEmpty())
-				{
-					O->SetBoolField(TEXT("python_ok"), St.bPythonOk);
-					O->SetStringField(TEXT("python_output"), St.PythonOutput);
-				}
 				if (St.Console.Num() > 0)
 				{
 					O->SetNumberField(TEXT("console_command_count"), St.Console.Num());
@@ -7888,7 +7846,7 @@ namespace MonolithEditorPieSmoke
 			TSharedPtr<FJsonObject> StagesObj = MakeShared<FJsonObject>();
 			auto AddStage = [&](const TCHAR* Key, const FPieSmokeStage& St)
 			{
-				if (!St.Python.IsEmpty() || St.Console.Num() > 0)
+				if (St.Console.Num() > 0)
 				{
 					StagesObj->SetObjectField(Key, StageJson(St));
 				}
@@ -7938,11 +7896,6 @@ namespace MonolithEditorPieSmoke
 				PObj->SetNumberField(TEXT("at_seconds"), Probe.AtSeconds);
 				PObj->SetBoolField(TEXT("fired"), Probe.bFired);
 				PObj->SetNumberField(TEXT("fired_at_seconds"), Probe.FiredAtSeconds);
-				if (!Probe.Python.IsEmpty())
-				{
-					PObj->SetBoolField(TEXT("python_ok"), Probe.bPythonOk);
-					PObj->SetStringField(TEXT("python_output"), Probe.PythonOutput);
-				}
 				if (Probe.Console.Num() > 0)
 				{
 					PObj->SetNumberField(TEXT("console_command_count"), Probe.Console.Num());
@@ -8194,7 +8147,7 @@ FMonolithActionResult FMonolithEditorActions::HandleRunPieSmoke(const TSharedPtr
 	UE_LOG(LogMonolith, Display, TEXT("%s begin (map=%s)"), *Marker,
 		PieWorld ? *PieWorld->GetMapName() : TEXT("<current>"));
 
-	// Optional console / python scripts run once at start (best-effort).
+	// Optional console commands run once at start (best-effort).
 	if (PieWorld)
 	{
 		RunScripts(Params, PieWorld);

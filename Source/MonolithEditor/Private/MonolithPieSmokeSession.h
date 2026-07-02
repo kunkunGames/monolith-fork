@@ -32,22 +32,19 @@ struct FPieSmokeSample
 	bool bFrameUniform = false; // single solid colour (incl. all-black) => not a real render
 };
 
-// #8 staged startup-Python / console hooks. Each stage fires AT MOST ONCE from the
+// #8 staged startup console hooks. Each stage fires AT MOST ONCE from the
 // per-frame observer (reusing the probe firing mechanism), except PrePie which fires
-// synchronously before PIE starts. Empty Python+Console => the stage is inert.
+// synchronously before PIE starts. Empty Console => the stage is inert.
 //   PrePie       : before StartPieInternal (driven synchronously by the handler).
 //   OnBeginPlay  : first observer tick where the PIE world HasBegunPlay.
 //   AfterNTicks  : first observer tick at/after FireAfterTicks observer ticks.
 //   BeforeCapture: first observer tick a clip frame is about to be captured.
 struct FPieSmokeStage
 {
-	FString Python;
 	TArray<FString> Console;
 	int32 FireAfterTicks = 0; // AfterNTicks only
 	bool bFired = false;
 	double FiredAtSeconds = -1.0;
-	bool bPythonOk = false;
-	FString PythonOutput;
 };
 
 // #8 the four staged hooks, keyed by lifecycle moment. Stored on the session; fired by
@@ -58,7 +55,7 @@ struct FPieSmokeStages
 	FPieSmokeStage OnBeginPlay;
 	FPieSmokeStage AfterNTicks;
 	FPieSmokeStage BeforeCapture;
-	bool bAny = false; // true if any stage carries a script (skip observer work otherwise)
+	bool bAny = false; // true if any stage carries console commands (skip observer work otherwise)
 };
 
 // #9 clip runtime-identity snapshot. Cached the first sampled tick a valid AnimInstance
@@ -103,18 +100,15 @@ struct FPieSmokeLogGroups
 	TArray<FString> Warn;
 };
 
-// #4 a delayed in-session probe: fire `Python` (and/or `Console`) against the LIVE
-// PIE world once session-elapsed reaches AtSeconds. Stored per session with a fired
-// flag so the per-frame observer runs each probe exactly once.
+// #4 a delayed in-session probe: fire `Console` commands against the LIVE PIE world
+// once session-elapsed reaches AtSeconds. Stored per session with a fired flag so the
+// per-frame observer runs each probe exactly once.
 struct FPieSmokeProbe
 {
 	double AtSeconds = 0.0;
-	FString Python;
 	TArray<FString> Console;
 	bool bFired = false;
 	double FiredAtSeconds = -1.0;
-	bool bPythonOk = false;
-	FString PythonOutput; // CommandResult / exception trace, when available
 };
 
 // Gap 9: a typed timed provocation fired ONCE against the live PIE world when session

@@ -31,8 +31,6 @@
 #include "Misc/DateTime.h"
 #include "UObject/UnrealType.h"
 
-#include "IPythonScriptPlugin.h" // #4 delayed in-session python probes
-#include "PythonScriptTypes.h"   // FPythonCommandEx
 
 // Phase 9 (OG-E3): PIE-session-scoped profiling (CSV profiler + Unreal Insights trace).
 // Both live in Core; no new module dependency is required (Core is already a public dep of
@@ -264,11 +262,9 @@ namespace
 		return Out;
 	}
 
-	// #8 run a python/console script payload against the LIVE PIE world. Shared core of
-	// both FireProbe (#4) and FireStage (#8) — same call shapes used everywhere
-	// (PC->ConsoleCommand for console, IPythonScriptPlugin::ExecPythonCommandEx for python).
-	void RunScriptPayload(const FString& Python, const TArray<FString>& Console,
-		UWorld* PieWorld, bool& OutPythonOk, FString& OutPythonOutput)
+	// #8 run console command payloads against the LIVE PIE world. Shared core of
+	// both FireProbe (#4) and FireStage (#8).
+	void RunConsolePayload(const TArray<FString>& Console, UWorld* PieWorld)
 	{
 		if (Console.Num() > 0 && PieWorld)
 		{
@@ -280,29 +276,6 @@ namespace
 				else if (GEngine) { GEngine->Exec(PieWorld, *Command); }
 			}
 		}
-
-		if (!Python.IsEmpty())
-		{
-			if (IPythonScriptPlugin* PythonPlugin = IPythonScriptPlugin::Get())
-			{
-				if (PythonPlugin->IsPythonAvailable())
-				{
-					FPythonCommandEx Cmd;
-					Cmd.Command = Python;
-					Cmd.ExecutionMode = EPythonCommandExecutionMode::ExecuteFile;
-					OutPythonOk = PythonPlugin->ExecPythonCommandEx(Cmd);
-					OutPythonOutput = Cmd.CommandResult;
-				}
-				else
-				{
-					OutPythonOutput = TEXT("Python not available in this build.");
-				}
-			}
-			else
-			{
-				OutPythonOutput = TEXT("IPythonScriptPlugin unavailable.");
-			}
-		}
 	}
 
 	// #8 fire one staged hook exactly once and stamp its outcome.
@@ -310,17 +283,16 @@ namespace
 	{
 		Stage.bFired = true;
 		Stage.FiredAtSeconds = ElapsedSeconds;
-		RunScriptPayload(Stage.Python, Stage.Console, PieWorld, Stage.bPythonOk, Stage.PythonOutput);
+		RunConsolePayload(Stage.Console, PieWorld);
 	}
 
 	// #4 fire one delayed probe against the LIVE PIE world. Uses the SAME mechanism the
-	// run_pie_smoke RunScripts start-time path uses (PC->ConsoleCommand for console,
-	// IPythonScriptPlugin::ExecPythonCommandEx for python). Records outcome on the probe.
+	// run_pie_smoke RunScripts start-time path uses (PC->ConsoleCommand for console).
 	void FireProbe(FPieSmokeProbe& Probe, UWorld* PieWorld, double ElapsedSeconds)
 	{
 		Probe.bFired = true;
 		Probe.FiredAtSeconds = ElapsedSeconds;
-		RunScriptPayload(Probe.Python, Probe.Console, PieWorld, Probe.bPythonOk, Probe.PythonOutput);
+		RunConsolePayload(Probe.Console, PieWorld);
 	}
 
 	// ── Gap 9: time-series target resolution + typed provocation dispatch ──
@@ -1182,13 +1154,13 @@ void FPieSmokeSessionManager::AdvanceSession(FPieSmokeSession& Session)
 		// on_begin_play: first observer tick (the observer only reaches AdvanceSession
 		// once HasBegunPlay is true, so this tick already satisfies "begin play").
 		if (!Session.Stages.OnBeginPlay.bFired &&
-			(!Session.Stages.OnBeginPlay.Python.IsEmpty() || Session.Stages.OnBeginPlay.Console.Num() > 0))
+			Session.Stages.OnBeginPlay.Console.Num() > 0)
 		{
 			FireStage(Session.Stages.OnBeginPlay, PieWorld, SampleTime);
 		}
 		// after_n_ticks: fire once observer ticks reach the requested count.
 		if (!Session.Stages.AfterNTicks.bFired &&
-			(!Session.Stages.AfterNTicks.Python.IsEmpty() || Session.Stages.AfterNTicks.Console.Num() > 0) &&
+			Session.Stages.AfterNTicks.Console.Num() > 0 &&
 			Session.ObserverTickCount >= Session.Stages.AfterNTicks.FireAfterTicks)
 		{
 			FireStage(Session.Stages.AfterNTicks, PieWorld, SampleTime);
@@ -1285,7 +1257,7 @@ void FPieSmokeSessionManager::AdvanceSession(FPieSmokeSession& Session)
 		{
 			// #8 before_capture stage fires once, immediately before the first frame grab.
 			if (Session.Stages.bAny && !Session.Stages.BeforeCapture.bFired &&
-				(!Session.Stages.BeforeCapture.Python.IsEmpty() || Session.Stages.BeforeCapture.Console.Num() > 0))
+				Session.Stages.BeforeCapture.Console.Num() > 0)
 			{
 				FireStage(Session.Stages.BeforeCapture, PieWorld, SampleTime);
 			}
