@@ -595,7 +595,7 @@ namespace
 	{
 		FConsoleExecutionOptions Options;
 		Options.bDryRun = ReadBool(Params, TEXT("dry_run"), bDefaultDryRun);
-		Options.bRequireKnownObject = ReadBool(Params, TEXT("require_known_object"), false);
+		Options.bRequireKnownObject = ReadBool(Params, TEXT("require_known_object"), true);
 		ReadStringField(Params, TEXT("target_world"), Options.WorldTarget, TEXT("auto"));
 		Options.WorldTarget = NormalizeWorldTarget(Options.WorldTarget);
 		return Options;
@@ -1562,7 +1562,7 @@ void FMonolithConsoleActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("command"), TEXT("string"), TEXT("Console command string, including optional arguments."))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate and report routing without executing. Default true."), TEXT("true"))
-			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first command token to resolve in IConsoleManager before execution. Default false."), TEXT("false"))
+			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first command token to resolve in IConsoleManager before execution. Default true."), TEXT("true"))
 			.Optional(TEXT("target_world"), TEXT("string"), TEXT("Execution target: auto, pie, or editor. Use pie to require a live game/PIE world. Default auto."), TEXT("auto"))
 			.Build());
 
@@ -1605,8 +1605,8 @@ void FMonolithConsoleActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&FMonolithConsoleActions::ExecuteAndExpect),
 		FParamSchemaBuilder()
 			.Required(TEXT("command"), TEXT("string"), TEXT("Console command string, including optional arguments."))
-			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate and report routing without executing. Default false."), TEXT("false"))
-			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first command token to resolve in IConsoleManager before execution. Default false."), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Validate and report routing without executing. Default true."), TEXT("true"))
+			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first command token to resolve in IConsoleManager before execution. Default true."), TEXT("true"))
 			.Optional(TEXT("target_world"), TEXT("string"), TEXT("Execution target: auto, pie, or editor. Default auto."), TEXT("auto"))
 			.Optional(TEXT("expect_log"), TEXT("string"), TEXT("Single expected log substring."))
 			.Optional(TEXT("expect_logs"), TEXT("array"), TEXT("Expected log substrings or objects {pattern, category?, min_count?, max_count?}."))
@@ -1621,8 +1621,8 @@ void FMonolithConsoleActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&FMonolithConsoleActions::RunSequence),
 		FParamSchemaBuilder()
 			.Required(TEXT("commands"), TEXT("array"), TEXT("Array of command strings or step objects {command, dry_run?, require_known_object?, target_world?, expect_log?, expect_logs?, reject_log?, reject_logs?, settle_ms?, log_limit?, capture?, capture_command?, capture_wait_ms?, capture_output_path?}."))
-			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Default dry-run value for steps. Default false."), TEXT("false"))
-			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Default known-object guard for steps. Default false."), TEXT("false"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Default dry-run value for steps. Default true."), TEXT("true"))
+			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Default known-object guard for steps. Default true."), TEXT("true"))
 			.Optional(TEXT("target_world"), TEXT("string"), TEXT("Default execution target: auto, pie, or editor. Default auto."), TEXT("auto"))
 			.Optional(TEXT("abort_on_failure"), TEXT("boolean"), TEXT("Stop after the first failed execution or expectation. Default true."), TEXT("true"))
 			.Optional(TEXT("settle_ms"), TEXT("integer"), TEXT("Default milliseconds to wait after each command. Default 100, max 5000."), TEXT("100"))
@@ -1637,7 +1637,7 @@ void FMonolithConsoleActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("command"), TEXT("string"), TEXT("Console command to execute before capture."))
 			.Optional(TEXT("capture_command"), TEXT("string"), TEXT("Console screenshot command. Default HighResShot 1920x1080."), TEXT("HighResShot 1920x1080"))
 			.Optional(TEXT("output_path"), TEXT("string"), TEXT("Optional path to copy the captured PNG to after the engine writes it. Relative paths resolve under the project root."))
-			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first token of the main command to resolve in IConsoleManager. Default false."), TEXT("false"))
+			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Require the first token of the main command to resolve in IConsoleManager. Default true."), TEXT("true"))
 			.Optional(TEXT("target_world"), TEXT("string"), TEXT("Execution target: auto, pie, or editor. Default auto."), TEXT("auto"))
 			.Optional(TEXT("settle_ms"), TEXT("integer"), TEXT("Milliseconds to wait between command and capture. Default 250, max 5000."), TEXT("250"))
 			.Optional(TEXT("capture_wait_ms"), TEXT("integer"), TEXT("Milliseconds to wait for the screenshot file after capture. Default 120000, max 240000."), TEXT("120000"))
@@ -1665,7 +1665,7 @@ void FMonolithConsoleActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("cvars"), TEXT("object"), TEXT("Map of console variable name to temporary string/number/bool value."))
 			.Required(TEXT("commands"), TEXT("array"), TEXT("Command strings or step objects to run while the CVar values are applied."))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Default dry-run value for command steps. Default false."), TEXT("false"))
-			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Default known-object guard for command steps. Default false."), TEXT("false"))
+			.Optional(TEXT("require_known_object"), TEXT("boolean"), TEXT("Default known-object guard for command steps. Default true."), TEXT("true"))
 			.Optional(TEXT("target_world"), TEXT("string"), TEXT("Default execution target: auto, pie, or editor. Default auto."), TEXT("auto"))
 			.Optional(TEXT("abort_on_failure"), TEXT("boolean"), TEXT("Stop command sequence after the first failed step. Default true."), TEXT("true"))
 			.Optional(TEXT("settle_ms"), TEXT("integer"), TEXT("Default milliseconds to wait after each command. Default 100, max 5000."), TEXT("100"))
@@ -2251,7 +2251,7 @@ FMonolithActionResult FMonolithConsoleActions::ExecuteAndExpect(const TSharedPtr
 		return FMonolithActionResult::Error(TEXT("Missing required field: command"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	FConsoleExecutionOptions Options = ReadExecutionOptions(Params, /*bDefaultDryRun=*/false);
+	FConsoleExecutionOptions Options = ReadExecutionOptions(Params, /*bDefaultDryRun=*/true);
 	FString TargetError;
 	if (!ValidateWorldTarget(Options.WorldTarget, TargetError))
 	{
@@ -2323,7 +2323,7 @@ FMonolithActionResult FMonolithConsoleActions::RunSequence(const TSharedPtr<FJso
 		return FMonolithActionResult::Error(StepsError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	FConsoleExecutionOptions Defaults = ReadExecutionOptions(Params, /*bDefaultDryRun=*/false);
+	FConsoleExecutionOptions Defaults = ReadExecutionOptions(Params, /*bDefaultDryRun=*/true);
 	FString TargetError;
 	if (!ValidateWorldTarget(Defaults.WorldTarget, TargetError))
 	{
@@ -2641,7 +2641,7 @@ FMonolithActionResult FMonolithConsoleActions::ExecuteAndCapture(const TSharedPt
 		return FMonolithActionResult::Error(TEXT("capture_command must be a non-empty string when provided."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	FConsoleExecutionOptions Options = ReadExecutionOptions(Params, /*bDefaultDryRun=*/false);
+	FConsoleExecutionOptions Options = ReadExecutionOptions(Params, /*bDefaultDryRun=*/true);
 	Options.bDryRun = false;
 	FString TargetError;
 	if (!ValidateWorldTarget(Options.WorldTarget, TargetError))
