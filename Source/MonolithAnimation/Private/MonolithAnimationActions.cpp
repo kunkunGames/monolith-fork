@@ -6330,6 +6330,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetRetargeterInfo(const T
 	// by-value on write) does not apply here because we only read the live settings,
 	// never copy-mutate-set.
 	TArray<TSharedPtr<FJsonValue>> OpsArr;
+	OpsArr.Reserve(NumOps);
 	for (int32 OpIdx = 0; OpIdx < NumOps; ++OpIdx)
 	{
 		TSharedPtr<FJsonObject> OpObj = MakeShared<FJsonObject>();
