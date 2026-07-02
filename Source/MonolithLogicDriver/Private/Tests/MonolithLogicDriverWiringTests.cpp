@@ -229,4 +229,80 @@ bool FMonolithLogicDriverRenameNodeFunctionalTest::RunTest(const FString& Parame
 
 	return true;
 }
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.MoveNodeFunctional
+// Validates the functional 'happy path' for moving a node in a state machine graph.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverMoveNodeFunctionalTest, "Monolith.LogicDriverKeeper.MoveNodeFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverMoveNodeFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("move_node")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_MoveNodeTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		if (!CreateResult.bSuccess)
+		{
+			TestTrue(TEXT("create_state_machine should succeed"), CreateResult.bSuccess);
+			return true;
+		}
+	}
+
+	// 2. Add State to move
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("StateToMove"));
+		AddStateParams->SetNumberField(TEXT("position_x"), 0);
+		AddStateParams->SetNumberField(TEXT("position_y"), 0);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	// 3. Move the State
+	if (!NodeGuid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> MoveParams = MakeShared<FJsonObject>();
+		MoveParams->SetStringField(TEXT("asset_path"), AssetPath);
+		MoveParams->SetStringField(TEXT("node_guid"), NodeGuid);
+		MoveParams->SetNumberField(TEXT("position_x"), 150);
+		MoveParams->SetNumberField(TEXT("position_y"), 250);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("move_node"), MoveParams);
+		TestTrue(TEXT("move_node should succeed for valid node"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			FString ActionName;
+			Result.Payload->TryGetStringField(TEXT("action"), ActionName);
+			TestEqual(TEXT("Action should be move_node"), ActionName, TEXT("move_node"));
+
+			double NewX = 0;
+			Result.Payload->TryGetNumberField(TEXT("new_x"), NewX);
+			TestEqual(TEXT("New X should match"), NewX, 150.0);
+
+			double NewY = 0;
+			Result.Payload->TryGetNumberField(TEXT("new_y"), NewY);
+			TestEqual(TEXT("New Y should match"), NewY, 250.0);
+		}
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
