@@ -1347,8 +1347,16 @@ FMonolithActionResult FMonolithAbpGraphSurgeryActions::HandleAddEvaluateChooserN
 
 	double TempVal;
 	int32 PosX = 0, PosY = 0;
-	if (Params->TryGetNumberField(TEXT("position_x"), TempVal)) PosX = static_cast<int32>(TempVal);
-	if (Params->TryGetNumberField(TEXT("position_y"), TempVal)) PosY = static_cast<int32>(TempVal);
+	if (Params->HasField(TEXT("position_x")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_x"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'position_x' must be a number"));
+		PosX = static_cast<int32>(TempVal);
+	}
+	if (Params->HasField(TEXT("position_y")))
+	{
+		if (!Params->TryGetNumberField(TEXT("position_y"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'position_y' must be a number"));
+		PosY = static_cast<int32>(TempVal);
+	}
 
 	UAnimBlueprint* ABP = FMonolithAssetUtils::LoadAssetByPath<UAnimBlueprint>(AbpPath);
 	if (!ABP)

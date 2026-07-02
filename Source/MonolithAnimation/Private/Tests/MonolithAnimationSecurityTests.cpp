@@ -258,4 +258,22 @@ bool FMonolithValidateChooserParamGuardTest::RunTest(const FString& Parameters)
 }
 #endif // WITH_CHOOSER
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimationAddEvaluateChooserNodeParamGuardTest, "Monolith.ParamGuard.Animation.AddEvaluateChooserNodeRejectsMalformedPosition", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAnimationAddEvaluateChooserNodeParamGuardTest::RunTest(const FString& Parameters)
+{
+	FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry::Get());
+
+	TSharedPtr<FJsonObject> ActionParams = MakeShared<FJsonObject>();
+	ActionParams->SetStringField(TEXT("abp_path"), TEXT("/Game/Tests/Monolith/TestABP"));
+	ActionParams->SetStringField(TEXT("chooser_path"), TEXT("/Game/Tests/Monolith/TestChooser"));
+	ActionParams->SetStringField(TEXT("position_x"), TEXT("should_be_number"));
+
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("animation"), TEXT("add_evaluate_chooser_node"), ActionParams);
+
+	TestFalse(TEXT("Malformed position_x should reject action"), Result.bSuccess);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
