@@ -16,6 +16,7 @@
 #include "EdGraph/EdGraphNode.h"
 #include "Misc/FileHelper.h"
 #include "HAL/PlatformFileManager.h"
+#include "Misc/Char.h"
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,6 +163,31 @@ static USCS_Node* AddComponentToBlueprint(UBlueprint* BP, UClass* ComponentClass
 
 	BP->SimpleConstructionScript->AddNode(NewNode);
 	return NewNode;
+}
+
+/** Ensure user-provided identifiers are safe for C++ symbol and file generation. */
+static bool IsSafeIdentifier(const FString& Value)
+{
+	if (Value.IsEmpty())
+	{
+		return false;
+	}
+
+	if (!(FChar::IsAlpha(Value[0]) || Value[0] == TCHAR('_')))
+	{
+		return false;
+	}
+
+	for (int32 Index = 1; Index < Value.Len(); ++Index)
+	{
+		const TCHAR Ch = Value[Index];
+		if (!(FChar::IsAlnum(Ch) || Ch == TCHAR('_')))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -726,6 +752,23 @@ FMonolithActionResult FMonolithGASInputActions::HandleScaffoldInputBindingCompon
 			return FMonolithActionResult::Error(ParamError);
 		}
 		if (BindingMode.IsEmpty()) BindingMode = TEXT("gameplay_tag");
+	}
+
+	if (!IsSafeIdentifier(ComponentName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid input_config.component_name. Use a C++ identifier (letters, numbers, underscore; must not start with a number)."));
+	}
+
+	if (!IsSafeIdentifier(ModuleName))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid input_config.module_name. Use a module identifier (letters, numbers, underscore; must not start with a number)."));
+	}
+
+	if (BindingMode != TEXT("input_id") &&
+		BindingMode != TEXT("gameplay_tag") &&
+		BindingMode != TEXT("enhanced_input"))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid input_config.binding_mode. Must be one of: input_id, gameplay_tag, enhanced_input."));
 	}
 
 	FString ClassName = FString::Printf(TEXT("U%s"), *ComponentName);
