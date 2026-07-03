@@ -1634,9 +1634,9 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddBlendSpaceSample(const
 FMonolithActionResult FMonolithAnimationActions::HandleEditBlendSpaceSample(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SampleIndex = static_cast<int32>(Params->GetNumberField(TEXT("sample_index")));
-	float X = static_cast<float>(Params->GetNumberField(TEXT("x")));
-	float Y = static_cast<float>(Params->GetNumberField(TEXT("y")));
+	int32 SampleIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("sample_index"), TempVal)) SampleIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'sample_index' must be a number"));
+	float X = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("x"), TempVal)) X = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'x' must be a number"));
+	float Y = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("y"), TempVal)) Y = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'y' must be a number"));
 	FString AnimPath;
 	if (Params->HasField(TEXT("anim_path")) && !Params->TryGetStringField(TEXT("anim_path"), AnimPath)) return FMonolithActionResult::Error(TEXT("Parameter \'anim_path\' must be a string"));
 
@@ -1679,7 +1679,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleEditBlendSpaceSample(cons
 FMonolithActionResult FMonolithAnimationActions::HandleDeleteBlendSpaceSample(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SampleIndex = static_cast<int32>(Params->GetNumberField(TEXT("sample_index")));
+	int32 SampleIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("sample_index"), TempVal)) SampleIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'sample_index' must be a number"));
 
 	UBlendSpace* BS = FMonolithAssetUtils::LoadAssetByPath<UBlendSpace>(AssetPath);
 	if (!BS) return FMonolithActionResult::Error(FString::Printf(TEXT("BlendSpace not found: %s"), *AssetPath));
@@ -1789,8 +1789,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceInterpolatio
 FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTime(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = static_cast<int32>(Params->GetNumberField(TEXT("notify_index")));
-	float NewTime = static_cast<float>(Params->GetNumberField(TEXT("new_time")));
+	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
+	float NewTime = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("new_time"), TempVal)) NewTime = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'new_time' must be a number"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -1813,8 +1813,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTime(const TShar
 FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyDuration(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = static_cast<int32>(Params->GetNumberField(TEXT("notify_index")));
-	float NewDuration = static_cast<float>(Params->GetNumberField(TEXT("new_duration")));
+	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
+	float NewDuration = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("new_duration"), TempVal)) NewDuration = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'new_duration' must be a number"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -3692,7 +3692,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotify(const TSharedPt
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NotifyClassName = Params->GetStringField(TEXT("notify_class"));
-	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
+	float Time = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("time"), TempVal)) Time = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'time' must be a number"));
 	FString TrackName = TEXT("1");
 	if (Params->HasField(TEXT("track_name")) && !Params->TryGetStringField(TEXT("track_name"), TrackName)) return FMonolithActionResult::Error(TEXT("Parameter \'track_name\' must be a string"));
 
@@ -3735,8 +3735,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotifyState(const TSha
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString NotifyClassName = Params->GetStringField(TEXT("notify_class"));
-	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
-	float Duration = static_cast<float>(Params->GetNumberField(TEXT("duration")));
+	float Time = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("time"), TempVal)) Time = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'time' must be a number"));
+	float Duration = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("duration"), TempVal)) Duration = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'duration' must be a number"));
 	FString TrackName = TEXT("1");
 	if (Params->HasField(TEXT("track_name")) && !Params->TryGetStringField(TEXT("track_name"), TrackName)) return FMonolithActionResult::Error(TEXT("Parameter \'track_name\' must be a string"));
 
@@ -3783,7 +3783,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotifyState(const TSha
 FMonolithActionResult FMonolithAnimationActions::HandleRemoveNotify(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = static_cast<int32>(Params->GetNumberField(TEXT("notify_index")));
+	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -3812,8 +3812,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveNotify(const TShare
 FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTrack(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = static_cast<int32>(Params->GetNumberField(TEXT("notify_index")));
-	int32 TrackIndex = static_cast<int32>(Params->GetNumberField(TEXT("track_index")));
+	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
+	int32 TrackIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("track_index"), TempVal)) TrackIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'track_index' must be a number"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -4826,7 +4826,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageSlot(const TSha
 FMonolithActionResult FMonolithAnimationActions::HandleSetMontageSlot(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SlotIndex = static_cast<int32>(Params->GetNumberField(TEXT("slot_index")));
+	int32 SlotIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("slot_index"), TempVal)) SlotIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"));
 	FString SlotName = Params->GetStringField(TEXT("slot_name"));
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
@@ -5248,7 +5248,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddCompositeSegment(const
 FMonolithActionResult FMonolithAnimationActions::HandleRemoveCompositeSegment(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 SegmentIndex = static_cast<int32>(Params->GetNumberField(TEXT("segment_index")));
+	int32 SegmentIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("segment_index"), TempVal)) SegmentIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'segment_index' must be a number"));
 
 	UAnimComposite* Composite = FMonolithAssetUtils::LoadAssetByPath<UAnimComposite>(AssetPath);
 	if (!Composite) return FMonolithActionResult::Error(FString::Printf(TEXT("AnimComposite not found: %s"), *AssetPath));
@@ -9849,7 +9849,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddSyncMarker(const TShar
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 	FString MarkerName = Params->GetStringField(TEXT("marker_name"));
-	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
+	float Time = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("time"), TempVal)) Time = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'time' must be a number"));
 	int32 TrackIndex = 0;
 	if (Params->HasField(TEXT("track_index")))
 	{
@@ -10489,7 +10489,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBulkAddNotify(const TShar
 		return FMonolithActionResult::Error(TEXT("asset_paths array is empty"));
 
 	FString NotifyClassName = Params->GetStringField(TEXT("notify_class"));
-	float Time = static_cast<float>(Params->GetNumberField(TEXT("time")));
+	float Time = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("time"), TempVal)) Time = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'time' must be a number"));
 	FString TimeMode = TEXT("absolute");
 	if (Params->HasField(TEXT("time_mode")) && !Params->TryGetStringField(TEXT("time_mode"), TimeMode)) return FMonolithActionResult::Error(TEXT("Parameter \'time_mode\' must be a string"));
 	bool bIsNormalized = TimeMode.Equals(TEXT("normalized"), ESearchCase::IgnoreCase);
@@ -11028,7 +11028,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleBuildSequenceFromPoses(co
 FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyProperties(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = static_cast<int32>(Params->GetNumberField(TEXT("notify_index")));
+	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
