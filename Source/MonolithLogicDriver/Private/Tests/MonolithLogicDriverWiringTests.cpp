@@ -251,9 +251,9 @@ bool FMonolithLogicDriverMoveNodeFunctionalTest::RunTest(const FString& Paramete
 		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
 		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
 
+		TestTrue(TEXT("create_state_machine should succeed"), CreateResult.bSuccess);
 		if (!CreateResult.bSuccess)
 		{
-			TestTrue(TEXT("create_state_machine should succeed"), CreateResult.bSuccess);
 			return true;
 		}
 	}
