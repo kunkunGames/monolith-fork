@@ -1286,6 +1286,7 @@ namespace MonolithUI::WidgetCopy
         }
 
         TArray<TSharedPtr<FJsonValue>> ClassRows;
+        ClassRows.Reserve(FMath::Min(Plan.SourceSubtree.Num(), Plan.ResolvedClasses.Num()));
         for (int32 Index = 0; Index < Plan.SourceSubtree.Num() && Index < Plan.ResolvedClasses.Num(); ++Index)
         {
             UWidget* SourceWidget = Plan.SourceSubtree[Index];
@@ -1411,6 +1412,7 @@ FMonolithActionResult FMonolithUIWidgetCopyActions::HandleCopyWidgetSubtreeWithC
     }
 
     TArray<TSharedPtr<FJsonValue>> PlanRows;
+    PlanRows.Reserve(Plans.Num());
     int32 PlannedCopiedWidgets = 0;
     int32 PlannedRemappedWidgets = 0;
     int32 SkippedRootCount = 0;
@@ -1461,6 +1463,7 @@ FMonolithActionResult FMonolithUIWidgetCopyActions::HandleCopyWidgetSubtreeWithC
     BuildReplacementObjects(SourceBlueprint, DestinationBlueprint, Options, ReplacementObjects);
 
     TArray<TSharedPtr<FJsonValue>> CopiedRows;
+    CopiedRows.Reserve(PlannedCopiedWidgets);
     int32 SoftReferenceFixups = 0;
     bool bChanged = false;
 
