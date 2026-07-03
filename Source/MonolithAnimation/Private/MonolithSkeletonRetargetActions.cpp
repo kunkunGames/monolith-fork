@@ -264,6 +264,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslation
 	const TArray<TSharedPtr<FJsonValue>>* EntriesArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("entries"), EntriesArr))
 	{
+		ResolvedEntries.Reserve(EntriesArr->Num());
 		for (const TSharedPtr<FJsonValue>& Val : *EntriesArr)
 		{
 			const TSharedPtr<FJsonObject>* EntryObj = nullptr;
@@ -330,6 +331,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleSetBoneTranslation
 	}
 
 	TArray<TSharedPtr<FJsonValue>> AppliedArr;
+	AppliedArr.Reserve(ResolvedEntries.Num());
 	for (const FBoneModeEntry& Entry : ResolvedEntries)
 	{
 		Skeleton->SetBoneTranslationRetargetingMode(Entry.BoneIndex, Entry.Mode, bRecursive);
@@ -379,6 +381,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetBoneTranslation
 	const TArray<TSharedPtr<FJsonValue>>* BonesArr = nullptr;
 	if (Params->TryGetArrayField(TEXT("bones"), BonesArr))
 	{
+		RequestedBones.Reserve(BonesArr->Num());
 		for (const TSharedPtr<FJsonValue>& Val : *BonesArr)
 		{
 			RequestedBones.Add(Val->AsString());
@@ -387,6 +390,15 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetBoneTranslation
 
 	TArray<TSharedPtr<FJsonValue>> EntriesArr;
 	TArray<FString> NotFound;
+
+	if (RequestedBones.Num() > 0)
+	{
+		EntriesArr.Reserve(RequestedBones.Num());
+	}
+	else
+	{
+		EntriesArr.Reserve(NumBones);
+	}
 
 	auto EmitBone = [&](int32 BoneIndex)
 	{
@@ -429,6 +441,7 @@ FMonolithActionResult FMonolithSkeletonRetargetActions::HandleGetBoneTranslation
 	if (NotFound.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
+		NotFoundArr.Reserve(NotFound.Num());
 		for (const FString& NF : NotFound)
 		{
 			NotFoundArr.Add(MakeShared<FJsonValueString>(NF));
