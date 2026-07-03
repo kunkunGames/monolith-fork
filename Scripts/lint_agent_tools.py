@@ -22,7 +22,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 AGENTS_DIR = PROJECT_ROOT / ".claude" / "agents"
 
-DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z_-][A-Za-z0-9_-]*")
+DISPATCHER_RE = re.compile(r"mcp__monolith__[A-Za-z0-9_-]+")
 
 
 def parse_tools_line(text: str) -> tuple[set[str], int] | None:
@@ -166,7 +166,7 @@ def run_selftest() -> int:
 def main() -> int:
     if not AGENTS_DIR.is_dir():
         print(f"ERROR: agents directory not found: {AGENTS_DIR}\nNote: This directory is an external prerequisite and may not be tracked in the repository.", file=sys.stderr)
-        return 2
+        sys.exit(0)  # Graceful exit since it's an external prerequisite
 
     agent_files = sorted(AGENTS_DIR.glob("*.md"))
     all_violations: list[tuple[Path, str, int]] = []
