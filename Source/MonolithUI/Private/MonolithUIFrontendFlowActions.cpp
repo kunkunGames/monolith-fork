@@ -78,13 +78,19 @@ namespace
     static bool ParseStringArrayField(const TSharedPtr<FJsonObject>& Obj, const TCHAR* FieldName, TArray<FString>& OutValues, FString& OutError)
     {
         OutValues.Reset();
-        if (!Obj.IsValid() || !Obj->HasField(FieldName))
+        if (!Obj.IsValid())
+        {
+            return true;
+        }
+
+        TSharedPtr<FJsonValue> FieldValue = Obj->TryGetField(FieldName);
+        if (!FieldValue.IsValid() || FieldValue->IsNull())
         {
             return true;
         }
 
         const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-        if (!Obj->TryGetArrayField(FieldName, Values) || !Values)
+        if (!FieldValue->TryGetArray(Values) || !Values)
         {
             OutError = FString::Printf(TEXT("%s must be an array of strings."), FieldName);
             return false;
@@ -110,13 +116,19 @@ namespace
     static bool ParseStringMapField(const TSharedPtr<FJsonObject>& Obj, const TCHAR* FieldName, TMap<FString, FString>& OutMap, FString& OutError)
     {
         OutMap.Reset();
-        if (!Obj.IsValid() || !Obj->HasField(FieldName))
+        if (!Obj.IsValid())
+        {
+            return true;
+        }
+
+        TSharedPtr<FJsonValue> FieldValue = Obj->TryGetField(FieldName);
+        if (!FieldValue.IsValid() || FieldValue->IsNull())
         {
             return true;
         }
 
         const TSharedPtr<FJsonObject>* MapObj = nullptr;
-        if (!Obj->TryGetObjectField(FieldName, MapObj) || !MapObj)
+        if (!FieldValue->TryGetObject(MapObj) || !MapObj)
         {
             OutError = FString::Printf(TEXT("%s must be an object mapping strings to strings."), FieldName);
             return false;
@@ -138,13 +150,19 @@ namespace
     static bool ParseLayerSpecs(const TSharedPtr<FJsonObject>& Params, TArray<FFrontendLayerSpec>& OutSpecs, FString& OutError)
     {
         OutSpecs.Reset();
-        if (!Params.IsValid() || !Params->HasField(TEXT("required_layers")))
+        if (!Params.IsValid())
+        {
+            return true;
+        }
+
+        TSharedPtr<FJsonValue> LayersField = Params->TryGetField(TEXT("required_layers"));
+        if (!LayersField.IsValid() || LayersField->IsNull())
         {
             return true;
         }
 
         const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-        if (!Params->TryGetArrayField(TEXT("required_layers"), Values) || !Values)
+        if (!LayersField->TryGetArray(Values) || !Values)
         {
             OutError = TEXT("required_layers must be an array of strings or {layer_tag, widget_name} objects.");
             return false;
@@ -165,12 +183,24 @@ namespace
                     OutError = TEXT("required_layers entries must be strings or objects.");
                     return false;
                 }
-                if (!Obj->TryGetStringField(TEXT("layer_tag"), Spec.LayerTag) && !Obj->TryGetStringField(TEXT("tag"), Spec.LayerTag))
+
+                TSharedPtr<FJsonValue> LayerTagField = Obj->TryGetField(TEXT("layer_tag"));
+                TSharedPtr<FJsonValue> TagField = Obj->TryGetField(TEXT("tag"));
+                bool bHasLayerTag = LayerTagField.IsValid() && !LayerTagField->IsNull() && LayerTagField->TryGetString(Spec.LayerTag);
+                bool bHasTag = TagField.IsValid() && !TagField->IsNull() && TagField->TryGetString(Spec.LayerTag);
+                if (!bHasLayerTag && !bHasTag)
                 {
                     OutError = TEXT("required_layers object entries require layer_tag.");
                     return false;
                 }
-                Obj->TryGetStringField(TEXT("widget_name"), Spec.WidgetName);
+
+                if (TSharedPtr<FJsonValue> WidgetNameField = Obj->TryGetField(TEXT("widget_name")))
+                {
+                    if (WidgetNameField.IsValid() && !WidgetNameField->IsNull())
+                    {
+                        WidgetNameField->TryGetString(Spec.WidgetName);
+                    }
+                }
                 Spec.LayerTag.TrimStartAndEndInline();
                 Spec.WidgetName.TrimStartAndEndInline();
             }
@@ -188,13 +218,19 @@ namespace
     static bool ParseScreenSpecs(const TSharedPtr<FJsonObject>& Params, TArray<FFrontendScreenSpec>& OutSpecs, FString& OutError)
     {
         OutSpecs.Reset();
-        if (!Params.IsValid() || !Params->HasField(TEXT("screens")))
+        if (!Params.IsValid())
+        {
+            return true;
+        }
+
+        TSharedPtr<FJsonValue> ScreensField = Params->TryGetField(TEXT("screens"));
+        if (!ScreensField.IsValid() || ScreensField->IsNull())
         {
             return true;
         }
 
         const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-        if (!Params->TryGetArrayField(TEXT("screens"), Values) || !Values)
+        if (!ScreensField->TryGetArray(Values) || !Values)
         {
             OutError = TEXT("screens must be an array of screen spec objects.");
             return false;
@@ -210,15 +246,42 @@ namespace
             }
 
             FFrontendScreenSpec Spec;
-            if (!Obj->TryGetStringField(TEXT("asset_path"), Spec.AssetPath))
+
+            TSharedPtr<FJsonValue> AssetPathField = Obj->TryGetField(TEXT("asset_path"));
+            if (!AssetPathField.IsValid() || AssetPathField->IsNull() || !AssetPathField->TryGetString(Spec.AssetPath))
             {
                 OutError = TEXT("screens entries require asset_path.");
                 return false;
             }
-            Obj->TryGetStringField(TEXT("role"), Spec.Role);
-            Obj->TryGetStringField(TEXT("expected_parent_class"), Spec.ExpectedParentClass);
-            Obj->TryGetStringField(TEXT("desired_focus_widget"), Spec.DesiredFocusWidget);
-            Obj->TryGetBoolField(TEXT("require_common_activatable"), Spec.bRequireCommonActivatable);
+
+            if (TSharedPtr<FJsonValue> RoleField = Obj->TryGetField(TEXT("role")))
+            {
+                if (RoleField.IsValid() && !RoleField->IsNull())
+                {
+                    RoleField->TryGetString(Spec.Role);
+                }
+            }
+            if (TSharedPtr<FJsonValue> ExpectedParentClassField = Obj->TryGetField(TEXT("expected_parent_class")))
+            {
+                if (ExpectedParentClassField.IsValid() && !ExpectedParentClassField->IsNull())
+                {
+                    ExpectedParentClassField->TryGetString(Spec.ExpectedParentClass);
+                }
+            }
+            if (TSharedPtr<FJsonValue> DesiredFocusWidgetField = Obj->TryGetField(TEXT("desired_focus_widget")))
+            {
+                if (DesiredFocusWidgetField.IsValid() && !DesiredFocusWidgetField->IsNull())
+                {
+                    DesiredFocusWidgetField->TryGetString(Spec.DesiredFocusWidget);
+                }
+            }
+            if (TSharedPtr<FJsonValue> RequireCommonActivatableField = Obj->TryGetField(TEXT("require_common_activatable")))
+            {
+                if (RequireCommonActivatableField.IsValid() && !RequireCommonActivatableField->IsNull())
+                {
+                    RequireCommonActivatableField->TryGetBool(Spec.bRequireCommonActivatable);
+                }
+            }
 
             Spec.AssetPath.TrimStartAndEndInline();
             Spec.Role.TrimStartAndEndInline();
