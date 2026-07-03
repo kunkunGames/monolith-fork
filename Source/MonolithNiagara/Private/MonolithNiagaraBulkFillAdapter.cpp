@@ -77,13 +77,6 @@ namespace MonolithNiagaraBulkFillInternal
 	// targets where the override store path is needed.
 	static FDryRunReport HandleDataInterfaceArray(const FBulkFillSpec& Spec)
 	{
-		UObject* Asset = ResolveAsset(Spec.TargetAsset);
-		if (!Asset)
-		{
-			return MakeResolveFailureReport(FString::Printf(
-				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
-		}
-
 		FString UserParam;
 		if (!Spec.Tree->TryGetStringField(TEXT("user_param"), UserParam))
 		{
@@ -109,6 +102,13 @@ namespace MonolithNiagaraBulkFillInternal
 		{
 			return MakeResolveFailureReport(
 				TEXT("niagara adapter: DataInterfaceArray requires 'rows' array"));
+		}
+
+		UObject* Asset = ResolveAsset(Spec.TargetAsset);
+		if (!Asset)
+		{
+			return MakeResolveFailureReport(FString::Printf(
+				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
 		}
 
 		// Wrap as walker input — walker writes into Asset's UPROPERTY whose name
@@ -153,13 +153,6 @@ namespace MonolithNiagaraBulkFillInternal
 	// the engine's standard ImportText grammar.
 	static FDryRunReport HandleCurve(const FBulkFillSpec& Spec)
 	{
-		UObject* Asset = ResolveAsset(Spec.TargetAsset);
-		if (!Asset)
-		{
-			return MakeResolveFailureReport(FString::Printf(
-				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
-		}
-
 		FString CurveName;
 		if (!Spec.Tree->TryGetStringField(TEXT("curve_name"), CurveName))
 		{
@@ -176,6 +169,13 @@ namespace MonolithNiagaraBulkFillInternal
 		{
 			return MakeResolveFailureReport(
 				TEXT("niagara adapter: Curve fill_kind requires 'keys' array (FRichCurveKey shape)"));
+		}
+
+		UObject* Asset = ResolveAsset(Spec.TargetAsset);
+		if (!Asset)
+		{
+			return MakeResolveFailureReport(FString::Printf(
+				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
 		}
 
 		// Map keys into a single-key root and route through the walker. The walker
@@ -219,13 +219,6 @@ namespace MonolithNiagaraBulkFillInternal
 	// rejected per design.
 	static FDryRunReport HandleParameterOverrides(const FBulkFillSpec& Spec)
 	{
-		UObject* Asset = ResolveAsset(Spec.TargetAsset);
-		if (!Asset)
-		{
-			return MakeResolveFailureReport(FString::Printf(
-				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
-		}
-
 		const TSharedPtr<FJsonValue> ParamsVal = Spec.Tree->TryGetField(TEXT("parameters"));
 		if (!ParamsVal.IsValid() || ParamsVal->Type != EJson::Object)
 		{
@@ -248,6 +241,13 @@ namespace MonolithNiagaraBulkFillInternal
 						*MonolithKeyToString(KV.Key)));
 				}
 			}
+		}
+
+		UObject* Asset = ResolveAsset(Spec.TargetAsset);
+		if (!Asset)
+		{
+			return MakeResolveFailureReport(FString::Printf(
+				TEXT("niagara adapter: asset not found at '%s'"), *Spec.TargetAsset));
 		}
 
 		FDryRunReport Report;

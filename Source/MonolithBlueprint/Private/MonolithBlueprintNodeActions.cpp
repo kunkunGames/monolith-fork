@@ -154,6 +154,56 @@ static const TMap<FString, FNodeAlias>& GetNodeAliases()
 	return Aliases;
 }
 
+static bool TryGetResolveNodeReliableParam(const TSharedPtr<FJsonObject>& Params, bool& bOutReliable, FString& OutError)
+{
+	bOutReliable = false;
+	OutError.Reset();
+
+	if (!Params.IsValid())
+	{
+		return true;
+	}
+
+	const TSharedPtr<FJsonValue> ReliableValue = Params->TryGetField(TEXT("reliable"));
+	if (!ReliableValue.IsValid() || ReliableValue->IsNull())
+	{
+		return true;
+	}
+
+	if (ReliableValue->Type == EJson::Boolean && ReliableValue->TryGetBool(bOutReliable))
+	{
+		return true;
+	}
+
+	FString ReliableLiteral;
+	if (ReliableValue->Type == EJson::String && ReliableValue->TryGetString(ReliableLiteral))
+	{
+		ReliableLiteral.TrimStartAndEndInline();
+		const bool bTruthyLiteral =
+			ReliableLiteral.Equals(TEXT("true"), ESearchCase::IgnoreCase) ||
+			ReliableLiteral == TEXT("1") ||
+			ReliableLiteral.Equals(TEXT("yes"), ESearchCase::IgnoreCase);
+		if (bTruthyLiteral)
+		{
+			bOutReliable = true;
+			return true;
+		}
+
+		const bool bFalsyLiteral =
+			ReliableLiteral.Equals(TEXT("false"), ESearchCase::IgnoreCase) ||
+			ReliableLiteral == TEXT("0") ||
+			ReliableLiteral.Equals(TEXT("no"), ESearchCase::IgnoreCase);
+		if (bFalsyLiteral)
+		{
+			bOutReliable = false;
+			return true;
+		}
+	}
+
+	OutError = TEXT("resolve_node reliable must be a boolean or one of the string literals: true, false, 1, 0, yes, no");
+	return false;
+}
+
 static bool HasAliasDefaultParam(const FNodeAlias& Alias, const FString& FieldName)
 {
 	const FString* Value = Alias.DefaultParams.Find(FieldName);
@@ -817,7 +867,7 @@ void FMonolithBlueprintNodeActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("target_class"),           TEXT("string"), TEXT("Class to search for the function (CallFunction) or delegate (AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate)"))
 			.Optional(TEXT("variable_name"),          TEXT("string"), TEXT("Variable name hint for VariableGet/VariableSet (uses wildcard if omitted)"))
 			.Optional(TEXT("replication"),            TEXT("string"), TEXT("Replication mode for CustomEvent: none, multicast, server, client"))
-			.Optional(TEXT("reliable"),               TEXT("bool"),   TEXT("Use reliable replication for CustomEvent"))
+			.Optional(TEXT("reliable"),               TEXT("bool|string"), TEXT("Use reliable replication for CustomEvent; accepts boolean or true/false/1/0/yes/no string literal for dry-run compatibility"))
 			.OptionalAssetPath(TEXT("asset_path"),             TEXT("Blueprint asset path (required for ComponentBoundEvent and AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate self-context dry-runs)"))
 			.Optional(TEXT("component_name"),         TEXT("string"), TEXT("Component variable name for ComponentBoundEvent dry-run"))
 			.Optional(TEXT("delegate_property_name"), TEXT("string"), TEXT("Multicast delegate name for ComponentBoundEvent / AddDelegate / RemoveDelegate / ClearDelegate / CallDelegate dry-run"))
@@ -3387,8 +3437,15 @@ FMonolithActionResult FMonolithBlueprintNodeActions::HandleResolveNode(const TSh
 		}
 
 		bool bPreviewReliable = false;
-		if (Params->TryGetBoolField(TEXT("reliable"), bPreviewReliable) && bPreviewReliable)
+		FString ReliableError;
+		if (!TryGetResolveNodeReliableParam(Params, bPreviewReliable, ReliableError))
+		{
+			return FMonolithActionResult::Error(ReliableError, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (bPreviewReliable)
+		{
 			EventNode->FunctionFlags |= FUNC_NetReliable;
+		}
 
 		Node = EventNode;
 	}

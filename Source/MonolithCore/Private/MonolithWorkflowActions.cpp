@@ -60,7 +60,7 @@ namespace
 			return;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Source->Values)
+		for (const auto& Pair : Source->Values)
 		{
 			if (Pair.Value.IsValid())
 			{
@@ -513,7 +513,7 @@ namespace
 			return;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : Obj->Values)
+		for (const auto& Pair : Obj->Values)
 		{
 			CollectAssetPathsFromValue(Pair.Value, OutAssets);
 		}

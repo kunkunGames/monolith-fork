@@ -1529,4 +1529,281 @@ bool FMonolithUIAnimationDeltaFloatKeyLifecycleTest::RunTest(const FString& Para
     return true;
 }
 
+
+/**
+ * MonolithUI.AnimationDelta.TransformColorComponents
+ *
+ * Proves the canonical delta owner action also covers common UMG design-data
+ * animation components without registering external Sequencer clone actions:
+ * property=transform/component=tx|sy and property=color/component=a normalize
+ * to real MovieScene float tracks, then read back through time-slice/timeline.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIAnimationDeltaTransformColorComponentsTest,
+    "MonolithUI.AnimationDelta.TransformColorComponents",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIAnimationDeltaTransformColorComponentsTest::RunTest(const FString& Parameters)
+{
+    using MonolithUI::TestUtils::CreateOrReuseTestWidgetBlueprint;
+
+    const FString DeltaTestPath = TEXT("/Game/Tests/Monolith/UI/WBP_AnimationDeltaComponentsTest");
+
+    FString FixtureError;
+    if (!CreateOrReuseTestWidgetBlueprint(DeltaTestPath, FName(TEXT("MyImage")), nullptr, FixtureError))
+    {
+        AddError(FString::Printf(TEXT("Fixture build failed: %s"), *FixtureError));
+        return false;
+    }
+
+    UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *DeltaTestPath);
+    if (!TestNotNull(TEXT("component delta WBP loaded"), WBP))
+    {
+        return false;
+    }
+
+    WBP->Animations.Empty();
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(WBP);
+    FKismetEditorUtilities::CompileBlueprint(WBP);
+
+    {
+        TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+        CreateParams->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        CreateParams->SetStringField(TEXT("animation_name"), TEXT("DeltaComponents"));
+        CreateParams->SetNumberField(TEXT("duration_sec"), 1.0);
+        CreateParams->SetBoolField(TEXT("compile_once"), true);
+
+        TArray<TSharedPtr<FJsonValue>> Tracks;
+        TSharedPtr<FJsonObject> Track = MakeShared<FJsonObject>();
+        Track->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Track->SetStringField(TEXT("property"), TEXT("RenderOpacity"));
+
+        TArray<TSharedPtr<FJsonValue>> Keys;
+        TSharedPtr<FJsonObject> K0 = MakeShared<FJsonObject>();
+        K0->SetNumberField(TEXT("time"), 0.0);
+        K0->SetNumberField(TEXT("value"), 1.0);
+        Keys.Add(MakeShared<FJsonValueObject>(K0));
+        Track->SetArrayField(TEXT("keys"), Keys);
+        Tracks.Add(MakeShared<FJsonValueObject>(Track));
+        CreateParams->SetArrayField(TEXT("tracks"), Tracks);
+
+        const FMonolithActionResult CreateResult = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("create_animation_v2"), CreateParams);
+        TestTrue(TEXT("create_animation_v2 succeeds"), CreateResult.bSuccess);
+        if (!CreateResult.bSuccess)
+        {
+            AddError(FString::Printf(TEXT("create_animation_v2 failed: %s"), *CreateResult.ErrorMessage));
+            return false;
+        }
+    }
+
+    auto MakeDeltaParams = [&DeltaTestPath](const bool bDryRun, const bool bConfirm, const bool bConfirmDelete)
+    {
+        TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+        Params->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        Params->SetStringField(TEXT("animation_name"), TEXT("DeltaComponents"));
+        Params->SetBoolField(TEXT("dry_run"), bDryRun);
+        Params->SetBoolField(TEXT("confirm"), bConfirm);
+        Params->SetBoolField(TEXT("confirm_delete"), bConfirmDelete);
+        Params->SetBoolField(TEXT("compile"), true);
+        Params->SetBoolField(TEXT("read_back"), true);
+        return Params;
+    };
+
+    auto MakeComponentOp = [](const TCHAR* OpName, const TCHAR* Property, const TCHAR* Component, const double Value)
+    {
+        TSharedPtr<FJsonObject> Op = MakeShared<FJsonObject>();
+        Op->SetStringField(TEXT("op"), OpName);
+        Op->SetStringField(TEXT("widget_name"), TEXT("MyImage"));
+        Op->SetStringField(TEXT("property"), Property);
+        Op->SetStringField(TEXT("component"), Component);
+        Op->SetNumberField(TEXT("time"), 0.25);
+        if (FCString::Strcmp(OpName, TEXT("upsert_float_key")) == 0)
+        {
+            Op->SetNumberField(TEXT("value"), Value);
+        }
+        return Op;
+    };
+
+    {
+        TSharedPtr<FJsonObject> DryRunParams = MakeDeltaParams(true, false, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("transform"), TEXT("tx"), 42.0)));
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("transform"), TEXT("sy"), 1.25)));
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("color"), TEXT("a"), 0.5)));
+        DryRunParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult DryRun = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), DryRunParams);
+        TestTrue(TEXT("component dry-run succeeds"), DryRun.bSuccess);
+        if (!DryRun.bSuccess || !DryRun.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("component dry-run failed: %s"), *DryRun.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("dry-run has operations"), DryRun.Result->TryGetArrayField(TEXT("operations"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+
+        bool bSawTranslationX = false;
+        bool bSawScaleY = false;
+        bool bSawAlpha = false;
+        for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+        {
+            const TSharedPtr<FJsonObject>* Row = nullptr;
+            if (!RowValue.IsValid() || !RowValue->TryGetObject(Row) || !Row || !Row->IsValid())
+            {
+                continue;
+            }
+
+            FString PropertyPath;
+            (*Row)->TryGetStringField(TEXT("property_path"), PropertyPath);
+            bSawTranslationX |= PropertyPath == TEXT("RenderTransform.Translation.X");
+            bSawScaleY |= PropertyPath == TEXT("RenderTransform.Scale.Y");
+            bSawAlpha |= PropertyPath == TEXT("ColorAndOpacity.A");
+        }
+
+        TestTrue(TEXT("dry-run normalizes transform tx"), bSawTranslationX);
+        TestTrue(TEXT("dry-run normalizes transform sy"), bSawScaleY);
+        TestTrue(TEXT("dry-run normalizes color alpha"), bSawAlpha);
+    }
+
+    {
+        TSharedPtr<FJsonObject> ApplyParams = MakeDeltaParams(false, true, false);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("transform"), TEXT("tx"), 42.0)));
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("transform"), TEXT("sy"), 1.25)));
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("upsert_float_key"), TEXT("color"), TEXT("a"), 0.5)));
+        ApplyParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult Apply = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), ApplyParams);
+        TestTrue(TEXT("component apply succeeds"), Apply.bSuccess);
+        if (!Apply.bSuccess || !Apply.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("component apply failed: %s"), *Apply.ErrorMessage));
+            return false;
+        }
+
+        double KeysInserted = -1.0;
+        TestTrue(TEXT("component apply has keys_inserted"), Apply.Result->TryGetNumberField(TEXT("keys_inserted"), KeysInserted));
+        TestEqual(TEXT("three component keys inserted"), static_cast<int32>(KeysInserted), 3);
+    }
+
+    {
+        TSharedPtr<FJsonObject> SliceParams = MakeShared<FJsonObject>();
+        SliceParams->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        SliceParams->SetStringField(TEXT("animation_name"), TEXT("DeltaComponents"));
+        SliceParams->SetNumberField(TEXT("time"), 0.25);
+
+        const FMonolithActionResult Slice = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_time_slice"), SliceParams);
+        TestTrue(TEXT("component time-slice succeeds"), Slice.bSuccess);
+        if (!Slice.bSuccess || !Slice.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("component time-slice failed: %s"), *Slice.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Samples = nullptr;
+        TestTrue(TEXT("component slice has samples"), Slice.Result->TryGetArrayField(TEXT("samples"), Samples));
+        if (!Samples || Samples->Num() == 0)
+        {
+            return false;
+        }
+
+        const TSharedPtr<FJsonObject>* FirstSample = nullptr;
+        TestTrue(TEXT("component sample[0] is object"), (*Samples)[0]->TryGetObject(FirstSample));
+        if (!FirstSample || !FirstSample->IsValid())
+        {
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("component sample has rows"), (*FirstSample)->TryGetArrayField(TEXT("rows"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+
+        bool bSawTranslationX = false;
+        bool bSawScaleY = false;
+        bool bSawAlpha = false;
+        for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+        {
+            const TSharedPtr<FJsonObject>* Row = nullptr;
+            if (!RowValue.IsValid() || !RowValue->TryGetObject(Row) || !Row || !Row->IsValid())
+            {
+                continue;
+            }
+
+            FString PropertyPath;
+            (*Row)->TryGetStringField(TEXT("property_path"), PropertyPath);
+            double Value = 0.0;
+            if (!(*Row)->TryGetNumberField(TEXT("value"), Value))
+            {
+                continue;
+            }
+
+            bSawTranslationX |= PropertyPath == TEXT("RenderTransform.Translation.X") && FMath::IsNearlyEqual(Value, 42.0, 0.01);
+            bSawScaleY |= PropertyPath == TEXT("RenderTransform.Scale.Y") && FMath::IsNearlyEqual(Value, 1.25, 0.01);
+            bSawAlpha |= PropertyPath == TEXT("ColorAndOpacity.A") && FMath::IsNearlyEqual(Value, 0.5, 0.01);
+        }
+
+        TestTrue(TEXT("time-slice reads transform tx component"), bSawTranslationX);
+        TestTrue(TEXT("time-slice reads transform sy component"), bSawScaleY);
+        TestTrue(TEXT("time-slice reads color alpha component"), bSawAlpha);
+    }
+
+    {
+        TSharedPtr<FJsonObject> DeleteParams = MakeDeltaParams(false, true, true);
+        TArray<TSharedPtr<FJsonValue>> Operations;
+        Operations.Add(MakeShared<FJsonValueObject>(MakeComponentOp(TEXT("delete_float_key"), TEXT("color"), TEXT("a"), 0.0)));
+        DeleteParams->SetArrayField(TEXT("operations"), Operations);
+
+        const FMonolithActionResult Delete = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("apply_animation_delta"), DeleteParams);
+        TestTrue(TEXT("component delete succeeds"), Delete.bSuccess);
+        if (!Delete.bSuccess || !Delete.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("component delete failed: %s"), *Delete.ErrorMessage));
+            return false;
+        }
+
+        double KeysDeleted = -1.0;
+        TestTrue(TEXT("component delete has keys_deleted"), Delete.Result->TryGetNumberField(TEXT("keys_deleted"), KeysDeleted));
+        TestEqual(TEXT("one color alpha key deleted"), static_cast<int32>(KeysDeleted), 1);
+    }
+
+    {
+        TSharedPtr<FJsonObject> TimelineParams = MakeShared<FJsonObject>();
+        TimelineParams->SetStringField(TEXT("asset_path"), DeltaTestPath);
+        TimelineParams->SetStringField(TEXT("animation_name"), TEXT("DeltaComponents"));
+        TimelineParams->SetStringField(TEXT("property_path"), TEXT("ColorAndOpacity.A"));
+
+        const FMonolithActionResult Timeline = FMonolithToolRegistry::Get().ExecuteAction(
+            TEXT("ui"), TEXT("get_animation_timeline"), TimelineParams);
+        TestTrue(TEXT("component timeline read-back succeeds"), Timeline.bSuccess);
+        if (!Timeline.bSuccess || !Timeline.Result.IsValid())
+        {
+            AddError(FString::Printf(TEXT("component timeline failed: %s"), *Timeline.ErrorMessage));
+            return false;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+        TestTrue(TEXT("component timeline has rows"), Timeline.Result->TryGetArrayField(TEXT("rows"), Rows));
+        if (!Rows)
+        {
+            return false;
+        }
+        TestEqual(TEXT("ColorAndOpacity.A timeline is empty after delete"), Rows->Num(), 0);
+    }
+
+    return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

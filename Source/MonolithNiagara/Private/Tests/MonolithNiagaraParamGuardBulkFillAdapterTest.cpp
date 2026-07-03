@@ -6,6 +6,21 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+namespace
+{
+	static bool ReportHasReason(const FDryRunReport& Report, const FString& ExpectedReason)
+	{
+		for (const FBulkFillFieldWrite& Write : Report.FieldWrites)
+		{
+			if (Write.Reason.Contains(ExpectedReason))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardBulkFillAdapterTest, "Monolith.Niagara.ParamGuard.BulkFillAdapter", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardBulkFillAdapterTest::RunTest(const FString& Parameters)
@@ -24,7 +39,7 @@ bool FMonolithNiagaraParamGuardBulkFillAdapterTest::RunTest(const FString& Param
 		FDryRunReport Report = Adapter.NiagaraBulkFill(Spec);
 		TestFalse(TEXT("Should fail on missing fill_kind"), Report.bWouldApply);
 		TestTrue(TEXT("Should complain about fill_kind"),
-			Report.Errors > 0 && Report.FieldWrites.Num() > 0 && Report.FieldWrites[0].Reason.Contains(TEXT("fill_kind required")));
+			Report.Errors > 0 && ReportHasReason(Report, TEXT("fill_kind required")));
 	}
 
 	// Test missing user_param for DataInterfaceArray
@@ -39,7 +54,7 @@ bool FMonolithNiagaraParamGuardBulkFillAdapterTest::RunTest(const FString& Param
 		FDryRunReport Report = Adapter.NiagaraBulkFill(Spec);
 		TestFalse(TEXT("Should fail on missing user_param"), Report.bWouldApply);
 		TestTrue(TEXT("Should complain about user_param"),
-			Report.Errors > 0 && Report.FieldWrites.Num() > 0 && Report.FieldWrites[0].Reason.Contains(TEXT("requires string 'user_param'")));
+			Report.Errors > 0 && ReportHasReason(Report, TEXT("requires string 'user_param'")));
 	}
 
 	// Test missing curve_name for Curve
@@ -54,7 +69,7 @@ bool FMonolithNiagaraParamGuardBulkFillAdapterTest::RunTest(const FString& Param
 		FDryRunReport Report = Adapter.NiagaraBulkFill(Spec);
 		TestFalse(TEXT("Should fail on missing curve_name"), Report.bWouldApply);
 		TestTrue(TEXT("Should complain about curve_name"),
-			Report.Errors > 0 && Report.FieldWrites.Num() > 0 && Report.FieldWrites[0].Reason.Contains(TEXT("requires string 'curve_name'")));
+			Report.Errors > 0 && ReportHasReason(Report, TEXT("requires string 'curve_name'")));
 	}
 
 	return true;

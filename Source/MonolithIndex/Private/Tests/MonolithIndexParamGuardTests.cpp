@@ -6,7 +6,9 @@
 #include "Actions/ProjectFindUnusedAction.h"
 #include "Actions/ProjectExportAssetTextAction.h"
 #include "Actions/ProjectSearchAction.h"
+#include "Actions/ProjectSearchGameplayTagsAction.h"
 #include "Dom/JsonObject.h"
+#include "MonolithParamSchema.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexParamGuardTest, "Monolith.ParamGuard.ProjectIndex.MalformedInput", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -137,6 +139,39 @@ bool FProjectIndexParamGuardTest::RunTest(const FString& Parameters)
 		TestFalse(TEXT("Search: Reject wrong type for path_filter"), Result.bSuccess);
 		TestEqual(TEXT("Search: Error code for path_filter"), Result.ErrorCode, -32602);
 	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectIndexSearchQueryAliasTest,
+	"Monolith.Registry.ProjectIndex.SearchQueryAlias",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectIndexSearchQueryAliasTest::RunTest(const FString& Parameters)
+{
+	auto TestSchema = [this](const TCHAR* Label, const TSharedPtr<FJsonObject>& Schema)
+	{
+		TestTrue(FString::Printf(TEXT("%s schema exists"), Label), Schema.IsValid());
+		if (!Schema.IsValid())
+		{
+			return;
+		}
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("q"), TEXT("Health"));
+
+		FString Collision;
+		const bool bResult = FMonolithParamSchema::ApplyAliases(Schema, Params, Collision);
+
+		TestTrue(FString::Printf(TEXT("%s q alias applies"), Label), bResult);
+		TestTrue(FString::Printf(TEXT("%s query created from q"), Label), Params->HasField(TEXT("query")));
+		TestEqual(FString::Printf(TEXT("%s query value matches q"), Label),
+			Params->GetStringField(TEXT("query")),
+			FString(TEXT("Health")));
+	};
+
+	TestSchema(TEXT("project.search"), FProjectSearchAction::GetSchema());
+	TestSchema(TEXT("project.search_gameplay_tags"), FProjectSearchGameplayTagsAction::GetSchema());
 
 	return true;
 }

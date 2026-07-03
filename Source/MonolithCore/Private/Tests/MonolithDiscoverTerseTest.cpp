@@ -4,8 +4,9 @@
 //
 // Goals:
 //   - Per-namespace discover is terse by default: action + description, NO `params`.
-//   - `detail=true` (canonical) inlines the full per-action param schema.
+//   - `detail=true` (canonical) inlines per-action param schema; `schema_detail=compact` is default for bulk listings.
 //   - `verbose=true` is an accepted alias for `detail=true`.
+//   - `planning_detail=compact` is default; `planning_detail=full` opts back into heavy planning arrays.
 //   - `filter` substring-matches name OR description (case-insensitive).
 //   - Default returns a bounded action page with total/cursor metadata.
 //   - Pagination supports offset/limit; explicit limit=0 is normalized to the default page; out-of-range clamps.
@@ -74,6 +75,26 @@ namespace MonolithDiscoverTerseTestDetail
 			}
 		}
 		return nullptr;
+	}
+
+	static FMonolithActionResult ProjectionCapNoop(const TSharedPtr<FJsonObject>& /*Params*/)
+	{
+		return FMonolithActionResult::Success(MakeShared<FJsonObject>());
+	}
+
+	static void RegisterProjectionCapNamespace(const int32 Count)
+	{
+		FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("projectioncap"));
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const FString ActionName = FString::Printf(TEXT("action_%03d"), Index);
+			FMonolithToolRegistry::Get().RegisterAction(
+				TEXT("projectioncap"),
+				ActionName,
+				FString::Printf(TEXT("Projection cap test action %03d."), Index),
+				FMonolithActionHandler::CreateStatic(&ProjectionCapNoop),
+				nullptr);
+		}
 	}
 
 	/** Pull the `actions` array out of a successful discover result, or null. */
@@ -232,6 +253,212 @@ bool FMonolithDiscoverDetailOptInTest::RunTest(const FString& /*Parameters*/)
 	{
 		TestFalse(TEXT("detail result has NO schema_hint"), R.Result->HasField(TEXT("schema_hint")));
 	}
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Test 2b: Planning detail projection. Bulk action listings keep params when
+// detail=true, but omit the heavy planning/schema payload unless requested.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithDiscoverPlanningDetailProjectionTest,
+	"Monolith.Discover.Terse.PlanningDetailProjection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithDiscoverPlanningDetailProjectionTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithDiscoverTerseTestDetail;
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+		Params->SetBoolField(TEXT("detail"), true);
+		Params->SetNumberField(TEXT("limit"), 5);
+
+		const FMonolithActionResult R = Discover(Params);
+		TestTrue(TEXT("compact planning detail discover succeeds"), R.bSuccess);
+		TestTrue(TEXT("compact result object present"), R.Result.IsValid());
+		if (R.Result.IsValid())
+		{
+			TestEqual(TEXT("top-level planning detail is compact"), R.Result->GetStringField(TEXT("planning_detail")), TEXT("compact"));
+			TestEqual(TEXT("top-level schema detail is compact"), R.Result->GetStringField(TEXT("schema_detail")), TEXT("compact"));
+			TestTrue(TEXT("compact result includes planning detail hint"), R.Result->HasTypedField<EJson::String>(TEXT("planning_detail_hint")));
+			TestTrue(TEXT("compact result includes schema detail hint"), R.Result->HasTypedField<EJson::String>(TEXT("schema_detail_hint")));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+		TestNotNull(TEXT("compact actions array present"), Arr);
+		if (Arr)
+		{
+			TestTrue(TEXT("compact test returned at least one row"), Arr->Num() > 0);
+			bool bAnyHasParams = false;
+			for (const TSharedPtr<FJsonValue>& Val : *Arr)
+			{
+				const TSharedPtr<FJsonObject>* Obj = nullptr;
+				if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+				{
+					continue;
+				}
+				bAnyHasParams = bAnyHasParams || (*Obj)->HasField(TEXT("params"));
+				TestEqual(TEXT("row planning detail is compact"), (*Obj)->GetStringField(TEXT("planning_detail")), TEXT("compact"));
+				TestFalse(TEXT("compact row omits search_metadata"), (*Obj)->HasField(TEXT("search_metadata")));
+				FString CompactDescription;
+				if ((*Obj)->TryGetStringField(TEXT("description"), CompactDescription))
+				{
+					TestTrue(TEXT("compact row description is terse"), CompactDescription.Len() <= 153);
+				}
+				TestFalse(TEXT("compact row omits precondition_details"), (*Obj)->HasField(TEXT("precondition_details")));
+				TestFalse(TEXT("compact row omits planning_signals"), (*Obj)->HasField(TEXT("planning_signals")));
+				TestTrue(TEXT("compact row includes precondition detail count"), (*Obj)->HasField(TEXT("precondition_detail_count")));
+				TestTrue(TEXT("compact row includes planning signal count"), (*Obj)->HasField(TEXT("planning_signal_count")));
+				if ((*Obj)->HasField(TEXT("params")))
+				{
+					TestEqual(TEXT("row schema detail is compact"), (*Obj)->GetStringField(TEXT("schema_detail")), TEXT("compact"));
+					const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
+					TestTrue(TEXT("compact row params object exists"), (*Obj)->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj);
+					if (ParamsObj && ParamsObj->IsValid())
+					{
+						for (const auto& ParamPair : FMonolithJsonUtils::GetFields(*ParamsObj))
+						{
+							const TSharedPtr<FJsonObject>* ParamObj = nullptr;
+							if (ParamPair.Value.IsValid() && ParamPair.Value->TryGetObject(ParamObj) && ParamObj && ParamObj->IsValid())
+							{
+								TestFalse(TEXT("compact schema omits per-param description"), (*ParamObj)->HasField(TEXT("description")));
+							}
+						}
+					}
+				}
+			}
+			TestTrue(TEXT("detail=true still inlines params in compact planning mode"), bAnyHasParams);
+		}
+	}
+
+	{
+		RegisterProjectionCapNamespace(60);
+
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("namespace"), TEXT("projectioncap"));
+		Params->SetBoolField(TEXT("detail"), true);
+		Params->SetNumberField(TEXT("limit"), 1000);
+
+		const FMonolithActionResult R = Discover(Params);
+		TestTrue(TEXT("detail projection cap discover succeeds"), R.bSuccess);
+		const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+		TestNotNull(TEXT("detail projection cap actions array present"), Arr);
+		if (Arr)
+		{
+			TestEqual(TEXT("detail projection cap returns default page"), Arr->Num(), 50);
+		}
+		if (R.Result.IsValid())
+		{
+			bool bTruncated = false;
+			TestTrue(TEXT("detail projection cap truncated field present"), R.Result->TryGetBoolField(TEXT("truncated"), bTruncated));
+			TestTrue(TEXT("detail projection cap reports truncation"), bTruncated);
+			TestTrue(TEXT("detail projection cap emits next_offset"), R.Result->HasField(TEXT("next_offset")));
+			const TSharedPtr<FJsonObject>* Limits = nullptr;
+			TestTrue(TEXT("detail projection cap limits object present"), R.Result->TryGetObjectField(TEXT("limits"), Limits) && Limits);
+			if (Limits && Limits->IsValid())
+			{
+				int32 LimitValue = -1;
+				int32 RequestedLimitValue = -1;
+				(*Limits)->TryGetNumberField(TEXT("limit"), LimitValue);
+				(*Limits)->TryGetNumberField(TEXT("requested_limit"), RequestedLimitValue);
+				TestEqual(TEXT("detail projection cap effective limit"), LimitValue, 50);
+				TestEqual(TEXT("detail projection cap preserves requested limit"), RequestedLimitValue, 1000);
+				TestTrue(TEXT("detail projection cap explains reason"), (*Limits)->HasTypedField<EJson::String>(TEXT("projection_limit_reason")));
+			}
+		}
+
+		FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("projectioncap"));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+		Params->SetBoolField(TEXT("detail"), true);
+		Params->SetStringField(TEXT("planning_detail"), TEXT("full"));
+		Params->SetStringField(TEXT("schema_detail"), TEXT("full"));
+		Params->SetNumberField(TEXT("limit"), 5);
+
+		const FMonolithActionResult R = Discover(Params);
+		TestTrue(TEXT("full planning detail discover succeeds"), R.bSuccess);
+		if (R.Result.IsValid())
+		{
+			TestEqual(TEXT("top-level planning detail is full"), R.Result->GetStringField(TEXT("planning_detail")), TEXT("full"));
+			TestEqual(TEXT("top-level schema detail is full"), R.Result->GetStringField(TEXT("schema_detail")), TEXT("full"));
+			TestFalse(TEXT("full result has no compact planning hint"), R.Result->HasField(TEXT("planning_detail_hint")));
+			TestFalse(TEXT("full result has no compact schema hint"), R.Result->HasField(TEXT("schema_detail_hint")));
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Arr = GetActionsArray(R);
+		TestNotNull(TEXT("full actions array present"), Arr);
+		if (Arr)
+		{
+			TestTrue(TEXT("full test returned at least one row"), Arr->Num() > 0);
+			bool bAnyFullParamDescription = false;
+			for (const TSharedPtr<FJsonValue>& Val : *Arr)
+			{
+				const TSharedPtr<FJsonObject>* Obj = nullptr;
+				if (!Val.IsValid() || !Val->TryGetObject(Obj) || !Obj || !Obj->IsValid())
+				{
+					continue;
+				}
+				TestEqual(TEXT("row planning detail is full"), (*Obj)->GetStringField(TEXT("planning_detail")), TEXT("full"));
+				TestTrue(TEXT("full row includes precondition_details"), (*Obj)->HasField(TEXT("precondition_details")));
+				TestTrue(TEXT("full row includes planning_signals"), (*Obj)->HasField(TEXT("planning_signals")));
+				TestFalse(TEXT("full row omits compact precondition count"), (*Obj)->HasField(TEXT("precondition_detail_count")));
+				TestFalse(TEXT("full row omits compact planning count"), (*Obj)->HasField(TEXT("planning_signal_count")));
+				if ((*Obj)->HasField(TEXT("params")))
+				{
+					TestEqual(TEXT("row schema detail is full"), (*Obj)->GetStringField(TEXT("schema_detail")), TEXT("full"));
+					const TSharedPtr<FJsonObject>* ParamsObj = nullptr;
+					if ((*Obj)->TryGetObjectField(TEXT("params"), ParamsObj) && ParamsObj && ParamsObj->IsValid())
+					{
+						for (const auto& ParamPair : FMonolithJsonUtils::GetFields(*ParamsObj))
+						{
+							const TSharedPtr<FJsonObject>* ParamObj = nullptr;
+							if (ParamPair.Value.IsValid()
+								&& ParamPair.Value->TryGetObject(ParamObj)
+								&& ParamObj
+								&& ParamObj->IsValid()
+								&& (*ParamObj)->HasField(TEXT("description")))
+							{
+								bAnyFullParamDescription = true;
+							}
+						}
+					}
+				}
+			}
+			TestTrue(TEXT("full schema detail includes per-param descriptions"), bAnyFullParamDescription);
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+		Params->SetStringField(TEXT("planning_detail"), TEXT("verbose"));
+
+		const FMonolithActionResult R = Discover(Params);
+		TestFalse(TEXT("invalid planning_detail is rejected"), R.bSuccess);
+		if (!R.bSuccess)
+		{
+			TestTrue(TEXT("invalid planning_detail error names the param"), R.ErrorMessage.Contains(TEXT("planning_detail")));
+		}
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("namespace"), TEXT("monolith"));
+		Params->SetStringField(TEXT("schema_detail"), TEXT("verbose"));
+
+		const FMonolithActionResult R = Discover(Params);
+		TestFalse(TEXT("invalid schema_detail is rejected"), R.bSuccess);
+		if (!R.bSuccess)
+		{
+			TestTrue(TEXT("invalid schema_detail error names the param"), R.ErrorMessage.Contains(TEXT("schema_detail")));
+		}
+	}
+
 	return true;
 }
 
@@ -686,6 +913,8 @@ bool FMonolithDiscoverRegisteredSchemaCoversTerseParamsTest::RunTest(const FStri
 		TEXT("mode"),
 		TEXT("detail"),
 		TEXT("verbose"),
+		TEXT("planning_detail"),
+		TEXT("schema_detail"),
 		TEXT("filter"),
 		TEXT("offset"),
 		TEXT("limit")

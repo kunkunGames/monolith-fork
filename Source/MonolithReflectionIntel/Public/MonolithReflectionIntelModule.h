@@ -66,7 +66,7 @@ public:
 
 	/**
 	 * Phase 3a (v0.17.0) — run the cppreflect indexer pair on demand.
-	 *   1. FUHTArtefactReader — sweeps Intermediate/Build/<...>/UHT/*.gen.cpp
+	 *   1. FUHTArtefactReader — sweeps generated UHT .gen.cpp artefacts under Intermediate/Build
 	 *      (richer than .generated.h) and populates reflect_uclasses /
 	 *      reflect_uproperties / reflect_ufunctions / reflect_uinterfaces /
 	 *      reflect_uinterface_impls.

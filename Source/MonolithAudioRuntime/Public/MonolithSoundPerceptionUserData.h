@@ -2,10 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "Engine/AssetUserData.h"
+#include "Perception/AISense.h"
 #include "Templates/SubclassOf.h"
 #include "MonolithSoundPerceptionUserData.generated.h"
-
-class UAISense;
 
 /**
  * Design-time perception binding stamped onto a USoundBase asset (Cue / MetaSoundSource / Wave).

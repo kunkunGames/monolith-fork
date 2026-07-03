@@ -311,7 +311,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Find all functions that call the given function"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindCallers),
 		FParamSchemaBuilder()
-			.Required(TEXT("symbol"), TEXT("string"), TEXT("Function name"))
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Function name. Alias: query."), { TEXT("query") })
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results"), TEXT("50"))
 			.Build());
 
@@ -319,7 +319,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Find all functions called by the given function"),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleFindCallees),
 		FParamSchemaBuilder()
-			.Required(TEXT("symbol"), TEXT("string"), TEXT("Function name"))
+			.Required(TEXT("symbol"), TEXT("string"), TEXT("Function name. Alias: query."), { TEXT("query") })
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results"), TEXT("50"))
 			.Build());
 
@@ -327,7 +327,7 @@ void FMonolithSourceActions::RegisterAll()
 		TEXT("Full-text search across Unreal Engine source code and shaders. Supports cursor pagination — pass `cursor` from a prior response's `next_cursor` to fetch the next page."),
 		FMonolithActionHandler::CreateStatic(&FMonolithSourceActions::HandleSearchSource),
 		FParamSchemaBuilder()
-			.Required(TEXT("query"), TEXT("string"), TEXT("Search query"))
+			.Required(TEXT("query"), TEXT("string"), TEXT("Search query. Alias: q."), { TEXT("q") })
 			.Optional(TEXT("scope"), TEXT("string"), TEXT("Search scope (all, engine, shaders)"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max results"), TEXT("50"))
 			.Optional(TEXT("mode"), TEXT("string"), TEXT("Search mode (fts, regex, exact)"))

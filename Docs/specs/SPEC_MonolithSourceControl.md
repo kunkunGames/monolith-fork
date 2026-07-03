@@ -47,27 +47,29 @@
 | `source_control.list_opened` | `changelist`?, `resolve_packages`?, `limit`? | Runs `p4 -ztag opened`, optionally scoped to one changelist, and maps opened depot paths back to local and Unreal package paths when `resolve_packages=true`. |
 | `source_control.map_depot_paths` | `paths` | Maps Perforce depot/client/local paths and `/Game` paths to local filesystem paths plus Unreal long package paths using `p4 -ztag where` and project mount points. |
 
+Canonical calls should use `paths` as an array of filesystem or `/Game` paths. For additive agent-input tolerance, every `source_control` action that takes `paths` also accepts a single non-empty string and the alias key `files`; handlers normalize both forms to the same path row contract. Optional boolean fields (`dry_run`, `confirm`, and `resolve_packages`) accept booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`; malformed strings and numeric booleans remain validation errors. Destructive delete/revert actions still require `confirm=true` unless `dry_run=true`.
+
 `source_control.checkout_or_add` and the central action execution guard both use `FMonolithSourceControlUtils::CheckoutOrAddFiles`. Existing source-controlled files are checked out; local files are marked for add; already checked-out or added files are skipped. Explicit `source_control.checkout_or_add` allows add planning for missing package filenames to preserve its manual prepare behavior. Automatic asset mutation prepare skips missing files before the handler runs, then retries after the handler succeeds so newly saved `.uasset` and `.umap` files can be marked for add. Automatic prepare is scoped to asset-mutation namespaces/actions and project-owned package files; read-only project/source/bridge/context/catalog calls are excluded even if legacy policy inference marks them as mutating.
 
 ---
 
 ## 4. Routing Validation Contract
 
-All eleven `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, `confirm`, `changelist`, `resolve_packages`, and `limit` types before provider state queries, source-control operations, or P4 mapping commands run.
+All eleven `source_control` actions opt into registry-level top-level parameter validation via `FParamSchemaBuilder::EnableValidation()`. The registry rejects malformed `paths`, `dry_run`, `confirm`, `changelist`, `resolve_packages`, and `limit` types before provider state queries, source-control operations, or P4 mapping commands run. The only supported tolerance is the explicit source-control contract above: `files` aliases to `paths`, scalar path strings wrap to a one-item list, and known boolean strings are parsed by the source-control handlers.
 
 | Action | Registry-owned validation | Handler-owned validation |
 |--------|---------------------------|--------------------------|
 | `get_capabilities` | Empty typed schema. | Provider inventory and capability projection. |
-| `get_status` | `paths` must be an array. | Non-empty path array, string element validation, package/filesystem path normalization, provider availability. |
-| `checkout` | `paths` array; `dry_run` bool. | Path normalization, provider availability, checkout execution/state rows. |
-| `add` | `paths` array; `dry_run` bool. | Path normalization, provider availability, mark-for-add execution/state rows. |
-| `checkout_or_add` | `paths` array; `dry_run` bool. | State-based checkout/add decisioning and operation result aggregation. |
-| `delete` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, provider delete execution/state rows. |
-| `mark_for_delete` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, provider delete execution/state rows. |
-| `revert` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert execution/state rows. |
-| `revert_unchanged` | `paths` array; `dry_run` bool; `confirm` bool. | Confirm gate, path normalization, provider availability, revert-unchanged execution/state rows. |
-| `list_opened` | `changelist` string; `resolve_packages` bool; `limit` integer. | Executes bounded `p4 -ztag opened`, parses tagged records, optionally resolves local/package paths through `p4 where` and `FPackageName`. |
-| `map_depot_paths` | `paths` array. | Validates non-empty path strings, maps depot/client paths through `p4 where`, and converts local/package paths through Unreal mount points. |
+| `get_status` | `paths` array/string with `files` alias. | Non-empty path value validation, package/filesystem path normalization, provider availability. |
+| `checkout` | `paths` array/string with `files` alias; `dry_run` bool/string. | Path normalization, tolerant bool parsing, provider availability, checkout execution/state rows. |
+| `add` | `paths` array/string with `files` alias; `dry_run` bool/string. | Path normalization, tolerant bool parsing, provider availability, mark-for-add execution/state rows. |
+| `checkout_or_add` | `paths` array/string with `files` alias; `dry_run` bool/string. | Tolerant bool parsing, state-based checkout/add decisioning, and operation result aggregation. |
+| `delete` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, provider delete execution/state rows. |
+| `mark_for_delete` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, provider delete execution/state rows. |
+| `revert` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, revert execution/state rows. |
+| `revert_unchanged` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, revert-unchanged execution/state rows. |
+| `list_opened` | `changelist` string; `resolve_packages` bool/string; `limit` integer. | Tolerant bool parsing, bounded `p4 -ztag opened`, tagged-record parsing, and optional local/package path resolution through `p4 where` and `FPackageName`. |
+| `map_depot_paths` | `paths` array/string with `files` alias. | Validates non-empty path values, maps depot/client paths through `p4 where`, and converts local/package paths through Unreal mount points. |
 
 Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 
@@ -91,7 +93,8 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 | Gate | Evidence |
 |------|----------|
 | Registration | `FMonolithSourceControlModule::StartupModule` registers the `source_control` namespace. |
-| Parameter guard | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests are rejected by the registry. |
+| Parameter guard | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests are rejected by the registry and handlers. |
+| Input tolerance | `FMonolithSourceControlInputToleranceTest` verifies `files` aliases, scalar path strings, and supported boolean string literals are accepted without executing mutations. |
 | P4 mapping | Manual or automation smoke should verify `source_control.list_opened(changelist)` maps opened `.uasset`/`.umap` files to `/Game` package paths and that `source_control.map_depot_paths(paths)` handles depot, local, and package inputs without mutation. |
 | UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Optional-off build | Full plugin UBT build must also pass with `MONOLITH_RELEASE_BUILD=1`, even though SourceControl itself has no optional compile guard. |

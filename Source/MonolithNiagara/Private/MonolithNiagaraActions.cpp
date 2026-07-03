@@ -11506,11 +11506,10 @@ FMonolithActionResult FMonolithNiagaraActions::HandleRemoveDynamicInput(const TS
 			FNiagaraTypeDefinition PinType = UEdGraphSchema_Niagara::PinToTypeDefinition(Pin);
 			if (PinType == FNiagaraTypeDefinition::GetParameterMapDef()) continue;
 			// This is the data output pin — check what it's linked to
-			for (UEdGraphPin* Linked : Pin->LinkedTo)
+			if (!Pin->LinkedTo.IsEmpty())
 			{
 				// The linked pin is the override pin on the upstream override node
-				OverridePin = Linked;
-				break;
+				OverridePin = Pin->LinkedTo[0];
 			}
 			if (OverridePin) break;
 		}

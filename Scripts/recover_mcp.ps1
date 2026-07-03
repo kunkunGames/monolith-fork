@@ -8,7 +8,8 @@ Runs the documented Go-checkout recovery sequence (CLAUDE.md section 14 and
 Skills/monolith-mcp) as one deterministic entry point:
 
   1. GET <mcp-url-with-/health> (3s timeout). 200 means the server is up.
-  2. If down and -ProbeOnly: report and stop.
+  2. If down and -ProbeOnly: report the health failure reason plus local
+     listener/editor candidates and stop.
   3. Resolve the host checkout root (walk up from this script until a
      *.uproject is found, or use -ProjectRoot) and require
      Build/BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch
@@ -64,14 +65,93 @@ $ErrorActionPreference = 'Continue'
 $healthUrl = $McpUrl -replace '/mcp/?$', '/health'
 
 function Get-MonolithHealth {
+    $probe = Get-MonolithHealthProbe
+    return $probe.Health
+}
+
+function Get-MonolithHealthProbe {
     try {
-        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing
+        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
         if ($resp.StatusCode -eq 200) {
-            try { return $resp.Content | ConvertFrom-Json } catch { return [PSCustomObject]@{ status = 'ok' } }
+            $health = $null
+            try { $health = $resp.Content | ConvertFrom-Json } catch { $health = [PSCustomObject]@{ status = 'ok' } }
+            return [PSCustomObject]@{
+                Health = $health
+                ErrorClass = $null
+                ErrorMessage = $null
+                StatusCode = [int]$resp.StatusCode
+            }
+        }
+        return [PSCustomObject]@{
+            Health = $null
+            ErrorClass = 'http_status'
+            ErrorMessage = ("HTTP status {0}" -f $resp.StatusCode)
+            StatusCode = [int]$resp.StatusCode
         }
     }
-    catch { }
-    return $null
+    catch {
+        $class = Get-HealthFailureClass -ErrorRecord $_
+        $statusCode = $null
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            try { $statusCode = [int]$_.Exception.Response.StatusCode } catch { $statusCode = $null }
+        }
+        return [PSCustomObject]@{
+            Health = $null
+            ErrorClass = $class
+            ErrorMessage = $_.Exception.Message
+            StatusCode = $statusCode
+        }
+    }
+}
+
+function Get-HealthFailureClass {
+    param($ErrorRecord)
+
+    $exception = $ErrorRecord.Exception
+    $message = if ($exception) { [string]$exception.Message } else { '' }
+    if ($exception -and $exception.Response -and $exception.Response.StatusCode) {
+        return 'http_status'
+    }
+
+    $status = $null
+    if ($exception -and $exception.PSObject.Properties['Status']) {
+        $status = [string]$exception.Status
+    }
+
+    if ($status -match '(?i)NameResolutionFailure' -or $message -match '(?i)name resolution|no such host') {
+        return 'name_resolution'
+    }
+    if ($status -match '(?i)Timeout' -or $message -match '(?i)timed out|timeout') {
+        return 'timeout'
+    }
+    if ($status -match '(?i)ConnectFailure' -or $message -match '(?i)actively refused|connection refused|no connection could be made') {
+        return 'connection_refused'
+    }
+    if ($message -match '(?i)closed|reset|forcibly') {
+        return 'connection_closed'
+    }
+    return 'request_failed'
+}
+
+function Format-RecoverResultValue {
+    param([AllowNull()]$Value, [int]$MaxLength = 160)
+
+    if ($null -eq $Value) { return '-' }
+    $text = ([string]$Value) -replace '[\r\n]+', ' '
+    $text = $text.Trim()
+    if ($text.Length -eq 0) { return '-' }
+    if ($text.Length -gt $MaxLength) {
+        $text = $text.Substring(0, [Math]::Max(0, $MaxLength - 3)) + '...'
+    }
+    return ($text -replace '\s+', '_')
+}
+
+function Join-RecoverIds {
+    param([AllowNull()]$Values)
+
+    $items = @($Values | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
+    if ($items.Count -eq 0) { return '-' }
+    return ($items -join ',')
 }
 
 function Write-UpResult {
@@ -119,6 +199,136 @@ function Get-NewestEditorLog {
     param([string]$Root)
     return Get-ChildItem -Path (Join-Path $Root 'Saved\HeadlessMcp\Logs\HeadlessEditor-*.log') -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
+
+function Get-McpHealthPort {
+    try {
+        $uri = [System.Uri]$healthUrl
+        if ($uri.Port -gt 0) { return [int]$uri.Port }
+    }
+    catch { }
+    return 9316
+}
+
+function Get-PortListenerSummary {
+    param([int]$Port)
+
+    try {
+        $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object { $_.LocalPort -eq $Port })
+        $pids = @($listeners | ForEach-Object { $_.OwningProcess } | Sort-Object -Unique)
+        $owners = @()
+        foreach ($pid in $pids) {
+            try {
+                $proc = Get-Process -Id $pid -ErrorAction Stop
+                $owners += ("{0}:{1}" -f $pid, $proc.ProcessName)
+            }
+            catch {
+                $owners += ("{0}:unknown" -f $pid)
+            }
+        }
+        return [PSCustomObject]@{
+            Count = $listeners.Count
+            Pids = $pids
+            Owners = $owners
+            Error = $null
+        }
+    }
+    catch {
+        $netstatError = $_.Exception.Message
+        try {
+            $rows = @(netstat -ano -p tcp 2>$null | Where-Object { $_ -match (":{0}\s" -f [regex]::Escape([string]$Port)) -and $_ -match '\sLISTENING\s+(\d+)\s*$' })
+            $pids = @($rows | ForEach-Object {
+                    if ($_ -match '\sLISTENING\s+(\d+)\s*$') { [int]$Matches[1] }
+                } | Sort-Object -Unique)
+            $owners = @()
+            foreach ($pid in $pids) {
+                try {
+                    $proc = Get-Process -Id $pid -ErrorAction Stop
+                    $owners += ("{0}:{1}" -f $pid, $proc.ProcessName)
+                }
+                catch {
+                    $owners += ("{0}:unknown" -f $pid)
+                }
+            }
+            return [PSCustomObject]@{
+                Count = $rows.Count
+                Pids = $pids
+                Owners = $owners
+                Error = $null
+            }
+        }
+        catch {
+            $netstatError = ("{0}; netstat fallback: {1}" -f $netstatError, $_.Exception.Message)
+        }
+        return [PSCustomObject]@{
+            Count = -1
+            Pids = @()
+            Owners = @()
+            Error = $netstatError
+        }
+    }
+}
+
+function Get-HeadlessEditorCandidates {
+    $procs = @(Get-EditorServerCandidates)
+    if ($procs.Count -eq 0) { return @() }
+
+    $cims = @{}
+    Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" -ErrorAction SilentlyContinue |
+        ForEach-Object { $cims[[int]$_.ProcessId] = $_.CommandLine }
+    return @($procs | Where-Object {
+            $cmd = $cims[$_.Id]
+            $cmd -and ($cmd -match '(?i)(-NullRHI|Saved\\HeadlessMcp|HeadlessEditor-)')
+        })
+}
+
+function Get-RecoverProbeNextAction {
+    param($ListenerSummary, $EditorCandidates, $HeadlessCandidates)
+
+    if ($HeadlessCandidates.Count -gt 0) {
+        return 'run_watch_mcp_or_recover_force_after_timeout'
+    }
+    if ($EditorCandidates.Count -gt 0) {
+        return 'wait_or_run_recover_mcp_without_force'
+    }
+    if ($ListenerSummary.Count -gt 0) {
+        return 'inspect_non_editor_listener_on_mcp_port'
+    }
+    return 'run_watch_mcp_or_recover_mcp'
+}
+
+function Write-DownProbeResult {
+    param($Probe)
+
+    $port = Get-McpHealthPort
+    $listeners = Get-PortListenerSummary -Port $port
+    $editorCandidates = @(Get-EditorServerCandidates)
+    $headlessCandidates = @(Get-HeadlessEditorCandidates)
+    $nextAction = Get-RecoverProbeNextAction -ListenerSummary $listeners -EditorCandidates $editorCandidates -HeadlessCandidates $headlessCandidates
+
+    $fields = New-Object System.Collections.Generic.List[string]
+    $fields.Add('RESULT=MCP_DOWN')
+    $fields.Add('probe_only=true')
+    $fields.Add(("url={0}" -f (Format-RecoverResultValue $healthUrl)))
+    $fields.Add(("reason={0}" -f (Format-RecoverResultValue $Probe.ErrorClass)))
+    if ($null -ne $Probe.StatusCode) {
+        $fields.Add(("status_code={0}" -f $Probe.StatusCode))
+    }
+    $fields.Add(("detail={0}" -f (Format-RecoverResultValue $Probe.ErrorMessage)))
+    $fields.Add(("listener_port={0}" -f $port))
+    $fields.Add(("listener_count={0}" -f $listeners.Count))
+    $fields.Add(("listener_pids={0}" -f (Join-RecoverIds $listeners.Pids)))
+    $fields.Add(("listener_owners={0}" -f (Format-RecoverResultValue (($listeners.Owners) -join ','))))
+    if ($listeners.Error) {
+        $fields.Add(("listener_error={0}" -f (Format-RecoverResultValue $listeners.Error)))
+    }
+    $fields.Add(("editor_candidate_count={0}" -f $editorCandidates.Count))
+    $fields.Add(("editor_candidate_pids={0}" -f (Join-RecoverIds ($editorCandidates | ForEach-Object { $_.Id }))))
+    $fields.Add(("headless_candidate_count={0}" -f $headlessCandidates.Count))
+    $fields.Add(("headless_candidate_pids={0}" -f (Join-RecoverIds ($headlessCandidates | ForEach-Object { $_.Id }))))
+    $fields.Add(("next_action={0}" -f $nextAction))
+
+    Write-Output ($fields -join ' ')
 }
 
 function Set-HeadlessAssetEditorRestoreState {
@@ -234,6 +444,9 @@ function Initialize-HeadlessEditorConfigState {
 
     $perProjectIni = Join-Path $configDir 'EditorPerProjectUserSettings.ini'
     $perProjectLines = @(
+        '[/Script/UnrealEd.EditorStyleSettings]',
+        'AssetEditorOpenLocation=NewWindow',
+        '',
         '[AssetEditorSubsystem]',
         'CleanShutdown=True',
         'DebuggerAttached=False',
@@ -249,14 +462,14 @@ function Initialize-HeadlessEditorConfigState {
     }
 }
 
-$health = Get-MonolithHealth
-if ($health) {
-    Write-UpResult -Health $health -ElapsedSec 0
+$healthProbe = Get-MonolithHealthProbe
+if ($healthProbe.Health) {
+    Write-UpResult -Health $healthProbe.Health -ElapsedSec 0
     exit 0
 }
 
 if ($ProbeOnly) {
-    Write-Output ("RESULT=MCP_DOWN probe_only=true url={0}" -f $healthUrl)
+    Write-DownProbeResult -Probe $healthProbe
     exit 2
 }
 
@@ -282,6 +495,7 @@ else {
     $headlessArgs = @(
         ("-EditorLayoutINI={0}" -f $headlessConfig.LayoutIni),
         ("-EditorPerProjectUserSettingsINI={0}" -f $headlessConfig.PerProjectIni),
+        '-ini:EditorPerProjectUserSettings:/Script/UnrealEd.EditorStyleSettings:AssetEditorOpenLocation=NewWindow',
         '-ini:EditorPerProjectUserSettings:AssetEditorSubsystem:CleanShutdown=True',
         '-ini:EditorPerProjectUserSettings:[/Script/UnrealEd.EditorLoadingSavingSettings]:RestoreOpenAssetTabsOnRestart=NeverRestore'
     )
@@ -315,6 +529,10 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSec) {
     Start-Sleep -Seconds $PollIntervalSec
     $health = Get-MonolithHealth
     if ($health) {
+        $healthyLog = Get-NewestEditorLog -Root $hostRoot
+        if ($healthyLog) {
+            Write-Output ("INFO editor_log_current path={0}" -f $healthyLog.FullName)
+        }
         Write-UpResult -Health $health -ElapsedSec ([int]$stopwatch.Elapsed.TotalSeconds)
         exit 0
     }

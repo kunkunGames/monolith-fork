@@ -51,7 +51,7 @@ bool FMonolithBuildArtifactRegistryAndGuardTest::RunTest(const FString& /*Parame
 	TestTrue(TEXT("artifact.mirror_screenshot_evidence registered"), HasAction(TEXT("artifact"), TEXT("mirror_screenshot_evidence")));
 	TestTrue(TEXT("notify.discord_screenshot_evidence registered"), HasAction(TEXT("notify"), TEXT("discord_screenshot_evidence")));
 
-	for (const TPair<FString, FString> NamespaceAction : {
+	for (const TPair<FString, FString>& NamespaceAction : {
 		TPair<FString, FString>(TEXT("build"), TEXT("resolve_unreal_engine")),
 		TPair<FString, FString>(TEXT("build"), TEXT("run_buildcookrun")),
 		TPair<FString, FString>(TEXT("artifact"), TEXT("package_build_outputs")),

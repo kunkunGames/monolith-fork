@@ -24,6 +24,7 @@
 #include "UObject/UnrealType.h"
 #include "MonolithUICommon.h"  // MonolithUI::LoadWidgetBlueprint
 #include "Components/Widget.h"
+#include "Components/PanelWidget.h"
 #include "Components/PanelSlot.h"
 #include "Blueprint/WidgetTree.h"
 
@@ -191,6 +192,21 @@ namespace MonolithUIRegistryPhase2
         return FString();
     }
 
+    static FString GetFirstPathSegment(const FString& PropertyPath)
+    {
+        FString Segment = PropertyPath;
+        if (Segment.IsEmpty())
+        {
+            return FString();
+        }
+        int32 DotIndex = INDEX_NONE;
+        if (Segment.FindChar(TEXT('.'), DotIndex))
+        {
+            Segment.LeftInline(DotIndex);
+        }
+        return Segment;
+    }
+
     static TSharedPtr<FJsonObject> MakePropertySchemaEntry(
         const FUIPropertyMapping& Mapping,
         const UClass* WidgetClass,
@@ -218,7 +234,8 @@ namespace MonolithUIRegistryPhase2
         Entry->SetStringField(TEXT("json_path"), Mapping.JsonPath);
         Entry->SetStringField(TEXT("engine_path"), Mapping.EnginePath);
         Entry->SetStringField(TEXT("cpp_type"), GetPropertyCppType(Property));
-        Entry->SetBoolField(TEXT("settable"), bSettable);
+        const bool bEffectiveSettable = bSettable && (!bSlotPath || Property != nullptr);
+        Entry->SetBoolField(TEXT("settable"), bEffectiveSettable);
         Entry->SetStringField(TEXT("allowlist_status"), AllowlistStatus);
         Entry->SetStringField(TEXT("tooltip"), Mapping.Description);
         Entry->SetStringField(TEXT("description"), Mapping.Description);
@@ -252,10 +269,84 @@ namespace MonolithUIRegistryPhase2
         if (bSlotPath)
         {
             Entry->SetStringField(TEXT("slot_class"), LiveSlotClass ? LiveSlotClass->GetPathName() : FString());
-            Entry->SetStringField(TEXT("slot_context"),
-                LiveSlotClass
-                    ? TEXT("settable for the supplied live widget slot class")
-                    : TEXT("contextual; settable only when the live parent creates a compatible slot class"));
+            if (!LiveSlotClass)
+            {
+                Entry->SetStringField(TEXT("slot_context"),
+                    TEXT("contextual; settable only when the live parent creates a compatible slot class"));
+            }
+            else if (!Property)
+            {
+                Entry->SetStringField(TEXT("slot_context"),
+                    TEXT("blocked for the supplied live widget slot class; this Slot.* path belongs to a different parent slot shape"));
+                Entry->SetStringField(TEXT("blocked_reason"), FString::Printf(
+                    TEXT("Live slot class '%s' does not expose engine path '%s'."),
+                    *LiveSlotClass->GetPathName(),
+                    *ResolutionPath));
+            }
+            else
+            {
+                Entry->SetStringField(TEXT("slot_context"),
+                    TEXT("settable for the supplied live widget slot class"));
+            }
+        }
+
+        return Entry;
+    }
+
+    static TSharedPtr<FJsonObject> MakeLiveChildCapacityEntry(UWidget* LiveWidget, const FUITypeRegistryEntry* TypeEntry)
+    {
+        TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
+        UPanelWidget* Panel = Cast<UPanelWidget>(LiveWidget);
+        const int32 MaxChildren = Panel
+            ? (Panel->CanHaveMultipleChildren() ? -1 : 1)
+            : (TypeEntry ? TypeEntry->MaxChildren : 0);
+
+        Entry->SetNumberField(TEXT("max_children"), MaxChildren);
+        Entry->SetBoolField(TEXT("is_panel"), Panel != nullptr);
+        Entry->SetBoolField(TEXT("can_add_child"), false);
+        Entry->SetNumberField(TEXT("child_count"), 0);
+
+        if (!LiveWidget)
+        {
+            Entry->SetStringField(TEXT("capacity_context"), TEXT("no live widget supplied"));
+            return Entry;
+        }
+
+        Entry->SetStringField(TEXT("widget_class"), LiveWidget->GetClass()->GetPathName());
+        if (!Panel)
+        {
+            Entry->SetStringField(TEXT("capacity_context"), TEXT("leaf widget cannot parent children"));
+            return Entry;
+        }
+
+        const int32 ChildCount = Panel->GetChildrenCount();
+        const bool bCanAddChild = Panel->CanAddMoreChildren();
+        Entry->SetStringField(TEXT("panel_class"), Panel->GetClass()->GetPathName());
+        Entry->SetNumberField(TEXT("child_count"), ChildCount);
+        Entry->SetBoolField(TEXT("can_add_child"), bCanAddChild);
+
+        if (MaxChildren < 0)
+        {
+            Entry->SetStringField(TEXT("capacity_context"), TEXT("multi-child panel can accept additional children"));
+        }
+        else if (MaxChildren == 1)
+        {
+            if (bCanAddChild)
+            {
+                Entry->SetStringField(TEXT("capacity_context"), TEXT("single-child container is empty"));
+            }
+            else
+            {
+                Entry->SetStringField(TEXT("capacity_context"), TEXT("single-child container is full"));
+                if (const UWidget* ExistingChild = Panel->GetChildAt(0))
+                {
+                    Entry->SetStringField(TEXT("blocking_child"), ExistingChild->GetName());
+                }
+            }
+        }
+        else
+        {
+            Entry->SetStringField(TEXT("capacity_context"), TEXT("widget cannot parent children"));
         }
 
         return Entry;
@@ -311,9 +402,12 @@ namespace MonolithUIRegistryPhase2
 
         bool bIncludeUnsafe = false;
         Params->TryGetBoolField(TEXT("include_unsafe"), bIncludeUnsafe);
+        bool bIncludeInherited = false;
+        Params->TryGetBoolField(TEXT("include_inherited"), bIncludeInherited);
 
         UClass* WidgetClass = nullptr;
         UClass* LiveSlotClass = nullptr;
+        UWidget* LiveWidget = nullptr;
         FString ResolvedFrom;
 
         if (!AssetPath.IsEmpty() && !WidgetName.IsEmpty())
@@ -328,7 +422,7 @@ namespace MonolithUIRegistryPhase2
             {
                 return FMonolithActionResult::Error(TEXT("WidgetTree is null."), -32603);
             }
-            UWidget* LiveWidget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
+            LiveWidget = WBP->WidgetTree->FindWidget(FName(*WidgetName));
             if (!LiveWidget)
             {
                 return FMonolithActionResult::Error(
@@ -363,12 +457,16 @@ namespace MonolithUIRegistryPhase2
         TArray<TSharedPtr<FJsonValue>> Properties;
         TArray<TSharedPtr<FJsonValue>> SlotProperties;
         TSet<FString> MappedJsonPaths;
+        TSet<FString> MappedReflectedPropertyRoots;
+        int32 IncompatibleLiveSlotPathCount = 0;
 
         if (Entry)
         {
             for (const FUIPropertyMapping& Mapping : Entry->PropertyMappings)
             {
                 MappedJsonPaths.Add(Mapping.JsonPath);
+                MappedReflectedPropertyRoots.Add(GetFirstPathSegment(Mapping.JsonPath));
+                MappedReflectedPropertyRoots.Add(GetFirstPathSegment(Mapping.EnginePath));
                 const bool bSlotPath = Mapping.JsonPath.StartsWith(TEXT("Slot."));
                 const bool bSlotSettable = !bSlotPath || LiveSlotClass != nullptr;
                 const FString Status = bSlotPath ? TEXT("slot_only") : TEXT("allowed");
@@ -378,6 +476,10 @@ namespace MonolithUIRegistryPhase2
                     LiveSlotClass,
                     Status,
                     bSlotSettable);
+                if (bSlotPath && LiveSlotClass && !PropertyEntry->GetBoolField(TEXT("settable")))
+                {
+                    ++IncompatibleLiveSlotPathCount;
+                }
                 Properties.Add(MakeShared<FJsonValueObject>(PropertyEntry));
                 if (bSlotPath)
                 {
@@ -388,10 +490,14 @@ namespace MonolithUIRegistryPhase2
 
         if (bIncludeUnsafe)
         {
-            for (TFieldIterator<FProperty> It(WidgetClass, EFieldIteratorFlags::IncludeSuper); It; ++It)
+            const EFieldIteratorFlags::SuperClassFlags SuperClassFlags =
+                bIncludeInherited ? EFieldIteratorFlags::IncludeSuper : EFieldIteratorFlags::ExcludeSuper;
+            for (TFieldIterator<FProperty> It(WidgetClass, SuperClassFlags); It; ++It)
             {
                 FProperty* Property = *It;
-                if (!Property || MappedJsonPaths.Contains(Property->GetName()))
+                if (!Property
+                    || MappedJsonPaths.Contains(Property->GetName())
+                    || MappedReflectedPropertyRoots.Contains(Property->GetName()))
                 {
                     continue;
                 }
@@ -419,6 +525,12 @@ namespace MonolithUIRegistryPhase2
             Warnings.Add(MakeShared<FJsonValueString>(
                 TEXT("Live widget has no parent slot, so Slot.* paths are not settable in this context.")));
         }
+        if (IncompatibleLiveSlotPathCount > 0)
+        {
+            Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+                TEXT("%d Slot.* path(s) are not settable for the live slot class; inspect each slot_context before writing."),
+                IncompatibleLiveSlotPathCount)));
+        }
 
         TArray<TSharedPtr<FJsonValue>> NextActions;
         auto AddNextAction = [&NextActions](const FString& ToolName, bool bAvailable)
@@ -441,6 +553,8 @@ namespace MonolithUIRegistryPhase2
         Result->SetStringField(TEXT("resolved_from"), ResolvedFrom);
         Result->SetStringField(TEXT("engine_path"), WidgetClass->GetPathName());
         Result->SetBoolField(TEXT("registered"), Entry != nullptr);
+        Result->SetBoolField(TEXT("include_inherited"), bIncludeInherited);
+        Result->SetBoolField(TEXT("include_unsafe"), bIncludeUnsafe);
         if (Entry)
         {
             Result->SetStringField(TEXT("container_kind"), ContainerKindToString(Entry->ContainerKind));
@@ -459,6 +573,13 @@ namespace MonolithUIRegistryPhase2
             Result->SetStringField(TEXT("widget_name"), WidgetName);
         }
         Result->SetStringField(TEXT("live_slot_class"), LiveSlotClass ? LiveSlotClass->GetPathName() : FString());
+        if (LiveWidget)
+        {
+            const TSharedPtr<FJsonObject> ChildCapacity = MakeLiveChildCapacityEntry(LiveWidget, Entry);
+            Result->SetObjectField(TEXT("live_child_capacity"), ChildCapacity);
+            Result->SetNumberField(TEXT("live_child_count"), ChildCapacity->GetNumberField(TEXT("child_count")));
+            Result->SetBoolField(TEXT("live_can_add_child"), ChildCapacity->GetBoolField(TEXT("can_add_child")));
+        }
         Result->SetArrayField(TEXT("properties"), Properties);
         Result->SetArrayField(TEXT("slot_properties"), SlotProperties);
         Result->SetNumberField(TEXT("property_count"), Properties.Num());
@@ -1010,7 +1131,7 @@ void FMonolithUIRegistryActions::RegisterActions(FMonolithToolRegistry& Registry
             .Optional(TEXT("widget_class"), TEXT("string"), TEXT("Widget token or class path, e.g. TextBlock, Button, /Script/UMG.Button"))
             .OptionalAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint path. Combine with widget_name to describe a live widget instance."))
             .Optional(TEXT("widget_name"), TEXT("string"), TEXT("Widget name inside asset_path. When supplied, live slot context is included."))
-            .Optional(TEXT("include_inherited"), TEXT("bool"), TEXT("Reserved; inherited reflected fields are included for include_unsafe=true."), TEXT("false"))
+            .Optional(TEXT("include_inherited"), TEXT("bool"), TEXT("When include_unsafe=true, include inherited reflected fields as raw-mode-only entries."), TEXT("false"))
             .Optional(TEXT("include_unsafe"), TEXT("bool"), TEXT("Also include reflected editable properties that require raw_mode and are not in the curated allowlist."), TEXT("false"))
             .Optional(TEXT("include_examples"), TEXT("bool"), TEXT("Reserved for future examples; current result returns next_actions and schema metadata."), TEXT("true"))
             .Build(),

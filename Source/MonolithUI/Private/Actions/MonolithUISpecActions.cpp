@@ -398,14 +398,15 @@ namespace MonolithUI::SpecActionsInternal
         // Styles map.
         if (SpecObj->TryGetObjectField(TEXT("styles"), Sub) && Sub)
         {
-            for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*Sub)->Values)
+            for (const auto& Pair : (*Sub)->Values)
             {
                 const TSharedPtr<FJsonObject>* StyleObj = nullptr;
                 if (Pair.Value.IsValid() && Pair.Value->TryGetObject(StyleObj) && StyleObj)
                 {
                     FUISpecStyle Style;
                     ParseStyle(*StyleObj, Style);
-                    OutDoc.Styles.Add(FName(*Pair.Key), Style);
+                    const FString StyleName(Pair.Key.Len(), *Pair.Key);
+                    OutDoc.Styles.Add(FName(*StyleName), Style);
                 }
             }
         }
@@ -4577,6 +4578,29 @@ namespace MonolithUI::SpecActionsInternal
         return Copy;
     }
 
+    static void NormalizeObjectFieldToSingletonArray(const TSharedPtr<FJsonObject>& Object, const TCHAR* FieldName)
+    {
+        if (!Object.IsValid() || !Object->HasField(FieldName))
+        {
+            return;
+        }
+
+        const TSharedPtr<FJsonObject>* FieldObject = nullptr;
+        if (!Object->TryGetObjectField(FieldName, FieldObject) || !FieldObject || !FieldObject->IsValid())
+        {
+            return;
+        }
+
+        TArray<TSharedPtr<FJsonValue>> Values;
+        Values.Add(MakeShared<FJsonValueObject>(*FieldObject));
+        Object->SetArrayField(FieldName, Values);
+    }
+
+    static void NormalizeCommonMenuTransformSpec(const TSharedPtr<FJsonObject>& Spec)
+    {
+        NormalizeObjectFieldToSingletonArray(Spec, TEXT("screens"));
+    }
+
     static bool ResolveCommonMenuSpecObject(const TSharedPtr<FJsonObject>& Params, TSharedPtr<FJsonObject>& OutSpec, FString& OutError)
     {
         if (!Params.IsValid())
@@ -4587,7 +4611,8 @@ namespace MonolithUI::SpecActionsInternal
 
         if (!Params->HasField(TEXT("spec")))
         {
-            OutSpec = Params;
+            OutSpec = CloneJsonObject(Params);
+            NormalizeCommonMenuTransformSpec(OutSpec);
             return true;
         }
 
@@ -4597,7 +4622,8 @@ namespace MonolithUI::SpecActionsInternal
             OutError = TEXT("spec must be an object when provided.");
             return false;
         }
-        OutSpec = *SpecObject;
+        OutSpec = CloneJsonObject(*SpecObject);
+        NormalizeCommonMenuTransformSpec(OutSpec);
         return true;
     }
 
@@ -4855,9 +4881,9 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
-        for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : A->Values)
+        for (const auto& Pair : A->Values)
         {
-            const TSharedPtr<FJsonValue> OtherValue = B->TryGetField(Pair.Key);
+            const TSharedPtr<FJsonValue> OtherValue = B->TryGetField(MakeStringView(Pair.Key));
             if (!OtherValue.IsValid() || !JsonValuesEqual(Pair.Value, OtherValue))
             {
                 return false;
@@ -6706,16 +6732,17 @@ namespace MonolithUI::SpecActionsInternal
             }
         }
 
-        for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : StyleObject->Values)
+        for (const auto& Pair : StyleObject->Values)
         {
-            if (!IsSupportedStylePatchField(Pair.Key) && !IsPatchEnvelopeField(Pair.Key))
+            const FString StyleField(Pair.Key.Len(), *Pair.Key);
+            if (!IsSupportedStylePatchField(StyleField) && !IsPatchEnvelopeField(StyleField))
             {
                 AddUnsupportedPatchField(
                     OutUnsupported,
                     Index,
                     OpForDiagnostics,
                     TEXT("Only proof-gated common/SizeBox/Border/ProgressBar style fields are routed automatically by ui.apply_ui_spec_patch; use explicit owner actions for other style fields."),
-                    FString::Printf(TEXT("style.%s"), *Pair.Key),
+                    FString::Printf(TEXT("style.%s"), *StyleField),
                     WidgetName);
             }
         }
@@ -8935,7 +8962,7 @@ void MonolithUI::FSpecActions::Register(FMonolithToolRegistry& Registry)
         FMonolithActionHandler::CreateStatic(&HandleApplyCommonMenuTransformSpec),
         FParamSchemaBuilder()
             .Optional(TEXT("spec"), TEXT("object"), TEXT("Nested transform spec object; when omitted, the payload itself is the spec"))
-            .Optional(TEXT("screens"), TEXT("array"), TEXT("Screen map entries [{id, asset_path}] used by focus_table and nav_overrides"))
+            .Optional(TEXT("screens"), TEXT("array|object"), TEXT("Screen map entries [{id, asset_path}] used by focus_table and nav_overrides; a single object is normalized to one entry"))
             .Optional(TEXT("layout_asset_path"), TEXT("string"), TEXT("Default PrimaryGameLayout WBP path used by layout_layers/layers"))
             .Optional(TEXT("layout_layers"), TEXT("array"), TEXT("Array of ui.add_primary_game_layout_layer child specs"))
             .Optional(TEXT("layers"), TEXT("array"), TEXT("Menu layer entries from build_menu_from_spec deferred_aggregation; layer_tag falls back to tag/id and asset_path falls back to layout_asset_path"))

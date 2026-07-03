@@ -82,6 +82,12 @@ Try calling Monolith MCP: `editor_query({action: 'get_build_status'})` or `monol
 - **MCP responds** → Editor is running
 - **MCP fails/timeout** → Editor is closed
 
+When the editor is running, inspect Live Coding before attempting any compile. Use `editor_query("get_live_coding_diagnostics")` or `editor_query("get_build_status")` first, then choose:
+
+- `.cpp` body-only change → `editor_query("trigger_build", { "wait": true })` / `editor_query("live_compile", { "wait": true })`, followed by `editor_query("get_compile_output")`.
+- Header/API/module descriptor/new-or-deleted source change → close/restart editor and run full UBT; Live Coding cannot make new generated symbols reliable.
+- Endpoint down but no editor-server process remains → run `Scripts\watch_mcp.ps1 -Once` or the project's UBT command, then recover the MCP endpoint.
+
 ## Step 3: Execute Build
 
 ### Live Coding Path (editor open + .cpp-only changes)
@@ -109,7 +115,7 @@ $editorTarget = if ($targetFile) {
 } else {
   "$([System.IO.Path]::GetFileNameWithoutExtension($uproject.Name))Editor"
 }
-$resolver = Join-Path $projectRoot "BatchFiles\Script\ResolveUnrealEngine.ps1"
+$resolver = Join-Path $projectRoot "Build\BatchFiles\Script\ResolveUnrealEngine.ps1"
 $engineRoot = powershell -NoProfile -ExecutionPolicy Bypass -File $resolver -Project $uproject.FullName -Output Root
 & "$engineRoot\Engine\Binaries\DotNET\UnrealBuildTool\UnrealBuildTool.exe" $editorTarget Win64 Development "-Project=$($uproject.FullName)" -WaitMutex -NoHotReloadFromIDE
 ```

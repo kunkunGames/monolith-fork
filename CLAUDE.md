@@ -70,7 +70,7 @@ Project search is content-inclusive by default. Live `project.search` and offlin
 
 `project repair_fts --target=all` covers all seven project FTS tables. Prefer a dry-run first on the live editor DB; use `--execute` only when repair is intended and the DB is writable, or verify write behavior on a copied DB.
 
-`Scripts/check_index_freshness.ps1` runs the offline health -> repair -> re-verify chain for both DBs in one call: report mode prints each warning plus exact repair commands; `-Execute` runs only the warning-indicated `repair_crg_cache`/`repair_fts` repairs and refuses on-disk DB writes while the MCP endpoint is up unless `-AllowLiveEditor` is passed. Contract: `Docs/specs/Script/SPEC_MonolithAgentOpsScripts.md`.
+`Scripts/check_index_freshness.ps1` runs the offline health -> repair -> re-verify chain for both DBs in one call: report mode prints each warning plus exact repair commands; `-Execute` runs only the warning-indicated `repair_crg_cache`/`repair_fts` repairs and refuses on-disk DB writes while the MCP endpoint is up unless `-AllowLiveEditor` is passed. Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
 
 ## 13. Offline Source/Bridge Usage
 
@@ -87,7 +87,7 @@ Binaries\monolith_query.exe bridge search_asset_symbols --asset-path=/Game/Maps/
 Binaries\monolith_query.exe bridge search_asset_symbols --symbol=UObject --limit=5
 ```
 
-`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. Use `source build_crg_graph --execute` only when that graph-node search/export surface is explicitly needed; the builder uses a graph rebuild lock, skips when source-signature metadata is current (`skip_reason=parity_fresh`) or when the last build is within the `--cooldown-seconds` window (default 1800s, `skip_reason=cooldown`) unless `--force` is passed, and replaces `graph.db` only after a validated temp DB build. The cooldown caps the daily `repair_crg_cache`+`build_crg_graph` maintenance loop because `graph.db` is an export/search cache; do not chain the pair (§12). Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline `monolith_query.exe source build_crg_graph --execute` remains synchronous. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
+`source search_crg_graph` reads `Saved/graph.db` and uses `nodes_fts` before falling back to LIKE. Use `source build_crg_graph --execute` only when that graph-node search/export surface is explicitly needed; the builder uses a graph rebuild lock, skips when source-signature metadata is current (`skip_reason=parity_fresh`) or when the last build is within the `--cooldown_seconds` window (default 1800s, `skip_reason=cooldown`) unless `--force` is passed, and replaces `graph.db` only after a validated temp DB build. The cooldown caps the daily `repair_crg_cache`+`build_crg_graph` maintenance loop because `graph.db` is an export/search cache; do not chain the pair (§12). Live editor/MCP execute calls return `status=started`, `job_id`, and `poll_action=source.crg_graph_health`; offline `monolith_query.exe source build_crg_graph --execute` remains synchronous. `bridge search_asset_symbols` is read-only, opens `Saved/ProjectIndex.db` and `Saved/EngineSource.db`, and returns heuristic links with `confidence`, `reasons`, `asset`, `symbol`, `warnings`, `count`, `truncated`, and `lexical_only`.
 
 ## 13a. Offline Project Search Usage
 
@@ -112,7 +112,44 @@ D:\P4\speed\Build\BatchFiles\RunHeadlessEditor.bat
 
 Wait for `localhost:9316` to listen, reconnect to `http://localhost:9316/mcp`, then re-run `monolith_status()` before using `monolith_find`, `monolith_discover`, or namespace actions. If the endpoint still cannot connect after the editor starts, inspect `D:\P4\speed\Saved\HeadlessMcp\Logs\HeadlessEditor-*.log` and the Monolith proxy/editor invocation logs, report the concrete blocker, and limit fallback work to read-only `Binaries\monolith_query.exe` source/project/bridge queries while editor-only actions remain blocked.
 
-`Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances and MCP-disabled editor processes are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/Script/SPEC_MonolithAgentOpsScripts.md`.
+`Scripts/recover_mcp.ps1` runs this probe -> launch -> wait -> verify sequence deterministically (`-ProbeOnly` for diagnosis; `-game`/`-server` instances and MCP-disabled editor processes are not counted as a booting editor; documented `RESULT=` tokens and exit codes). Contract: `Docs/specs/SPEC_MonolithAgentOpsScripts.md`.
+
+For long Codex/Claude work where editor-backed actions will be used repeatedly, start the watchdog from the Monolith plugin root:
+
+```powershell
+Scripts\watch_mcp.ps1
+```
+
+The watchdog keeps probing `http://localhost:9316/health`. When the endpoint is down and the editor-server process is gone, it runs the host project's primary editor UBT build, then restart-triggered incremental maintenance before relaunch: `UnrealEditor-Cmd.exe -run=MonolithReindex -mode=project` for `Saved\EngineSource.db`, followed by cooldown-gated `Saved\graph.db` refresh. Because `ProjectIndex.db` asset indexing requires the non-commandlet editor subsystem, the asset portion is held until `recover_mcp.ps1` brings `/health` back, then `bridge.start_indexing(scope=assets, full=false)` runs and waits before normal watchdog operation resumes. If a headless editor process is alive but `/health` stays unhealthy until `-RecoverTimeoutSec`, the watchdog stops only the headless `-NullRHI` / `Saved\HeadlessMcp` process and reruns the same build -> source/graph maintenance -> relaunch sequence; dedicated-server and user editor processes are not killed. Recover launches force headless-safe settings including `AssetEditorOpenLocation=NewWindow`, `CleanShutdown=True`, and `RestoreOpenAssetTabsOnRestart=NeverRestore` to avoid stale asset-editor modal loops. It also runs one scheduled index-maintenance pass per selected time-zone date by default at `05:00` KST: `bridge.start_indexing(scope=all, full=false)`, wait through `bridge.get_index_status`, then refresh `Saved\graph.db` through the cooldown-gated offline graph builder. Tune with `-RestartReindexMode`, `-RestartReindexTargets`, `-SkipRestartReindex`, `-DailyReindexTime`, `-DailyReindexTimeZone`, `-DailyReindexMode incremental|full`, `-DailyReindexTargets`, or disable scheduled maintenance with `-DisableDailyReindex`. Use `-Once` for a single CI-style probe/recover cycle and `-MaxRestartAttempts` when a bounded supervisor is required; use `-RunDailyReindexNow` only for an intentional maintenance smoke test.
+
+To keep a visible watchdog PowerShell window across workstation restarts, register it as a per-user Task Scheduler job that runs only when the user is logged on. Do not install it as a Windows Service or as `LocalSystem`: the watchdog depends on the user's Unreal/project environment and an interactive session is the right context for the editor-backed MCP endpoint. Agents can register the task from an elevated or normal PowerShell prompt owned by the target user:
+
+```powershell
+$taskName = 'Monolith MCP Watchdog - Speed'
+$projectRoot = 'D:\P4\speed'
+$watchdogExe = Join-Path $projectRoot 'Plugins\Monolith\Binaries\monolith_watchdog.exe'
+$user = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
+
+$action = New-ScheduledTaskAction -Execute $watchdogExe -Argument "`"$projectRoot`"" -WorkingDirectory $projectRoot
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive
+$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+    -Principal $principal -Settings $settings `
+    -Description 'Keeps the Speed Monolith MCP endpoint supervised in an interactive watchdog PowerShell window.' `
+    -Force
+Start-ScheduledTask -TaskName $taskName
+```
+
+Verify with `Get-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed'`, inspect the visible PowerShell watchdog window, and confirm `Invoke-RestMethod http://localhost:9316/health` or `monolith_status()` once the editor is up. To remove the auto-start hook, run `Unregister-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed' -Confirm:$false`.
+Task Manager should show `monolith_watchdog.exe`; that wrapper keeps a child `powershell.exe` running for `Scripts\watch_mcp.ps1` and forwards the watchdog exit code.
+
+When compiling intentionally, check the live editor path first. If the editor/MCP endpoint is up and the change is `.cpp` body-only, use the editor namespace Live Coding flow (`editor.get_live_coding_diagnostics`, `editor.trigger_build`/`editor.live_compile`, then `editor.get_compile_output`/`editor.get_build_errors`). Run full UBT only when the editor is closed/dead, or when the change is structural (`.h`, new/deleted `.cpp`, `.Build.cs`, `.uplugin`, or generated-code-affecting API changes).
+
+For task execution priority, use this order: first-class Monolith action or workflow > Unreal commandlet > direct reflected/CDO property access or modification > Unreal Python. If a required task cannot be completed with a first-class Monolith action, finish through the narrowest safe fallback only when necessary, then add or update a concrete `Docs/TODO.md` item under the Monolith native fallback-gap section so the fallback can be promoted into a typed action/workflow later. Do not leave an `editor.run_python` or direct CDO workaround as an undocumented permanent path.
 
 ## 15. Tool Invocation Daily Logs
 

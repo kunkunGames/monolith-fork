@@ -56,16 +56,58 @@ namespace
 		return FMonolithSourceControlUtils::NormalizePathForSourceControl(Input, OutFile, OutError);
 	}
 
-	bool ReadPathArray(const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutInputs, TArray<FString>& OutFiles, TArray<TSharedPtr<FJsonValue>>& OutRows, FString& OutError)
+	bool ReadPathValues(const TSharedPtr<FJsonObject>& Params, TArray<TSharedPtr<FJsonValue>>& OutPathValues, FString& OutError)
 	{
 		const TArray<TSharedPtr<FJsonValue>>* PathValues = nullptr;
-		if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("paths"), PathValues) || !PathValues || PathValues->Num() == 0)
+		if (!Params.IsValid())
 		{
-			OutError = TEXT("Required parameter: paths (non-empty string array)");
+			OutError = TEXT("Required parameter: paths (non-empty string array or string)");
 			return false;
 		}
 
-		for (const TSharedPtr<FJsonValue>& Value : *PathValues)
+		const TSharedPtr<FJsonValue>* RawPaths = Params->Values.Find(TEXT("paths"));
+		if (!RawPaths || !RawPaths->IsValid())
+		{
+			OutError = TEXT("Required parameter: paths (non-empty string array or string)");
+			return false;
+		}
+
+		if ((*RawPaths)->Type == EJson::Array)
+		{
+			if (!Params->TryGetArrayField(TEXT("paths"), PathValues) || !PathValues || PathValues->Num() == 0)
+			{
+				OutError = TEXT("Required parameter: paths (non-empty string array or string)");
+				return false;
+			}
+			OutPathValues = *PathValues;
+			return true;
+		}
+
+		if ((*RawPaths)->Type == EJson::String)
+		{
+			FString Path;
+			if (!(*RawPaths)->TryGetString(Path) || Path.TrimStartAndEnd().IsEmpty())
+			{
+				OutError = TEXT("Required parameter: paths (non-empty string array or string)");
+				return false;
+			}
+			OutPathValues.Add(MakeShared<FJsonValueString>(Path));
+			return true;
+		}
+
+		OutError = TEXT("Required parameter: paths (non-empty string array or string)");
+		return false;
+	}
+
+	bool ReadPathArray(const TSharedPtr<FJsonObject>& Params, TArray<FString>& OutInputs, TArray<FString>& OutFiles, TArray<TSharedPtr<FJsonValue>>& OutRows, FString& OutError)
+	{
+		TArray<TSharedPtr<FJsonValue>> PathValues;
+		if (!ReadPathValues(Params, PathValues, OutError))
+		{
+			return false;
+		}
+
+		for (const TSharedPtr<FJsonValue>& Value : PathValues)
 		{
 			FString Input;
 			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -101,6 +143,46 @@ namespace
 			return false;
 		}
 		return true;
+	}
+
+	bool TryReadTolerantBoolField(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, bool& InOutValue, FString& OutError)
+	{
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue>* RawValue = Params->Values.Find(FieldName);
+		if (!RawValue || !RawValue->IsValid() || (*RawValue)->Type == EJson::Null)
+		{
+			return true;
+		}
+
+		if ((*RawValue)->Type == EJson::Boolean)
+		{
+			return Params->TryGetBoolField(FieldName, InOutValue);
+		}
+
+		if ((*RawValue)->Type == EJson::String)
+		{
+			FString Text;
+			(*RawValue)->TryGetString(Text);
+			Text.TrimStartAndEndInline();
+			Text.ToLowerInline();
+			if (Text == TEXT("true") || Text == TEXT("1") || Text == TEXT("yes") || Text == TEXT("on"))
+			{
+				InOutValue = true;
+				return true;
+			}
+			if (Text == TEXT("false") || Text == TEXT("0") || Text == TEXT("no") || Text == TEXT("off"))
+			{
+				InOutValue = false;
+				return true;
+			}
+		}
+
+		OutError = FString::Printf(TEXT("%s must be a bool or one of true/false/1/0/yes/no/on/off."), FieldName);
+		return false;
 	}
 
 	TSharedPtr<FJsonObject> StateToJson(const FString& File, const FSourceControlStatePtr& State)
@@ -199,8 +281,14 @@ namespace
 		bool bConfirm = false;
 		if (Params.IsValid())
 		{
-			Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
-			Params->TryGetBoolField(TEXT("confirm"), bConfirm);
+			if (!TryReadTolerantBoolField(Params, TEXT("dry_run"), bDryRun, Error))
+			{
+				return FMonolithActionResult::Error(Error);
+			}
+			if (!TryReadTolerantBoolField(Params, TEXT("confirm"), bConfirm, Error))
+			{
+				return FMonolithActionResult::Error(Error);
+			}
 		}
 
 		ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
@@ -403,7 +491,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleGetStatus),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("checkout"),
@@ -411,8 +499,8 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleCheckout),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("add"),
@@ -420,8 +508,8 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleAdd),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("checkout_or_add"),
@@ -429,8 +517,8 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleCheckoutOrAdd),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview actions without executing"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview actions without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("delete"),
@@ -438,9 +526,9 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleDelete),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
-			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute source-control delete"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool|string"), TEXT("Required to execute source-control delete. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("mark_for_delete"),
@@ -448,9 +536,9 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleMarkForDelete),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
-			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute source-control mark for delete"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool|string"), TEXT("Required to execute source-control mark for delete. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("revert"),
@@ -458,9 +546,9 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleRevert),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
-			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool|string"), TEXT("Required to execute revert. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("revert_unchanged"),
@@ -468,9 +556,9 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleRevertUnchanged),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Filesystem paths or /Game package/object paths"))
-			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview states without executing"), TEXT("false"))
-			.Optional(TEXT("confirm"), TEXT("bool"), TEXT("Required to execute revert unchanged"), TEXT("false"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Filesystem paths or /Game package/object paths. Alias: files."), { TEXT("files") })
+			.Optional(TEXT("dry_run"), TEXT("bool|string"), TEXT("Preview states without executing. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("bool|string"), TEXT("Required to execute revert unchanged. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("list_opened"),
@@ -479,7 +567,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		FParamSchemaBuilder()
 			.EnableValidation()
 			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Perforce changelist number or 'default'. Omit for all opened files."))
-			.Optional(TEXT("resolve_packages"), TEXT("bool"), TEXT("Run p4 where for each opened file and emit local_path/package_path. Default true."), TEXT("true"))
+			.Optional(TEXT("resolve_packages"), TEXT("bool|string"), TEXT("Run p4 where for each opened file and emit local_path/package_path. Default true. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("true"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened records to return. Default 200, max 2000."), TEXT("200"))
 			.Build());
 
@@ -488,7 +576,7 @@ void FMonolithSourceControlActions::RegisterActions()
 		FMonolithActionHandler::CreateStatic(&HandleMapDepotPaths),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array"), TEXT("Depot, client, local filesystem, or /Game package/object paths to map"))
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Depot, client, local filesystem, or /Game package/object paths to map. Alias: files."), { TEXT("files") })
 			.Build());
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("get_status"),
@@ -608,7 +696,11 @@ FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSha
 	if (Params.IsValid())
 	{
 		Params->TryGetStringField(TEXT("changelist"), Changelist);
-		Params->TryGetBoolField(TEXT("resolve_packages"), bResolvePackages);
+		FString BoolError;
+		if (!TryReadTolerantBoolField(Params, TEXT("resolve_packages"), bResolvePackages, BoolError))
+		{
+			return FMonolithActionResult::Error(BoolError);
+		}
 		Params->TryGetNumberField(TEXT("limit"), LimitValue);
 	}
 	Changelist.TrimStartAndEndInline();
@@ -660,14 +752,15 @@ FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSha
 
 FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const TSharedPtr<FJsonObject>& Params)
 {
-	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-	if (!Params.IsValid() || !Params->TryGetArrayField(TEXT("paths"), Values) || !Values || Values->Num() == 0)
+	TArray<TSharedPtr<FJsonValue>> Values;
+	FString Error;
+	if (!ReadPathValues(Params, Values, Error))
 	{
-		return FMonolithActionResult::Error(TEXT("Required parameter: paths (non-empty string array)"), -32602);
+		return FMonolithActionResult::Error(Error, -32602);
 	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
-	for (const TSharedPtr<FJsonValue>& Value : *Values)
+	for (const TSharedPtr<FJsonValue>& Value : Values)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		FString Input;
@@ -685,8 +778,8 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 		FString PackagePath;
 		if (Input.StartsWith(TEXT("//")))
 		{
-			FString Error;
-			if (DepotPathToLocalPath(Input, LocalPath, Error))
+			FString DepotError;
+			if (DepotPathToLocalPath(Input, LocalPath, DepotError))
 			{
 				PackagePath = LocalPathToPackagePath(LocalPath);
 				Row->SetBoolField(TEXT("valid"), true);
@@ -697,7 +790,7 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 			else
 			{
 				Row->SetBoolField(TEXT("valid"), false);
-				Row->SetStringField(TEXT("error"), Error);
+				Row->SetStringField(TEXT("error"), DepotError);
 			}
 		}
 		else if (Input.StartsWith(TEXT("/")))
@@ -760,7 +853,10 @@ FMonolithActionResult FMonolithSourceControlActions::HandleCheckoutOrAdd(const T
 	bool bDryRun = false;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+		if (!TryReadTolerantBoolField(Params, TEXT("dry_run"), bDryRun, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
 	}
 
 	FMonolithSourceControlPrepareOptions Options;

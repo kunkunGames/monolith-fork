@@ -197,6 +197,8 @@ Extend the existing action, without removing existing fields:
 | `category` | string | empty | Existing category filter. |
 | `mode` | string | `summary` | `summary`, `actions`, or `schema`. |
 | `fields` | array | empty | Optional allowlist of top-level row fields. |
+| `planning_detail` | string | `compact` | `compact` omits heavy per-action planning arrays in namespace listings; `full` includes `precondition_details` and `planning_signals` for metadata audits. |
+| `schema_detail` | string | `compact` | `compact` uses terse action descriptions and omits `search_metadata` plus per-param descriptions from inline `params` in namespace listings; `full` includes complete action/search/schema text. Focused `mode=schema` defaults to `full`. |
 | `limit` | integer | 100 | Maximum namespace/action rows. |
 | `cursor` | string | empty | Cursor for continuation. |
 | `include_optional` | bool | true | Include known optional modules. |

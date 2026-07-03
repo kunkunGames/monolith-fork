@@ -3,6 +3,7 @@
 
 #include "MonolithImageGenSvgSourceActions.h"
 #include "MonolithAssetTextureIngestActions.h"
+#include "MonolithHashUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithParamSchema.h"
@@ -40,6 +41,8 @@ namespace MonolithImageGen::ImageGenerationInternal
 	static constexpr int32 MinResolutionEdge = 16;
 	static constexpr int32 MaxResolutionEdge = 3840;
 	static constexpr int64 MaxResolutionPixels = 8294400;
+	static constexpr double DefaultIma2RateLimitCooldownSeconds = 60.0;
+	static constexpr double MaxIma2RateLimitCooldownSeconds = 3600.0;
 	static constexpr const TCHAR* DefaultGeneratedAssetPath = TEXT("/Game/GeneratedImages");
 	static constexpr const TCHAR* DefaultLocalModel = TEXT("monolith/local-gradient-png-v1");
 	static constexpr const TCHAR* LegacyLocalBmpModel = TEXT("monolith/local-gradient-bmp-v1");
@@ -83,6 +86,15 @@ namespace MonolithImageGen::ImageGenerationInternal
 		FString RevisedPrompt;
 		FString Elapsed;
 	};
+
+	struct FIma2RateLimitCooldownEntry
+	{
+		double UntilSeconds = 0.0;
+		double WindowSeconds = 0.0;
+	};
+
+	static FCriticalSection GIma2RateLimitCooldownLock;
+	static TMap<FString, FIma2RateLimitCooldownEntry> GIma2RateLimitCooldowns;
 
 	static FString ResolveDefaultIma2ServerUrl()
 	{
@@ -1643,6 +1655,189 @@ namespace MonolithImageGen::ImageGenerationInternal
 		return Output;
 	}
 
+	static FString JsonObjectToCondensedString(const TSharedRef<FJsonObject>& Object)
+	{
+		FString Output;
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Output);
+		FJsonSerializer::Serialize(Object, Writer);
+		return Output;
+	}
+
+	static bool IsRetrySignatureSensitiveKey(const FString& Key)
+	{
+		const FString Lower = Key.ToLower();
+		static const TCHAR* Fragments[] = {
+			TEXT("authorization"),
+			TEXT("bearer"),
+			TEXT("token"),
+			TEXT("api_key"),
+			TEXT("apikey"),
+			TEXT("password"),
+			TEXT("passwd"),
+			TEXT("secret"),
+			TEXT("cookie"),
+			TEXT("private_key"),
+			TEXT("session_id"),
+		};
+		for (const TCHAR* Fragment : Fragments)
+		{
+			if (Lower.Contains(Fragment))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static TSharedPtr<FJsonValue> RedactRetrySignatureValue(const TSharedPtr<FJsonValue>& Value);
+
+	static TSharedPtr<FJsonObject> RedactRetrySignatureObject(const TSharedPtr<FJsonObject>& Object)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		if (!Object.IsValid())
+		{
+			return Out;
+		}
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : FMonolithJsonUtils::GetFields(Object))
+		{
+			if (IsRetrySignatureSensitiveKey(Field.Key))
+			{
+				Out->SetStringField(Field.Key, TEXT("[REDACTED]"));
+			}
+			else
+			{
+				Out->SetField(Field.Key, RedactRetrySignatureValue(Field.Value));
+			}
+		}
+		return Out;
+	}
+
+	static TSharedPtr<FJsonValue> RedactRetrySignatureValue(const TSharedPtr<FJsonValue>& Value)
+	{
+		if (!Value.IsValid())
+		{
+			return MakeShared<FJsonValueNull>();
+		}
+		if (Value->Type == EJson::Object)
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (Value->TryGetObject(Object) && Object)
+			{
+				return MakeShared<FJsonValueObject>(RedactRetrySignatureObject(*Object));
+			}
+		}
+		if (Value->Type == EJson::Array)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Array = nullptr;
+			if (Value->TryGetArray(Array) && Array)
+			{
+				TArray<TSharedPtr<FJsonValue>> Redacted;
+				Redacted.Reserve(Array->Num());
+				for (const TSharedPtr<FJsonValue>& Item : *Array)
+				{
+					Redacted.Add(RedactRetrySignatureValue(Item));
+				}
+				return MakeShared<FJsonValueArray>(Redacted);
+			}
+		}
+		return Value;
+	}
+
+	static FString BuildIma2RetrySignature(const TSharedPtr<FJsonObject>& Params)
+	{
+		const TSharedPtr<FJsonObject> Redacted = RedactRetrySignatureObject(Params);
+		return FMonolithHashUtils::Sha256TextWithFallback(
+			TEXT("imagegen:generate_image_via_ima2:") + JsonObjectToCondensedString(Redacted.ToSharedRef()));
+	}
+
+	static double SanitizeIma2RetryAfterSeconds(double RetryAfterSeconds)
+	{
+		if (!FMath::IsFinite(RetryAfterSeconds) || RetryAfterSeconds <= 0.0)
+		{
+			RetryAfterSeconds = DefaultIma2RateLimitCooldownSeconds;
+		}
+		return FMath::Clamp(RetryAfterSeconds, 1.0, MaxIma2RateLimitCooldownSeconds);
+	}
+
+	static void RecordIma2RateLimitCooldown(const FString& RetrySignature, double RetryAfterSeconds)
+	{
+		if (RetrySignature.IsEmpty())
+		{
+			return;
+		}
+		const double WindowSeconds = SanitizeIma2RetryAfterSeconds(RetryAfterSeconds);
+		FScopeLock Lock(&GIma2RateLimitCooldownLock);
+		FIma2RateLimitCooldownEntry& Entry = GIma2RateLimitCooldowns.FindOrAdd(RetrySignature);
+		Entry.WindowSeconds = WindowSeconds;
+		Entry.UntilSeconds = FPlatformTime::Seconds() + WindowSeconds;
+	}
+
+	static void ClearIma2RateLimitCooldown(const FString& RetrySignature)
+	{
+		if (RetrySignature.IsEmpty())
+		{
+			return;
+		}
+		FScopeLock Lock(&GIma2RateLimitCooldownLock);
+		GIma2RateLimitCooldowns.Remove(RetrySignature);
+	}
+
+	static void ResetIma2RateLimitCooldowns()
+	{
+		FScopeLock Lock(&GIma2RateLimitCooldownLock);
+		GIma2RateLimitCooldowns.Reset();
+	}
+
+	static TSharedPtr<FJsonObject> BuildIma2RateLimitErrorData(
+		const FString& RetrySignature,
+		double RetryAfterSeconds,
+		bool bProviderCallSkipped)
+	{
+		const double RetrySeconds = SanitizeIma2RetryAfterSeconds(RetryAfterSeconds);
+		TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+		ErrorData->SetStringField(TEXT("error_class"), TEXT("provider_rate_limited"));
+		ErrorData->SetStringField(TEXT("retry_signature"), RetrySignature);
+		ErrorData->SetNumberField(TEXT("retry_after_seconds"), RetrySeconds);
+		ErrorData->SetNumberField(TEXT("cooldown_remaining_seconds"), RetrySeconds);
+		ErrorData->SetBoolField(TEXT("rate_limit_cooldown_active"), true);
+		ErrorData->SetBoolField(TEXT("provider_call_skipped"), bProviderCallSkipped);
+		return ErrorData;
+	}
+
+	static bool TryMakeIma2RateLimitCooldownResult(const FString& RetrySignature, FMonolithActionResult& OutResult)
+	{
+		if (RetrySignature.IsEmpty())
+		{
+			return false;
+		}
+
+		double RemainingSeconds = 0.0;
+		{
+			FScopeLock Lock(&GIma2RateLimitCooldownLock);
+			FIma2RateLimitCooldownEntry* Entry = GIma2RateLimitCooldowns.Find(RetrySignature);
+			if (!Entry)
+			{
+				return false;
+			}
+			RemainingSeconds = Entry->UntilSeconds - FPlatformTime::Seconds();
+			if (RemainingSeconds <= 0.0)
+			{
+				GIma2RateLimitCooldowns.Remove(RetrySignature);
+				return false;
+			}
+		}
+
+		TSharedPtr<FJsonObject> ErrorData = BuildIma2RateLimitErrorData(RetrySignature, RemainingSeconds, true);
+		FMonolithActionResult Error = FMonolithActionResult::Error(
+			TEXT("Provider rate limit cooldown is active for this identical image request; provider call skipped."),
+			-32603);
+		Error.WithErrorData(ErrorData);
+		Error.WithHint(TEXT("Do not retry this identical image request until error_data.retry_after_seconds elapses. Change the prompt/model/size or wait before retrying."));
+		OutResult = Error;
+		return true;
+	}
+
 	static bool ParseJsonObject(const FString& Body, TSharedPtr<FJsonObject>& OutObject, FString& OutError)
 	{
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Body);
@@ -2039,6 +2234,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 		const FString& ServerUrl,
 		float TimeoutSeconds,
 		const TSharedRef<FJsonObject>& Payload,
+		const FString& RetrySignature,
 		FIma2GenerateResponse& OutResponse)
 	{
 		const FString RequestBody = JsonObjectToString(Payload);
@@ -2107,8 +2303,14 @@ namespace MonolithImageGen::ImageGenerationInternal
 					|| ResponseJson->TryGetNumberField(TEXT("retryAfterSeconds"), RetryAfterSeconds)
 					|| ResponseJson->TryGetNumberField(TEXT("retry_after"), RetryAfterSeconds))
 				{
-					ErrorData->SetNumberField(TEXT("retry_after_seconds"), RetryAfterSeconds);
 				}
+				RetryAfterSeconds = SanitizeIma2RetryAfterSeconds(RetryAfterSeconds);
+				RecordIma2RateLimitCooldown(RetrySignature, RetryAfterSeconds);
+				ErrorData->SetStringField(TEXT("retry_signature"), RetrySignature);
+				ErrorData->SetNumberField(TEXT("retry_after_seconds"), RetryAfterSeconds);
+				ErrorData->SetNumberField(TEXT("cooldown_remaining_seconds"), RetryAfterSeconds);
+				ErrorData->SetBoolField(TEXT("rate_limit_cooldown_active"), true);
+				ErrorData->SetBoolField(TEXT("provider_call_skipped"), false);
 			}
 			TSharedPtr<FJsonObject> RequestSummary = MakeShared<FJsonObject>();
 			CopyOptionalString(Payload, RequestSummary, TEXT("provider"), TEXT("provider"));
@@ -2152,6 +2354,23 @@ namespace MonolithImageGen::ImageGenerationInternal
 }
 
 namespace ImageGenerationInternal = MonolithImageGen::ImageGenerationInternal;
+
+#if WITH_DEV_AUTOMATION_TESTS
+FString FMonolithImageGenActions::TestBuildIma2RetrySignature(const TSharedPtr<FJsonObject>& Params)
+{
+	return ImageGenerationInternal::BuildIma2RetrySignature(Params);
+}
+
+void FMonolithImageGenActions::TestRecordIma2RateLimitCooldown(const FString& RetrySignature, double RetryAfterSeconds)
+{
+	ImageGenerationInternal::RecordIma2RateLimitCooldown(RetrySignature, RetryAfterSeconds);
+}
+
+void FMonolithImageGenActions::TestResetIma2RateLimitCooldowns()
+{
+	ImageGenerationInternal::ResetIma2RateLimitCooldowns();
+}
+#endif
 
 void FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry& Registry)
 {
@@ -2714,11 +2933,19 @@ FMonolithActionResult FMonolithImageGenActions::HandleGenerateImageViaIma2(const
 	}
 
 	ImageGenerationInternal::FIma2GenerateResponse Ima2Response;
-	FMonolithActionResult GenerateResult = ImageGenerationInternal::CallIma2Generate(ServerUrl, TimeoutSeconds, Payload.ToSharedRef(), Ima2Response);
+	const FString RetrySignature = ImageGenerationInternal::BuildIma2RetrySignature(Params);
+	FMonolithActionResult CooldownResult;
+	if (ImageGenerationInternal::TryMakeIma2RateLimitCooldownResult(RetrySignature, CooldownResult))
+	{
+		return CooldownResult;
+	}
+
+	FMonolithActionResult GenerateResult = ImageGenerationInternal::CallIma2Generate(ServerUrl, TimeoutSeconds, Payload.ToSharedRef(), RetrySignature, Ima2Response);
 	if (!GenerateResult.bSuccess)
 	{
 		return GenerateResult;
 	}
+	ImageGenerationInternal::ClearIma2RateLimitCooldown(RetrySignature);
 
 	ImageGenerationInternal::FCompressedImagePayload ImagePayload;
 	FString PayloadError;

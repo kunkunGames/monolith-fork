@@ -144,7 +144,7 @@ public:
 		}
 		if (TickerHandle.IsValid())
 		{
-			FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
+			FTSTicker::RemoveTicker(TickerHandle);
 			TickerHandle.Reset();
 		}
 		bRegistered = false;

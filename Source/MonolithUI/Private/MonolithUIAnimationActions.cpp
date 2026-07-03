@@ -756,6 +756,7 @@ namespace
         FString BindingGuidText;
         FGuid BindingGuid;
         FString PropertyPath;
+        FString Component;
         double TimeSeconds = 0.0;
         FFrameNumber Frame;
         double Value = 0.0;
@@ -781,23 +782,150 @@ namespace
         return Aliases;
     }
 
-    FString NormalizeFloatDeltaPropertyPath(const FString& InProperty)
+    FString NormalizeAnimationToken(FString Value)
+    {
+        Value.TrimStartAndEndInline();
+        Value.ToLowerInline();
+        Value.ReplaceInline(TEXT("-"), TEXT("_"));
+        Value.ReplaceInline(TEXT("."), TEXT("_"));
+        Value.ReplaceInline(TEXT(" "), TEXT("_"));
+        return Value;
+    }
+
+    bool TryCanonicalKnownFloatTrackPath(const FString& InProperty, FString& OutPropertyPath)
+    {
+        const FString Token = NormalizeAnimationToken(InProperty);
+        if (Token == TEXT("renderopacity") || Token == TEXT("render_opacity") || Token == TEXT("opacity"))
+        {
+            OutPropertyPath = TEXT("RenderOpacity");
+            return true;
+        }
+
+        struct FKnownPath
+        {
+            const TCHAR* Token;
+            const TCHAR* Path;
+        };
+
+        static const FKnownPath KnownPaths[] = {
+            { TEXT("rendertransform_translation_x"), TEXT("RenderTransform.Translation.X") },
+            { TEXT("render_transform_translation_x"), TEXT("RenderTransform.Translation.X") },
+            { TEXT("translation_x"), TEXT("RenderTransform.Translation.X") },
+            { TEXT("tx"), TEXT("RenderTransform.Translation.X") },
+            { TEXT("rendertransform_translation_y"), TEXT("RenderTransform.Translation.Y") },
+            { TEXT("render_transform_translation_y"), TEXT("RenderTransform.Translation.Y") },
+            { TEXT("translation_y"), TEXT("RenderTransform.Translation.Y") },
+            { TEXT("ty"), TEXT("RenderTransform.Translation.Y") },
+            { TEXT("rendertransform_angle"), TEXT("RenderTransform.Angle") },
+            { TEXT("render_transform_angle"), TEXT("RenderTransform.Angle") },
+            { TEXT("angle"), TEXT("RenderTransform.Angle") },
+            { TEXT("rotation"), TEXT("RenderTransform.Angle") },
+            { TEXT("rendertransform_scale_x"), TEXT("RenderTransform.Scale.X") },
+            { TEXT("render_transform_scale_x"), TEXT("RenderTransform.Scale.X") },
+            { TEXT("scale_x"), TEXT("RenderTransform.Scale.X") },
+            { TEXT("sx"), TEXT("RenderTransform.Scale.X") },
+            { TEXT("rendertransform_scale_y"), TEXT("RenderTransform.Scale.Y") },
+            { TEXT("render_transform_scale_y"), TEXT("RenderTransform.Scale.Y") },
+            { TEXT("scale_y"), TEXT("RenderTransform.Scale.Y") },
+            { TEXT("sy"), TEXT("RenderTransform.Scale.Y") },
+            { TEXT("rendertransform_shear_x"), TEXT("RenderTransform.Shear.X") },
+            { TEXT("render_transform_shear_x"), TEXT("RenderTransform.Shear.X") },
+            { TEXT("shear_x"), TEXT("RenderTransform.Shear.X") },
+            { TEXT("shx"), TEXT("RenderTransform.Shear.X") },
+            { TEXT("rendertransform_shear_y"), TEXT("RenderTransform.Shear.Y") },
+            { TEXT("render_transform_shear_y"), TEXT("RenderTransform.Shear.Y") },
+            { TEXT("shear_y"), TEXT("RenderTransform.Shear.Y") },
+            { TEXT("shy"), TEXT("RenderTransform.Shear.Y") },
+            { TEXT("colorandopacity_r"), TEXT("ColorAndOpacity.R") },
+            { TEXT("color_and_opacity_r"), TEXT("ColorAndOpacity.R") },
+            { TEXT("color_r"), TEXT("ColorAndOpacity.R") },
+            { TEXT("r"), TEXT("ColorAndOpacity.R") },
+            { TEXT("red"), TEXT("ColorAndOpacity.R") },
+            { TEXT("colorandopacity_g"), TEXT("ColorAndOpacity.G") },
+            { TEXT("color_and_opacity_g"), TEXT("ColorAndOpacity.G") },
+            { TEXT("color_g"), TEXT("ColorAndOpacity.G") },
+            { TEXT("g"), TEXT("ColorAndOpacity.G") },
+            { TEXT("green"), TEXT("ColorAndOpacity.G") },
+            { TEXT("colorandopacity_b"), TEXT("ColorAndOpacity.B") },
+            { TEXT("color_and_opacity_b"), TEXT("ColorAndOpacity.B") },
+            { TEXT("color_b"), TEXT("ColorAndOpacity.B") },
+            { TEXT("b"), TEXT("ColorAndOpacity.B") },
+            { TEXT("blue"), TEXT("ColorAndOpacity.B") },
+            { TEXT("colorandopacity_a"), TEXT("ColorAndOpacity.A") },
+            { TEXT("color_and_opacity_a"), TEXT("ColorAndOpacity.A") },
+            { TEXT("color_a"), TEXT("ColorAndOpacity.A") },
+            { TEXT("a"), TEXT("ColorAndOpacity.A") },
+            { TEXT("alpha"), TEXT("ColorAndOpacity.A") },
+        };
+
+        for (const FKnownPath& Known : KnownPaths)
+        {
+            if (Token == Known.Token)
+            {
+                OutPropertyPath = Known.Path;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool TryNormalizeFloatDeltaPropertyPath(
+        const FString& InProperty,
+        const FString& InComponent,
+        FString& OutPropertyPath,
+        FString& OutError)
     {
         FString Property = InProperty;
         Property.TrimStartAndEndInline();
         if (Property.IsEmpty())
         {
-            return FString();
+            OutPropertyPath.Reset();
+            return true;
         }
 
-        const FString Lower = Property.ToLower();
-        if (Lower == TEXT("opacity")
-            || Lower == TEXT("render_opacity")
-            || Lower == TEXT("renderopacity"))
+        if (TryCanonicalKnownFloatTrackPath(Property, OutPropertyPath))
         {
-            return TEXT("RenderOpacity");
+            return true;
         }
-        return Property;
+
+        const FString PropertyToken = NormalizeAnimationToken(Property);
+        const FString ComponentToken = NormalizeAnimationToken(InComponent);
+
+        if (PropertyToken == TEXT("transform") || PropertyToken == TEXT("rendertransform") || PropertyToken == TEXT("render_transform"))
+        {
+            if (ComponentToken.IsEmpty())
+            {
+                OutError = TEXT("property 'transform' requires component one of: tx, ty, angle, sx, sy, shx, shy");
+                return false;
+            }
+            if (TryCanonicalKnownFloatTrackPath(ComponentToken, OutPropertyPath)
+                && OutPropertyPath.StartsWith(TEXT("RenderTransform.")))
+            {
+                return true;
+            }
+            OutError = TEXT("property 'transform' component must be one of: tx, ty, angle, sx, sy, shx, shy");
+            return false;
+        }
+
+        if (PropertyToken == TEXT("color") || PropertyToken == TEXT("colorandopacity") || PropertyToken == TEXT("color_and_opacity"))
+        {
+            if (ComponentToken.IsEmpty())
+            {
+                OutError = TEXT("property 'color' requires component one of: r, g, b, a");
+                return false;
+            }
+            if (TryCanonicalKnownFloatTrackPath(ComponentToken, OutPropertyPath)
+                && OutPropertyPath.StartsWith(TEXT("ColorAndOpacity.")))
+            {
+                return true;
+            }
+            OutError = TEXT("property 'color' component must be one of: r, g, b, a");
+            return false;
+        }
+
+        OutPropertyPath = Property;
+        return true;
     }
 
     FName FloatTrackPropertyNameFromPath(const FString& PropertyPath)
@@ -805,6 +933,50 @@ namespace
         if (PropertyPath == TEXT("RenderOpacity"))
         {
             return FName(TEXT("RenderOpacity"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Translation.X"))
+        {
+            return FName(TEXT("Translation X"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Translation.Y"))
+        {
+            return FName(TEXT("Translation Y"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Angle"))
+        {
+            return FName(TEXT("Angle"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Scale.X"))
+        {
+            return FName(TEXT("Scale X"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Scale.Y"))
+        {
+            return FName(TEXT("Scale Y"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Shear.X"))
+        {
+            return FName(TEXT("Shear X"));
+        }
+        if (PropertyPath == TEXT("RenderTransform.Shear.Y"))
+        {
+            return FName(TEXT("Shear Y"));
+        }
+        if (PropertyPath == TEXT("ColorAndOpacity.R"))
+        {
+            return FName(TEXT("Color R"));
+        }
+        if (PropertyPath == TEXT("ColorAndOpacity.G"))
+        {
+            return FName(TEXT("Color G"));
+        }
+        if (PropertyPath == TEXT("ColorAndOpacity.B"))
+        {
+            return FName(TEXT("Color B"));
+        }
+        if (PropertyPath == TEXT("ColorAndOpacity.A"))
+        {
+            return FName(TEXT("Color A"));
         }
 
         FString Tail = PropertyPath;
@@ -991,6 +1163,7 @@ namespace
         Op.OperationIndex = OperationIndex;
         Obj->TryGetStringField(TEXT("widget_name"), Op.WidgetName);
         Obj->TryGetStringField(TEXT("binding_guid"), Op.BindingGuidText);
+        Obj->TryGetStringField(TEXT("component"), Op.Component);
         if (Op.WidgetName.IsEmpty() && Op.BindingGuidText.IsEmpty())
         {
             OutError = FMonolithActionResult::Error(
@@ -1011,7 +1184,14 @@ namespace
         {
             Obj->TryGetStringField(TEXT("property"), Property);
         }
-        Op.PropertyPath = NormalizeFloatDeltaPropertyPath(Property);
+        FString NormalizeError;
+        if (!TryNormalizeFloatDeltaPropertyPath(Property, Op.Component, Op.PropertyPath, NormalizeError))
+        {
+            OutError = FMonolithActionResult::Error(
+                FString::Printf(TEXT("operations[%d].%s"), OperationIndex, *NormalizeError),
+                -32602);
+            return false;
+        }
         if (Op.PropertyPath.IsEmpty())
         {
             OutError = FMonolithActionResult::Error(
@@ -1262,6 +1442,10 @@ namespace
         Row->SetStringField(TEXT("widget_name"), Op.WidgetName);
         Row->SetStringField(TEXT("binding_guid"), BindingGuid.IsValid() ? GuidToString(BindingGuid) : Op.BindingGuidText);
         Row->SetStringField(TEXT("property_path"), Op.PropertyPath);
+        if (!Op.Component.IsEmpty())
+        {
+            Row->SetStringField(TEXT("component"), Op.Component);
+        }
         Row->SetBoolField(TEXT("had_existing_key"), bHadExistingKey);
         Row->SetNumberField(TEXT("deleted_key_count"), DeletedKeyCount);
         Row->SetBoolField(TEXT("would_create_binding"), bWouldCreateBinding);
@@ -1339,12 +1523,12 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
 
     Registry.RegisterAction(
         TEXT("ui"), TEXT("apply_animation_delta"),
-        TEXT("Confirm-gated delta edit for existing UMG animations. Supports scalar float-key upsert/delete without resetting sections; writes require dry_run=false and confirm=true, deletes additionally require confirm_delete=true."),
+        TEXT("Confirm-gated delta edit for existing UMG animations. Supports scalar float-key upsert/delete without resetting sections, including canonical opacity plus transform/color component paths; writes require dry_run=false and confirm=true, deletes additionally require confirm_delete=true."),
         FMonolithActionHandler::CreateStatic(&HandleApplyAnimationDelta),
         FParamSchemaBuilder()
             .RequiredAssetPath(TEXT("asset_path"), TEXT("Widget Blueprint asset path"))
             .Required(TEXT("animation_name"), TEXT("string"), TEXT("Name/display label of the existing UWidgetAnimation"))
-            .Required(TEXT("operations"), TEXT("array"), TEXT("Array of delta operations. v1 ops: upsert_float_key/delete_float_key with widget_name or binding_guid, property_path/property, time, and value for upsert."))
+            .Required(TEXT("operations"), TEXT("array"), TEXT("Array of delta operations. Ops: upsert_float_key/delete_float_key with widget_name or binding_guid, property_path/property, optional component for transform/color, time, and value for upsert."))
             .Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Plan only; default true. Set false with confirm=true to mutate."), TEXT("true"))
             .Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when dry_run=false."), TEXT("false"))
             .Optional(TEXT("confirm_delete"), TEXT("boolean"), TEXT("Required true for delete operations, globally or per operation."), TEXT("false"))
@@ -1403,9 +1587,9 @@ void FMonolithUIAnimationActions::RegisterActions(FMonolithToolRegistry& Registr
         { TEXT("animation_time_properties"), TEXT("sample_widget_animation"), TEXT("animation_sample") },
         { TEXT("sample RenderOpacity at t=0.25"), TEXT("show animation values and exact event matches at multiple times") });
     FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("ui"), TEXT("apply_animation_delta"),
-        { TEXT("UMG animation delta"), TEXT("MovieScene float key merge"), TEXT("animation key delete"), TEXT("confirm-gated animation edit") },
+        { TEXT("UMG animation delta"), TEXT("MovieScene float key merge"), TEXT("animation key delete"), TEXT("confirm-gated animation edit"), TEXT("RenderTransform component key"), TEXT("ColorAndOpacity component key") },
         { TEXT("animation_append_widget_tracks"), TEXT("animation_append_time_slice"), TEXT("animation_delete_widget_keys"), TEXT("set_property_keys") },
-        { TEXT("add or update a RenderOpacity key without resetting existing keys"), TEXT("delete one exact-frame float key with confirm_delete=true") });
+        { TEXT("add or update a RenderOpacity key without resetting existing keys"), TEXT("patch RenderTransform.Translation.X with property=transform component=tx"), TEXT("delete one exact-frame ColorAndOpacity.A key with confirm_delete=true") });
 }
 
 // --- list_animations ---
@@ -2373,9 +2557,17 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleApplyAnimationDelta(con
     SupportedOps.Add(MakeShared<FJsonValueString>(TEXT("upsert_float_key")));
     SupportedOps.Add(MakeShared<FJsonValueString>(TEXT("delete_float_key")));
 
+    TArray<TSharedPtr<FJsonValue>> SupportedPropertyGroups;
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderOpacity")));
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Translation.X/Y via property=transform component=tx/ty")));
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Angle via property=transform component=angle")));
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Scale.X/Y via property=transform component=sx/sy")));
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Shear.X/Y via property=transform component=shx/shy")));
+    SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("ColorAndOpacity.R/G/B/A via property=color component=r/g/b/a")));
+
     TArray<TSharedPtr<FJsonValue>> UnsupportedOps;
     UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("event key writes require endpoint/function validation and are deferred")));
-    UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("transform/color/vector/object track delta is deferred")));
+    UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("vector/object track delta is deferred")));
 
     TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
     Result->SetStringField(TEXT("schema_version"), TEXT("ui_animation_delta.v1"));
@@ -2384,6 +2576,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleApplyAnimationDelta(con
     Result->SetStringField(TEXT("owner_action"), TEXT("ui.apply_animation_delta"));
     Result->SetArrayField(TEXT("external_aliases_not_registered"), MakeAnimationDeltaExternalAliases());
     Result->SetArrayField(TEXT("supported_operations"), SupportedOps);
+    Result->SetArrayField(TEXT("supported_property_groups"), SupportedPropertyGroups);
     Result->SetArrayField(TEXT("unsupported_operations"), UnsupportedOps);
     Result->SetBoolField(TEXT("dry_run"), bDryRun);
     Result->SetBoolField(TEXT("confirmed"), bConfirm);

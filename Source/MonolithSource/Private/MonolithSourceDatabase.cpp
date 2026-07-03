@@ -771,6 +771,17 @@ static void AddNextActions(const TSharedPtr<FJsonObject>& Root, const TArray<FSt
 	Root->SetArrayField(TEXT("next_actions"), Arr);
 }
 
+static TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+{
+	TArray<TSharedPtr<FJsonValue>> Arr;
+	Arr.Reserve(Values.Num());
+	for (const FString& Value : Values)
+	{
+		Arr.Add(MakeShared<FJsonValueString>(Value));
+	}
+	return Arr;
+}
+
 static bool ParseJsonArray(const FString& Json, TArray<TSharedPtr<FJsonValue>>& Out)
 {
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
@@ -4581,6 +4592,53 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Root->SetArrayField(TEXT("checks"), Checks);
 	Root->SetArrayField(TEXT("warnings"), Warnings);
 	Root->SetBoolField(TEXT("truncated"), false);
+
+	TArray<FString> MaintenanceReasons;
+	if (bNeedsReindex)
+	{
+		MaintenanceReasons.Add(TEXT("reindex_required"));
+	}
+	if (bNeedsFtsRepair)
+	{
+		MaintenanceReasons.Add(TEXT("fts_repair_required"));
+	}
+	if (bNeedsCrgRepair)
+	{
+		MaintenanceReasons.Add(TEXT("crg_cache_repair_required"));
+	}
+	if (bNeedsOverrideRepair)
+	{
+		MaintenanceReasons.Add(TEXT("override_edges_repair_required"));
+	}
+	if (MaintenanceReasons.Num() == 0)
+	{
+		MaintenanceReasons.Add(bRunExpensiveChecks
+			? TEXT("deep_health_clean")
+			: TEXT("shallow_health_clean_deep_check_optional"));
+	}
+
+	TSharedPtr<FJsonObject> Maintenance = MakeShared<FJsonObject>();
+	const bool bMaintenanceRequired = bNeedsReindex || bNeedsFtsRepair || bNeedsCrgRepair || bNeedsOverrideRepair;
+	Maintenance->SetBoolField(TEXT("maintenance_required"), bMaintenanceRequired);
+	Maintenance->SetBoolField(TEXT("expensive_maintenance_required"), bMaintenanceRequired);
+	Maintenance->SetBoolField(TEXT("reindex_required"), bNeedsReindex);
+	Maintenance->SetBoolField(TEXT("repair_fts_required"), bNeedsFtsRepair);
+	Maintenance->SetBoolField(TEXT("repair_crg_cache_required"), bNeedsCrgRepair);
+	Maintenance->SetBoolField(TEXT("repair_override_edges_required"), bNeedsOverrideRepair);
+	Maintenance->SetBoolField(TEXT("deep_health_ran"), bRunExpensiveChecks);
+	Maintenance->SetBoolField(TEXT("routine_deep_health_recommended"), !bRunExpensiveChecks && !bHealthy);
+	Maintenance->SetArrayField(TEXT("reason_codes"), MakeStringArray(MaintenanceReasons));
+	if (!bRunExpensiveChecks)
+	{
+		TArray<FString> DiagnosticActions;
+		DiagnosticActions.Add(TEXT("source.health include_deep_checks=true"));
+		Maintenance->SetArrayField(TEXT("optional_diagnostic_actions"), MakeStringArray(DiagnosticActions));
+	}
+	Maintenance->SetStringField(TEXT("summary"), bMaintenanceRequired
+		? TEXT("Source health found a concrete maintenance requirement; follow next_actions.")
+		: TEXT("No source-index maintenance is required by this health result; deep health is optional diagnostics, not a routine next step."));
+	Root->SetObjectField(TEXT("maintenance_recommendation"), Maintenance);
+
 	TArray<FString> NextActions;
 	auto AddNextUnique = [&NextActions](const FString& Action)
 	{
@@ -4589,10 +4647,6 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 			NextActions.Add(Action);
 		}
 	};
-	if (!bRunExpensiveChecks)
-	{
-		AddNextUnique(TEXT("source.health include_deep_checks=true"));
-	}
 	if (bNeedsCrgRepair)
 	{
 		AddNextUnique(TEXT("source.repair_crg_cache"));

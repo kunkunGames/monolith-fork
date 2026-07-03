@@ -138,7 +138,7 @@ FMonolithActionResult FProjectSearchGameplayTagsAction::Execute(const TSharedPtr
 TSharedPtr<FJsonObject> FProjectSearchGameplayTagsAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("query"), TEXT("string"), TEXT("Substring to search for in tag names (e.g. 'Damage', 'Weapon')"))
+		.Required(TEXT("query"), TEXT("string"), TEXT("Substring to search for in tag names (e.g. 'Damage', 'Weapon'). Alias: q."), { TEXT("q") })
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum tags to return"), TEXT("100"))
 		.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset"), TEXT("0"))
 		.Build();

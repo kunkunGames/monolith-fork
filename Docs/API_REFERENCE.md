@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Version:** v0.20.3 · **Last updated:** 2026-07-01
+**Version:** v0.20.3 · **Last updated:** 2026-07-04
 
 **In-tree action total is approximate: current source contains roughly 2,049 in-tree `RegisterAction` registrations** (public, in-tree only; all active by default, plus 45 experimental town-gen actions that register only when `bEnableProceduralTownGen=true`). The surface is too large and build-flag dependent to track to the unit — **query `monolith_discover()` (its `total_actions` field) for the exact live figure.** The `ui` namespace re-exports 4 GAS UI binding actions as aliases. v0.19.0 adds an LLM C++ authoring ergonomics pack (`source`, 8 actions + `editor.get_build_errors` fix hints), live-PIE introspection + driving and stat-group readout (`editor`), anim-node binding read/write and time-series PIE sampling (`animation`), a Blueprint variable census + contract reconciliation (`blueprint`), and T3D asset-text export (`project`); plus two first-launch fixes (issue #70) and a ~40% smaller `tools/list` manifest. The `console` namespace adds live `IConsoleManager` registry discovery plus EngineSource.db/FTS5 snapshot search. The `monolith_*` meta-tools (`discover`, `status`, `update`, `reindex`, `guide`) plus the `bulk_fill_query` and `describe_query` framework dispatchers round out the MCP tool count. This total EXCLUDES sibling-plugin actions — they ship in their own repos and are never in the public release zip.
 
@@ -62,6 +62,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [cppreflect](#cppreflect) | 6 | **New v0.17.0.** Reflection Intelligence — UE 5.7 UHT reflection-edge queries (UCLASS / UPROPERTY / UFUNCTION / UINTERFACE + cpp↔asset edges + specifier discovery) |
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
+| [imagegen](#imagegen) | 10 | Generated Texture2D/PNG/SVG/MSDF image workflows and ima2 bridge |
 | [bridge](#bridge) | 5 | Read-only RX-6 bridge integration |
 | [reflect](#reflect) | 1 | **New [Unreleased].** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
 | **Curated in-tree subtotal** | **v0.17.x public surface** | Static public/in-tree reference from the curated body below; fully loaded local projects may report additional sibling/private plugin actions. |
@@ -131,10 +132,12 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `action` | string | optional | Filter to a specific action inside `namespace`; most useful with `mode="schema"` |
 | `category` | string | optional | Filter actions within the namespace by category |
 | `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
+| `planning_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which keeps planning status/count fields but omits heavy `precondition_details` and `planning_signals` arrays; pass `full` when auditing those arrays. |
+| `schema_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which uses terse action descriptions and omits `search_metadata` plus per-param descriptions from inline `params`; focused `mode="schema"` defaults to `full`. |
 | `offset` | integer | optional | Pagination offset applied after category/filter. |
-| `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. |
+| `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. Namespace listings with `detail=true` are capped to the default page size even when a larger limit is requested; continue with `next_cursor`/`offset`. |
 
-**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action.
+**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action.
 
 ---
 
@@ -1295,7 +1298,7 @@ Unreal Engine C++ source code navigation. 1M+ symbols indexed. **13 actions** (1
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `symbol` | string | **required** | Symbol or function name |
+| `symbol` | string | **required** | Symbol or function name. `find_callers` and `find_callees` also accept `query` as a validated alias for this value. |
 | `ref_kind` | string | optional | (`find_references` only) Filter by reference kind |
 | `limit` | integer | optional | Default: `50` |
 
@@ -1375,6 +1378,8 @@ Override-only traversal for virtual/function symbols. The default `detail_level=
 ### `source.health`
 
 Default `source.health` is a fast shallow check. It validates required tables, schema metadata, journal mode, triggers, and CRG structure without large row-count/parity scans.
+
+The result includes `maintenance_recommendation` with explicit `maintenance_required`, `expensive_maintenance_required`, `reindex_required`, `repair_fts_required`, `repair_crg_cache_required`, `repair_override_edges_required`, `deep_health_ran`, `routine_deep_health_recommended`, and `reason_codes`. When a shallow result is healthy, deep health is reported only as `maintenance_recommendation.optional_diagnostic_actions`, not as a required `next_actions` entry.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1555,11 +1560,32 @@ Optional sprite asset production orchestration and validation actions.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithSprite.md` for the deep dive.
 
+## imagegen
+
+Generated-image provider discovery, deterministic local PNG generation, ima2/imag2-gen bridge calls, generated PNG import, SVG source workflows, and MSDF Texture2D baking. `generate_image_via_ima2` keeps provider credentials outside Monolith and accepts only PNG provider output for generated Texture2D imports.
+
+Provider rate limits return `error_data.error_class="provider_rate_limited"`, `retry_signature`, `retry_after_seconds`, `rate_limit_cooldown_active`, and `provider_call_skipped`. After a 429 / `RATE_LIMITED` / relayed rate-limit message, Monolith records a process-local cooldown for the same redacted retry signature; an identical request inside that window short-circuits before the provider call with `provider_call_skipped=true`.
+
+| Action | Params |
+|--------|--------|
+| `list_image_models` | none |
+| `get_image_generation_defaults` | none |
+| `generate_image` | `prompt` (required), `aspect_ratio`, `resolution`, `texture_role`, `destination`, `save`, `save_source_png` |
+| `generate_image_via_ima2` | `prompt` (required), `server_url`, `provider`, `model`, `quality`, `size`/`resolution`, `format` (`png` only), `background`, `compose_prompt`, reference image fields, `texture_role`, `destination`, `save`, `save_source_png` |
+| `import_generated_image` | `bytes_b64` or `file_path`/`path`, `format_hint` (`png`), `texture_role`, `destination`, `save`, `save_source_png` |
+| `generate_svg` | `svg_spec` or `prompt`, `profile`, `destination`, `return_svg`, `save`, `strict` |
+| `import_generated_svg` | `svg_text` or `bytes_b64` or `file_path`/`path`, `profile`, `destination`, `save`, `strict` |
+| `validate_svg` | `svg_text` or `bytes_b64` or `file_path`/`path`, `profile` |
+| `generate_msdf_from_svg` | `svg_spec` or `svg_text` or `file_path` or `prompt`, `size`, `pixel_range`, `verify_samples`, `create_material`, `verify_material_render` |
+| `get_generated_asset_provenance` | `asset_path` |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithImageGen.md` for the deep dive.
+
 ## ui
 
-`diff_ui_spec` / `apply_ui_spec_patch` are the canonical design-data delta surface: diff reports stable patch candidates plus graph-binding preservation and explicit replace-decomposition evidence, and patch composes existing widget, image, Border brush, common-style, SizeBox/Border/ProgressBar style, CommonUI style, and EffectSurface owner actions instead of registering raw `apply_json_to_umg` / `apply_layout` compatibility actions. `replace_widget` is a confirm-gated patch op, not a duplicate public action: the normal path expands to `ui.remove_widget` + `ui.add_widget` plus existing setter actions, while `preserve_children=true` expands to temporary `ui.add_widget`, explicit child `ui.move_widget`, old `ui.remove_widget`, and `ui.rename_widget` to restore the stable name. Border `brushPath` expands to the existing `ui.set_brush` owner action. `audit_widget_layout` remains the single read-only structural lint surface and now emits guide-derived `rule_id` findings such as `OneChildCanvasWrapper`, `CanvasOveruse`, `EdgeUiMissingSafeZone`, `DecorativeHitTestBlocker`, `HiddenInteractiveSpace`, `UnstyledInteractiveState`, `MaterialDomainMismatch`, and `LargeStaticListWithoutListView` through the same action instead of adding duplicate validators. `audit_widget_material_lifecycle` is the companion read-only graph lint for dynamic-material lifetime: it scans Widget Blueprint K2 graphs for MID creation calls and reports repeated-lifecycle findings without cloning Blueprint graph edit APIs. `workflow.ui_shipping_widget_blueprint` forwards its `layout_rule_profile` and `suppress_layout_rule_ids` to the layout owner action, composes `ui.measure_widget_layout` for visual/runtime authored bounds, overlap, and safe-zone evidence, and reports `DpiSafeZoneProfileMissing` under `validation.visual_profile` when mobile/console visual proof profiles omit explicit DPI or safe-zone inputs. `workflow.ui_bind_widget_event` is the companion interaction workflow: it does not add UI-local Blueprint graph primitives, and instead composes `blueprint.resolve_node`, `blueprint.add_node`, `blueprint.connect_pins`, `blueprint.compile_blueprint`, and `blueprint.get_graph_summary` behind a ViewModel-only boundary and explicit confirm gate. `workflow.ui_material_hlsl_effect` follows the same owner-action rule for advanced UI visuals: it composes `material.create_material`/`set_material_property`/`create_custom_hlsl_node`/`update_custom_hlsl_node`/`connect_expressions`, optional `material.build_material_graph(clear_existing=false)` for float4 alpha ComponentMask-to-Opacity wiring, material compile/stat/connection readback actions, `ui.set_image` or `ui.set_brush`, `ui.audit_widget_material_lifecycle`, and optional `workflow.ui_shipping_widget_blueprint`, without adding a separate `hlsl` namespace or external material aliases. Retainer effects use the same split: `ui.set_retainer_effect_material` is the RetainerBox owner mutation, while `workflow.ui_retainer_effect_material` composes material parameter/domain readback plus that owner action, `ui.audit_widget_material_lifecycle`, and optional widget proof.
+`diff_ui_spec` / `apply_ui_spec_patch` are the canonical design-data delta surface: diff reports stable patch candidates plus graph-binding preservation and explicit replace-decomposition evidence, and patch composes existing widget, image, Border brush, common-style, SizeBox/Border/ProgressBar style, CommonUI style, and EffectSurface owner actions instead of registering raw `apply_json_to_umg` / `apply_layout` compatibility actions. `replace_widget` is a confirm-gated patch op, not a duplicate public action: the normal path expands to `ui.remove_widget` + `ui.add_widget` plus existing setter actions, while `preserve_children=true` expands to temporary `ui.add_widget`, explicit child `ui.move_widget`, old `ui.remove_widget`, and `ui.rename_widget` to restore the stable name. Border `brushPath` expands to the existing `ui.set_brush` owner action. `audit_widget_layout` remains the single read-only structural lint surface and now emits guide-derived `rule_id` findings such as `OneChildCanvasWrapper`, `CanvasOveruse`, `EdgeUiMissingSafeZone`, `DecorativeHitTestBlocker`, `HiddenInteractiveSpace`, `UnstyledInteractiveState`, `MaterialDomainMismatch`, and `LargeStaticListWithoutListView` through the same action instead of adding duplicate validators. `audit_widget_material_lifecycle` is the companion read-only graph lint for dynamic-material lifetime: it scans Widget Blueprint K2 graphs for MID creation calls and reports repeated-lifecycle findings without cloning Blueprint graph edit APIs. `workflow.ui_shipping_widget_blueprint` forwards its `layout_rule_profile` and `suppress_layout_rule_ids` to the layout owner action, composes `ui.measure_widget_layout` for visual/runtime authored bounds, overlap, and safe-zone evidence, and reports `DpiSafeZoneProfileMissing` under `validation.visual_profile` when mobile/console visual proof profiles omit explicit DPI or safe-zone inputs. Its real visual fixture verifies that the workflow executes `editor.capture_scene_preview` and then `ui.verify_widget_visual_artifacts` against the generated PNG. `workflow.ui_bind_widget_event` is the companion interaction workflow: it does not add UI-local Blueprint graph primitives, and instead composes `blueprint.resolve_node`, `blueprint.add_node`, `blueprint.connect_pins`, `blueprint.compile_blueprint`, and `blueprint.get_graph_summary` behind a ViewModel-only boundary and explicit confirm gate. Its real WBP fixture verifies the resulting `StartButton.OnClicked` component-bound event, ViewModel getter, command call, exec link, and ViewModel target pin link in the EventGraph. `apply_animation_delta` likewise stays inside the canonical UI animation owner action: external Sequencer write names remain search aliases, while component design-data deltas use `property=transform/color` plus `component` to write/read canonical `RenderTransform.*` and `ColorAndOpacity.*` float tracks. `workflow.ui_material_hlsl_effect` follows the same owner-action rule for advanced UI visuals: it composes `material.create_material`/`set_material_property`/`create_custom_hlsl_node`/`update_custom_hlsl_node`/`connect_expressions`, optional `material.build_material_graph(clear_existing=false)` for float4 alpha ComponentMask-to-Opacity wiring, material compile/stat/connection readback actions, `ui.set_image` or `ui.set_brush`, `ui.audit_widget_material_lifecycle`, and optional `workflow.ui_shipping_widget_blueprint`, without adding a separate `hlsl` namespace or external material aliases. Retainer effects use the same split: `ui.set_retainer_effect_material` is the RetainerBox owner mutation, while `workflow.ui_retainer_effect_material` composes material parameter/domain readback plus that owner action, `ui.audit_widget_material_lifecycle`, and optional widget proof.
 
-UMG widget Blueprint CRUD, explicit session/request work context, templates, styling, UI post-copy repair, animation (v1 + v2 plus read inspection and guarded delta edits), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `set_widget_context` / `get_widget_context` / `clear_widget_context` for diagnostic target focus without hidden write defaults, `get_animation_overview` / `get_animation_timeline` / `get_animation_time_slice` for read-only UMG animation evidence without registering duplicate external Sequencer names, `apply_animation_delta` for confirm-gated scalar float-key merge/upsert/delete on existing animations, `measure_widget_layout` for authored bounds / overlap / safe-zone evidence without cloning weak external layout APIs, `audit_widget_material_lifecycle` for read-only WBP graph DMI lifetime evidence, `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `apply_common_menu_transform_spec` for guarded menu-level transform application, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` / `validate_frontend_menu_flow` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal/frontend reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
+UMG widget Blueprint CRUD, explicit session/request work context, templates, styling, UI post-copy repair, animation (v1 + v2 plus read inspection and guarded delta edits), the schema-driven **Spec / EffectSurface** architecture, UIExtension-point setup, CommonFramework diagnostics/authoring, settings scaffolding, accessibility, **CommonUI**, and GAS UI bindings. The live count is registry-derived — includes `set_widget_context` / `get_widget_context` / `clear_widget_context` for diagnostic target focus without hidden write defaults, `get_animation_overview` / `get_animation_timeline` / `get_animation_time_slice` for read-only UMG animation evidence without registering duplicate external Sequencer names, `apply_animation_delta` for confirm-gated float-key merge/upsert/delete on existing animations including `RenderOpacity`, `RenderTransform.*`, and `ColorAndOpacity.*` component paths, `measure_widget_layout` for authored bounds / overlap / safe-zone evidence without cloning weak external layout APIs, `audit_widget_material_lifecycle` for read-only WBP graph DMI lifetime evidence, `add_extension_point_widget` for `UUIExtensionPointWidget` + GameplayTag + deterministic slot layout, `add_primary_game_layout_layer` for PrimaryGameLayout CommonActivatable layer container widgets, `apply_common_menu_transform_spec` for guarded menu-level transform application, `copy_widget_subtree_with_class_remap` for copied WBP subtree repair with class/object/root remaps, `clone_composite_font_with_remapped_faces` for copied composite `UFont` face-reference remapping, `repair_slate_font_references` for copied UI asset `FSlateFontInfo.FontObject` remapping, plus `get_common_framework_status` / `describe_common_widget_blueprint` / `describe_common_messaging_flow` / `validate_common_dialog_contract` / `validate_common_layer_push_contract` / `validate_frontend_menu_flow` for CommonUI, CommonGame, UIExtension, CommonUser, CommonLoadingScreen, GameSettings, GameplayMessageRouter, ModularGameplayActors, GameSubtitles, and CommonGame messaging/modal/frontend reflection diagnostics. The four CommonUI-surface gap-closure actions (`convert_border_to_common`, `convert_textblock_to_common`, `set_action_bar_button_class`, `apply_token_binding`) are `#if WITH_COMMONUI`-gated; `apply_token_binding` is validation/probe only until BP graph writes ship and returns non-success `status:"not_implemented"` for the deferred write.
 
 > For full param schemas, use focused `monolith_discover` schema mode at runtime. The surface is large — categories below; the v0.15.0-new actions are flagged.
 
@@ -1581,13 +1607,15 @@ UMG widget Blueprint CRUD, explicit session/request work context, templates, sty
 | Animation v1 | 5 | `list_animations`, `get_animation_details`, `create_animation`, `add_animation_keyframe`, `remove_animation` |
 | Animation v2 | 5 | `create_animation_v2`, `add_bezier_eased_segment`, `bake_spring_animation`, `add_animation_event_track`, `bind_animation_to_event` |
 | Animation read inspection | 3 | `get_animation_overview`, `get_animation_timeline`, `get_animation_time_slice` |
-| Animation delta | 1 | `apply_animation_delta` confirm-gated scalar float-key merge/upsert/delete on existing animations; external Sequencer names remain search aliases only |
+| Animation delta | 1 | `apply_animation_delta` confirm-gated scalar/component float-key merge/upsert/delete on existing animations; external Sequencer names remain search aliases only |
 | Inspection | 3 | `list_widget_events`, `list_widget_properties`, `get_widget_bindings` |
 | Design import | 4 | `import_texture_from_bytes`, `import_font_family`, `set_rounded_corners`, `create_gradient_mid_from_spec` |
 | EffectSurface (provider-gated, `-32010` when absent) | 13 | `apply_box_shadow`, `set_effect_surface_corners`, `set_effect_surface_fill`, `set_effect_surface_border`, `set_effect_surface_dropShadow`, `set_effect_surface_innerShadow`, `set_effect_surface_glow`, `set_effect_surface_filter`, `set_effect_surface_backdropBlur`, `set_effect_surface_insetHighlight`, `apply_effect_surface_preset` |
 | Spec round-trip / menu transform | 11 | `build_ui_from_spec`, `dump_ui_spec`, `dump_ui_spec_schema`, `convert_markup_to_ui_spec`, `diff_ui_spec`, `apply_ui_spec_patch`, `audit_widget_layout`, `audit_widget_material_lifecycle`, `measure_widget_layout`, `build_menu_from_spec` (v0.15.0), `apply_common_menu_transform_spec` |
 | Accessibility | 6 | `scaffold_accessibility_subsystem`, `audit_accessibility`, `set_colorblind_mode`, `set_text_scale`, `apply_high_contrast_variant`, `set_text_scale_binding` |
 | Allowlist / diagnostics | 3 | `dump_property_allowlist`, `describe_widget_type_schema`, `dump_style_cache_stats` |
+
+`describe_widget_type_schema` is the safe pre-write schema probe for JSON/markup-driven UMG authoring. For live widgets it reports the actual parent slot class, marks incompatible contextual `Slot.*` paths as `settable:false` with `blocked_reason`, and exposes `live_child_capacity` so full single-child parents are visible before add/move/patch writes. With `include_unsafe=true`, raw reflected properties remain non-settable and raw engine aliases already represented by curated paths are suppressed.
 
 ### `ui.apply_common_menu_transform_spec`
 
@@ -1856,19 +1884,21 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithDataflow.md` for the deep dive.
 
 Unreal SourceControl-provider status, guarded file prepare/delete/revert operations, and Perforce opened/path mapping. **11 actions.**
 
+Canonical file-list params are `paths` arrays. Source-control actions also accept a single path string and the alias key `files`; boolean options accept booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`. Destructive delete/revert actions still require `confirm=true` unless `dry_run=true`.
+
 | Action | Params |
 |--------|--------|
 | `get_capabilities` | none |
-| `get_status` | `paths` |
-| `checkout` | `paths`, `dry_run` (optional boolean) |
-| `add` | `paths`, `dry_run` (optional boolean) |
-| `checkout_or_add` | `paths`, `dry_run` (optional boolean) |
-| `delete` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
-| `mark_for_delete` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
-| `revert` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
-| `revert_unchanged` | `paths`, `dry_run` (optional boolean), `confirm` (optional boolean) |
-| `list_opened` | `changelist` (optional string), `resolve_packages` (optional boolean), `limit` (optional integer) |
-| `map_depot_paths` | `paths` |
+| `get_status` | `paths` array/string, alias `files` |
+| `checkout` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string) |
+| `add` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string) |
+| `checkout_or_add` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string) |
+| `delete` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
+| `mark_for_delete` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
+| `revert` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
+| `revert_unchanged` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
+| `list_opened` | `changelist` (optional string), `resolve_packages` (optional boolean/string), `limit` (optional integer) |
+| `map_depot_paths` | `paths` array/string, alias `files` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithSourceControl.md` for the deep dive.
 
@@ -3177,7 +3207,7 @@ bootstrap_gas_foundation → create_attribute_set → add_attribute → create_g
 ui.add_widget_variable(ViewModel) -> workflow.ui_bind_widget_event -> workflow.ui_shipping_widget_blueprint -> asset.save_asset
 ```
 
-`workflow.ui_bind_widget_event` is a cross-module workflow, not a duplicate `ui` action. It binds common widget events to ViewModel commands by composing existing Blueprint graph actions, rejects direct gameplay Actor/Pawn/Controller/component targets, and reports the child actions plus compile/read-back proof in the workflow envelope.
+`workflow.ui_bind_widget_event` is a cross-module workflow, not a duplicate `ui` action. It binds common widget events to ViewModel commands by composing existing Blueprint graph actions, rejects direct gameplay Actor/Pawn/Controller/component targets, and reports the child actions plus compile/read-back proof in the workflow envelope. Fixture coverage verifies the real WBP graph shape after apply: component-bound widget event, ViewModel getter, command call, exec link, and target data link.
 
 ### UMG Material Effects
 

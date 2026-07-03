@@ -443,22 +443,88 @@ static TArray<FString> BuildPlanningNextActions(const FMonolithActionInfo& Actio
 	return ActionInfo.PlanningMetadata.NextActions;
 }
 
-static void AddPlanningFields(TSharedPtr<FJsonObject>& ActionObj, const FMonolithActionInfo& ActionInfo)
+enum class EMonolithPlanningDetail
+{
+	Compact,
+	Full
+};
+
+enum class EMonolithSchemaDetail
+{
+	Compact,
+	Full
+};
+
+static FString MonolithPlanningDetailToString(const EMonolithPlanningDetail Detail)
+{
+	return Detail == EMonolithPlanningDetail::Full ? TEXT("full") : TEXT("compact");
+}
+
+static FString MonolithSchemaDetailToString(const EMonolithSchemaDetail Detail)
+{
+	return Detail == EMonolithSchemaDetail::Full ? TEXT("full") : TEXT("compact");
+}
+
+static TSharedPtr<FJsonObject> MakeCompactParamSchema(const TSharedPtr<FJsonObject>& ParamSchema)
+{
+	if (!ParamSchema.IsValid())
+	{
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> Compact = MakeShared<FJsonObject>();
+	for (const auto& Pair : FMonolithJsonUtils::GetFields(ParamSchema))
+	{
+		const TSharedPtr<FJsonObject>* ParamObj = nullptr;
+		if (!Pair.Value.IsValid() || !Pair.Value->TryGetObject(ParamObj) || !ParamObj || !ParamObj->IsValid())
+		{
+			Compact->SetField(Pair.Key, Pair.Value);
+			continue;
+		}
+
+		TSharedPtr<FJsonObject> CompactParam = MakeShared<FJsonObject>();
+		for (const auto& ParamPair : FMonolithJsonUtils::GetFields(*ParamObj))
+		{
+			if (ParamPair.Key == TEXT("description"))
+			{
+				continue;
+			}
+			CompactParam->SetField(ParamPair.Key, ParamPair.Value);
+		}
+		Compact->SetObjectField(Pair.Key, CompactParam);
+	}
+	return Compact;
+}
+
+static void AddPlanningFields(
+	TSharedPtr<FJsonObject>& ActionObj,
+	const FMonolithActionInfo& ActionInfo,
+	const EMonolithPlanningDetail Detail = EMonolithPlanningDetail::Full)
 {
 	const TArray<FString> Outputs = BuildPlanningOutputs(ActionInfo);
 	const TArray<FString> NextActions = BuildPlanningNextActions(ActionInfo);
 	TArray<FString> Preconditions;
 	FString PreconditionsStatus;
 	const TArray<TSharedPtr<FJsonValue>> PreconditionDetails = BuildPlanningPreconditionDetails(ActionInfo, Preconditions, PreconditionsStatus);
+	const TArray<TSharedPtr<FJsonValue>> PlanningSignals = FMonolithToolRegistry::BuildPlanningSignals(ActionInfo);
 	ActionObj->SetStringField(TEXT("skill"), GetPlanningSkill(ActionInfo));
 	ActionObj->SetArrayField(TEXT("preconditions"), StringArrayToJson(Preconditions));
 	ActionObj->SetStringField(TEXT("preconditions_status"), PreconditionsStatus);
-	ActionObj->SetArrayField(TEXT("precondition_details"), PreconditionDetails);
 	ActionObj->SetArrayField(TEXT("outputs"), StringArrayToJson(Outputs));
 	ActionObj->SetStringField(TEXT("output_contract_status"), Outputs.Num() > 0 ? TEXT("declared") : TEXT("not_declared"));
 	ActionObj->SetArrayField(TEXT("next_actions"), StringArrayToJson(NextActions));
 	ActionObj->SetStringField(TEXT("next_actions_status"), NextActions.Num() > 0 ? TEXT("declared") : TEXT("not_declared"));
-	ActionObj->SetArrayField(TEXT("planning_signals"), FMonolithToolRegistry::BuildPlanningSignals(ActionInfo));
+	ActionObj->SetStringField(TEXT("planning_detail"), MonolithPlanningDetailToString(Detail));
+	if (Detail == EMonolithPlanningDetail::Full)
+	{
+		ActionObj->SetArrayField(TEXT("precondition_details"), PreconditionDetails);
+		ActionObj->SetArrayField(TEXT("planning_signals"), PlanningSignals);
+	}
+	else
+	{
+		ActionObj->SetNumberField(TEXT("precondition_detail_count"), PreconditionDetails.Num());
+		ActionObj->SetNumberField(TEXT("planning_signal_count"), PlanningSignals.Num());
+	}
 }
 
 // MCP routing alias table for monolith.find query expansion. The fuzzy primitives
@@ -640,18 +706,23 @@ static FString BuildFindSearchMetadataText(const FMonolithActionInfo& Info)
 	return FString::Join(Parts, TEXT(" "));
 }
 
-static TSharedPtr<FJsonObject> MakeDiscoverActionRow(const FMonolithActionInfo& ActionInfo)
+static TSharedPtr<FJsonObject> MakeDiscoverActionRow(
+	const FMonolithActionInfo& ActionInfo,
+	const EMonolithPlanningDetail PlanningDetail = EMonolithPlanningDetail::Full,
+	const EMonolithSchemaDetail SchemaDetail = EMonolithSchemaDetail::Full)
 {
 	TSharedPtr<FJsonObject> ActionObj = MakeShared<FJsonObject>();
 	ActionObj->SetStringField(TEXT("action"), ActionInfo.Action);
-	ActionObj->SetStringField(TEXT("description"), ActionInfo.Description);
+	ActionObj->SetStringField(TEXT("description"), SchemaDetail == EMonolithSchemaDetail::Full
+		? ActionInfo.Description
+		: MonolithTerseOneLineDescription(ActionInfo.Description));
 	ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
 	AddActionPolicyFields(ActionObj, ActionInfo);
 	if (!ActionInfo.Category.IsEmpty())
 	{
 		ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
 	}
-	if (!ActionInfo.SearchMetadata.IsEmpty())
+	if (SchemaDetail == EMonolithSchemaDetail::Full && !ActionInfo.SearchMetadata.IsEmpty())
 	{
 		TSharedPtr<FJsonObject> SearchObj = MakeShared<FJsonObject>();
 		if (ActionInfo.SearchMetadata.Keywords.Num() > 0)
@@ -670,9 +741,12 @@ static TSharedPtr<FJsonObject> MakeDiscoverActionRow(const FMonolithActionInfo& 
 	}
 	if (ActionInfo.ParamSchema.IsValid())
 	{
-		ActionObj->SetObjectField(TEXT("params"), ActionInfo.ParamSchema);
+		ActionObj->SetStringField(TEXT("schema_detail"), MonolithSchemaDetailToString(SchemaDetail));
+		ActionObj->SetObjectField(TEXT("params"), SchemaDetail == EMonolithSchemaDetail::Full
+			? ActionInfo.ParamSchema
+			: MakeCompactParamSchema(ActionInfo.ParamSchema));
 	}
-	AddPlanningFields(ActionObj, ActionInfo);
+	AddPlanningFields(ActionObj, ActionInfo, PlanningDetail);
 	return ActionObj;
 }
 
@@ -1489,12 +1563,16 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("mode"), TEXT("string"), TEXT("summary for namespace counts, actions for namespace action rows, schema for action param schemas."), TEXT("summary"))
 				.Optional(TEXT("detail"), TEXT("boolean"), TEXT("When true, inline each action's full param schema in namespace action listings."), TEXT("false"))
 				.Optional(TEXT("verbose"), TEXT("boolean"), TEXT("Alias for detail=true, kept for older clients."), TEXT("false"))
+				.Optional(TEXT("planning_detail"), TEXT("string"), TEXT("compact omits heavy per-action planning arrays; full includes precondition_details and planning_signals."), TEXT("compact"))
+				.Optional(TEXT("schema_detail"), TEXT("string"), TEXT("compact omits bulk textual docs/search metadata from namespace action rows; full includes complete descriptions, search metadata, and per-param descriptions."), TEXT("compact"))
 				.Optional(TEXT("filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter over action name or description."))
 				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter."), TEXT("0"))
 				.Range(TEXT("offset"), 0, 1000000)
 				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. Defaults to 50; values below 1 are normalized to the default to keep discovery bounded."), TEXT("50"))
 				.Range(TEXT("limit"), 0, 1000)
 				.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions"), TEXT("schema") })
+				.Enum(TEXT("planning_detail"), { TEXT("compact"), TEXT("full") })
+				.Enum(TEXT("schema_detail"), { TEXT("compact"), TEXT("full") })
 				.Build()
 		);
 		// Survivor A (plan §3.A) — read-only + idempotent enumeration.
@@ -2228,6 +2306,40 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			}
 		}
 
+		FString PlanningDetailText = FilterAction.IsEmpty() ? TEXT("compact") : TEXT("full");
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("planning_detail"), PlanningDetailText, ErrMsg, PlanningDetailText, true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		PlanningDetailText.TrimStartAndEndInline();
+		PlanningDetailText.ToLowerInline();
+		if (PlanningDetailText != TEXT("compact") && PlanningDetailText != TEXT("full"))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Parameter 'planning_detail' must be 'compact' or 'full'; got '%s'"), *PlanningDetailText),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		const EMonolithPlanningDetail PlanningDetail = PlanningDetailText == TEXT("full")
+			? EMonolithPlanningDetail::Full
+			: EMonolithPlanningDetail::Compact;
+
+		FString SchemaDetailText = FilterAction.IsEmpty() ? TEXT("compact") : TEXT("full");
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("schema_detail"), SchemaDetailText, ErrMsg, SchemaDetailText, true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		SchemaDetailText.TrimStartAndEndInline();
+		SchemaDetailText.ToLowerInline();
+		if (SchemaDetailText != TEXT("compact") && SchemaDetailText != TEXT("full"))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Parameter 'schema_detail' must be 'compact' or 'full'; got '%s'"), *SchemaDetailText),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		const EMonolithSchemaDetail SchemaDetail = SchemaDetailText == TEXT("full")
+			? EMonolithSchemaDetail::Full
+			: EMonolithSchemaDetail::Compact;
+
 		// Optional substring filter on action name OR description (case-insensitive).
 		// Applied AFTER the category filter, BEFORE pagination.
 		FString Filter;
@@ -2252,6 +2364,9 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		constexpr int32 MaxLimit = 1000;
 		int32 Offset = 0;
 		int32 RequestedLimit = DefaultLimit;
+		int32 EffectiveLimit = DefaultLimit;
+		bool bNormalizedLimit = false;
+		bool bProjectionCappedLimit = false;
 
 		const TSharedPtr<FJsonValue> OffsetField = Params->TryGetField(TEXT("offset"));
 		if (OffsetField.IsValid())
@@ -2279,20 +2394,42 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			RequestedLimit = static_cast<int32>(RawLimit);
 			if (RequestedLimit <= 0)
 			{
-				RequestedLimit = DefaultLimit;
+				EffectiveLimit = DefaultLimit;
+				bNormalizedLimit = true;
 			}
 			else if (RequestedLimit > MaxLimit)
 			{
 				return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'limit' cannot exceed %d"), MaxLimit), FMonolithJsonUtils::ErrInvalidParams);
 			}
+			else
+			{
+				EffectiveLimit = RequestedLimit;
+			}
+		}
+		if (bDetail && EffectiveLimit > DefaultLimit)
+		{
+			EffectiveLimit = DefaultLimit;
+			bProjectionCappedLimit = true;
 		}
 
-		const int32 Limit = RequestedLimit;
+		const int32 Limit = EffectiveLimit;
 		const int32 SliceStart = FMath::Clamp(Offset, 0, TotalCount);
 		const int32 SliceEnd = FMath::Clamp(SliceStart + Limit, SliceStart, TotalCount);
 
 		Result->SetStringField(TEXT("namespace"), FilterNamespace);
 		Result->SetStringField(TEXT("mode"), Mode);
+		Result->SetStringField(TEXT("planning_detail"), MonolithPlanningDetailToString(PlanningDetail));
+		Result->SetStringField(TEXT("schema_detail"), MonolithSchemaDetailToString(SchemaDetail));
+		if (PlanningDetail == EMonolithPlanningDetail::Compact)
+		{
+			Result->SetStringField(TEXT("planning_detail_hint"),
+				TEXT("Compact planning metadata omits precondition_details and planning_signals arrays. Pass planning_detail=\"full\" for those arrays."));
+		}
+		if (SchemaDetail == EMonolithSchemaDetail::Compact)
+		{
+			Result->SetStringField(TEXT("schema_detail_hint"),
+				TEXT("Compact namespace schemas use terse action descriptions and omit search_metadata plus per-param descriptions. Use mode=\"schema\" for one action, or pass schema_detail=\"full\" for full inline namespace schemas."));
+		}
 		if (!FilterCategory.IsEmpty())
 		{
 			Result->SetStringField(TEXT("category"), FilterCategory);
@@ -2300,7 +2437,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		if (!FilterAction.IsEmpty())
 		{
 			Result->SetStringField(TEXT("action"), Actions[0].Action);
-			Result->SetObjectField(TEXT("schema"), MakeDiscoverActionRow(Actions[0]));
+			Result->SetObjectField(TEXT("schema"), MakeDiscoverActionRow(Actions[0], PlanningDetail, SchemaDetail));
 		}
 		else
 		{
@@ -2311,7 +2448,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 				const FMonolithActionInfo& ActionInfo = Actions[Index];
 				if (bDetail)
 				{
-					ActionArray.Add(MakeShared<FJsonValueObject>(MakeDiscoverActionRow(ActionInfo)));
+					ActionArray.Add(MakeShared<FJsonValueObject>(MakeDiscoverActionRow(ActionInfo, PlanningDetail, SchemaDetail)));
 					continue;
 				}
 
@@ -2320,7 +2457,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 				ActionObj->SetStringField(TEXT("description"), MonolithTerseOneLineDescription(ActionInfo.Description));
 				ActionObj->SetObjectField(TEXT("execution_policy"), ActionInfo.ExecutionPolicy.ToJson());
 				AddActionPolicyFields(ActionObj, ActionInfo);
-				AddPlanningFields(ActionObj, ActionInfo);
+				AddPlanningFields(ActionObj, ActionInfo, PlanningDetail);
 				if (!ActionInfo.Category.IsEmpty())
 				{
 					ActionObj->SetStringField(TEXT("category"), ActionInfo.Category);
@@ -2338,10 +2475,17 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 			LimitsObj->SetNumberField(TEXT("offset"), SliceStart);
 			LimitsObj->SetNumberField(TEXT("total"), TotalCount);
 			LimitsObj->SetNumberField(TEXT("returned"), ActionArray.Num());
-			if (RequestedLimit <= 0)
+			LimitsObj->SetStringField(TEXT("planning_detail"), MonolithPlanningDetailToString(PlanningDetail));
+			LimitsObj->SetStringField(TEXT("schema_detail"), MonolithSchemaDetailToString(SchemaDetail));
+			if (bNormalizedLimit)
 			{
 				LimitsObj->SetStringField(TEXT("normalized_limit_reason"),
 					TEXT("limit values below 1 are normalized to default_limit to keep discovery responses bounded."));
+			}
+			if (bProjectionCappedLimit)
+			{
+				LimitsObj->SetStringField(TEXT("projection_limit_reason"),
+					TEXT("detail=true namespace listings are capped to default_limit per page to prevent large schema payloads. Use next_cursor/offset or focused mode=schema."));
 			}
 			Result->SetObjectField(TEXT("limits"), LimitsObj);
 			if (SliceEnd < TotalCount)

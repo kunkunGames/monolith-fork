@@ -299,11 +299,11 @@ Required work:
 |---|---|
 | UI examples | Add examples for `build_ui_from_spec`, `build_menu_from_spec`, `apply_common_menu_transform_spec`, `workflow.ui_shipping_widget_blueprint(proof_profile=...)`, and `ui.verify_widget_visual_artifacts` that use exact envelope fields. |
 | Builder/probe | Prefer existing registry/schema validation and focused schema discovery. Add a helper/probe action only if invocation logs still show recurring schema confusion after examples and fixtures land. |
-| Analyzer fixture | Add a UI schema-confusion fixture for common mistakes such as object-shaped `screens` where an array is required. |
+| Analyzer fixture | Add a UI schema-confusion fixture for common mistakes such as singleton object-shaped `screens`; `ui.apply_common_menu_transform_spec` now accepts and normalizes that shape, while other object/array mismatches should still produce explicit validation errors. |
 | Error recommendation | Schema findings should recommend either an alias/coercion or a clearer example. |
 | Large discovery pressure | UI skills should prefer focused schema discovery over broad `monolith.discover` dumps. |
 
-Known recent evidence: the local invocation analyzer reported repeated `ui.apply_common_menu_transform_spec` schema confusion where `screens` was passed as a non-array. The implementation should fix that through examples, fixtures, and optional additive input tolerance only if it does not weaken the public contract.
+Known recent evidence: the local invocation analyzer reported repeated `ui.apply_common_menu_transform_spec` schema confusion where `screens` was passed as a single object. The implementation accepts that additive shape by normalizing it to a one-entry `screens[]` array before focus/navigation screen lookups, without weakening validation for unrelated fields.
 
 ### 4.5 Optional Runtime Profile
 

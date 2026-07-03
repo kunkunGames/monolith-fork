@@ -79,6 +79,7 @@ bool FMonolithUIApplyCommonMenuTransformSpecSchemaTest::RunTest(const FString& /
 	bool bFoundAction = false;
 	bool bCategoryOk = false;
 	bool bHasLayers = false;
+	bool bScreensAcceptsObject = false;
 	bool bHasWidgetProperties = false;
 	bool bDryRunDefault = false;
 	bool bConfirmDefault = false;
@@ -96,6 +97,7 @@ bool FMonolithUIApplyCommonMenuTransformSpecSchemaTest::RunTest(const FString& /
 		bCategoryOk = ActionInfo.Category == TEXT("Spec Builder");
 		if (ActionInfo.ParamSchema.IsValid())
 		{
+			const TSharedPtr<FJsonObject>* Screens = nullptr;
 			const TSharedPtr<FJsonObject>* Layers = nullptr;
 			const TSharedPtr<FJsonObject>* WidgetProperties = nullptr;
 			const TSharedPtr<FJsonObject>* DryRun = nullptr;
@@ -103,6 +105,9 @@ bool FMonolithUIApplyCommonMenuTransformSpecSchemaTest::RunTest(const FString& /
 			const TSharedPtr<FJsonObject>* Compile = nullptr;
 			const TSharedPtr<FJsonObject>* Save = nullptr;
 			FString DefaultValue;
+			FString ScreensType;
+			bScreensAcceptsObject = ActionInfo.ParamSchema->TryGetObjectField(TEXT("screens"), Screens) && Screens && Screens->IsValid()
+				&& (*Screens)->TryGetStringField(TEXT("type"), ScreensType) && ScreensType == TEXT("array|object");
 			bHasLayers = ActionInfo.ParamSchema->TryGetObjectField(TEXT("layers"), Layers) && Layers && Layers->IsValid();
 			bHasWidgetProperties = ActionInfo.ParamSchema->TryGetObjectField(TEXT("widget_properties"), WidgetProperties) && WidgetProperties && WidgetProperties->IsValid();
 			bDryRunDefault = ActionInfo.ParamSchema->TryGetObjectField(TEXT("dry_run"), DryRun) && DryRun && DryRun->IsValid()
@@ -119,6 +124,7 @@ bool FMonolithUIApplyCommonMenuTransformSpecSchemaTest::RunTest(const FString& /
 
 	TestTrue(TEXT("apply_common_menu_transform_spec registered"), bFoundAction);
 	TestTrue(TEXT("apply_common_menu_transform_spec category"), bCategoryOk);
+	TestTrue(TEXT("screens accepts array or object"), bScreensAcceptsObject);
 	TestTrue(TEXT("layers schema exists"), bHasLayers);
 	TestTrue(TEXT("widget_properties schema exists"), bHasWidgetProperties);
 	TestTrue(TEXT("dry_run defaults true"), bDryRunDefault);
@@ -227,6 +233,55 @@ bool FMonolithUIApplyCommonMenuTransformSpecDryRunDeferredAggregationTest::RunTe
 		TestEqual(TEXT("layout layer count"), static_cast<int32>(LayoutCount), 1);
 		TestEqual(TEXT("focus count"), static_cast<int32>(FocusCount), 1);
 		TestEqual(TEXT("navigation bulk count"), static_cast<int32>(NavCount), 1);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithUIApplyCommonMenuTransformSpecSingleScreenObjectTest,
+	"Monolith.UI.ApplyCommonMenuTransformSpec.SingleScreenObject",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIApplyCommonMenuTransformSpecSingleScreenObjectTest::RunTest(const FString& /*Parameters*/)
+{
+	TSharedPtr<FJsonObject> Screen = MakeShared<FJsonObject>();
+	Screen->SetStringField(TEXT("id"), TEXT("host"));
+	Screen->SetStringField(TEXT("asset_path"), TEXT("/Game/Tests/Monolith/UI/WBP_HostMenu"));
+
+	TSharedPtr<FJsonObject> Nav = MakeShared<FJsonObject>();
+	Nav->SetStringField(TEXT("screen"), TEXT("host"));
+	Nav->SetStringField(TEXT("widget"), TEXT("HostButton"));
+	Nav->SetStringField(TEXT("direction"), TEXT("Down"));
+	Nav->SetStringField(TEXT("target"), TEXT("BackButton"));
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetObjectField(TEXT("screens"), Screen);
+	AddObjectToArrayField(Params, TEXT("nav_overrides"), Nav);
+
+	const FMonolithActionResult Result = ExecuteApplyCommonMenuTransformSpec(Params);
+	TestTrue(TEXT("single object screens payload passes schema and planning"), Result.bSuccess);
+	TestTrue(TEXT("single object screens payload returns JSON"), Result.Result.IsValid());
+	if (!Result.bSuccess || !Result.Result.IsValid())
+	{
+		AddError(Result.ErrorMessage);
+		return false;
+	}
+
+	double StepCount = 0.0;
+	double PlannedOnlyStepCount = 0.0;
+	TestTrue(TEXT("step_count exposed"), Result.Result->TryGetNumberField(TEXT("step_count"), StepCount));
+	TestEqual(TEXT("navigation step planned from singleton screens map"), static_cast<int32>(StepCount), 1);
+	TestTrue(TEXT("planned_only_step_count exposed"), Result.Result->TryGetNumberField(TEXT("planned_only_step_count"), PlannedOnlyStepCount));
+	TestEqual(TEXT("singleton screens navigation remains plan-only in dry-run"), static_cast<int32>(PlannedOnlyStepCount), 1);
+
+	const TSharedPtr<FJsonObject>* PlannedCounts = nullptr;
+	TestTrue(TEXT("planned_counts exposed"), Result.Result->TryGetObjectField(TEXT("planned_counts"), PlannedCounts));
+	if (PlannedCounts && PlannedCounts->IsValid())
+	{
+		double NavCount = 0.0;
+		TestTrue(TEXT("navigation_bulk planned"), (*PlannedCounts)->TryGetNumberField(TEXT("navigation_bulk"), NavCount));
+		TestEqual(TEXT("navigation count"), static_cast<int32>(NavCount), 1);
 	}
 
 	return true;

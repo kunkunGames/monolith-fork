@@ -274,7 +274,7 @@ FMonolithActionResult FProjectSearchAction::Execute(const TSharedPtr<FJsonObject
 TSharedPtr<FJsonObject> FProjectSearchAction::GetSchema()
 {
 	return FParamSchemaBuilder()
-		.Required(TEXT("query"), TEXT("string"), TEXT("FTS search query (automatically escaped and tokenized for prefix matching). Search results are not writable schema."))
+		.Required(TEXT("query"), TEXT("string"), TEXT("FTS search query (automatically escaped and tokenized for prefix matching). Alias: q. Search results are not writable schema."), { TEXT("q") })
 		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum results to return, clamped to 1..1000"), TEXT("50"))
 		.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after final fused ranking"), TEXT("0"))
 		.Optional(TEXT("cursor"), TEXT("string"), TEXT("Numeric offset cursor returned as next_cursor"), TEXT(""))

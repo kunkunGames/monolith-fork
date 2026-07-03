@@ -132,6 +132,8 @@ MCP server is running.
 
 **Widget-context resolution note (#14, Phase 3 2026-05-23):** `add_node` and `resolve_node` CallFunction first-match resolution now biases toward `UWidget`-derived owning classes when `target_class` is omitted AND the asset is a Widget Blueprint (class-generic `IsChildOf(UWidget)` reflection — never sibling-widget names). No action-count change.
 
+**`resolve_node.reliable` compatibility note (2026-07-03):** `resolve_node` is a read-only dry-run surface for node pin/flag discovery, so its CustomEvent `reliable` param accepts both JSON booleans and the string literals `true`, `false`, `1`, `0`, `yes`, and `no`. Arbitrary strings still fail with `-32602`, and this compatibility does not apply to `add_node` or other mutating bool params.
+
 **Compile & Create (6)**
 | Action | Params | Description |
 |--------|--------|-------------|

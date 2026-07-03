@@ -116,7 +116,7 @@ private:
 
 	bool WriteBatch(FSQLiteDatabase& DB, const FNetworkArtefactBatch& Batch);
 
-	/** Walk a root for `<Anywhere>/Inc/<Module>/UHT/*.gen.cpp`. Mirrors
+	/** Walk a root for generated UHT .gen.cpp artefacts under `<Anywhere>/Inc/<Module>/UHT`. Mirrors
 	 *  Phase 3a's helper — duplication is intentional so Phase 4b can
 	 *  consolidate without coupling.
 	 *  bAllowMarketplacePaths opens a narrow /Plugins/Marketplace/ exception to

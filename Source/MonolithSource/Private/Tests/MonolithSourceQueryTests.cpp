@@ -648,6 +648,29 @@ bool FSourceHealthHealthyTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("default shallow source health stays healthy"), Shallow->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestEqual(TEXT("shallow health reports depth"), Shallow->GetStringField(TEXT("check_depth")), FString(TEXT("shallow")));
 	TestFalse(TEXT("shallow health omits row counts"), Shallow->HasField(TEXT("row_counts")));
+	const TArray<TSharedPtr<FJsonValue>>* ShallowNextActions = nullptr;
+	TestTrue(TEXT("shallow health exposes next actions"), Shallow->TryGetArrayField(TEXT("next_actions"), ShallowNextActions) && ShallowNextActions != nullptr);
+	bool bSuggestsRoutineDeepHealth = false;
+	if (ShallowNextActions)
+	{
+		for (const TSharedPtr<FJsonValue>& Action : *ShallowNextActions)
+		{
+			FString ActionText;
+			if (Action.IsValid() && Action->TryGetString(ActionText) && ActionText.Contains(TEXT("include_deep_checks")))
+			{
+				bSuggestsRoutineDeepHealth = true;
+			}
+		}
+	}
+	TestFalse(TEXT("healthy shallow health keeps deep checks out of required next actions"), bSuggestsRoutineDeepHealth);
+	const TSharedPtr<FJsonObject>* Maintenance = nullptr;
+	TestTrue(TEXT("shallow health exposes maintenance recommendation"), Shallow->TryGetObjectField(TEXT("maintenance_recommendation"), Maintenance) && Maintenance && Maintenance->IsValid());
+	if (Maintenance && Maintenance->IsValid())
+	{
+		TestFalse(TEXT("healthy shallow health does not require maintenance"), (*Maintenance)->GetBoolField(TEXT("maintenance_required")));
+		TestFalse(TEXT("healthy shallow health does not require expensive maintenance"), (*Maintenance)->GetBoolField(TEXT("expensive_maintenance_required")));
+		TestFalse(TEXT("healthy shallow health does not recommend routine deep health"), (*Maintenance)->GetBoolField(TEXT("routine_deep_health_recommended")));
+	}
 	TSharedPtr<FJsonObject> DefaultShallow = T.Db.ComputeHealth(false);
 	TestEqual(TEXT("single-argument health defaults to shallow checks"), DefaultShallow->GetStringField(TEXT("check_depth")), FString(TEXT("shallow")));
 	T.Db.InsertReference(0, T.Sb, TEXT("type"), T.FileId, 11);

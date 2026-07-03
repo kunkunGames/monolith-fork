@@ -190,19 +190,21 @@ Rules:
 | P0.1.1 deterministic probe | `Scripts/recover_mcp.ps1 -ProbeOnly` returns stable `RESULT=` tokens and never launches the editor. |
 | P0.1.2 recovery plan | A new or extended readiness action reports endpoint URL, listener status, editor candidate status, headless log path, and bounded next steps. |
 | P0.1.3 offline catalog snapshot | `Binaries\monolith_query.exe monolith discover`, `find`, `status`, and `get_action_metadata_coverage` work while MCP is down, using a stamped snapshot and `requires_live_editor` markers. |
-| P0.1.4 Codex-direct path | Availability fixes cover direct streamable-HTTP clients, not only `monolith_proxy.py` / `.js`. |
+| P0.1.4 watchdog supervisor | `Scripts/watch_mcp.ps1` keeps `/health` supervised during long agent sessions; when the editor process is gone, it runs the host editor UBT build, restart-triggered source/graph maintenance, relaunches through `recover_mcp.ps1`, then runs post-health asset maintenance; when a headless editor process exists but stays unhealthy through the recover timeout, it stops only that headless process and reruns the same sequence; recover uses modal-safe headless asset-editor settings. |
+| P0.1.5 Codex-direct path | Availability fixes cover direct streamable-HTTP clients, not only `monolith_proxy.py` / `.js`. |
 
 Acceptance:
 
 ```powershell
 Scripts\recover_mcp.ps1 -ProbeOnly
+Scripts\watch_mcp.ps1 -ProbeOnly
 Binaries\monolith_query.exe monolith status
 Binaries\monolith_query.exe monolith discover --namespace blueprint --mode actions --limit 10
 Binaries\monolith_query.exe monolith get_action_metadata_coverage --namespace blueprint
 python Analyzer\analyze_session_transcripts.py --since 20260626 --out Saved\Monolith\SessionAnalysis\roi-current
 ```
 
-Transport/availability errors in fresh session transcripts must drop, and offline catalog output must be clearly marked as snapshot data.
+Transport/availability errors in fresh session transcripts must drop, watchdog runs must emit a clear `[timestamp][EventType] result=<camelCase>` line, and offline catalog output must be clearly marked as snapshot data.
 
 ### P0.2 Source/project/bridge readiness trust
 
@@ -271,7 +273,7 @@ Live acceptance requires focused AssetEditing rows for these actions to pass wit
 
 | Requirement | Contract |
 |---|---|
-| P0.5.1 `monolith.discover` projection | Default discover output remains bounded. Large namespace listings must support `limit`, `offset`, `filter`, `category`, `detail=false`, `truncated`, `next_cursor`, and `limits`. |
+| P0.5.1 `monolith.discover` projection | Default discover output remains bounded. Large namespace listings must support `limit`, `offset`, `filter`, `category`, `detail=false`, `planning_detail=compact`, `planning_detail=full` opt-in, `schema_detail=compact`, `schema_detail=full` opt-in, `detail=true` page capping to the default limit, `truncated`, `next_cursor`, and `limits`. |
 | P0.5.2 `console.search_objects` cap | Default response must be compact; full help/value rows require explicit detail/projection. |
 | P0.5.3 `project.search` cap | Content-inclusive search must expose provenance fields but keep result rows bounded and cursorable. |
 | P0.5.4 analyzer guard | `Analyzer/analyze_invocation_logs.py` continues to flag `large_result` with recent windows. |
@@ -438,7 +440,7 @@ For each optional domain touched:
 
 | Req | Task family | Test family |
 |---|---|---|
-| P0.1 | MCP availability and offline catalog | `recover_mcp.ps1 -ProbeOnly`, offline `monolith` CLI actions, session analyzer. |
+| P0.1 | MCP availability and offline catalog | `recover_mcp.ps1 -ProbeOnly`, `watch_mcp.ps1 -ProbeOnly`, `watch_mcp.ps1 -Once -RunDailyReindexNow` only on an intentional live endpoint maintenance smoke, offline `monolith` CLI actions, session analyzer. |
 | P0.2 | Source/project/bridge readiness | source/project health, index freshness script, bridge next-action snapshot tests. |
 | P0.3 | Metadata/ParamGuard gate | ActionGuidance, metadata coverage, param guard automation, static CI. |
 | P0.4 | Blueprint high-error recovery | focused AssetEditing rows, analyzer high-error regression check. |

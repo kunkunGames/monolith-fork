@@ -1169,7 +1169,7 @@ namespace
 				TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 				Row->SetNumberField(TEXT("step_index"), StepIndex);
 				Row->SetStringField(TEXT("command"), Step->GetStringField(TEXT("command")));
-				for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : LogJsonObject->Values)
+				for (const auto& Pair : LogJsonObject->Values)
 				{
 					Row->SetField(Pair.Key, Pair.Value);
 				}
@@ -2860,19 +2860,20 @@ FMonolithActionResult FMonolithConsoleActions::SetCvarScoped(const TSharedPtr<FJ
 
 	TArray<FScopedCvarRecord> Records;
 	Records.Reserve((*CvarsPtr)->Values.Num());
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*CvarsPtr)->Values)
+	for (const auto& Pair : (*CvarsPtr)->Values)
 	{
+		const FString CvarName(Pair.Key.Len(), *Pair.Key);
 		bool bValueOk = false;
 		FString RequestedValue = JsonValueToConsoleString(Pair.Value, bValueOk);
 		if (!bValueOk)
 		{
 			return FMonolithActionResult::Error(
-				FString::Printf(TEXT("cvars.%s must be a string, number, or boolean."), *Pair.Key),
+				FString::Printf(TEXT("cvars.%s must be a string, number, or boolean."), *CvarName),
 				FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		FScopedCvarRecord Record;
-		Record.Name = Pair.Key;
+		Record.Name = CvarName;
 		Record.RequestedValue = RequestedValue;
 		Records.Add(MoveTemp(Record));
 	}

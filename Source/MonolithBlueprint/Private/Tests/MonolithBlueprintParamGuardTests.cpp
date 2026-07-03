@@ -744,7 +744,7 @@ bool FMonolithBlueprintParamGuardNodeActionsRejectMalformedTopLevelParams::RunTe
 				[](TSharedRef<FJsonObject> Params)
 				{
 					Params->SetStringField(TEXT("node_type"), TEXT("CustomEvent"));
-					Params->SetStringField(TEXT("reliable"), TEXT("true"));
+					Params->SetStringField(TEXT("reliable"), TEXT("maybe"));
 				},
 				TEXT("reliable"),
 				TEXT("resolve_node should reject malformed reliable")
@@ -929,6 +929,33 @@ bool FMonolithBlueprintParamGuardNodeActionsRejectMalformedTopLevelParams::RunTe
 				TEXT("promote_pin_to_variable should reject malformed variable_name")
 			},
 		});
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintResolveNodeAcceptsReliableStringLiteral, "Monolith.Blueprint.ResolveNode.AcceptsReliableStringLiteral", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithBlueprintResolveNodeAcceptsReliableStringLiteral::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithBlueprintNodeActions::RegisterActions(Registry);
+
+	TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("node_type"), TEXT("CustomEvent"));
+	Params->SetStringField(TEXT("replication"), TEXT("server"));
+	Params->SetStringField(TEXT("reliable"), TEXT("true"));
+
+	const FMonolithActionResult Result = Registry.ExecuteAction(TEXT("blueprint"), TEXT("resolve_node"), Params);
+	bool bOk = true;
+	bOk &= TestTrue(TEXT("resolve_node accepts reliable string literal"), Result.bSuccess);
+	bOk &= TestTrue(TEXT("resolve_node returns a result object"), Result.Result.IsValid());
+
+	if (Result.Result.IsValid())
+	{
+		bool bReliable = false;
+		bOk &= TestTrue(TEXT("resolve_node emits reliable field"), Result.Result->TryGetBoolField(TEXT("reliable"), bReliable));
+		bOk &= TestTrue(TEXT("resolve_node reliable string literal resolves true"), bReliable);
+	}
+
+	return bOk;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintParamGuardUtilityAndDataActionsRejectMalformedTopLevelParams, "Monolith.ParamGuard.Blueprint.UtilityAndDataActionsRejectMalformedTopLevelParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

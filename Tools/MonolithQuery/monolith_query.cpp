@@ -607,6 +607,17 @@ static std::string trim_copy(std::string value) {
     return value;
 }
 
+static std::string escape_sql_like(std::string value) {
+    for (size_t pos = 0; pos < value.size(); ++pos) {
+        char ch = value[pos];
+        if (ch == '\\' || ch == '%' || ch == '_') {
+            value.insert(value.begin() + static_cast<std::ptrdiff_t>(pos), '\\');
+            ++pos;
+        }
+    }
+    return value;
+}
+
 static std::string collapse_ws_copy(const std::string& value) {
     std::string out;
     bool pending_space = false;
@@ -994,6 +1005,17 @@ struct Args {
     }
 };
 
+static std::string first_positional_or_query_option(const Args& args) {
+    if (!args.positional.empty() && !trim_copy(args.positional[0]).empty())
+        return args.positional[0];
+
+    std::string q = args.opt("query");
+    if (!trim_copy(q).empty())
+        return q;
+
+    return args.opt("q");
+}
+
 static Args parse_args(int argc, char* argv[]) {
     Args args;
     if (argc < 3) {
@@ -1213,6 +1235,39 @@ class SourceActions {
     std::string source_db_path;
     static constexpr const char* kSourceSchemaVersion = "3";
 
+    Rows resolve_function_symbol_rows(const std::string& symbol) {
+        std::string lookup = symbol;
+        std::string qualified;
+        const size_t scope_pos = symbol.rfind("::");
+        if (scope_pos != std::string::npos && scope_pos + 2 < symbol.size()) {
+            lookup = symbol.substr(scope_pos + 2);
+            qualified = symbol;
+        }
+
+        if (trim_copy(lookup).empty())
+            return {};
+
+        Rows sym_rows = query(db,
+            "SELECT id, qualified_name FROM symbols WHERE name = ? AND kind = 'function'",
+            {lookup});
+        if (sym_rows.empty()) {
+            std::string fts_q = escape_fts(lookup);
+            sym_rows = query(db,
+                "SELECT s.id, s.qualified_name FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                "WHERE symbols_fts MATCH ? AND s.kind = 'function' LIMIT 5", {fts_q});
+        }
+        if (!qualified.empty() && sym_rows.size() > 1) {
+            Rows exact;
+            for (const auto& row : sym_rows) {
+                if (row.get("qualified_name") == qualified)
+                    exact.push_back(row);
+            }
+            if (!exact.empty())
+                return exact;
+        }
+        return sym_rows;
+    }
+
 public:
     void open(const std::string& path, bool query_only = true) {
         source_db_path = path;
@@ -1243,8 +1298,8 @@ public:
 
     // --- search_source ---
     void search_source(const Args& args) {
-        if (args.positional.empty()) die("search_source requires a query argument");
-        std::string q = args.positional[0];
+        std::string q = first_positional_or_query_option(args);
+        if (trim_copy(q).empty()) die("search_source requires a query argument (positional or --query=<text>)");
         int requested_limit = args.opt_int("limit", 20);
         int limit = clamp_int(requested_limit <= 0 ? 20 : requested_limit, 1, 200);
         std::string module = args.opt("module");
@@ -1484,17 +1539,11 @@ public:
 
     // --- find_callers ---
     void find_callers(const Args& args) {
-        if (args.positional.empty()) die("find_callers requires a symbol argument");
-        std::string symbol = args.positional[0];
+        std::string symbol = first_positional_or_query_option(args);
+        if (trim_copy(symbol).empty()) die("find_callers requires a symbol argument (positional or --query=<text>)");
         int limit = args.opt_int("limit", 50);
 
-        auto sym_rows = query(db, "SELECT id FROM symbols WHERE name = ? AND kind = 'function'", {symbol});
-        if (sym_rows.empty()) {
-            std::string fts_q = escape_fts(symbol);
-            sym_rows = query(db,
-                "SELECT s.id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
-                "WHERE symbols_fts MATCH ? AND s.kind = 'function' LIMIT 5", {fts_q});
-        }
+        auto sym_rows = resolve_function_symbol_rows(symbol);
         if (sym_rows.empty()) die("No function found matching '" + symbol + "'.");
 
         std::vector<std::string> lines;
@@ -1516,17 +1565,11 @@ public:
 
     // --- find_callees ---
     void find_callees(const Args& args) {
-        if (args.positional.empty()) die("find_callees requires a symbol argument");
-        std::string symbol = args.positional[0];
+        std::string symbol = first_positional_or_query_option(args);
+        if (trim_copy(symbol).empty()) die("find_callees requires a symbol argument (positional or --query=<text>)");
         int limit = args.opt_int("limit", 50);
 
-        auto sym_rows = query(db, "SELECT id FROM symbols WHERE name = ? AND kind = 'function'", {symbol});
-        if (sym_rows.empty()) {
-            std::string fts_q = escape_fts(symbol);
-            sym_rows = query(db,
-                "SELECT s.id FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
-                "WHERE symbols_fts MATCH ? AND s.kind = 'function' LIMIT 5", {fts_q});
-        }
+        auto sym_rows = resolve_function_symbol_rows(symbol);
         if (sym_rows.empty()) die("No function found matching '" + symbol + "'.");
 
         std::vector<std::string> lines;
@@ -2123,6 +2166,37 @@ LIMIT ?
                 ? "EngineSource schema, triggers, symbols_fts parity, CRG cache and integrity OK"
                 : "EngineSource schema, required tables/triggers, and CRG structure OK; deep parity checks skipped")
             : std::to_string(root["warnings"].size()) + " health warning(s)";
+
+        json reason_codes = json::array();
+        if (needs_reindex) reason_codes.push_back("reindex_required");
+        if (needs_fts_repair) reason_codes.push_back("fts_repair_required");
+        if (needs_crg_repair) reason_codes.push_back("crg_cache_repair_required");
+        if (needs_override_repair) reason_codes.push_back("override_edges_repair_required");
+        if (reason_codes.empty()) {
+            reason_codes.push_back(run_expensive_checks
+                ? "deep_health_clean"
+                : "shallow_health_clean_deep_check_optional");
+        }
+        bool maintenance_required = needs_reindex || needs_fts_repair || needs_crg_repair || needs_override_repair;
+        json maintenance = {
+            {"maintenance_required", maintenance_required},
+            {"expensive_maintenance_required", maintenance_required},
+            {"reindex_required", needs_reindex},
+            {"repair_fts_required", needs_fts_repair},
+            {"repair_crg_cache_required", needs_crg_repair},
+            {"repair_override_edges_required", needs_override_repair},
+            {"deep_health_ran", run_expensive_checks},
+            {"routine_deep_health_recommended", !run_expensive_checks && !root["warnings"].empty()},
+            {"reason_codes", reason_codes},
+            {"summary", maintenance_required
+                ? "Source health found a concrete maintenance requirement; follow next_actions."
+                : "No source-index maintenance is required by this health result; deep health is optional diagnostics, not a routine next step."},
+        };
+        if (!run_expensive_checks) {
+            maintenance["optional_diagnostic_actions"] = json::array({"source.health --include-deep-checks=true"});
+        }
+        root["maintenance_recommendation"] = maintenance;
+
         auto next = json::array();
         auto add_next_unique = [&](const std::string& action) {
             for (const auto& existing : next) {
@@ -2130,7 +2204,6 @@ LIMIT ?
             }
             next.push_back(action);
         };
-        if (!run_expensive_checks) add_next_unique("source.health --include-deep-checks=true");
         if (needs_crg_repair) add_next_unique("source.repair_crg_cache");
         if (needs_override_repair) add_next_unique("source.repair_crg_cache --scope=override_edges");
         if (needs_fts_repair) add_next_unique("source.repair_fts --target=symbols");
@@ -4559,6 +4632,13 @@ public:
 class ProjectActions {
     Database db;
     static constexpr int kProjectSearchMatchValuePreviewChars = 240;
+    static constexpr int kProjectMaxWindow = 100000;
+
+    struct ProjectPage {
+        int limit = 100;
+        int offset = 0;
+        int query_limit = 101;
+    };
 
     static std::pair<std::string, bool> compact_match_value(const std::string& value, bool detail) {
         if (detail || value.size() <= kProjectSearchMatchValuePreviewChars)
@@ -4566,13 +4646,79 @@ class ProjectActions {
         return {value.substr(0, kProjectSearchMatchValuePreviewChars), true};
     }
 
+    static bool parse_non_negative_offset(const std::string& value, int& out) {
+        if (value.empty()) return false;
+        if (!std::all_of(value.begin(), value.end(), [](unsigned char c) { return std::isdigit(c) != 0; }))
+            return false;
+        try {
+            long long parsed = std::stoll(value);
+            if (parsed < 0 || parsed > kProjectMaxWindow) return false;
+            out = static_cast<int>(parsed);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    static ProjectPage parse_page(const Args& args, const std::string& action, int default_limit = 100) {
+        ProjectPage page;
+        page.limit = clamp_int(args.opt_int("limit", default_limit), 1, 1000);
+        page.offset = args.opt_int("offset", 0);
+        std::string cursor = args.opt("cursor");
+        if (!cursor.empty() && !parse_non_negative_offset(cursor, page.offset))
+            die("project " + action + " --cursor must be a non-negative numeric offset cursor");
+        if (page.offset < 0 || page.offset > kProjectMaxWindow)
+            die("project " + action + " --offset must be within 0..100000");
+        const long long requested_window = static_cast<long long>(page.offset) + static_cast<long long>(page.limit);
+        if (requested_window > kProjectMaxWindow)
+            die("project " + action + " --offset + --limit exceeds the max window");
+        page.query_limit = static_cast<int>(
+            std::min<long long>(static_cast<long long>(page.limit) + 1LL,
+                                static_cast<long long>(kProjectMaxWindow) - static_cast<long long>(page.offset)));
+        return page;
+    }
+
+    static void trim_to_page(json& rows, const ProjectPage& page, bool& truncated) {
+        truncated = rows.size() > static_cast<size_t>(page.limit);
+        while (rows.size() > static_cast<size_t>(page.limit))
+            rows.erase(rows.end() - 1);
+    }
+
+    static json missing_gameplay_tag_schema_json(const std::string& action, const std::vector<std::string>& required_tables, const std::vector<std::string>& missing_tables) {
+        json required = json::array();
+        for (const auto& table : required_tables)
+            required.push_back(table);
+        json missing = json::array();
+        for (const auto& table : missing_tables)
+            missing.push_back(table);
+        return {
+            {"success", false},
+            {"status", "schema_missing"},
+            {"action", action},
+            {"summary", "ProjectIndex.db is missing required gameplay tag table(s)"},
+            {"missing_tables", missing},
+            {"required_tables", required},
+            {"next_actions", json::array({"project.health", "monolith.reindex"})},
+            {"truncated", false},
+        };
+    }
+
+    std::vector<std::string> missing_tables(std::initializer_list<const char*> required) {
+        std::vector<std::string> missing;
+        for (const char* table : required) {
+            if (!object_exists(db, "table", table))
+                missing.push_back(table);
+        }
+        return missing;
+    }
+
 public:
     void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
 
     // --- search ---
     void search(const Args& args) {
-        if (args.positional.empty()) die("search requires a query argument");
-        std::string q = args.positional[0];
+        std::string q = first_positional_or_query_option(args);
+        if (trim_copy(q).empty()) die("search requires a query argument (positional or --query=<text>)");
         constexpr int max_window = 100000;
         int limit = clamp_int(args.opt_int("limit", 50), 1, 1000);
         int offset = args.opt_int("offset", 0);
@@ -4759,6 +4905,116 @@ public:
         if (truncated)
             out["next_cursor"] = std::to_string(offset + limit);
         std::cout << out.dump(2) << std::endl;
+    }
+
+    // --- list_gameplay_tags ---
+    void list_gameplay_tags(const Args& args) {
+        auto missing = missing_tables({"tags"});
+        if (!missing.empty()) {
+            print_json(missing_gameplay_tag_schema_json("project.list_gameplay_tags", {"tags"}, missing));
+            return;
+        }
+
+        std::string prefix = args.opt("prefix");
+        if (prefix.empty() && !args.positional.empty())
+            prefix = args.positional[0];
+
+        ProjectPage page = parse_page(args, "list_gameplay_tags", 100);
+        std::string sql = "SELECT tag_name, parent_tag, reference_count FROM tags";
+        std::vector<std::string> binds;
+        if (!prefix.empty()) {
+            sql += " WHERE tag_name LIKE ? ESCAPE '\\'";
+            binds.push_back(escape_sql_like(prefix) + "%");
+        }
+        sql += " ORDER BY tag_name LIMIT " + std::to_string(page.query_limit) +
+               " OFFSET " + std::to_string(page.offset) + ";";
+
+        json tags = json::array();
+        for (const auto& row : query(db, sql, binds)) {
+            tags.push_back({
+                {"tag_name", row.get("tag_name")},
+                {"parent_tag", row.get("parent_tag")},
+                {"reference_count", row.get_int64("reference_count")},
+            });
+        }
+
+        bool truncated = false;
+        trim_to_page(tags, page, truncated);
+        json out = {
+            {"success", true},
+            {"tags", tags},
+            {"count", tags.size()},
+            {"limit", page.limit},
+            {"offset", page.offset},
+            {"truncated", truncated},
+        };
+        if (!prefix.empty())
+            out["prefix_filter"] = prefix;
+        if (truncated)
+            out["next_cursor"] = std::to_string(page.offset + page.limit);
+        print_json(out);
+    }
+
+    // --- search_gameplay_tags ---
+    void search_gameplay_tags(const Args& args) {
+        auto missing = missing_tables({"tags", "tag_references", "assets"});
+        if (!missing.empty()) {
+            print_json(missing_gameplay_tag_schema_json("project.search_gameplay_tags", {"tags", "tag_references", "assets"}, missing));
+            return;
+        }
+
+        std::string q = first_positional_or_query_option(args);
+        if (trim_copy(q).empty())
+            die("search_gameplay_tags requires a query argument (positional or --query=<text>)");
+
+        ProjectPage page = parse_page(args, "search_gameplay_tags", 100);
+        auto rows = query(db,
+            "SELECT t.id, t.tag_name, t.parent_tag, t.reference_count, "
+            "GROUP_CONCAT(a.package_path) AS referencing_assets "
+            "FROM tags t "
+            "LEFT JOIN tag_references tr ON t.id = tr.tag_id "
+            "LEFT JOIN assets a ON tr.asset_id = a.id "
+            "WHERE t.tag_name LIKE ? ESCAPE '\\' "
+            "GROUP BY t.id "
+            "ORDER BY t.reference_count DESC, t.tag_name "
+            "LIMIT " + std::to_string(page.query_limit) + " OFFSET " + std::to_string(page.offset) + ";",
+            {"%" + escape_sql_like(q) + "%"});
+
+        json tags = json::array();
+        for (const auto& row : rows) {
+            json referencing_assets = json::array();
+            std::string raw_assets = row.get("referencing_assets");
+            if (!raw_assets.empty()) {
+                std::istringstream asset_stream(raw_assets);
+                std::string asset_path;
+                while (std::getline(asset_stream, asset_path, ',')) {
+                    asset_path = trim_copy(asset_path);
+                    if (!asset_path.empty())
+                        referencing_assets.push_back(asset_path);
+                }
+            }
+            tags.push_back({
+                {"tag_name", row.get("tag_name")},
+                {"parent_tag", row.get("parent_tag")},
+                {"reference_count", row.get_int64("reference_count")},
+                {"referencing_assets", referencing_assets},
+            });
+        }
+
+        bool truncated = false;
+        trim_to_page(tags, page, truncated);
+        json out = {
+            {"success", true},
+            {"tags", tags},
+            {"count", tags.size()},
+            {"query", q},
+            {"limit", page.limit},
+            {"offset", page.offset},
+            {"truncated", truncated},
+        };
+        if (truncated)
+            out["next_cursor"] = std::to_string(page.offset + page.limit);
+        print_json(out);
     }
 
     // --- find_by_type ---
@@ -9299,6 +9555,8 @@ int main(int argc, char* argv[]) {
 
             static const std::map<std::string, std::function<void(ProjectActions&, const Args&)>> actions = {
                 {"search",            [](ProjectActions& p, const Args& a) { p.search(a); }},
+                {"list_gameplay_tags", [](ProjectActions& p, const Args& a) { p.list_gameplay_tags(a); }},
+                {"search_gameplay_tags", [](ProjectActions& p, const Args& a) { p.search_gameplay_tags(a); }},
                 {"find_by_type",      [](ProjectActions& p, const Args& a) { p.find_by_type(a); }},
                 {"find_references",   [](ProjectActions& p, const Args& a) { p.find_references(a); }},
                 {"get_stats",         [](ProjectActions& p, const Args& a) { p.get_stats(a); }},

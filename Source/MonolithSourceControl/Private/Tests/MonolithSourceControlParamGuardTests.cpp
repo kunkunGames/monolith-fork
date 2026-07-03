@@ -16,6 +16,14 @@ namespace
 		Paths.Add(MakeShared<FJsonValueString>(TEXT("Project.uproject")));
 		Params->SetArrayField(TEXT("paths"), Paths);
 	}
+
+	bool ExpectActionSuccess(FAutomationTestBase& Test, const TCHAR* Action, const TSharedPtr<FJsonObject>& Params)
+	{
+		const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("source_control"), Action, Params);
+		return Test.TestTrue(
+			*FString::Printf(TEXT("source_control.%s accepts tolerant params"), Action),
+			Result.bSuccess);
+	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSourceControlTypedParamsTest, "Monolith.ParamValidation.MonolithSourceControl.TypedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -59,20 +67,10 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				TEXT("get_status"),
 				[](TSharedRef<FJsonObject> Params)
 				{
-					Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
+					Params->SetNumberField(TEXT("paths"), 1.0);
 				},
 				TEXT("paths"),
-				TEXT("source_control.get_status rejects non-array paths")
-			},
-			{
-				TEXT("checkout"),
-				[](TSharedRef<FJsonObject> Params)
-				{
-					AddValidPathArray(Params);
-					Params->SetStringField(TEXT("dry_run"), TEXT("true"));
-				},
-				TEXT("dry_run"),
-				TEXT("source_control.checkout rejects non-bool dry_run")
+				TEXT("source_control.get_status rejects non-string/non-array paths")
 			},
 			{
 				TEXT("add"),
@@ -89,20 +87,20 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				[](TSharedRef<FJsonObject> Params)
 				{
 					AddValidPathArray(Params);
-					Params->SetStringField(TEXT("dry_run"), TEXT("false"));
+					Params->SetStringField(TEXT("dry_run"), TEXT("later"));
 				},
 				TEXT("dry_run"),
-				TEXT("source_control.checkout_or_add rejects non-bool dry_run")
+				TEXT("source_control.checkout_or_add rejects malformed dry_run string")
 			},
 			{
 				TEXT("delete"),
 				[](TSharedRef<FJsonObject> Params)
 				{
 					AddValidPathArray(Params);
-					Params->SetStringField(TEXT("confirm"), TEXT("yes"));
+					Params->SetStringField(TEXT("confirm"), TEXT("sure"));
 				},
 				TEXT("confirm"),
-				TEXT("source_control.delete rejects non-bool confirm")
+				TEXT("source_control.delete rejects malformed confirm string")
 			},
 			{
 				TEXT("mark_for_delete"),
@@ -119,40 +117,85 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				[](TSharedRef<FJsonObject> Params)
 				{
 					AddValidPathArray(Params);
-					Params->SetStringField(TEXT("confirm"), TEXT("yes"));
+					Params->SetStringField(TEXT("confirm"), TEXT("sure"));
 				},
 				TEXT("confirm"),
-				TEXT("source_control.revert rejects non-bool confirm")
+				TEXT("source_control.revert rejects malformed confirm string")
 			},
 			{
 				TEXT("revert_unchanged"),
 				[](TSharedRef<FJsonObject> Params)
 				{
 					AddValidPathArray(Params);
-					Params->SetStringField(TEXT("dry_run"), TEXT("true"));
+					Params->SetStringField(TEXT("dry_run"), TEXT("later"));
 				},
 				TEXT("dry_run"),
-				TEXT("source_control.revert_unchanged rejects non-bool dry_run")
+				TEXT("source_control.revert_unchanged rejects malformed dry_run string")
 			},
 			{
 				TEXT("list_opened"),
 				[](TSharedRef<FJsonObject> Params)
 				{
-					Params->SetStringField(TEXT("resolve_packages"), TEXT("true"));
+					Params->SetStringField(TEXT("resolve_packages"), TEXT("later"));
 				},
 				TEXT("resolve_packages"),
-				TEXT("source_control.list_opened rejects non-bool resolve_packages")
+				TEXT("source_control.list_opened rejects malformed resolve_packages string")
 			},
 			{
 				TEXT("map_depot_paths"),
 				[](TSharedRef<FJsonObject> Params)
 				{
-					Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
+					Params->SetNumberField(TEXT("paths"), 1.0);
 				},
 				TEXT("paths"),
-				TEXT("source_control.map_depot_paths rejects non-array paths")
+				TEXT("source_control.map_depot_paths rejects non-string/non-array paths")
 			}
 		});
+
+	return bOk;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSourceControlInputToleranceTest, "Monolith.ParamValidation.MonolithSourceControl.InputTolerance", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithSourceControlInputToleranceTest::RunTest(const FString& Parameters)
+{
+	FMonolithScopedTestNamespace ScopedNamespace(TEXT("source_control"));
+	FMonolithSourceControlActions::RegisterActions();
+
+	bool bOk = true;
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("files"), TEXT("Project.uproject"));
+		bOk &= ExpectActionSuccess(*this, TEXT("get_status"), Params);
+	}
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("files"), TEXT("Project.uproject"));
+		Params->SetStringField(TEXT("dry_run"), TEXT("true"));
+		bOk &= ExpectActionSuccess(*this, TEXT("checkout"), Params);
+	}
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
+		Params->SetStringField(TEXT("dry_run"), TEXT("yes"));
+		bOk &= ExpectActionSuccess(*this, TEXT("delete"), Params);
+	}
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("paths"), TEXT("Project.uproject"));
+		Params->SetStringField(TEXT("dry_run"), TEXT("1"));
+		bOk &= ExpectActionSuccess(*this, TEXT("checkout_or_add"), Params);
+	}
+
+	{
+		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("files"), TEXT("Project.uproject"));
+		bOk &= ExpectActionSuccess(*this, TEXT("map_depot_paths"), Params);
+	}
 
 	return bOk;
 }

@@ -91,10 +91,10 @@ namespace
 	// indexers that carried a byte-identical copy. Behaviour unchanged.
 
 	/**
-	 * Replace C# `//` line comments and `/* ... *​/` block comments with a single
+	 * Replace C# line comments and slash-star block comments with a single
 	 * space each (preserving overall token boundaries), so a later regex sweep over
 	 * the dependency arrays is not derailed by parentheses / quoted strings that
-	 * appear INSIDE comments. String-literal aware: a `//` or `/*` inside a "..."
+	 * appear INSIDE comments. String-literal aware: comment markers inside a "..."
 	 * string is NOT treated as a comment. Newlines inside replaced regions collapse
 	 * to a space — line numbers are not needed by the dep sweep.
 	 */

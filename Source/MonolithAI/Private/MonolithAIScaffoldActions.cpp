@@ -53,12 +53,12 @@ static FMonolithActionResult LinkBTToBlackboard(const FString& BTPath, const FSt
 	TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
 	SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
 	SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-	FMonolithActionResult LinkResult = FMonolithAIScaffoldActions::Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
+	FMonolithActionResult LinkResult = FMonolithToolRegistry::Get().ExecuteAction(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
 	if (!LinkResult.bSuccess)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
 	}
-	return FMonolithActionResult::Success();
+	return FMonolithActionResult::Success(MakeShared<FJsonObject>());
 }
 
 bool FMonolithAIScaffoldActions::DispatchOrWarn(

@@ -746,7 +746,7 @@ FMonolithActionResult FMonolithMeshOperationActions::GenerateLods(const TSharedP
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
 	}
-	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
+	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
 
 	FString Error;
 	UDynamicMesh* SourceMesh = Pool->GetHandle(HandleName, Error);

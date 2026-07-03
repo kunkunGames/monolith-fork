@@ -1379,9 +1379,9 @@ FMonolithActionResult FMonolithGASDataAssetProfileActions::HandleSetDataAssetGAS
 	TArray<TSharedPtr<FJsonValue>> WriteReports;
 	TArray<TSharedPtr<FJsonValue>> Errors;
 
-	for (const TPair<FString, TSharedPtr<FJsonValue>>& FieldPair : (*FieldsObjPtr)->Values)
+	for (const auto& FieldPair : (*FieldsObjPtr)->Values)
 	{
-		const FString Role = FieldPair.Key;
+		const FString Role(FieldPair.Key.Len(), *FieldPair.Key);
 		const FGASProfileRoleSpec* Spec = SpecsByRole.Find(Role);
 		TSharedPtr<FJsonObject> WriteReport = MakeShared<FJsonObject>();
 		WriteReport->SetStringField(TEXT("role"), Role);

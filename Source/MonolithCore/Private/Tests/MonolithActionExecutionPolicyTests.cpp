@@ -157,6 +157,7 @@ bool FMonolithActionExecutionPolicyDiscoverTest::RunTest(const FString& Paramete
 
 	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 	Params->SetStringField(TEXT("namespace"), TEXT("policytest"));
+	Params->SetStringField(TEXT("planning_detail"), TEXT("full"));
 	FMonolithActionResult Result = FMonolithCoreTools::HandleDiscover(Params);
 	TestTrue(TEXT("Discover succeeds"), Result.bSuccess);
 	TestTrue(TEXT("Discover result valid"), Result.Result.IsValid());

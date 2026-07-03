@@ -626,7 +626,7 @@ namespace
 			return false;
 		}
 
-		for (const TPair<FString, TSharedPtr<FJsonValue>>& Pair : (*RemapObject)->Values)
+		for (const auto& Pair : (*RemapObject)->Values)
 		{
 			FString Destination;
 			if (!Pair.Value.IsValid() || !Pair.Value->TryGetString(Destination))
@@ -636,7 +636,7 @@ namespace
 			}
 
 			FRootRemap Remap;
-			Remap.SourceRoot = NormalizeRoot(Pair.Key);
+			Remap.SourceRoot = NormalizeRoot(FString(Pair.Key.Len(), *Pair.Key));
 			Remap.DestinationRoot = NormalizeRoot(Destination);
 			if (!IsValidPackageOrRoot(Remap.SourceRoot) || !IsValidPackageOrRoot(Remap.DestinationRoot))
 			{

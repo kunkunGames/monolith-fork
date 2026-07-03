@@ -79,6 +79,51 @@ bool FMonolithParamGuardImageGenGenerateImageViaIma2MalformedParamsTest::RunTest
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithImageGenGenerateImageViaIma2RateLimitCooldownTest, "Monolith.ParamGuard.MonolithImageGen.GenerateImageViaIma2RateLimitCooldown", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithImageGenGenerateImageViaIma2RateLimitCooldownTest::RunTest(const FString& Parameters)
+{
+	if (!FMonolithToolRegistry::Get().HasAction(TEXT("imagegen"), TEXT("generate_image_via_ima2")))
+	{
+		FMonolithImageGenActions::RegisterActions(FMonolithToolRegistry::Get());
+	}
+	FMonolithImageGenActions::TestResetIma2RateLimitCooldowns();
+
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("prompt"), TEXT("rate limit cooldown smoke"));
+	Params->SetStringField(TEXT("server_url"), TEXT("http://127.0.0.1:9"));
+	Params->SetStringField(TEXT("format"), TEXT("png"));
+	Params->SetBoolField(TEXT("save"), false);
+	Params->SetNumberField(TEXT("timeout_seconds"), 1.0);
+
+	const FString RetrySignature = FMonolithImageGenActions::TestBuildIma2RetrySignature(Params);
+	TestTrue(TEXT("retry signature computed"), RetrySignature.StartsWith(TEXT("sha256:")));
+	FMonolithImageGenActions::TestRecordIma2RateLimitCooldown(RetrySignature, 120.0);
+
+	const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("imagegen"), TEXT("generate_image_via_ima2"), Params);
+	TestFalse(TEXT("identical request inside cooldown fails"), Result.bSuccess);
+	TestEqual(TEXT("cooldown error code"), Result.ErrorCode, -32603);
+	TestTrue(TEXT("cooldown message indicates skipped provider call"), Result.ErrorMessage.Contains(TEXT("provider call skipped")));
+	TestTrue(TEXT("cooldown error data present"), Result.ErrorData.IsValid());
+	if (Result.ErrorData.IsValid())
+	{
+		FString ErrorClass;
+		Result.ErrorData->TryGetStringField(TEXT("error_class"), ErrorClass);
+		TestEqual(TEXT("cooldown error class"), ErrorClass, FString(TEXT("provider_rate_limited")));
+		FString ResultSignature;
+		Result.ErrorData->TryGetStringField(TEXT("retry_signature"), ResultSignature);
+		TestEqual(TEXT("cooldown preserves retry signature"), ResultSignature, RetrySignature);
+		TestTrue(TEXT("provider call skipped flag"), Result.ErrorData->GetBoolField(TEXT("provider_call_skipped")));
+		TestTrue(TEXT("cooldown active flag"), Result.ErrorData->GetBoolField(TEXT("rate_limit_cooldown_active")));
+		double RetryAfterSeconds = 0.0;
+		Result.ErrorData->TryGetNumberField(TEXT("retry_after_seconds"), RetryAfterSeconds);
+		TestTrue(TEXT("retry_after_seconds remains positive"), RetryAfterSeconds > 0.0);
+	}
+
+	FMonolithImageGenActions::TestResetIma2RateLimitCooldowns();
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardImageGenImportGeneratedImageMalformedParamsTest, "Monolith.ParamGuard.MonolithImageGen.ImportGeneratedImageRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithParamGuardImageGenImportGeneratedImageMalformedParamsTest::RunTest(const FString& Parameters)

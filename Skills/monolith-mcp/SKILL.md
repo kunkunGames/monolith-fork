@@ -21,7 +21,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | Tool | Params (req* opt? =default) | Use |
 |------|------------------------------|-----|
 | `monolith_find` | `query*`, `namespace?`, `limit=8` (1..50), `include_schema=false` | Find candidate namespaces/actions from a task description. **Call this first when the action is unclear.** |
-| `monolith_discover` | `namespace?`, `action?`, `category?`, `mode=summary` (summary/actions/schema) | Live catalog + schemas. No arg → compact namespace summary. `action` implies `mode=schema`. |
+| `monolith_discover` | `namespace?`, `action?`, `category?`, `mode=summary` (summary/actions/schema), `planning_detail=compact` (compact/full), `schema_detail=compact` (compact/full) | Live catalog + schemas. No arg → compact namespace summary. `action` implies `mode=schema`. Namespace action listings default to compact planning metadata and compact inline param schemas; pass `planning_detail="full"` / `schema_detail="full"` only for metadata audits or broad schema exports. |
 | `monolith_status` | (none) | Health check: version, uptime, port, registered action count, module status. |
 | `monolith_reindex` | `[w]` `force=false` | Re-index the project DB. Incremental (delta) by default; `force=true` for full wipe+rebuild. |
 | `monolith_guide` | `section?` (onboarding/recipes/decisions/errors/skills_map/gotchas) | Cross-namespace workflow guide: recipes, X-vs-Y decision matrices, error-to-recovery maps, gotchas. Pass `section` to bound context cost; omit for the full index. |
@@ -37,7 +37,7 @@ monolith_discover({ namespace: "scene", action: "place_light", mode: "schema" })
 
 Then call the namespace tool: `scene_query("place_light", { type: "spot", location: [...] })`.
 
-Discovery rows include planning fields for agents:
+Discovery rows include planning fields for agents. Namespace action listings use compact projections by default: `planning_detail="compact"` keeps `skill`, `preconditions`, contract status, next-action status, and count fields, but omits the heavy `precondition_details` and `planning_signals` arrays; `schema_detail="compact"` keeps terse descriptions and inline `params` while omitting search metadata and per-param descriptions. `detail=true` listings are page-capped to the default 50 rows even if a larger `limit` is requested, so continue with `next_cursor` / `offset` instead of dumping a whole namespace. Use focused `mode:"schema"` for one exact action, or pass `planning_detail:"full"` / `schema_detail:"full"` only when the arrays or full inline schemas are required.
 
 - `skill`: owning skill to read before planning that action.
 - `preconditions` / `preconditions_status` / `precondition_details`: factual requirements derived from declared metadata, required params, or execution policy. Treat `none_required` as "no required params or mutation precondition found", not as a guarantee the handler cannot fail.
@@ -157,6 +157,37 @@ After launching the wrapper, wait for `localhost:9316` to listen, reconnect the 
 powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\recover_mcp.ps1             # probe + launch + wait
 powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\recover_mcp.ps1 -ProbeOnly  # diagnose only, never launches
 ```
+
+For a long agent session that will call editor-backed actions repeatedly, keep the endpoint supervised instead of re-running one-shot recovery after every transport failure:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\watch_mcp.ps1
+```
+
+The watchdog probes `/health` continuously. If the endpoint is down and the editor-server process is gone, it runs the host project's primary editor UBT build, then restart-triggered source/graph maintenance before relaunch (`MonolithReindex -mode=project`, then cooldown-gated `build_crg_graph`). Asset ProjectIndex maintenance requires the non-commandlet editor subsystem, so the watchdog waits for `/health`, runs `bridge.start_indexing(scope=assets, full=false)`, and only then resumes normal supervision. If a headless `-NullRHI` / `Saved\HeadlessMcp` editor process is alive but `/health` stays unhealthy until `-RecoverTimeoutSec`, it stops only that headless process and reruns the same build/reindex/relaunch sequence; non-headless editor/server processes are left alone. Recover launches with `AssetEditorOpenLocation=NewWindow`, `CleanShutdown=True`, and `RestoreOpenAssetTabsOnRestart=NeverRestore` to avoid stale asset-editor modal loops. Use Live Coding through the editor namespace for `.cpp` body-only compile checks and reserve full UBT for dead editor or structural changes. While healthy, the watchdog also runs scheduled index maintenance once per selected time-zone date, defaulting to `05:00` KST: live `bridge.start_indexing(scope=all, full=false)`, wait via `bridge.get_index_status`, then cooldown-gated `Saved\graph.db` refresh. Tune with `-RestartReindexMode`, `-RestartReindexTargets`, `-RecoverTimeoutSec`, `-DailyReindexTime`, `-DailyReindexMode incremental|full`, `-DailyReindexTargets`, or disable with `-SkipRestartReindex` / `-DisableDailyReindex`.
+
+For automatic startup after a workstation restart, prefer a per-user Task Scheduler job that opens a visible watchdog PowerShell window at logon. Use `Run only when user is logged on` / `LogonType Interactive`; do not run the watchdog as a Windows Service or `LocalSystem` job because it uses the user's checkout, Unreal environment, and editor-backed MCP process. Agents can install the Speed watchdog task with:
+
+```powershell
+$taskName = 'Monolith MCP Watchdog - Speed'
+$projectRoot = 'D:\P4\speed'
+$watchdogExe = Join-Path $projectRoot 'Plugins\Monolith\Binaries\monolith_watchdog.exe'
+$user = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
+$action = New-ScheduledTaskAction -Execute $watchdogExe -Argument "`"$projectRoot`"" -WorkingDirectory $projectRoot
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive
+$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+    -Principal $principal -Settings $settings `
+    -Description 'Keeps the Speed Monolith MCP endpoint supervised in an interactive watchdog PowerShell window.' `
+    -Force
+Start-ScheduledTask -TaskName $taskName
+```
+
+Verify the registration with `Get-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed'`, confirm the PowerShell watchdog window is visible after logon, and then check `Invoke-RestMethod http://localhost:9316/health` or `monolith_status()`. Remove it with `Unregister-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed' -Confirm:$false`.
+Task Manager should show `monolith_watchdog.exe`; that wrapper keeps a child `powershell.exe` running for `Scripts\watch_mcp.ps1` and forwards the watchdog exit code.
 
 ## Invocation diagnostics
 

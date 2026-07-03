@@ -126,7 +126,7 @@ void UMonolithUpdateSubsystem::Deinitialize()
 {
 	if (UpdateCheckTickerHandle.IsValid())
 	{
-		FTSTicker::GetCoreTicker().RemoveTicker(UpdateCheckTickerHandle);
+		FTSTicker::RemoveTicker(UpdateCheckTickerHandle);
 		UpdateCheckTickerHandle.Reset();
 	}
 

@@ -91,7 +91,7 @@ Monolith already covers much of the basic action inventory:
 | Editor-safe widget mutation | `ui.add_widget`, `ui.remove_widget`, `ui.rename_widget`, `ui.move_widget`, spec build/patch candidates | UE 5.8 exposes editor operation utilities that preserve slot/named-slot/transaction/variable semantics. Monolith should use them or prove equivalent behavior before expanding patch workflows. |
 | JSON source of truth | `ui.build_ui_from_spec`, `ui.dump_ui_spec`, `ui.dump_ui_spec_schema` | Good canonical base. Missing spec diff/patch ergonomics and markup-to-spec conversion. |
 | Layout audit | `ui.audit_widget_layout` | Structural audit exists. Authored bounds/overlap/safe-zone evidence now lives in `ui.measure_widget_layout`; full render/prepass geometry remains pending. |
-| Visual proof | `editor.capture_scene_preview(asset_type="widget")`, `ui.verify_widget_visual_artifacts`, `ui.measure_widget_layout`, `workflow.ui_shipping_widget_blueprint(proof_profile="visual")` | Good base. Visual/runtime proof now composes authored layout-bounds evidence; future render-geometry measurement remains pending. |
+| Visual proof | `editor.capture_scene_preview(asset_type="widget")`, `ui.verify_widget_visual_artifacts`, `ui.measure_widget_layout`, `workflow.ui_shipping_widget_blueprint(proof_profile="visual")` | Good base. Visual/runtime proof now composes authored layout-bounds evidence, and the workflow has a real WBP fixture for capture + artifact verification; future render-geometry measurement remains pending. |
 | UMG animation creation | `ui.create_animation_v2`, `ui.add_bezier_eased_segment`, `ui.bake_spring_animation`, `ui.add_animation_event_track`, `ui.bind_animation_to_event` | Missing compact animation overview/timeline/time-slice read actions and delta editing for existing animations. |
 | Blueprint event graph editing | Generic Blueprint graph/source actions exist outside `ui` | Missing UI-specific event binding workflow that respects the ViewModel boundary and proves compile/read-back. |
 | UI materials | `material` namespace + UI styling/effect actions | Missing a UI-domain material/Retainer workflow that proves `MD_UI`, brush/effect binding, Custom-node diagnostics, and visual/perf evidence. |
@@ -237,7 +237,7 @@ Implementation status (2026-07-02):
 - Landed initial Monolith-native `ui.describe_widget_type_schema` in `MonolithUIRegistryActions.cpp`.
 - The action reuses `UMonolithUIRegistrySubsystem`, `FUITypeRegistry`, curated property mappings, enum reflection, live widget slot context, and owner-action `next_actions`.
 - It does not loosen `ui.set_widget_property` and does not add external compatibility aliases.
-- Current test coverage proves TextBlock allowlist schema and Button enum surfacing. Remaining acceptance gaps: Image fixture, live Canvas slot fixture, root-no-slot warning fixture, and stricter `include_inherited` behavior.
+- Follow-up hardening makes live `Slot.*` entries settable only when the actual parent slot class resolves the mapped engine path, reports incompatible Canvas-vs-box and VerticalBox-vs-Canvas slot paths with `blocked_reason`, suppresses raw reflected aliases that are already represented by curated engine-path mappings, and honours `include_inherited=false` for unsafe reflected properties. Live widgets now expose `live_child_capacity` / `live_can_add_child` so single-child-full parents are discoverable before add/move/spec-patch writes. Current test coverage proves TextBlock allowlist schema, Button enum surfacing, Button `Style` vs raw `WidgetStyle` alias suppression, Image brush/tint schema, raw-mode-only blocked Image properties, live CanvasPanelSlot and VerticalBoxSlot settable-vs-incompatible slot paths, root-widget-no-slot warnings, full single-child Border capacity, and `include_inherited` expansion.
 
 ### 5.2 `ui.set_widget_context`, `ui.get_widget_context`, `ui.clear_widget_context`
 
@@ -588,7 +588,7 @@ Status: initial Monolith-native P1.2 diff/patch slice landed 2026-07-02 in `Mono
 
 ### 6.3 UMG Animation Read/Delta Surface
 
-Status: initial read-only P1.2 slice landed 2026-07-02 in `FMonolithUIAnimationActions`. P1.3 scalar float-key delta editing landed the same day as canonical `ui.apply_animation_delta`. These slices intentionally register only canonical Monolith owner actions (`ui.get_animation_overview`, `ui.get_animation_timeline`, `ui.get_animation_time_slice`, `ui.apply_animation_delta`). External Sequencer-style names such as `animation_overview`, `animation_widget_properties`, `animation_time_properties`, `animation_append_widget_tracks`, `animation_append_time_slice`, `animation_delete_widget_keys`, and `set_property_keys` are search metadata / response hints only, not duplicate registered actions.
+Status: initial read-only P1.2 slice landed 2026-07-02 in `FMonolithUIAnimationActions`. P1.3 scalar float-key delta editing landed the same day as canonical `ui.apply_animation_delta`; the follow-up component-key slice extends that same owner action to normalize `property=transform` + `component=tx|ty|angle|sx|sy|shx|shy` and `property=color` + `component=r|g|b|a` into canonical `RenderTransform.*` and `ColorAndOpacity.*` MovieScene float-track paths. These slices intentionally register only canonical Monolith owner actions (`ui.get_animation_overview`, `ui.get_animation_timeline`, `ui.get_animation_time_slice`, `ui.apply_animation_delta`). External Sequencer-style names such as `animation_overview`, `animation_widget_properties`, `animation_time_properties`, `animation_append_widget_tracks`, `animation_append_time_slice`, `animation_delete_widget_keys`, and `set_property_keys` are search metadata / response hints only, not duplicate registered actions.
 
 Add read and delta actions inspired by external sequencer commands, but define them against UE 5.8 `UWidgetAnimation`, `UMovieScene`, `FWidgetAnimationBinding`, and generated-class delegate bindings.
 
@@ -597,7 +597,7 @@ Add read and delta actions inspired by external sequencer commands, but define t
 | `ui.get_animation_overview` | Read-only compact inventory: timing, display/tick rates, `AnimationBindings`, MovieScene bindings, tracks, property paths, support flags, key counts/times, event summaries, and `UWidgetAnimationDelegateBinding` rows. |
 | `ui.get_animation_timeline` | Read-only sorted key/event rows filtered by animation/widget/property. Each row includes frame/time, binding GUID, widget name, track class, property path, value type, channel name, value, interpolation/tangent data where available, and section index. |
 | `ui.get_animation_time_slice` | Read-only sampled values at `time` or `times[]`. Continuous property tracks can be evaluated; event rows are reported only for exact frame matches or explicit tolerance. |
-| `ui.apply_animation_delta` | Confirm-gated scalar float-key merge/upsert/delete surface for existing animations with dry-run, compile, and post-write read-back. |
+| `ui.apply_animation_delta` | Confirm-gated scalar float-key merge/upsert/delete surface for existing animations with dry-run, compile, and post-write read-back. Covers `RenderOpacity` plus transform/color component float tracks through canonical path normalization. |
 
 Rules:
 
@@ -615,6 +615,7 @@ Property support matrix:
 | Property family | UE track model | Initial Monolith stance |
 | --- | --- | --- |
 | Scalar float, including `RenderOpacity` | `UMovieSceneFloatTrack` | P1.2 read landed for overview/timeline/time-slice. P1.3 delta write/delete landed for exact-frame scalar float-key upsert/delete with dry-run, `confirm`, `confirm_delete`, compile, and read-back. |
+| Transform/color components | `UMovieSceneFloatTrack` on `RenderTransform.*` / `ColorAndOpacity.*` | Component-key delta write/delete landed through `ui.apply_animation_delta` without new actions. Time-slice/timeline read-back uses the same canonical property paths. |
 | Native `RenderTransform` | `UMovieScene2DTransformTrack` with seven float channels | Future read/write/delete; do not model as `DoubleVector`. |
 | `RenderTransformPivot` and true `FVector2D` properties | `UMovieSceneDoubleVectorTrack` | Future read/write/delete separately from transform. |
 | `FLinearColor` | `UMovieSceneColorTrack` | Future RGBA channel read/write/delete; `FSlateColor` writes require reflection gating. |
@@ -636,7 +637,7 @@ Acceptance:
 
 ### 6.4 `workflow.ui_bind_widget_event`
 
-Initial ViewModel-command event-binding workflow landed 2026-07-02 as `workflow.ui_bind_widget_event`. This is intentionally a workflow, not a raw `ui` or external-name Blueprint action. It composes existing Blueprint graph owner actions and adds only the UI-specific ViewModel boundary, confirm gate, action plan, compile/read-back envelope, and follow-up proof routing.
+Initial ViewModel-command event-binding workflow landed 2026-07-02 as `workflow.ui_bind_widget_event`. This is intentionally a workflow, not a raw `ui` or external-name Blueprint action. It composes existing Blueprint graph owner actions and adds only the UI-specific ViewModel boundary, confirm gate, action plan, compile/read-back envelope, and follow-up proof routing. Real WBP apply/read-back fixture coverage landed the same day in `Monolith.UI.Workflow.UiBindWidgetEventRealFixture`: the fixture creates/reuses a generated Widget Blueprint with a named `UButton`, prepares a ViewModel-like object variable through `blueprint.add_variable`, runs `workflow.ui_bind_widget_event(dry_run=false, confirm=true)`, verifies child `blueprint.resolve_node`/`add_node`/`connect_pins`/`compile_blueprint`/`get_graph_summary` rows, and directly reads back the EventGraph pins for `StartButton.OnClicked -> ViewModel.ForceLayoutPrepass`.
 
 Proposed params:
 
@@ -669,7 +670,7 @@ Rules:
 Acceptance:
 
 - Contract fixture verifies registration, dry-run graph plan, ViewModel boundary decision, event-name normalization, child-action visibility, confirm blocking, and direct actor rejection.
-- Apply fixture creates/updates the event binding, compiles, and reports read-back proof before this slice is considered fully covered by asset-level automation.
+- Apply fixture coverage landed: it creates a real WBP fixture, applies the binding through existing Blueprint owner actions, compiles, checks the workflow read-back rows, and directly verifies the event exec and ViewModel target pin links in the resulting EventGraph.
 - Negative fixture rejects direct actor access.
 
 ## 7. P1/P2 Specs
@@ -746,7 +747,7 @@ Deferred:
 
 Acceptance:
 
-- Creates/updates a UI-domain material in a fixture, compiles it, binds it to an Image brush, and verifies graph/widget read-back. Landed: real Image/WBP/material fixture proof for `workflow.ui_material_hlsl_effect`, including automatic alpha ComponentMask execution and brush resource read-back. Still pending: visual artifact output verification through `workflow.ui_shipping_widget_blueprint`.
+- Creates/updates a UI-domain material in a fixture, compiles it, binds it to an Image brush, and verifies graph/widget read-back. Landed: real Image/WBP/material fixture proof for `workflow.ui_material_hlsl_effect`, including automatic alpha ComponentMask execution and brush resource read-back. Visual artifact output proof now runs through the existing `workflow.ui_shipping_widget_blueprint(proof_profile="visual")` owner workflow fixture instead of adding a material- or HLSL-local screenshot action.
 - Binding a Surface-domain material to an Image reports `MaterialDomainMismatch`.
 - Retainer workflow contract and real fixture landed; fixture creates a real RetainerBox WBP and UI-domain effect material where the exact texture parameter passes and a mismatch fails.
 - Custom HLSL fixture reports sampler/instruction stats and unsafe-token warnings.
@@ -785,16 +786,16 @@ Do not port:
 
 ## 9. Implementation Order
 
-1. **P0.1:** `ui.describe_widget_type_schema` (initial implementation landed 2026-07-02; live-slot/unsafe edge fixtures still pending).
+1. **P0.1:** `ui.describe_widget_type_schema` (initial implementation landed 2026-07-02; live CanvasPanelSlot/root no-slot/`include_inherited` hardening landed in follow-up; raw-mode-only blocked property coverage, raw engine-alias suppression, non-Canvas VerticalBoxSlot proof, and single-child capacity proof landed in the next follow-up).
 2. **P0.2:** Explicit `ui` work context helpers (initial implementation landed 2026-07-02 as `set_widget_context`, `get_widget_context`, `clear_widget_context`; active-editor inference remains intentionally outside `ui` and should compose `editor` owner actions if needed).
-3. **P0.3:** `ui.measure_widget_layout`, overlap, safe-zone checks (initial authored-model implementation and `workflow.ui_shipping_widget_blueprint` visual/runtime proof composition landed 2026-07-02; future owned virtual-window render/prepass geometry still pending).
+3. **P0.3:** `ui.measure_widget_layout`, overlap, safe-zone checks (initial authored-model implementation, `workflow.ui_shipping_widget_blueprint` visual/runtime proof composition, and real WBP capture + `ui.verify_widget_visual_artifacts` workflow fixture landed 2026-07-02; future owned virtual-window render/prepass geometry still pending).
 4. **P0.4:** Expand `ui.audit_widget_layout` with guide-derived production lints.
 5. **P0.5:** UE 5.8 editor-safe mutation layer for existing widget mutations and future spec patch apply (`ui.move_widget` Canvas/box/overlay slot-preserving slice landed 2026-07-02; `ui.apply_ui_spec_patch` now routes add/remove/move/explicit replace/preserve-children replace/slot/property/text/image/Border brush/common style/type-specific style/CommonUI style/EffectSurface changes through existing owner actions and preflights slot-class compatibility plus preserve-child direct-parent invariants before executing patch steps; named-slot and broader rename/remove consistency remain pending).
 6. **P1.1:** `ui.convert_markup_to_ui_spec` read-only parser (initial implementation, build/dump round-trip fixture, and parent-slot contextual validation landed 2026-07-02).
 7. **P1.2:** `ui.diff_ui_spec` / `ui.apply_ui_spec_patch` for existing-WBP design-data deltas (initial stable-name diff + confirm-gated add/remove/move/slot/property/text patch slice landed 2026-07-02; slot `anchorPreset` decomposition, live slot-class preflight, image brush routing, Border brush routing via `ui.set_brush`, EffectSurface owner-action decomposition, common `RenderOpacity`/`Visibility` style routing, SizeBox/Border/ProgressBar type-specific style routing, CommonUI style candidates, graph-binding preservation reports, explicit replace decomposition, and preserve-children replacement landed in follow-up slices; broader non-Image brush/style struct routing and named-slot replacement fixtures remain pending).
-8. **P1.3:** `ui.get_animation_overview` / timeline / time-slice read actions (initial float/event/delegate overview slice landed 2026-07-02; native transform/color/vector/object read expansion remains pending).
-9. **P1.4:** `ui.apply_animation_delta` (initial scalar float-key delta slice landed 2026-07-02; event/transform/color/vector/object deltas remain deferred).
-10. **P1.5:** `workflow.ui_bind_widget_event` (initial ViewModel-safe workflow contract landed 2026-07-02; real-WBP apply/read-back fixture remains the next hardening step).
+8. **P1.3:** `ui.get_animation_overview` / timeline / time-slice read actions (initial float/event/delegate overview slice landed 2026-07-02; transform/color component float tracks now read back through canonical `RenderTransform.*` / `ColorAndOpacity.*` paths; native vector/object read expansion remains pending).
+9. **P1.4:** `ui.apply_animation_delta` (initial scalar float-key delta slice landed 2026-07-02; transform/color component-key deltas now normalize through the same owner action; event/vector/object deltas remain deferred).
+10. **P1.5:** `workflow.ui_bind_widget_event` (initial ViewModel-safe workflow contract and real-WBP apply/read-back fixture landed 2026-07-02; future runtime click/PIE interaction proof remains a separate workflow slice).
 11. **P1.6:** UI-domain material/Retainer proof workflows using existing `material` primitives (`workflow.ui_material_hlsl_effect` v2 landed 2026-07-02 for Custom-HLSL UI material + Image/brush binding proof plus automatic float4 alpha ComponentMask-to-Opacity planning/execution through `material.build_material_graph`; real Image/WBP/material fixture proof landed 2026-07-02; `workflow.ui_retainer_effect_material` v1 landed 2026-07-02 for exact Retainer texture-parameter proof; real RetainerBox/effect-material fixture proof landed 2026-07-02; `ui.audit_widget_material_lifecycle` DMI lifecycle lint landed and is composed by both workflows; Retainer/invalidation perf proof remains pending).
 12. **P2.1:** UI task profiles only after log evidence.
 
@@ -812,7 +813,7 @@ Likely implementation files:
 - `Source/MonolithUI/Private/CommonUI/MonolithCommonUIButtonActions.cpp` - reuse existing style/theme actions before adding any native UMG style gap filler.
 - `Source/MonolithMaterial/Private/MonolithMaterialActions.cpp` - reuse material Custom-node and compile primitives for UI material workflows.
 - `Source/MonolithCore/Private/MonolithWorkflowActions.cpp` - `workflow.ui_bind_widget_event`, UI material/Retainer proof workflows, and proof composition.
-- `Source/MonolithUI/Private/Tests/*` - deterministic fixtures for schema, layout, lint, markup, animation, and event workflows.
+- `Source/MonolithUI/Private/Tests/*` - deterministic fixtures for schema, layout, lint, markup, animation, visual proof, and event workflows, including `MonolithUIEventBindingWorkflowFixtureTests.cpp` for real WBP event-binding apply/read-back proof and `MonolithUIShippingVisualWorkflowFixtureTests.cpp` for real WBP capture + visual artifact verification through the shipping workflow.
 - `Docs/specs/SPEC_MonolithUI.md`, `Skills/unreal-ui/SKILL.md`, `Docs/MONOLITH_GUIDE.md` - public docs and skill examples after implementation.
 
 ## 11. Verification Requirements

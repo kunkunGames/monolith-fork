@@ -641,7 +641,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AutoGenerateLods(const TShare
 	{
 		return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'reduction_per_lod'. Expected number."));
 	}
-	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
+	if (ReductionPerLod < 0.1 || ReductionPerLod > 0.9) { return FMonolithActionResult::Error(FString::Printf(TEXT("Parameter 'reduction_per_lod' must be between 0.1 and 0.9 (received: %f)"), ReductionPerLod)); }
 
 	bool bPreserveUV = true;
 	if (Params->HasField(TEXT("preserve_uv_borders")) && !Params->TryGetBoolField(TEXT("preserve_uv_borders"), bPreserveUV))

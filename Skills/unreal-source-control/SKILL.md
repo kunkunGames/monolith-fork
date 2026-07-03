@@ -26,23 +26,23 @@ When the right action is unclear, `monolith_find("<task>")` suggests candidates 
 
 ## Action Reference
 
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. Keep the discover-first block above as the authority. The mutation param is `paths` (array of filesystem or `/Game` package/object paths), not `files`.
+Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. Keep the discover-first block above as the authority. The canonical mutation param is `paths` (array of filesystem or `/Game` package/object paths); the live schema also accepts a single path string and the alias key `files` for compatibility with natural agent input.
 
 ### Core (11)
 
 | Action | Params | Purpose |
 |--------|--------|---------|
 | `get_capabilities` | _(none)_ | Return the active Unreal source-control provider and Phase 1 Monolith action capabilities. |
-| `get_status` | `paths*` | Return source-control status for filesystem or /Game package paths. |
-| `[w] checkout` | `paths*` `dry_run?=false` | Check out files through the active Unreal source-control provider. |
-| `[w] add` | `paths*` `dry_run?=false` | Mark files for add through the active Unreal source-control provider. |
-| `[w] checkout_or_add` | `paths*` `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
-| `[w] delete` | `paths*` `confirm?=false` `dry_run?=false` | Mark files for delete. Requires `confirm=true` unless `dry_run=true`. |
-| `[w] mark_for_delete` | `paths*` `confirm?=false` `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
-| `[w] revert` | `paths*` `confirm?=false` `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
-| `[w] revert_unchanged` | `paths*` `confirm?=false` `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
+| `get_status` | `paths*` or `files*` | Return source-control status for filesystem or /Game package paths. |
+| `[w] checkout` | `paths*` or `files*`, `dry_run?=false` | Check out files through the active Unreal source-control provider. |
+| `[w] add` | `paths*` or `files*`, `dry_run?=false` | Mark files for add through the active Unreal source-control provider. |
+| `[w] checkout_or_add` | `paths*` or `files*`, `dry_run?=false` | Prepare files for mutation by checking out existing source-controlled files or adding local files. |
+| `[w] delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Mark files for delete. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] mark_for_delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
+| `[w] revert_unchanged` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
 | `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` | Read-only `p4 -ztag opened`, optionally scoped to a changelist, with depot-to-local/package mapping. |
-| `map_depot_paths` | `paths*` | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths to local/package rows. |
+| `map_depot_paths` | `paths*` or `files*` | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths to local/package rows. |
 
 ## Common workflows
 
@@ -110,7 +110,7 @@ source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Ga
 - `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` are destructive — they require `confirm=true` unless you pass `dry_run=true`. Run a `dry_run` first to preview the affected files.
 - This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
 - `list_opened` and `map_depot_paths` are read-only mapping primitives. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
-- Every action takes its file list as the `paths` array param (filesystem paths or `/Game` package/object paths), not `files`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
+- Prefer the canonical `paths` array for file lists. The schema also accepts `files` and a single path string for compatibility, and boolean options accept `true`/`false` booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
 
 ## Notes
 

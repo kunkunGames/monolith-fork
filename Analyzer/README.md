@@ -26,3 +26,15 @@ python Analyzer/analyze_invocation_logs.py --log-root Analyzer/fixtures/invocati
 ```
 
 The tool does not mutate `Logs/` and does not open Monolith SQLite databases.
+
+Client-side MCP availability failures can happen before a call reaches Monolith,
+so they never appear in `Logs/yyyyMMdd/action.jsonl`. Use the session transcript
+analyzer for that blind spot:
+
+```powershell
+python Analyzer/analyze_session_transcripts.py --codex-root $HOME\.codex\sessions --claude-root $HOME\.claude\projects --out Saved/Monolith/SessionAnalysis/latest
+```
+
+Use both reports for the improvement loop: `LogAnalysis` ranks server-captured
+action/query/proxy issues, while `SessionAnalysis` ranks server-blind transport
+failures such as direct clients failing to reach `localhost:9316`.
