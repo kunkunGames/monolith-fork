@@ -48,6 +48,19 @@ FMonolithActionResult FMonolithAIScaffoldActions::Dispatch(
 	return FMonolithToolRegistry::Get().ExecuteAction(Namespace, Action, Params);
 }
 
+static FMonolithActionResult LinkBTToBlackboard(const FString& BTPath, const FString& BBPath)
+{
+	TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
+	SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
+	SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
+	FMonolithActionResult LinkResult = FMonolithAIScaffoldActions::Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
+	if (!LinkResult.bSuccess)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+	}
+	return FMonolithActionResult::Success();
+}
+
 bool FMonolithAIScaffoldActions::DispatchOrWarn(
 	const FString& Namespace, const FString& Action,
 	const TSharedPtr<FJsonObject>& Params, TArray<FString>& Warnings, FString StepName)
@@ -693,13 +706,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleHelloWorldAI(const TShar
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
 		if (!LinkResult.bSuccess)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+			return LinkResult;
 		}
 	}
 
@@ -927,13 +937,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompleteAICharac
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
 		if (!LinkResult.bSuccess)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+			return LinkResult;
 		}
 	}
 
@@ -1518,13 +1525,10 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldPatrolInvestigat
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
 		if (!LinkResult.bSuccess)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+			return LinkResult;
 		}
 	}
 
@@ -2856,11 +2860,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldCompanionAI(cons
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Create full AI character via dispatch
@@ -3040,11 +3041,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldBossAI(const TSh
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. AI Controller
@@ -3213,11 +3211,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldAmbientNPC(const
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -3389,11 +3384,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorStalker(co
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -3527,11 +3519,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorAmbush(con
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -3647,11 +3636,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorPresence(c
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller (no perception — invisible entity)
@@ -3765,11 +3751,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldHorrorMimic(cons
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -3915,11 +3898,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldStealthGameAI(co
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -4047,11 +4027,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldTurretAI(const T
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -4168,11 +4145,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldGroupCoordinator
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
@@ -4310,11 +4284,8 @@ FMonolithActionResult FMonolithAIScaffoldActions::HandleScaffoldFlyingAI(const T
 		CreatedAssets.Add(BTPath);
 
 		// Phase D1: belt-and-suspenders BB linkage (Issue #48)
-		TSharedPtr<FJsonObject> SetBBParams = MakeShared<FJsonObject>();
-		SetBBParams->SetStringField(TEXT("asset_path"), BTPath);
-		SetBBParams->SetStringField(TEXT("blackboard_path"), BBPath);
-		FMonolithActionResult LinkResult = Dispatch(TEXT("ai"), TEXT("set_bt_blackboard"), SetBBParams);
-		if (!LinkResult.bSuccess) return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to link BT to Blackboard: %s"), *LinkResult.ErrorMessage));
+		FMonolithActionResult LinkResult = LinkBTToBlackboard(BTPath, BBPath);
+		if (!LinkResult.bSuccess) return LinkResult;
 	}
 
 	// 3. Controller
