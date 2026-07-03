@@ -29,7 +29,11 @@ namespace
 		FString Value;
 		if (Obj.IsValid())
 		{
-			Obj->TryGetStringField(FieldName, Value);
+			const TSharedPtr<FJsonValue> Field = Obj->TryGetField(FieldName);
+			if (Field.IsValid() && !Field->IsNull())
+			{
+				Field->TryGetString(Value);
+			}
 		}
 		return Value;
 	}
@@ -39,7 +43,11 @@ namespace
 		bool bValue = bDefault;
 		if (Obj.IsValid())
 		{
-			Obj->TryGetBoolField(FieldName, bValue);
+			const TSharedPtr<FJsonValue> Field = Obj->TryGetField(FieldName);
+			if (Field.IsValid() && !Field->IsNull())
+			{
+				Field->TryGetBool(bValue);
+			}
 		}
 		return bValue;
 	}
@@ -61,7 +69,13 @@ namespace
 		TArray<FString>& OutValues,
 		FString& OutError)
 	{
-		if (!Params.IsValid() || !Params->HasField(FieldName))
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+		if (!Field.IsValid() || Field->IsNull())
 		{
 			return true;
 		}
@@ -106,7 +120,8 @@ namespace
 			}
 		}
 
-		if (!Target->HasField(TEXT("validation_usecase")))
+		const TSharedPtr<FJsonValue> UsecaseField = Target->TryGetField(TEXT("validation_usecase"));
+		if (!UsecaseField.IsValid() || UsecaseField->IsNull())
 		{
 			Target->SetStringField(TEXT("validation_usecase"), TEXT("pre_submit"));
 		}
@@ -215,7 +230,8 @@ namespace
 
 		const FString PackagePath = GetStringField(Row, TEXT("package_path"));
 		const FString Action = GetStringField(Row, TEXT("action"));
-		const bool bValid = !Row->HasField(TEXT("valid")) || GetBoolField(Row, TEXT("valid"), true);
+		const TSharedPtr<FJsonValue> ValidField = Row->TryGetField(TEXT("valid"));
+		const bool bValid = (!ValidField.IsValid() || ValidField->IsNull()) || GetBoolField(Row, TEXT("valid"), true);
 		const bool bIsPackage = GetBoolField(Row, TEXT("is_package"), !PackagePath.IsEmpty()) && !PackagePath.IsEmpty();
 		const bool bDeleted = IsDeleteAction(Action);
 		const FString FilesystemPath = BestFilesystemPath(Row);
@@ -266,14 +282,29 @@ namespace
 		}
 
 		FString Changelist;
-		Params->TryGetStringField(TEXT("changelist"), Changelist);
+		const TSharedPtr<FJsonValue> ChangelistField = Params->TryGetField(TEXT("changelist"));
+		if (ChangelistField.IsValid() && !ChangelistField->IsNull())
+		{
+			if (!ChangelistField->TryGetString(Changelist))
+			{
+				return FMonolithActionResult::Error(TEXT("changelist must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 		Changelist.TrimStartAndEndInline();
 
 		bool bHasIncludeOpened = false;
 		bool bIncludeOpened = false;
-		if (Params->TryGetBoolField(TEXT("include_opened"), bIncludeOpened))
+		const TSharedPtr<FJsonValue> IncludeOpenedField = Params->TryGetField(TEXT("include_opened"));
+		if (IncludeOpenedField.IsValid() && !IncludeOpenedField->IsNull())
 		{
-			bHasIncludeOpened = true;
+			if (IncludeOpenedField->TryGetBool(bIncludeOpened))
+			{
+				bHasIncludeOpened = true;
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("include_opened must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 		else
 		{
@@ -281,13 +312,34 @@ namespace
 		}
 
 		bool bResolvePackages = true;
-		Params->TryGetBoolField(TEXT("resolve_packages"), bResolvePackages);
+		const TSharedPtr<FJsonValue> ResolvePackagesField = Params->TryGetField(TEXT("resolve_packages"));
+		if (ResolvePackagesField.IsValid() && !ResolvePackagesField->IsNull())
+		{
+			if (!ResolvePackagesField->TryGetBool(bResolvePackages))
+			{
+				return FMonolithActionResult::Error(TEXT("resolve_packages must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 
 		bool bIncludeNonPackages = true;
-		Params->TryGetBoolField(TEXT("include_non_packages"), bIncludeNonPackages);
+		const TSharedPtr<FJsonValue> IncludeNonPackagesField = Params->TryGetField(TEXT("include_non_packages"));
+		if (IncludeNonPackagesField.IsValid() && !IncludeNonPackagesField->IsNull())
+		{
+			if (!IncludeNonPackagesField->TryGetBool(bIncludeNonPackages))
+			{
+				return FMonolithActionResult::Error(TEXT("include_non_packages must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 
 		double LimitNumber = DefaultValidationPlanLimit;
-		Params->TryGetNumberField(TEXT("limit"), LimitNumber);
+		const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+		if (LimitField.IsValid() && !LimitField->IsNull())
+		{
+			if (!LimitField->TryGetNumber(LimitNumber))
+			{
+				return FMonolithActionResult::Error(TEXT("limit must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+			}
+		}
 		const int32 Limit = FMath::Clamp(static_cast<int32>(LimitNumber), 1, MaxValidationPlanLimit);
 
 		if (!bIncludeOpened && ExplicitPaths.Num() == 0)
@@ -330,12 +382,21 @@ namespace
 			if (OpenedResult.Result.IsValid())
 			{
 				double Count = 0.0;
-				OpenedResult.Result->TryGetNumberField(TEXT("count"), Count);
+				const TSharedPtr<FJsonValue> CountField = OpenedResult.Result->TryGetField(TEXT("count"));
+				if (CountField.IsValid() && !CountField->IsNull())
+				{
+					CountField->TryGetNumber(Count);
+				}
 				OpenedCount = static_cast<int32>(Count);
-				OpenedResult.Result->TryGetBoolField(TEXT("truncated"), bOpenedTruncated);
+				const TSharedPtr<FJsonValue> TruncatedField = OpenedResult.Result->TryGetField(TEXT("truncated"));
+				if (TruncatedField.IsValid() && !TruncatedField->IsNull())
+				{
+					TruncatedField->TryGetBool(bOpenedTruncated);
+				}
 
 				const TArray<TSharedPtr<FJsonValue>>* OpenedRows = nullptr;
-				if (OpenedResult.Result->TryGetArrayField(TEXT("opened"), OpenedRows) && OpenedRows)
+				const TSharedPtr<FJsonValue> OpenedField = OpenedResult.Result->TryGetField(TEXT("opened"));
+				if (OpenedField.IsValid() && !OpenedField->IsNull() && OpenedResult.Result->TryGetArrayField(TEXT("opened"), OpenedRows) && OpenedRows)
 				{
 					for (const TSharedPtr<FJsonValue>& Value : *OpenedRows)
 					{
@@ -364,7 +425,8 @@ namespace
 			if (MapResult.Result.IsValid())
 			{
 				const TArray<TSharedPtr<FJsonValue>>* PathRows = nullptr;
-				if (MapResult.Result->TryGetArrayField(TEXT("paths"), PathRows) && PathRows)
+				const TSharedPtr<FJsonValue> PathsField = MapResult.Result->TryGetField(TEXT("paths"));
+				if (PathsField.IsValid() && !PathsField->IsNull() && MapResult.Result->TryGetArrayField(TEXT("paths"), PathRows) && PathRows)
 				{
 					for (const TSharedPtr<FJsonValue>& Value : *PathRows)
 					{
@@ -462,7 +524,8 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateChangesetAssets(cons
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* PackageValues = nullptr;
-	if (!(*ValidationParamsPtr)->TryGetArrayField(TEXT("packages"), PackageValues) || !PackageValues || PackageValues->Num() == 0)
+	const TSharedPtr<FJsonValue> PackagesField = (*ValidationParamsPtr)->TryGetField(TEXT("packages"));
+	if (!PackagesField.IsValid() || PackagesField->IsNull() || !(*ValidationParamsPtr)->TryGetArrayField(TEXT("packages"), PackageValues) || !PackageValues || PackageValues->Num() == 0)
 	{
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		Result->SetBoolField(TEXT("ok"), true);
