@@ -4068,6 +4068,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 	float MultiplyAdditive = 0.f;
 	float MultiplyCompound = 1.f;
 	float DivideAdditive = 0.f;
+	float Override = 0.f;
+	bool bHasOverride = false;
 	float AddFinal = 0.f;
 
 	for (const FActiveGameplayEffectHandle& EffHandle : EffectHandles)
@@ -4107,6 +4109,7 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 			case EGameplayModOp::MultiplyAdditive:  MultiplyAdditive += EffectiveMagnitude; break;
 			case EGameplayModOp::MultiplyCompound:  MultiplyCompound *= EffectiveMagnitude; break;
 			case EGameplayModOp::DivideAdditive:    DivideAdditive += EffectiveMagnitude; break;
+			case EGameplayModOp::Override:          Override = EffectiveMagnitude; bHasOverride = true; break;
 			case EGameplayModOp::AddFinal:          AddFinal += EffectiveMagnitude; break;
 			default: break;
 			}
@@ -4115,10 +4118,18 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 
 	// Calculate the aggregated result following GAS evaluation order:
 	// ((BaseValue + Additive) * (1 + MultiplyAdditive) * MultiplyCompound) / (1 + DivideAdditive) + AddFinal
-	float Computed = BaseValue + Additive;
-	if (MultiplyAdditive != 0.f) Computed *= (1.f + MultiplyAdditive);
-	Computed *= MultiplyCompound;
-	if (DivideAdditive != 0.f) Computed /= (1.f + DivideAdditive);
+	float Computed;
+	if (bHasOverride)
+	{
+		Computed = Override;
+	}
+	else
+	{
+		Computed = BaseValue + Additive;
+		if (MultiplyAdditive != 0.f) Computed *= (1.f + MultiplyAdditive);
+		Computed *= MultiplyCompound;
+		if (DivideAdditive != 0.f) Computed /= (1.f + DivideAdditive);
+	}
 	Computed += AddFinal;
 
 	bool bFound = false;
@@ -4130,6 +4141,8 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 	Breakdown->SetNumberField(TEXT("multiply_additive_sum"), MultiplyAdditive);
 	Breakdown->SetNumberField(TEXT("multiply_compound_product"), MultiplyCompound);
 	Breakdown->SetNumberField(TEXT("divide_additive_sum"), DivideAdditive);
+	Breakdown->SetBoolField(TEXT("has_override"), bHasOverride);
+	if (bHasOverride) Breakdown->SetNumberField(TEXT("override_value"), Override);
 	Breakdown->SetNumberField(TEXT("add_final_sum"), AddFinal);
 	Breakdown->SetNumberField(TEXT("computed_value"), Computed);
 	Breakdown->SetNumberField(TEXT("actual_current_value"), ActualCurrent);
