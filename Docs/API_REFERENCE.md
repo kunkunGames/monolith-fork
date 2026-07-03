@@ -1501,6 +1501,12 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithMesh.md` for the full action catal
 
 ---
 
+## level_instance
+
+Level instance creation, packing, blueprint packing, loading, unloading, and child instance querying. Registered via the MonolithMesh module.
+
+---
+
 ## modelgen
 
 Text-to-StaticMesh and caller-supplied generated-model jobs, provenance tracking, and import. (Split from `mesh` on 2026-05-20).
