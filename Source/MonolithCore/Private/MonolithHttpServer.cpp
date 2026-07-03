@@ -979,6 +979,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 
 				if (ActionInfo.ParamSchema.IsValid())
 				{
+					RequiredArray.Reserve(ActionInfo.ParamSchema->Values.Num());
 					static const TCHAR* const kForwardFields[] = {
 						TEXT("type"), TEXT("description"), TEXT("default"),
 						TEXT("enum"), TEXT("minimum"), TEXT("maximum"),
