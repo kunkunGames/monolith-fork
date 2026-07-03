@@ -1,6 +1,7 @@
 #include "MonolithComboGraphActions.h"
 #include "MonolithComboGraphModule.h"
 #include "MonolithParamSchema.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithPackagePathValidator.h"
 // NO ComboGraph includes — all property access via reflection
 
@@ -662,6 +663,11 @@ void FMonolithComboGraphActions::RegisterActions(FMonolithToolRegistry& Registry
 
 FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	UClass* ComboGraphClass = FindComboGraphClass();
 	if (!ComboGraphClass)
 	{
@@ -724,6 +730,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 
 FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -792,6 +803,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const 
 
 FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -861,6 +877,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(cons
 
 FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -1005,6 +1026,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const
 
 FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
@@ -1087,6 +1113,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 
 FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -1265,6 +1296,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 
 FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -1394,6 +1430,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 
 FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -1552,6 +1593,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
@@ -1707,6 +1753,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 
 FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
@@ -1935,6 +1986,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 
 FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AbilityPath;
 	if (!Params->TryGetStringField(TEXT("ability_path"), AbilityPath) || AbilityPath.IsEmpty())
 	{
@@ -2109,6 +2165,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(
 
 FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontages(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
@@ -2256,6 +2317,11 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 
 FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid parameters"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
