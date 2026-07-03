@@ -383,10 +383,15 @@ namespace
 
         TArray<TSharedPtr<FJsonValue>> ScreenChecks;
         TArray<TSharedPtr<FJsonValue>> RequiredWidgetRows;
+        RequiredWidgetRows.Reserve(Spec.RequiredWidgets.Num());
         TArray<TSharedPtr<FJsonValue>> ForbiddenWidgetRows;
+        ForbiddenWidgetRows.Reserve(Spec.ForbiddenWidgets.Num());
         TArray<TSharedPtr<FJsonValue>> VariableRows;
+        VariableRows.Reserve(Spec.ExpectedVariables.Num());
         TArray<TSharedPtr<FJsonValue>> WidgetClassRows;
+        WidgetClassRows.Reserve(Spec.ExpectedWidgetClasses.Num());
         TArray<TSharedPtr<FJsonValue>> GraphNeedleRows;
+        GraphNeedleRows.Reserve(Spec.RequiredGraphNeedles.Num() + Spec.ForbiddenGraphNeedles.Num());
 
         FMonolithActionResult LoadError;
         UWidgetBlueprint* WBP = MonolithUIInternal::LoadWidgetBlueprint(Spec.AssetPath, LoadError);
@@ -578,6 +583,7 @@ namespace
         Layout->SetBoolField(TEXT("provided"), !LayoutAssetPath.IsEmpty());
 
         TArray<TSharedPtr<FJsonValue>> LayerRows;
+        LayerRows.Reserve(RequiredLayers.Num());
         if (LayoutAssetPath.IsEmpty())
         {
             if (RequiredLayers.Num() > 0)
@@ -693,9 +699,11 @@ FMonolithActionResult FMonolithUIActions::HandleValidateFrontendMenuFlow(const T
     const FGameplayTag ModalLayerTag = FGameplayTag::RequestGameplayTag(FName(*ModalLayerTagName), /*ErrorIfNotFound=*/false);
 
     TArray<TSharedPtr<FJsonValue>> Checks;
+    Checks.Reserve(5);
     TArray<TSharedPtr<FJsonValue>> Issues;
     TArray<TSharedPtr<FJsonValue>> Warnings;
     TArray<TSharedPtr<FJsonValue>> ScreenRows;
+    ScreenRows.Reserve(Screens.Num());
 
     AddCheck(Checks, TEXT("primary_game_layout_available"), PrimaryGameLayoutClass != nullptr, PrimaryGameLayoutClass ? PrimaryGameLayoutClass->GetPathName() : FString());
     AddCheck(Checks, TEXT("common_activatable_container_available"), ContainerBaseClass != nullptr, ContainerBaseClass ? ContainerBaseClass->GetPathName() : FString());
