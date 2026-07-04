@@ -1047,4 +1047,27 @@ bool FMonolithParamGuardLogicDriverRuntimeStopSMRejectsMalformedParamsTest::RunT
 	return true;
 }
 
+
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.CompileStateMachineRejectsMalformedParams
+// Validates compile_state_machine rejects missing or malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverCompileStateMachineRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.CompileStateMachineRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverCompileStateMachineRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("compile_state_machine")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	TSharedPtr<FJsonObject> MissingAssetPathParams = MakeShared<FJsonObject>();
+
+	FMonolithActionResult Result1 = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("compile_state_machine"), MissingAssetPathParams);
+	TestTrue(TEXT("compile_state_machine rejects missing asset_path"), !Result1.bSuccess);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
