@@ -73,10 +73,12 @@ TSharedPtr<FJsonObject> FMonolithDryRunGuard::ReportToJson(const FDryRunReport& 
 	// would_create / would_modify (string-array convenience surface).
 	{
 		TArray<TSharedPtr<FJsonValue>> Creates;
+		Creates.Reserve(Report.WouldCreate.Num());
 		for (const FString& S : Report.WouldCreate) { Creates.Add(MakeShared<FJsonValueString>(S)); }
 		Root->SetArrayField(TEXT("would_create"), Creates);
 
 		TArray<TSharedPtr<FJsonValue>> Mods;
+		Mods.Reserve(Report.WouldModify.Num());
 		for (const FString& S : Report.WouldModify) { Mods.Add(MakeShared<FJsonValueString>(S)); }
 		Root->SetArrayField(TEXT("would_modify"), Mods);
 	}
