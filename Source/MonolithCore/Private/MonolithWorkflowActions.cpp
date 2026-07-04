@@ -2530,7 +2530,15 @@ FMonolithActionResult FMonolithWorkflowActions::HandleGameReadyAssetStaticMesh(c
 		AssetValidation->SetObjectField(TEXT("mesh"), MeshProof);
 		if (MeshProof.IsValid() && MeshProof->HasField(TEXT("result")))
 		{
-			Budget->SetObjectField(TEXT("mesh"), MeshProof->GetObjectField(TEXT("result")));
+			TSharedPtr<FJsonObject> ResultObj;
+			if (MeshProof->TryGetObjectField(TEXT("result"), ResultObj) && ResultObj)
+			{
+				Budget->SetObjectField(TEXT("mesh"), ResultObj);
+			}
+			else
+			{
+				return FMonolithActionResult::Error(-32602, TEXT("Invalid params: mesh proof result is not an object"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 	}
 
@@ -2879,12 +2887,20 @@ FMonolithActionResult FMonolithWorkflowActions::HandleGameplayFeatureManifest(co
 			? TEXT("runtime_proof_required=true, but this first slice does not start PIE or inject input.")
 			: TEXT("Runtime proof is declared as a later PIE workflow step."));
 	TArray<TSharedPtr<FJsonValue>> RuntimeNext;
+	TSharedPtr<FJsonObject> TriggerAction;
+	TSharedPtr<FJsonObject> TriggerParams;
+	TSharedPtr<FJsonObject> MakeRuntimeProofParamsResult = MakeRuntimeProofParams(RuntimeSection);
+	if (!MakeRuntimeProofParamsResult.IsValid() || !MakeRuntimeProofParamsResult->TryGetObjectField(TEXT("trigger_action"), TriggerAction) || !TriggerAction.IsValid() || !TriggerAction->TryGetObjectField(TEXT("params"), TriggerParams))
+	{
+		return FMonolithActionResult::Error(-32602, TEXT("Invalid params: trigger_action params are not an object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	RuntimeNext.Add(MakeShared<FJsonValueObject>(MakeNextAction(
 		TEXT("editor.pie_inject_input_action"),
 		FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("pie_inject_input_action")),
 		true,
 		TEXT("Inject the manifest input action during a confirmed PIE proof slice."),
-		MakeRuntimeProofParams(RuntimeSection)->GetObjectField(TEXT("trigger_action"))->GetObjectField(TEXT("params")))));
+		TriggerParams)));
 	RuntimeNext.Add(MakeShared<FJsonValueObject>(MakeNextAction(
 		TEXT("gas.expect_event_cue"),
 		FMonolithToolRegistry::Get().HasAction(TEXT("gas"), TEXT("expect_event_cue")),
@@ -3341,7 +3357,15 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 	UiEvidence->SetStringField(TEXT("layout_rule_profile"), LayoutRuleProfile);
 	if (VisualProfileProof.IsValid())
 	{
-		UiEvidence->SetStringField(TEXT("visual_profile_status"), VisualProfileProof->GetStringField(TEXT("status")));
+		FString VisualProfileStatus;
+		if (VisualProfileProof->TryGetStringField(TEXT("status"), VisualProfileStatus))
+		{
+			UiEvidence->SetStringField(TEXT("visual_profile_status"), VisualProfileStatus);
+		}
+		else
+		{
+			return FMonolithActionResult::Error(-32602, TEXT("Invalid params: visual profile proof status is not a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	UiEvidence->SetStringField(TEXT("visual_artifacts_status"),
 		bVisualProofRequested ? (bExecuteVisualProof ? TEXT("checked") : TEXT("planned")) : TEXT("not_requested"));
