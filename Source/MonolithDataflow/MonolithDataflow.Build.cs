@@ -12,16 +12,16 @@ public class MonolithDataflow : ModuleRules
 	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
 	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
 	{
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
+
 		if (Target.ProjectFile == null)
 		{
 			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
 		}
 
-		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
-		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
-		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
-
-		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		// 2. The .uproject's explicit Plugins[] entry is the deciding signal.
 		try
 		{
 			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
@@ -29,7 +29,7 @@ public class MonolithDataflow : ModuleRules
 			{
 				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
 				{
-					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase))
 					{
 						return Ref.bEnabled
 							&& Ref.IsEnabledForPlatform(Target.Platform)
