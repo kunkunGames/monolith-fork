@@ -1685,43 +1685,6 @@ FString FMonolithSourceDatabase::EscapeFTS(const FString& Query)
 	return Result;
 }
 
-static FString EscapeConsoleFTS(const FString& Query)
-{
-	FString Cleaned;
-	Cleaned.Reserve(Query.Len());
-	for (TCHAR Ch : Query)
-	{
-		if (FChar::IsAlnum(Ch) || Ch == TEXT('_'))
-		{
-			Cleaned += Ch;
-		}
-		else
-		{
-			Cleaned += TEXT(' ');
-		}
-	}
-
-	TArray<FString> Tokens;
-	Cleaned.ParseIntoArray(Tokens, TEXT(" "), true);
-	if (Tokens.Num() == 0)
-	{
-		return TEXT("\"\"");
-	}
-
-	FString Result;
-	for (int32 i = 0; i < Tokens.Num(); ++i)
-	{
-		if (i > 0)
-		{
-			Result += TEXT(" ");
-		}
-		Result += TEXT("\"");
-		Result += Tokens[i];
-		Result += TEXT("\"*");
-	}
-	return Result;
-}
-
 static FString EscapeConsoleLike(const FString& Query)
 {
 	FString Escaped;
@@ -2109,7 +2072,7 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::SearchConsoleObjects(
 			return Root;
 		}
 		const FString PrefixPattern = FString::Printf(TEXT("%s%%"), *EscapeConsoleLike(Query));
-		Stmt.SetBindingValueByIndex(1, EscapeConsoleFTS(Query));
+		Stmt.SetBindingValueByIndex(1, EscapeFTS(Query));
 		Stmt.SetBindingValueByIndex(2, FilterType);
 		Stmt.SetBindingValueByIndex(3, FilterType);
 		Stmt.SetBindingValueByIndex(4, Query);
