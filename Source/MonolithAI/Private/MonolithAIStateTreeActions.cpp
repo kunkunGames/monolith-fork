@@ -1192,9 +1192,10 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTState(const TShare
 	if (!EditorData) return FMonolithActionResult::Error(Error);
 
 	FString StateName;
-	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), StateName))
+	const TSharedPtr<FJsonValue> NameField = Params->TryGetField(TEXT("name"));
+	if (NameField.IsValid() && !NameField->IsNull() && !NameField->TryGetString(StateName))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid param 'name': expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid param 'name': expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	if (StateName.IsEmpty())
@@ -1224,14 +1225,16 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTState(const TShare
 	}
 
 	FString TypeStr;
-	if (Params->HasField(TEXT("type")) && !Params->TryGetStringField(TEXT("type"), TypeStr))
+	const TSharedPtr<FJsonValue> TypeField = Params->TryGetField(TEXT("type"));
+	if (TypeField.IsValid() && !TypeField->IsNull() && !TypeField->TryGetString(TypeStr))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid param 'type': expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid param 'type': expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString SelectionStr;
-	if (Params->HasField(TEXT("selection_behavior")) && !Params->TryGetStringField(TEXT("selection_behavior"), SelectionStr))
+	const TSharedPtr<FJsonValue> SelField = Params->TryGetField(TEXT("selection_behavior"));
+	if (SelField.IsValid() && !SelField->IsNull() && !SelField->TryGetString(SelectionStr))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid param 'selection_behavior': expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid param 'selection_behavior': expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString LinkedAssetPath;
 	Params->TryGetStringField(TEXT("linked_asset_path"), LinkedAssetPath);
@@ -1491,39 +1494,43 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTStateProperties(co
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set ST State Properties")));
 
-	if (Params->HasField(TEXT("weight")))
+	const TSharedPtr<FJsonValue> WeightField = Params->TryGetField(TEXT("weight"));
+	if (WeightField.IsValid() && !WeightField->IsNull())
 	{
 		double WeightVal;
-		if (!Params->TryGetNumberField(TEXT("weight"), WeightVal))
+		if (!WeightField->TryGetNumber(WeightVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'weight' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		State->Weight = static_cast<float>(WeightVal);
 	}
-	if (Params->HasField(TEXT("selection_behavior")))
+	const TSharedPtr<FJsonValue> SelBehaviorField = Params->TryGetField(TEXT("selection_behavior"));
+	if (SelBehaviorField.IsValid() && !SelBehaviorField->IsNull())
 	{
-		FString SelectionStr;
-		if (!Params->TryGetStringField(TEXT("selection_behavior"), SelectionStr))
+		FString SelectionStrUpdate;
+		if (!SelBehaviorField->TryGetString(SelectionStrUpdate))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'selection_behavior' must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'selection_behavior' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
-		State->SelectionBehavior = ParseSelectionBehavior(SelectionStr);
+		State->SelectionBehavior = ParseSelectionBehavior(SelectionStrUpdate);
 	}
-	if (Params->HasField(TEXT("tag")))
+	const TSharedPtr<FJsonValue> TagField = Params->TryGetField(TEXT("tag"));
+	if (TagField.IsValid() && !TagField->IsNull())
 	{
 		FString TagStr;
-		if (!Params->TryGetStringField(TEXT("tag"), TagStr))
+		if (!TagField->TryGetString(TagStr))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'tag' must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'tag' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		State->Tag = FGameplayTag::RequestGameplayTag(FName(*TagStr), /*bErrorIfNotFound=*/false);
 	}
-	if (Params->HasField(TEXT("enabled")))
+	const TSharedPtr<FJsonValue> EnabledField = Params->TryGetField(TEXT("enabled"));
+	if (EnabledField.IsValid() && !EnabledField->IsNull())
 	{
 		bool bEnabled;
-		if (!Params->TryGetBoolField(TEXT("enabled"), bEnabled))
+		if (!EnabledField->TryGetBool(bEnabled))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'enabled' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		State->bEnabled = bEnabled;
 	}
@@ -1881,11 +1888,12 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransition(const T
 	FString PriorityStr;
 	Params->TryGetStringField(TEXT("priority"), PriorityStr);
 	double Delay = 0.0;
-	if (Params->HasField(TEXT("delay")))
+	const TSharedPtr<FJsonValue> DelayField = Params->TryGetField(TEXT("delay"));
+	if (DelayField.IsValid() && !DelayField->IsNull())
 	{
-		if (!Params->TryGetNumberField(TEXT("delay"), Delay))
+		if (!DelayField->TryGetNumber(Delay))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'delay' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'delay' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
@@ -3039,10 +3047,11 @@ namespace
 					Trans.Priority = ParseTransitionPriority(PriorityStr);
 				}
 
-				if (TransSpec->HasField(TEXT("delay")))
+				const TSharedPtr<FJsonValue> TransDelayField = TransSpec->TryGetField(TEXT("delay"));
+				if (TransDelayField.IsValid() && !TransDelayField->IsNull())
 				{
 					double DelayVal;
-					if (!TransSpec->TryGetNumberField(TEXT("delay"), DelayVal))
+					if (!TransDelayField->TryGetNumber(DelayVal))
 					{
 						OutError = TEXT("Parameter 'delay' must be a number in transition spec");
 						return false;
