@@ -10199,6 +10199,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSearchDynamicInputs(const T
 	AR.GetAssets(Filter, Assets);
 
 	TArray<TSharedPtr<FJsonValue>> Results;
+	Results.Reserve(FMath::Min(Assets.Num(), Limit));
 	for (const FAssetData& Asset : Assets)
 	{
 		FString Path = Asset.GetSoftObjectPath().ToString();
