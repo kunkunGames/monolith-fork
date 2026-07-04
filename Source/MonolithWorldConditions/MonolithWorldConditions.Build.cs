@@ -1,29 +1,53 @@
 using UnrealBuildTool;
 using System.IO;
+using EpicGames.Core;
 
 public class MonolithWorldConditions : ModuleRules
 {
-	private static bool HasPluginDir(string BaseDir, string PluginName)
+	// Returns true iff `PluginName` is ENABLED for this target (not merely present on disk).
+	// Mirrors UnrealBuildTool Plugins.IsPluginEnabledForTarget (UE 5.7
+	// Engine/Source/Programs/UnrealBuildTool/System/Plugins.cs:693). Fixes issue #71:
+	// engine plugins ship-but-default-off (EnabledByDefault:false), so disk presence != enablement.
+	// Design + API citations: Docs/plans/2026-06-15-issue71-plugin-enablement-gating.md.
+	// Keep BYTE-IDENTICAL with the copies in MonolithMesh/MonolithIndex/MonolithAudio/MonolithAnimation.
+	private static bool IsPluginEnabled(ReadOnlyTargetRules Target, string PluginName)
 	{
-		if (!Directory.Exists(BaseDir))
+		if (Target.ProjectFile == null)
 		{
-			return false;
+			return false;   // engine/program target with no .uproject: every gated engine plugin is EnabledByDefault:false -> treat as OFF
 		}
 
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-		{
-			return true;
-		}
+		// 1. Target-level overrides win outright (uncommon but correct: -EnablePlugin=/-DisablePlugin=).
+		if (Target.DisablePlugins != null && System.Linq.Enumerable.Contains(Target.DisablePlugins, PluginName)) { return false; }
+		if (Target.EnablePlugins  != null && System.Linq.Enumerable.Contains(Target.EnablePlugins,  PluginName)) { return true;  }
 
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
+		// 2. The .uproject's explicit Plugins[] entry (non-optional) is the deciding signal.
+		try
 		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
+			ProjectDescriptor Project = ProjectDescriptor.FromFile(Target.ProjectFile);
+			if (Project.Plugins != null)
 			{
-				return true;
+				foreach (PluginReferenceDescriptor Ref in Project.Plugins)
+				{
+					if (string.Equals(Ref.Name, PluginName, System.StringComparison.OrdinalIgnoreCase) && !Ref.bOptional)
+					{
+						return Ref.bEnabled
+							&& Ref.IsEnabledForPlatform(Target.Platform)
+							&& Ref.IsEnabledForTargetConfiguration(Target.Configuration)
+							&& Ref.IsEnabledForTarget(Target.Type);
+					}
+				}
 			}
 		}
+		catch (System.Exception)
+		{
+			return false;   // unreadable .uproject -> fail safe to OFF (never hard-link)
+		}
 
+		// 3. No .uproject entry -> falls to the .uplugin EnabledByDefault. ALL gated plugins here are
+		//    engine plugins with EnabledByDefault:false, so absence == disabled. Return false.
+		//    (If a future gated plugin were EnabledByDefault:true, this branch would need to read its
+		//    .uplugin; documented as a known limitation in the plan.)
 		return false;
 	}
 
@@ -48,36 +72,8 @@ public class MonolithWorldConditions : ModuleRules
 		});
 
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-		bool bHasWorldConditions = false;
-		bool bHasSmartObjects = false;
-
-		if (!bReleaseBuild)
-		{
-			string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-			string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-
-			bHasWorldConditions =
-				HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "WorldConditions")
-				|| HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "WorldConditions")
-				|| HasPluginDir(EnginePluginsDir, "WorldConditions");
-
-			bHasSmartObjects =
-				HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "SmartObjects")
-				|| HasPluginDir(Path.Combine(EnginePluginsDir, "AI"), "SmartObjects")
-				|| HasPluginDir(EnginePluginsDir, "SmartObjects");
-
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				if (Directory.Exists(ProjectPluginsDir))
-				{
-					bHasWorldConditions = bHasWorldConditions
-						|| HasPluginDir(ProjectPluginsDir, "WorldConditions");
-					bHasSmartObjects = bHasSmartObjects
-						|| HasPluginDir(ProjectPluginsDir, "SmartObjects");
-				}
-			}
-		}
+		bool bHasWorldConditions = !bReleaseBuild && IsPluginEnabled(Target, "WorldConditions");
+		bool bHasSmartObjects = !bReleaseBuild && IsPluginEnabled(Target, "SmartObjects");
 
 		PublicDefinitions.Add("WITH_MONOLITH_WORLDCONDITIONS=" + (bHasWorldConditions ? "1" : "0"));
 		PublicDefinitions.Add("WITH_MONOLITH_WORLDCONDITIONS_SMARTOBJECTS=" + (bHasWorldConditions && bHasSmartObjects ? "1" : "0"));
