@@ -1,4 +1,5 @@
 using UnrealBuildTool;
+using EpicGames.Core;
 
 public class MonolithAudio : ModuleRules
 {

@@ -1,4 +1,5 @@
 using UnrealBuildTool;
+using EpicGames.Core;
 using System.IO;
 
 public class MonolithDataflow : ModuleRules
