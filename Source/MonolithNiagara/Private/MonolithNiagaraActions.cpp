@@ -15509,7 +15509,11 @@ FMonolithActionResult FMonolithNiagaraActions::HandleClearEmitterModules(const T
 // ============================================================================
 FMonolithActionResult FMonolithNiagaraActions::HandleGetModuleScriptInputs(const TSharedPtr<FJsonObject>& Params)
 {
-	FString ScriptPath = Params->GetStringField(TEXT("script_path"));
+	FString ScriptPath;
+	if (!Params->TryGetStringField(TEXT("script_path"), ScriptPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'script_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (ScriptPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: script_path"));
 
