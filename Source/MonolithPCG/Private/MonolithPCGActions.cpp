@@ -1,6 +1,7 @@
 #include "MonolithPCGActions.h"
 
 #include "MonolithParamSchema.h"
+#include "MonolithJsonUtils.h"
 
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -297,9 +298,13 @@ FMonolithActionResult FMonolithPCGActions::GetStatus(const TSharedPtr<FJsonObjec
 FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJsonObject>& Params)
 {
 	FString PackagePath = TEXT("/Game");
-	if (Params->HasField(TEXT("package_path")) && !Params->TryGetStringField(TEXT("package_path"), PackagePath))
+	TSharedPtr<FJsonValue> PackagePathField = Params->TryGetField(TEXT("package_path"));
+	if (PackagePathField.IsValid() && !PackagePathField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("package_path must be a string"));
+		if (!PackagePathField->TryGetString(PackagePath))
+		{
+			return FMonolithActionResult::Error(TEXT("package_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	PackagePath.TrimStartAndEndInline();
 	while (PackagePath.Len() > 5 && PackagePath.EndsWith(TEXT("/")))
@@ -312,9 +317,13 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 	}
 
 	double LimitValue = 100.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+	if (LimitField.IsValid() && !LimitField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+		if (!LimitField->TryGetNumber(LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
@@ -368,21 +377,33 @@ FMonolithActionResult FMonolithPCGActions::ListGraphAssets(const TSharedPtr<FJso
 FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonObject>& Params)
 {
 	FString AssetPath;
-	if (Params->HasField(TEXT("asset_path")) && !Params->TryGetStringField(TEXT("asset_path"), AssetPath))
+	TSharedPtr<FJsonValue> AssetPathField = Params->TryGetField(TEXT("asset_path"));
+	if (AssetPathField.IsValid() && !AssetPathField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path must be a string"));
+		if (!AssetPathField->TryGetString(AssetPath))
+		{
+			return FMonolithActionResult::Error(TEXT("asset_path must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	bool bIncludeTags = true;
-	if (Params->HasField(TEXT("include_tags")) && !Params->TryGetBoolField(TEXT("include_tags"), bIncludeTags))
+	TSharedPtr<FJsonValue> IncludeTagsField = Params->TryGetField(TEXT("include_tags"));
+	if (IncludeTagsField.IsValid() && !IncludeTagsField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("include_tags must be a boolean"));
+		if (!IncludeTagsField->TryGetBool(bIncludeTags))
+		{
+			return FMonolithActionResult::Error(TEXT("include_tags must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
 	double TagLimitValue = 50.0;
-	if (Params->HasField(TEXT("tag_limit")) && !Params->TryGetNumberField(TEXT("tag_limit"), TagLimitValue))
+	TSharedPtr<FJsonValue> TagLimitField = Params->TryGetField(TEXT("tag_limit"));
+	if (TagLimitField.IsValid() && !TagLimitField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("tag_limit must be a number"));
+		if (!TagLimitField->TryGetNumber(TagLimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("tag_limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	const int32 TagLimit = MonolithPCG::ClampTagLimit(TagLimitValue);
 
@@ -405,9 +426,13 @@ FMonolithActionResult FMonolithPCGActions::GetGraphAsset(const TSharedPtr<FJsonO
 FMonolithActionResult FMonolithPCGActions::ListComponents(const TSharedPtr<FJsonObject>& Params)
 {
 	double LimitValue = 100.0;
-	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitValue))
+	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+	if (LimitField.IsValid() && !LimitField->IsNull())
 	{
-		return FMonolithActionResult::Error(TEXT("limit must be a number"));
+		if (!LimitField->TryGetNumber(LimitValue))
+		{
+			return FMonolithActionResult::Error(TEXT("limit must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 	const int32 Limit = MonolithPCG::ClampLimit(LimitValue);
 
