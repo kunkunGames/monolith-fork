@@ -3681,25 +3681,26 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameter(const TShar
 	else if (Params->HasField(TEXT("vector_value")))
 	{
 		const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-		if (Params->TryGetObjectField(TEXT("vector_value"), ColorObj))
+		if (!Params->TryGetObjectField(TEXT("vector_value"), ColorObj))
 		{
-			FLinearColor Color;
-			Color.R = 0.f;
-				double ColorR_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
-			Color.G = 0.f;
-				double ColorG_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
-			Color.B = 0.f;
-				double ColorB_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
-			Color.A = 1.f;
-				double ColorA_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
-			MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
-			SetType = TEXT("vector");
-			SetValue = FString::Printf(TEXT("(%.3f, %.3f, %.3f, %.3f)"), Color.R, Color.G, Color.B, Color.A);
+			return FMonolithActionResult::Error(TEXT("'vector_value' must be a JSON object with R, G, B, A fields"), FMonolithJsonUtils::ErrInvalidParams);
 		}
+		FLinearColor Color;
+		Color.R = 0.f;
+			double ColorR_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+		Color.G = 0.f;
+			double ColorG_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+		Color.B = 0.f;
+			double ColorB_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+		Color.A = 1.f;
+			double ColorA_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
+		MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
+		SetType = TEXT("vector");
+		SetValue = FString::Printf(TEXT("(%.3f, %.3f, %.3f, %.3f)"), Color.R, Color.G, Color.B, Color.A);
 	}
 	else if (Params->HasField(TEXT("texture_value")))
 	{
@@ -5758,32 +5759,30 @@ FMonolithActionResult FMonolithMaterialActions::SetInstanceParameters(const TSha
 		else if (Type.Equals(TEXT("vector"), ESearchCase::IgnoreCase))
 		{
 			const TSharedPtr<FJsonObject>* ColorObj = nullptr;
-			if ((*ParamObj)->TryGetObjectField(TEXT("value"), ColorObj))
-			{
-				FLinearColor Color;
-				Color.R = 0.f;
-				double ColorR_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
-				Color.G = 0.f;
-				double ColorG_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
-				Color.B = 0.f;
-				double ColorB_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
-				Color.A = 1.f;
-				double ColorA_Val;
-				if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
-				MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
-				SetCount++;
-				bParamSuccess = true;
-			}
-			else
+			if (!(*ParamObj)->TryGetObjectField(TEXT("value"), ColorObj))
 			{
 				ParamError = FString::Printf(TEXT("Vector param '%s': missing or invalid 'value' object"), *Name);
 				auto ErrJson = MakeShared<FJsonObject>();
 				ErrJson->SetStringField(TEXT("error"), ParamError);
 				ErrorsArr.Add(MakeShared<FJsonValueObject>(ErrJson));
+				continue;
 			}
+			FLinearColor Color;
+			Color.R = 0.f;
+			double ColorR_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("R"), ColorR_Val)) Color.R = static_cast<float>(ColorR_Val);
+			Color.G = 0.f;
+			double ColorG_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("G"), ColorG_Val)) Color.G = static_cast<float>(ColorG_Val);
+			Color.B = 0.f;
+			double ColorB_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("B"), ColorB_Val)) Color.B = static_cast<float>(ColorB_Val);
+			Color.A = 1.f;
+			double ColorA_Val;
+			if ((*ColorObj)->TryGetNumberField(TEXT("A"), ColorA_Val)) Color.A = static_cast<float>(ColorA_Val);
+			MIC->SetVectorParameterValueEditorOnly(ParamInfo, Color);
+			SetCount++;
+			bParamSuccess = true;
 		}
 		else if (Type.Equals(TEXT("texture"), ESearchCase::IgnoreCase))
 		{
@@ -10751,7 +10750,7 @@ FMonolithActionResult FMonolithMaterialActions::SetFunctionInstanceParameter(con
 		const TSharedPtr<FJsonObject>* ColorObj = nullptr;
 		if (!Params->TryGetObjectField(TEXT("vector_value"), ColorObj))
 		{
-			return FMonolithActionResult::Error(TEXT("vector_value must be a JSON object with r, g, b, a fields"));
+			return FMonolithActionResult::Error(TEXT("'vector_value' must be a JSON object with r, g, b, a fields"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		FLinearColor Color;
