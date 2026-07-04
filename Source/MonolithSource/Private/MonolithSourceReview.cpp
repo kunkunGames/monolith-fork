@@ -247,6 +247,7 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* Reasons = nullptr;
 		if (Risk.IsValid() && Risk->TryGetArrayField(TEXT("reasons"), Reasons) && Reasons)
 		{
+			Out.Reserve(FMath::Min(Reasons->Num(), MaxItems));
 			for (int32 i = 0; i < Reasons->Num() && i < MaxItems; ++i)
 			{
 				Out.Add((*Reasons)[i]);
@@ -602,6 +603,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
 		{
 			const int32 EdgeSampleLimit = 25;
 			FJsonArr EdgeSample;
+			EdgeSample.Reserve(FMath::Min(EdgeCount, EdgeSampleLimit));
 			for (int32 Index = 0; Index < EdgeCount && Index < EdgeSampleLimit; ++Index)
 			{
 				EdgeSample.Add((*Edges)[Index]);
@@ -649,6 +651,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::RiskScore(
 	}
 
 	FJsonArr Items;
+	Items.Reserve(FMath::Min(Syms.Num(), Cap));
 	for (int32 i = 0; i < Syms.Num() && i < Cap; ++i)
 	{
 		Items.Add(MakeShared<FJsonValueObject>(ScoreSymbol(Db, Syms[i])));
