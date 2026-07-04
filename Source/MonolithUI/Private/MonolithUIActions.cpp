@@ -2543,6 +2543,7 @@ FMonolithActionResult FMonolithUIActions::HandleGetCommonFrameworkStatus(const T
     Result->SetArrayField(TEXT("modules"), Modules);
 
     TArray<TSharedPtr<FJsonValue>> Classes;
+    Classes.Reserve(UE_ARRAY_COUNT(CommonClassSpecs));
     for (const FCommonClassSpec& Spec : CommonClassSpecs)
     {
         Classes.Add(MakeShared<FJsonValueObject>(ClassSummary(Spec, bIncludeProperties, bIncludeFunctions, PropertyLimit, FunctionLimit)));
@@ -2550,6 +2551,7 @@ FMonolithActionResult FMonolithUIActions::HandleGetCommonFrameworkStatus(const T
     Result->SetArrayField(TEXT("classes"), Classes);
 
     TArray<TSharedPtr<FJsonValue>> Structs;
+    Structs.Reserve(UE_ARRAY_COUNT(CommonStructSpecs));
     for (const FCommonStructSpec& Spec : CommonStructSpecs)
     {
         Structs.Add(MakeShared<FJsonValueObject>(StructSummary(Spec, bIncludeProperties, PropertyLimit)));
@@ -2657,6 +2659,7 @@ FMonolithActionResult FMonolithUIActions::HandleDescribeCommonWidgetBlueprint(co
     if (bIncludeWidgetTree)
     {
         TArray<TSharedPtr<FJsonValue>> WidgetSummaries;
+        WidgetSummaries.Reserve(Widgets.Num());
         for (UWidget* Widget : Widgets)
         {
             if (Widget)
