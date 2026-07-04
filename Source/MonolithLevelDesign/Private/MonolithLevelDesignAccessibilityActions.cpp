@@ -380,7 +380,13 @@ FMonolithActionResult FMonolithLevelDesignAccessibilityActions::AnalyzeVisualCon
 	if (Forward.IsNearlyZero()) Forward = FVector::ForwardVector;
 
 	double FOV = 90.0;
-	Params->TryGetNumberField(TEXT("fov"), FOV);
+	if (Params->TryGetNumberField(TEXT("fov"), FOV))
+	{
+		if (FOV > 360.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("fov %g exceeds the maximum allowed (360)"), FOV));
+		}
+	}
 
 	// Parse tags for interactable actors
 	TArray<FString> Tags;
