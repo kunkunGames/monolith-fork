@@ -33,7 +33,7 @@ static void print_proxy_help()
         << "MCP config example:\n"
         << "  {\"mcpServers\":{\"monolith\":{\"command\":\"<project-root>/Plugins/Monolith/Binaries/monolith_proxy.exe\"}}}\n\n"
         << "Offline fallback:\n"
-        << "  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.\n";
+        << "  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.\n";
 }
 
 static void print_proxy_version()

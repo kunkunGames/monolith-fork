@@ -79,5 +79,5 @@ echo   Prefers Python 3.8+, then python3, then Node.js 18+, then py -3.
 echo   Help exits before probing runtimes; version is forwarded to the selected runtime.
 echo.
 echo Offline fallback:
-echo   Use Binaries\monolith_query.exe for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+echo   Use Binaries\monolith_query.exe for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
 exit /b 0

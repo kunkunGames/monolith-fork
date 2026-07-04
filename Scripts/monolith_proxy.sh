@@ -27,7 +27,7 @@ Runtime selection:
   Help exits before probing runtimes; version is forwarded to the selected runtime.
 
 Offline fallback:
-  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
 EOF
 		exit 0
 		;;

@@ -915,7 +915,7 @@ function handleInitialize(message) {
       "available actions and params for that namespace.\n" +
       "\n" +
       "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n" +
-      "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge reads.",
+      "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge/console reads.",
   });
 }
 
@@ -1071,7 +1071,7 @@ MCP config example:
   {"mcpServers":{"monolith":{"command":"node","args":["<project-root>/Plugins/Monolith/Scripts/monolith_proxy.js"]}}}
 
 Offline fallback:
-  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge queries when the editor or MCP server is unavailable.
+  Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
 `);
 }
 
