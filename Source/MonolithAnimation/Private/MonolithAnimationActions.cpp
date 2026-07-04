@@ -2118,6 +2118,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveVirtualBones(const 
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> RemovedArr;
+	RemovedArr.Reserve(Removed.Num());
 	for (const FString& R : Removed)
 		RemovedArr.Add(MakeShared<FJsonValueString>(R));
 	Root->SetArrayField(TEXT("removed"), RemovedArr);
@@ -2125,6 +2126,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveVirtualBones(const 
 	if (NotFound.Num() > 0)
 	{
 		TArray<TSharedPtr<FJsonValue>> NotFoundArr;
+		NotFoundArr.Reserve(NotFound.Num());
 		for (const FString& NF : NotFound)
 			NotFoundArr.Add(MakeShared<FJsonValueString>(NF));
 		Root->SetArrayField(TEXT("not_found"), NotFoundArr);
@@ -3061,6 +3063,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleListBoneTracks(const TSha
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetNumberField(TEXT("count"), BoneNames.Num());
 	TArray<TSharedPtr<FJsonValue>> NameArr;
+	NameArr.Reserve(BoneNames.Num());
 	for (const FName& N : BoneNames)
 	{
 		NameArr.Add(MakeShared<FJsonValueString>(N.ToString()));
@@ -12241,6 +12244,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleCopyBonePoseBetweenSequen
 	Root->SetNumberField(TEXT("keys_written_per_bone"), KeysToWrite);
 
 	TArray<TSharedPtr<FJsonValue>> CopiedJson;
+	CopiedJson.Reserve(CopiedBones.Num());
 	for (const FString& B : CopiedBones)
 	{
 		CopiedJson.Add(MakeShared<FJsonValueString>(B));
@@ -12815,6 +12819,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetAnimNodePinBinding(con
 	if (!bClearing)
 	{
 		TArray<TSharedPtr<FJsonValue>> PathOut;
+		PathOut.Reserve(Path.Num());
 		for (const FString& Seg : Path) PathOut.Add(MakeShared<FJsonValueString>(Seg));
 		Root->SetArrayField(TEXT("path"), PathOut);
 	}
