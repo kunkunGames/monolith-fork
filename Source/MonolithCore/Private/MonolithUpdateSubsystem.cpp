@@ -1052,6 +1052,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("if exist \"%s\\.antigravitycli\" xcopy /s /e /i /q /h \"%s\\.antigravitycli\" \"%s\\.antigravitycli\\\"\r\n")
 
 		TEXT("if exist \"%s\\.code-review-graph\" xcopy /s /e /i /q /h \"%s\\.code-review-graph\" \"%s\\.code-review-graph\\\"\r\n")
+		TEXT("if exist \"%s\\Analyzer\" xcopy /s /e /i /q /h \"%s\\Analyzer\" \"%s\\Analyzer\\\"\r\n")
 		TEXT("if exist \"%s\\CRG\" xcopy /s /e /i /q /h \"%s\\CRG\" \"%s\\CRG\\\"\r\n")
 		TEXT("if exist \"%s\\PRD\" xcopy /s /e /i /q /h \"%s\\PRD\" \"%s\\PRD\\\"\r\n")
 		TEXT("if exist \"%s\\Plans\" xcopy /s /e /i /q /h \"%s\\Plans\" \"%s\\Plans\\\"\r\n")
@@ -1114,6 +1115,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
+		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Preserve Saved/ from backup
 		*WinBackupDir, *WinBackupDir, *WinPluginDir,
 		// Cleanup
@@ -1153,6 +1155,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		TEXT("[ -d \"%s/.antigravitycli\" ] && cp -r \"%s/.antigravitycli\" \"%s/.antigravitycli\"\n")
 
 		TEXT("[ -d \"%s/.code-review-graph\" ] && cp -r \"%s/.code-review-graph\" \"%s/.code-review-graph\"\n")
+		TEXT("[ -d \"%s/Analyzer\" ] && cp -r \"%s/Analyzer\" \"%s/Analyzer\"\n")
 		TEXT("[ -d \"%s/CRG\" ] && cp -r \"%s/CRG\" \"%s/CRG\"\n")
 		TEXT("[ -d \"%s/PRD\" ] && cp -r \"%s/PRD\" \"%s/PRD\"\n")
 		TEXT("[ -d \"%s/Plans\" ] && cp -r \"%s/Plans\" \"%s/Plans\"\n")
@@ -1171,6 +1174,7 @@ bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const 
 		// Touch step
 		*PluginDir,
 		// Preserve .git from backup
+		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
 		*BackupDir, *BackupDir, *PluginDir,
