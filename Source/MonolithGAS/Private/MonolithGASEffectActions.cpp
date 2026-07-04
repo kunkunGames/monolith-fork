@@ -4128,7 +4128,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleGetEffectModifiersBreakdo
 		Computed = BaseValue + Additive;
 		if (MultiplyAdditive != 0.f) Computed *= (1.f + MultiplyAdditive);
 		Computed *= MultiplyCompound;
-		if (DivideAdditive != 0.f) Computed /= (1.f + DivideAdditive);
+		if (DivideAdditive != 0.f)
+		{
+			float Divisor = 1.f + DivideAdditive;
+			if (FMath::Abs(Divisor) > UE_SMALL_NUMBER)
+			{
+				Computed /= Divisor;
+			}
+		}
 	}
 	Computed += AddFinal;
 
@@ -4449,7 +4456,14 @@ FMonolithActionResult FMonolithGASEffectActions::HandleSimulateEffectStack(const
 		FinalValue = static_cast<float>(BaseValue) + Additive;
 		if (MultiplyAdditive != 0.f) FinalValue *= (1.f + MultiplyAdditive);
 		FinalValue *= MultiplyCompound;
-		if (DivideAdditive != 0.f) FinalValue /= (1.f + DivideAdditive);
+		if (DivideAdditive != 0.f)
+		{
+			float Divisor = 1.f + DivideAdditive;
+			if (FMath::Abs(Divisor) > UE_SMALL_NUMBER)
+			{
+				FinalValue /= Divisor;
+			}
+		}
 	}
 	FinalValue += AddFinal;
 
