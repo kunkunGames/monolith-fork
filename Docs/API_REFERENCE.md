@@ -1171,6 +1171,126 @@ DEV-ONLY (write): set a property on a UDeveloperSettings CDO at runtime. Resolve
 
 ---
 
+## localization
+
+Localization culture and StringTable asset management.
+
+### `localization.list_cultures`
+
+List available cultures known to Unreal internationalization.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `culture_names` | array | optional | Optional culture names to resolve; omitted returns configured/default culture context |
+| `include_derived` | boolean | optional | Include derived cultures when resolving culture_names. Default: `true` |
+
+### `localization.list_string_tables`
+
+List StringTable assets under a project content path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | optional | Content path to scan. Default: `/Game` |
+| `include_entries` | boolean | optional | Include capped entry rows. Default: `false` |
+| `include_metadata` | boolean | optional | Include per-entry metadata when entries are included. Default: `false` |
+| `limit` | integer | optional | Maximum tables or entries to return. Default: `100` |
+
+### `localization.get_string_table`
+
+Inspect a StringTable asset and return capped entries.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `include_metadata` | boolean | optional | Include per-entry metadata. Default: `true` |
+| `limit` | integer | optional | Maximum entries to return. Default: `200` |
+
+### `localization.validate_string_table`
+
+Validate a StringTable asset for empty keys, empty strings, duplicate-looking keys, and large output warnings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+
+### `localization.create_string_table`
+
+Create a StringTable asset under /Game. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | New StringTable asset path |
+| `namespace` | string | optional | StringTable namespace; defaults to asset name |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+| `save` | boolean | optional | Save the package after creation. Default: `false` |
+
+### `localization.set_string_entry`
+
+Add or replace one StringTable entry and optional metadata. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `key` | string | **required** | Entry key |
+| `source_string` | string | **required** | Source string |
+| `metadata` | object | optional | String metadata fields |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.remove_string_entry`
+
+Remove one StringTable entry by key. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `key` | string | **required** | Entry key |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.set_string_metadata`
+
+Add, replace, or remove metadata on one StringTable entry. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `key` | string | **required** | Entry key |
+| `metadata_key` | string | **required** | Metadata key |
+| `metadata_value` | string | optional | Metadata value to set |
+| `remove` | boolean | optional | Remove metadata_key instead of setting metadata_value. Default: `false` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.import_string_table_csv`
+
+Import key,source_string,metadata CSV rows into a StringTable. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `file_path` | string | **required** | CSV path under the project directory |
+| `replace_existing` | boolean | optional | Clear existing entries before import. Default: `false` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+| `save` | boolean | optional | Save the package after mutation. Default: `false` |
+
+### `localization.export_string_table_csv`
+
+Export a StringTable to CSV under the project directory. Requires dry_run=true or confirm=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | StringTable asset path |
+| `file_path` | string | **required** | Destination CSV path under the project directory |
+| `include_metadata` | boolean | optional | Include metadata columns. Default: `true` |
+| `dry_run` | boolean | optional | Preview without writing. Default: `false` |
+| `confirm` | boolean | optional | Required true for non-dry-run writes. Default: `false` |
+
 ## collection
 
 Content Browser collection CRUD, dynamic query management, and asset association. Backed by the CollectionManager module.
