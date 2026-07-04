@@ -368,6 +368,21 @@ bool FMonolithParamGuardAudioCreateLayeredSoundCueRejectsMalformedVolumesTest::R
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioCreateSwitchSoundCueRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.CreateSwitchSoundCueRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioCreateSwitchSoundCueRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Audio/SC_TestMalformedSwitch"));
+	Params->SetStringField(TEXT("parameter_name"), TEXT("SwitchParam"));
+	Params->SetStringField(TEXT("sound_waves"), TEXT("malformed")); // Should be array
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("create_switch_sound_cue"), Params);
+	TestTrue(TEXT("CreateSwitchSoundCue with malformed sound_waves should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("CreateSwitchSoundCue reports malformed sound_waves"), Result.ErrorMessage.Contains(TEXT("array is required")));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.BindSoundToPerceptionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FMonolithParamGuardAudioBindSoundToPerceptionRejectsMalformedParamsTest::RunTest(const FString& Parameters)
 {

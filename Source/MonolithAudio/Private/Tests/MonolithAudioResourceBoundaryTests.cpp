@@ -840,6 +840,26 @@ bool FMonolithAudioBuildSoundCueFromSpecLimitTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioCreateSwitchSoundCueLimitTest, "Monolith.LimitGuard.Audio.CreateSwitchSoundCueClampsLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAudioCreateSwitchSoundCueLimitTest::RunTest(const FString& Parameters)
+{
+	// Test oversized array is rejected
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Temp/TestLimitSwitchCue"));
+	Params->SetStringField(TEXT("parameter_name"), TEXT("SwitchParam"));
+	TArray<TSharedPtr<FJsonValue>> OversizedWavesArray;
+	for (int32 i = 0; i < 101; ++i) OversizedWavesArray.Add(MakeShared<FJsonValueString>(TEXT("/Game/Temp/SomeWave")));
+	Params->SetArrayField(TEXT("sound_waves"), OversizedWavesArray);
+
+	FMonolithAudioSoundCueActions::RegisterActions(FMonolithToolRegistry::Get());
+	FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("audio"), TEXT("create_switch_sound_cue"), Params);
+
+	TestFalse(TEXT("Oversized sound_waves array should return an error"), Result.bSuccess);
+	TestTrue(TEXT("Error should mention maximum allowed"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed")));
+
+	return true;
+}
+
 namespace
 {
 FMonolithActionResult ExecuteListPerceptionBoundSounds(const TSharedPtr<FJsonObject>& Params)
