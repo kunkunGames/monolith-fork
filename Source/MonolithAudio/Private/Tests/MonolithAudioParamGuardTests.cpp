@@ -429,4 +429,30 @@ bool FMonolithParamGuardAudioUnbindSoundFromPerceptionRejectsMalformedParamsTest
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioGetSoundPerceptionBindingRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.GetSoundPerceptionBindingRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioGetSoundPerceptionBindingRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetNumberField(TEXT("asset_path"), 12345); // Should be string
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("get_sound_perception_binding"), Params);
+	TestTrue(TEXT("GetSoundPerceptionBinding with malformed asset_path should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("GetSoundPerceptionBinding reports malformed asset_path"), Result.ErrorMessage.Contains(TEXT("asset_path must be a string")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest, "Monolith.ParamGuard.Audio.ListPerceptionBoundSoundsRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardAudioListPerceptionBoundSoundsRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+	Params->SetStringField(TEXT("limit"), TEXT("invalid_limit")); // Should be number
+
+	FMonolithActionResult Result = ExecuteAudioAction(TEXT("list_perception_bound_sounds"), Params);
+	TestTrue(TEXT("ListPerceptionBoundSounds with malformed limit should return Error"), !Result.bSuccess);
+	TestTrue(TEXT("ListPerceptionBoundSounds reports malformed limit"), Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
