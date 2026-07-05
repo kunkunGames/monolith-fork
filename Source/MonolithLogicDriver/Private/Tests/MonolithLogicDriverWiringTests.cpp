@@ -305,4 +305,84 @@ bool FMonolithLogicDriverMoveNodeFunctionalTest::RunTest(const FString& Paramete
 	return true;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Monolith.LogicDriverKeeper.SetInitialStateFunctional
+// Validates the functional 'happy path' for setting the initial state of a state machine graph.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLogicDriverSetInitialStateFunctionalTest, "Monolith.LogicDriverKeeper.SetInitialStateFunctional", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithLogicDriverSetInitialStateFunctionalTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("set_initial_state")))
+	{
+		FMonolithLogicDriverAssetActions::RegisterActions(Registry);
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	// 1. Create a State Machine Blueprint
+	FString AssetPath = TEXT("/Game/Tests/SM_SetInitialStateTest");
+	{
+		TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+		CreateParams->SetStringField(TEXT("save_path"), AssetPath);
+		FMonolithActionResult CreateResult = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("create_state_machine"), CreateParams);
+
+		// In Jules VM or environments without Logic Driver Pro loaded, this might fail,
+		// but we still want the test coverage to be syntactically correct and run what it can.
+		// Note: The memory instruction says: "When writing EditorContext automation tests for Monolith...
+		// do NOT assert TestTrue on the failing condition. Doing so forces a test failure and breaks CI pipelines for environments without the plugin."
+		if (!CreateResult.bSuccess)
+		{
+			return true;
+		}
+	}
+
+	// 2. Add State to be initial
+	FString NodeGuid;
+	{
+		TSharedPtr<FJsonObject> AddStateParams = MakeShared<FJsonObject>();
+		AddStateParams->SetStringField(TEXT("asset_path"), AssetPath);
+		AddStateParams->SetStringField(TEXT("name"), TEXT("InitialState"));
+		AddStateParams->SetNumberField(TEXT("position_x"), 0);
+		AddStateParams->SetNumberField(TEXT("position_y"), 0);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("add_state"), AddStateParams);
+		TestTrue(TEXT("add_state should succeed"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			Result.Payload->TryGetStringField(TEXT("node_guid"), NodeGuid);
+		}
+	}
+
+	// 3. Set Initial State
+	if (!NodeGuid.IsEmpty())
+	{
+		TSharedPtr<FJsonObject> SetInitialParams = MakeShared<FJsonObject>();
+		SetInitialParams->SetStringField(TEXT("asset_path"), AssetPath);
+		SetInitialParams->SetStringField(TEXT("node_guid"), NodeGuid);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("set_initial_state"), SetInitialParams);
+		TestTrue(TEXT("set_initial_state should succeed for valid node"), Result.bSuccess);
+		if (Result.bSuccess && Result.Payload.IsValid())
+		{
+			FString ActionName;
+			Result.Payload->TryGetStringField(TEXT("action"), ActionName);
+			TestEqual(TEXT("Action should be set_initial_state"), ActionName, TEXT("set_initial_state"));
+
+			FString SetNodeGuid;
+			Result.Payload->TryGetStringField(TEXT("node_guid"), SetNodeGuid);
+			TestEqual(TEXT("Set node guid should match"), SetNodeGuid, NodeGuid);
+		}
+	}
+
+	// 4. Cleanup (if delete_state_machine action is available, use it to leave clean state)
+	if (Registry.HasAction(TEXT("logicdriver"), TEXT("delete_state_machine")))
+	{
+		TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+		DeleteParams->SetStringField(TEXT("asset_path"), AssetPath);
+		Registry.ExecuteAction(TEXT("logicdriver"), TEXT("delete_state_machine"), DeleteParams);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
