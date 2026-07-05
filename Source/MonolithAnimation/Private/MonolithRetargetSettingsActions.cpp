@@ -332,6 +332,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleAlignRetargetPose(
 	Root->SetStringField(TEXT("mode"), ModeStr);
 	{
 		TArray<TSharedPtr<FJsonValue>> SidesArr;
+		SidesArr.Reserve(SidesAligned.Num());
 		for (const FString& S : SidesAligned) { SidesArr.Add(MakeShared<FJsonValueString>(S)); }
 		Root->SetArrayField(TEXT("sides_aligned"), SidesArr);
 	}
@@ -371,6 +372,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleGetRetargetPose(co
 	// Per-bone rotation deltas
 	const TMap<FName, FQuat>& Deltas = Pose.GetAllDeltaRotations();
 	TArray<TSharedPtr<FJsonValue>> DeltasArr;
+	DeltasArr.Reserve(Deltas.Num());
 	for (const TPair<FName, FQuat>& Pair : Deltas)
 	{
 		TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
@@ -386,6 +388,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleGetRetargetPose(co
 
 	// Enumerate available poses for convenience
 	TArray<TSharedPtr<FJsonValue>> PoseNamesArr;
+	PoseNamesArr.Reserve(Controller->GetRetargetPoses(Side).Num());
 	for (const TPair<FName, FIKRetargetPose>& Pair : Controller->GetRetargetPoses(Side))
 	{
 		PoseNamesArr.Add(MakeShared<FJsonValueString>(Pair.Key.ToString()));
@@ -586,6 +589,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleGetRetargetChainSe
 	{
 		const FIKRetargetFKChainsOpSettings FKSettings = FKController->GetSettings();
 		TArray<TSharedPtr<FJsonValue>> FKArr;
+		FKArr.Reserve(FKSettings.ChainsToRetarget.Num());
 		for (const FRetargetFKChainSettings& Chain : FKSettings.ChainsToRetarget)
 		{
 			if (bHasChainFilter && !Chain.TargetChainName.ToString().Equals(ChainFilter, ESearchCase::IgnoreCase))
@@ -621,6 +625,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleGetRetargetChainSe
 	{
 		const FIKRetargetIKChainsOpSettings* IKSettings = static_cast<const FIKRetargetIKChainsOpSettings*>(IKOp->GetSettings());
 		TArray<TSharedPtr<FJsonValue>> IKArr;
+		IKArr.Reserve(IKSettings->ChainsToRetarget.Num());
 		for (const FRetargetIKChainSettings& Chain : IKSettings->ChainsToRetarget)
 		{
 			if (bHasChainFilter && !Chain.TargetChainName.ToString().Equals(ChainFilter, ESearchCase::IgnoreCase))
@@ -1067,6 +1072,7 @@ FMonolithActionResult FMonolithRetargetSettingsActions::HandleEnableFootGroundLo
 	Root->SetNumberField(TEXT("speed_planting_op_index"), SpeedOpIndex);
 	{
 		TArray<TSharedPtr<FJsonValue>> ChainArr;
+		ChainArr.Reserve(ResolvedChains.Num());
 		for (const FString& C : ResolvedChains) { ChainArr.Add(MakeShared<FJsonValueString>(C)); }
 		Root->SetArrayField(TEXT("speed_plant_chains"), ChainArr);
 	}
