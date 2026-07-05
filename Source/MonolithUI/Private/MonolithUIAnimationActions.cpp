@@ -1684,6 +1684,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(con
 
     // Iterate all tracks
     TArray<TSharedPtr<FJsonValue>> TrackArray;
+    TrackArray.Reserve(MovieScene->GetTracks().Num());
     for (UMovieSceneTrack* Track : MovieScene->GetTracks())
     {
         if (!Track) continue;
@@ -1693,6 +1694,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(con
 
         // Get sections
         TArray<TSharedPtr<FJsonValue>> SectionArray;
+        SectionArray.Reserve(Track->GetAllSections().Num());
         for (UMovieSceneSection* Section : Track->GetAllSections())
         {
             if (!Section) continue;
@@ -1746,6 +1748,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleGetAnimationDetails(con
             TrackObj->SetStringField(TEXT("track_type"), Track->GetClass()->GetName());
 
             TArray<TSharedPtr<FJsonValue>> SectionArray;
+            SectionArray.Reserve(Track->GetAllSections().Num());
             for (UMovieSceneSection* Section : Track->GetAllSections())
             {
                 if (!Section) continue;

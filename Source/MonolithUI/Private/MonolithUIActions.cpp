@@ -2517,6 +2517,7 @@ FMonolithActionResult FMonolithUIActions::HandleGetCommonFrameworkStatus(const T
     Result->SetBoolField(TEXT("uses_hard_dependencies"), false);
 
     TArray<TSharedPtr<FJsonValue>> Plugins;
+    Plugins.Reserve(9);
     Plugins.Add(MakeShared<FJsonValueObject>(PluginStatus(TEXT("CommonUI"))));
     Plugins.Add(MakeShared<FJsonValueObject>(PluginStatus(TEXT("CommonGame"))));
     Plugins.Add(MakeShared<FJsonValueObject>(PluginStatus(TEXT("UIExtension"))));
@@ -2529,6 +2530,7 @@ FMonolithActionResult FMonolithUIActions::HandleGetCommonFrameworkStatus(const T
     Result->SetArrayField(TEXT("plugins"), Plugins);
 
     TArray<TSharedPtr<FJsonValue>> Modules;
+    Modules.Reserve(11);
     Modules.Add(MakeShared<FJsonValueObject>(ModuleStatus(TEXT("CommonUI"))));
     Modules.Add(MakeShared<FJsonValueObject>(ModuleStatus(TEXT("CommonGame"))));
     Modules.Add(MakeShared<FJsonValueObject>(ModuleStatus(TEXT("UIExtension"))));
