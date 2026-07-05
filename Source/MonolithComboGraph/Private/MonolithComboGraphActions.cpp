@@ -677,7 +677,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleListComboGraphs(const TS
 	FString PathFilter;
 	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'path_filter', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'path_filter', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
@@ -738,7 +738,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboGraphInfo(const 
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Error;
@@ -811,13 +811,13 @@ FMonolithActionResult FMonolithComboGraphActions::HandleGetComboNodeEffects(cons
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	double NodeIndexVal;
 	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
@@ -885,7 +885,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleValidateComboGraph(const
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Error;
@@ -1034,7 +1034,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboGraph(const T
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
@@ -1121,19 +1121,19 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString AnimAssetPath;
 	if (!Params->TryGetStringField(TEXT("animation_asset"), AnimAssetPath) || AnimAssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'animation_asset'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'animation_asset'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString NodeType;
 	if (Params->HasField(TEXT("node_type")) && !Params->TryGetStringField(TEXT("node_type"), NodeType))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'node_type', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'node_type', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
@@ -1144,7 +1144,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 		double PlayRateVal;
 		if (!PlayRateField->TryGetNumber(PlayRateVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for param 'play_rate', expected number"));
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'play_rate', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		PlayRate = static_cast<float>(PlayRateVal);
 	}
@@ -1156,7 +1156,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 		double ParentNodeIndexVal;
 		if (!ParentNodeIndexField->TryGetNumber(ParentNodeIndexVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_node_index', expected number"));
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_node_index', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		ParentNodeIndex = static_cast<int32>(ParentNodeIndexVal);
 	}
@@ -1304,39 +1304,39 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboEdge(const TShar
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	double FromIndexVal;
 	if (!Params->TryGetNumberField(TEXT("from_node_index"), FromIndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'from_node_index' or not a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'from_node_index' or not a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 FromIndex = static_cast<int32>(FromIndexVal);
 
 	double ToIndexVal;
 	if (!Params->TryGetNumberField(TEXT("to_node_index"), ToIndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'to_node_index' or not a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'to_node_index' or not a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 ToIndex = static_cast<int32>(ToIndexVal);
 
 	FString InputAction;
 	if (Params->HasField(TEXT("input_action")) && !Params->TryGetStringField(TEXT("input_action"), InputAction))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'input_action', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'input_action', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TriggerEvent;
 	if (Params->HasField(TEXT("trigger_event")) && !Params->TryGetStringField(TEXT("trigger_event"), TriggerEvent))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'trigger_event', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'trigger_event', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TransitionBehavior;
 	if (Params->HasField(TEXT("transition_behavior")) && !Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'transition_behavior', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'transition_behavior', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Load graph
@@ -1438,20 +1438,20 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	double NodeIndexVal;
 	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
 	const TSharedPtr<FJsonObject>* EffectsObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("effects"), EffectsObj) || !EffectsObj || !(*EffectsObj).IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'effects' (must be a JSON object)"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'effects' (must be a JSON object)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Load graph
@@ -1541,7 +1541,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 		{
 			if (UseSetByCallerVal->Type != EJson::Boolean)
 			{
-				return FMonolithActionResult::Error(TEXT("Invalid type for param 'use_set_by_caller', expected boolean"));
+				return FMonolithActionResult::Error(TEXT("Invalid type for param 'use_set_by_caller', expected boolean"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 			bUseSetByCaller = UseSetByCallerVal->AsBool();
 			ContainerParts.Add(FString::Printf(TEXT("UseSetByCaller=%s"),
@@ -1601,20 +1601,20 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeCues(const T
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	double NodeIndexVal;
 	if (!Params->TryGetNumberField(TEXT("node_index"), NodeIndexVal))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'node_index' or not a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 NodeIndex = static_cast<int32>(NodeIndexVal);
 
 	const TSharedPtr<FJsonObject>* CuesObj = nullptr;
 	if (!Params->TryGetObjectField(TEXT("cues"), CuesObj) || !CuesObj || !(*CuesObj).IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'cues' (must be a JSON object)"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'cues' (must be a JSON object)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Load graph
@@ -1761,25 +1761,25 @@ FMonolithActionResult FMonolithComboGraphActions::HandleCreateComboAbility(const
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString ComboGraphPath;
 	if (Params->HasField(TEXT("combo_graph")) && !Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'combo_graph', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'combo_graph', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString InitialInput;
 	if (Params->HasField(TEXT("initial_input")) && !Params->TryGetStringField(TEXT("initial_input"), InitialInput))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'initial_input', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'initial_input', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString ParentClassName;
 	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_class', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_class', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (ParentClassName.IsEmpty()) ParentClassName = TEXT("GameplayAbility");
 
@@ -1994,13 +1994,13 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLinkAbilityToComboGraph(
 	FString AbilityPath;
 	if (!Params->TryGetStringField(TEXT("ability_path"), AbilityPath) || AbilityPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'ability_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'ability_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString ComboGraphPath;
 	if (!Params->TryGetStringField(TEXT("combo_graph"), ComboGraphPath) || ComboGraphPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'combo_graph'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'combo_graph'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Load blueprint
@@ -2173,7 +2173,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'save_path'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
@@ -2184,19 +2184,19 @@ FMonolithActionResult FMonolithComboGraphActions::HandleScaffoldComboFromMontage
 	const TArray<TSharedPtr<FJsonValue>>* MontagesArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("montages"), MontagesArr) || !MontagesArr || MontagesArr->Num() == 0)
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or empty required param 'montages' (array of asset paths)"));
+		return FMonolithActionResult::Error(TEXT("Missing or empty required param 'montages' (array of asset paths)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString InputAction;
 	if (Params->HasField(TEXT("input_action")) && !Params->TryGetStringField(TEXT("input_action"), InputAction))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'input_action', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'input_action', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TransitionBehavior;
 	if (Params->HasField(TEXT("transition_behavior")) && !Params->TryGetStringField(TEXT("transition_behavior"), TransitionBehavior))
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid type for param 'transition_behavior', expected string"));
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'transition_behavior', expected string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (TransitionBehavior.IsEmpty()) TransitionBehavior = TEXT("Immediately");
 
@@ -2325,7 +2325,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 	FString AssetPath;
 	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("asset_path is required"));
+		return FMonolithActionResult::Error(TEXT("asset_path is required"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	int32 HSpacing = 300;
@@ -2335,7 +2335,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 		double Val;
 		if (!HSpacingField->TryGetNumber(Val))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for param 'horizontal_spacing', expected number"));
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'horizontal_spacing', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		HSpacing = static_cast<int32>(Val);
 	}
@@ -2346,7 +2346,7 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 		double Val;
 		if (!VSpacingField->TryGetNumber(Val))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid type for param 'vertical_spacing', expected number"));
+			return FMonolithActionResult::Error(TEXT("Invalid type for param 'vertical_spacing', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		VSpacing = static_cast<int32>(Val);
 	}
