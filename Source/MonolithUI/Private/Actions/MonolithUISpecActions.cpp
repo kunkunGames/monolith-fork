@@ -8228,6 +8228,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
@@ -8272,6 +8273,7 @@ namespace MonolithUI::SpecActionsInternal
         Entries.Append(MenuLayers);
 
         const FString DefaultLayoutPath = GetFirstStringField(Spec, TEXT("layout_asset_path"), TEXT("asset_path"));
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
@@ -8296,6 +8298,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
@@ -8328,6 +8331,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TArray<FString> WidgetNames;
@@ -8382,6 +8386,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(Entries[Index]);
@@ -8414,6 +8419,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + Entries.Num());
         for (int32 Index = 0; Index < Entries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = MakeShared<FJsonObject>();
@@ -8437,6 +8443,7 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
+        OutSteps.Reserve(OutSteps.Num() + DirectEntries.Num());
         for (int32 Index = 0; Index < DirectEntries.Num(); ++Index)
         {
             TSharedPtr<FJsonObject> ChildParams = CloneJsonObject(DirectEntries[Index]);
@@ -8473,6 +8480,7 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         int32 GroupIndex = 0;
+        OutSteps.Reserve(OutSteps.Num() + EntriesByAsset.Num());
         for (TPair<FString, TArray<TSharedPtr<FJsonValue>>>& Pair : EntriesByAsset)
         {
             TSharedPtr<FJsonObject> ChildParams = MakeShared<FJsonObject>();
