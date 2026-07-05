@@ -1166,7 +1166,15 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleBatchAddBBKeys(const T
 #endif
 
 		bool bSync = false;
-		if ((*KeyObj)->TryGetBoolField(TEXT("instance_synced"), bSync))
+		if ((*KeyObj)->HasField(TEXT("instance_synced")) && !(*KeyObj)->TryGetBoolField(TEXT("instance_synced"), bSync))
+		{
+			TSharedPtr<FJsonObject> ErrObj = MakeShared<FJsonObject>();
+			ErrObj->SetNumberField(TEXT("index"), i);
+			ErrObj->SetStringField(TEXT("error"), TEXT("Parameter 'instance_synced' must be a boolean"));
+			Errors.Add(MakeShared<FJsonValueObject>(ErrObj));
+			continue;
+		}
+		else if ((*KeyObj)->HasField(TEXT("instance_synced")))
 		{
 			NewEntry.bInstanceSynced = bSync ? 1 : 0;
 		}
