@@ -85,6 +85,17 @@
 
 namespace MonolithCommonUITemplate
 {
+
+    static void AddStringArrayField(const TSharedPtr<FJsonObject>& Obj, const FString& FieldName, const TArray<FString>& Values)
+    {
+        TArray<TSharedPtr<FJsonValue>> Arr;
+        Arr.Reserve(Values.Num());
+        for (const FString& Value : Values)
+        {
+            Arr.Add(MakeShared<FJsonValueString>(Value));
+        }
+        Obj->SetArrayField(FieldName, Arr);
+    }
     // ----- Shared: default UCommonButtonBase path ------------------------------
     //
     // Mirrors the Phase 1 Bug #4 contract from create_bound_action_bar
@@ -582,15 +593,8 @@ namespace MonolithCommonUITemplate
         Result->SetStringField(TEXT("compile_status"), CompileStatus);
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
-        TArray<TSharedPtr<FJsonValue>> ErrArr;
-        ErrArr.Reserve(CompileErrors.Num());
-        for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
-        Result->SetArrayField(TEXT("errors"), ErrArr);
-
-        TArray<TSharedPtr<FJsonValue>> WarnArr;
-        WarnArr.Reserve(CompileWarnings.Num());
-        for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
-        Result->SetArrayField(TEXT("warnings"), WarnArr);
+        AddStringArrayField(Result, TEXT("errors"), CompileErrors);
+        AddStringArrayField(Result, TEXT("warnings"), CompileWarnings);
 
         return FMonolithActionResult::Success(Result);
     }
@@ -730,15 +734,8 @@ namespace MonolithCommonUITemplate
         Result->SetStringField(TEXT("compile_status"), CompileStatus);
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
-        TArray<TSharedPtr<FJsonValue>> ErrArr;
-        ErrArr.Reserve(CompileErrors.Num());
-        for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
-        Result->SetArrayField(TEXT("errors"), ErrArr);
-
-        TArray<TSharedPtr<FJsonValue>> WarnArr;
-        WarnArr.Reserve(CompileWarnings.Num());
-        for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
-        Result->SetArrayField(TEXT("warnings"), WarnArr);
+        AddStringArrayField(Result, TEXT("errors"), CompileErrors);
+        AddStringArrayField(Result, TEXT("warnings"), CompileWarnings);
 
         return FMonolithActionResult::Success(Result);
     }
@@ -896,15 +893,8 @@ namespace MonolithCommonUITemplate
         Result->SetStringField(TEXT("compile_status"), CompileStatus);
         Result->SetArrayField(TEXT("widgets_created"), WidgetsCreated);
 
-        TArray<TSharedPtr<FJsonValue>> ErrArr;
-        ErrArr.Reserve(CompileErrors.Num());
-        for (const FString& E : CompileErrors) ErrArr.Add(MakeShared<FJsonValueString>(E));
-        Result->SetArrayField(TEXT("errors"), ErrArr);
-
-        TArray<TSharedPtr<FJsonValue>> WarnArr;
-        WarnArr.Reserve(CompileWarnings.Num());
-        for (const FString& W : CompileWarnings) WarnArr.Add(MakeShared<FJsonValueString>(W));
-        Result->SetArrayField(TEXT("warnings"), WarnArr);
+        AddStringArrayField(Result, TEXT("errors"), CompileErrors);
+        AddStringArrayField(Result, TEXT("warnings"), CompileWarnings);
 
         return FMonolithActionResult::Success(Result);
     }
