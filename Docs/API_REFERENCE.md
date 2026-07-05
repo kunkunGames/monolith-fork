@@ -49,6 +49,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [settings](#settings) | 6 | GameSettings registry/screen/setting, dynamic path, visual-data, and player-mappable input diagnostics |
 | [loading](#loading) | 4 | CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra handoff diagnostics |
 | [interchange](#interchange) | | Optional Interchange framework discovery, validation, and asset import/export operations |
+| [ndisplay](#ndisplay) | | Optional nDisplay/DisplayCluster config discovery and validation |
 | [combograph](#combograph) | 13 | ComboGraph melee combo authoring (conditional on `WITH_COMBOGRAPH`) |
 | [ai](#ai) | 243 | Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart Objects, Navigation, Mass, Zone Graph, runtime PIE inspection, scaffolds |
 | [logicdriver](#logicdriver) | 66 | Logic Driver Pro state machines: graph CRUD, runtime PIE control, scaffolds, dialogue (conditional on `WITH_LOGICDRIVER`) |
@@ -2099,6 +2100,16 @@ Optional Interchange framework discovery, validation, and asset import/export op
 | `reimport_asset` | `asset_path` (required string), `source_file` (optional string), `source_file_index` (optional integer), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `reimport_assets` | `asset_paths` (required array), `confirm` (optional boolean), `dry_run` (optional boolean) |
 | `export_asset` | `asset_path` (required string), `file_path` (required string), `replace_existing` (optional boolean), `allow_external` (optional boolean), `confirm` (optional boolean), `dry_run` (optional boolean) |
+
+
+## ndisplay
+
+Optional nDisplay/DisplayCluster config discovery and validation. Read-only in this milestone.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_config_assets` | `package_path` (optional string), `limit` (optional integer) |
 
 ## combograph
 

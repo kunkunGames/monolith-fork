@@ -185,10 +185,11 @@ Each module has its own spec file under `specs/`. The table below is the index.
 | 3.24 | MonolithGameFeatures | [specs/SPEC_MonolithGameFeatures.md](specs/SPEC_MonolithGameFeatures.md) | Game Feature plugin discovery/validation and guarded `UGameFeatureData` write actions for Lyra-compatible feature data |
 | 3.25 | MonolithLyra | [specs/SPEC_MonolithLyra.md](specs/SPEC_MonolithLyra.md) | Reflection-based Lyra Experience graph, UserFacingExperience hosting-contract, GamePhase, PawnData, inventory/equipment/weapon, team, and cosmetic character-part inspection/validation plus guarded writes (18 actions) |
 | 3.26 | MonolithOnline | [specs/SPEC_MonolithOnline.md](specs/SPEC_MonolithOnline.md) | Read-only EOS/OSSv2/CommonSession/UserFacingSession/CommonUser diagnostics and AccountPortal log scanning with credential redaction (8 actions) |
-| 3.27 | MonolithModular | [specs/SPEC_MonolithModular.md](specs/SPEC_MonolithModular.md) | Read-only ModularGameplay receiver lifecycle, AddComponentRequest target, and static extension-event source diagnostics (4 actions) |
-| 3.28 | MonolithGameplayMessage | [specs/SPEC_MonolithGameplayMessage.md](specs/SPEC_MonolithGameplayMessage.md) | Read-only GameplayMessageRouter channel, match-type, payload UScriptStruct, and static broadcaster/listener source diagnostics (5 actions) |
-| 3.29 | MonolithGameSettings | [specs/SPEC_MonolithGameSettings.md](specs/SPEC_MonolithGameSettings.md) | Read-only GameSettings registry, setting-class, data-source path, visual-data, and player-mappable input diagnostics (6 actions) |
-| 3.30 | MonolithLoading | [specs/SPEC_MonolithLoading.md](specs/SPEC_MonolithLoading.md) | Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics (4 actions) |
+| 3.27 | MonolithNDisplay | [specs/SPEC_MonolithNDisplay.md](specs/SPEC_MonolithNDisplay.md) | Optional nDisplay/DisplayCluster config discovery and validation |
+| 3.28 | MonolithModular | [specs/SPEC_MonolithModular.md](specs/SPEC_MonolithModular.md) | Read-only ModularGameplay receiver lifecycle, AddComponentRequest target, and static extension-event source diagnostics (4 actions) |
+| 3.29 | MonolithGameplayMessage | [specs/SPEC_MonolithGameplayMessage.md](specs/SPEC_MonolithGameplayMessage.md) | Read-only GameplayMessageRouter channel, match-type, payload UScriptStruct, and static broadcaster/listener source diagnostics (5 actions) |
+| 3.30 | MonolithGameSettings | [specs/SPEC_MonolithGameSettings.md](specs/SPEC_MonolithGameSettings.md) | Read-only GameSettings registry, setting-class, data-source path, visual-data, and player-mappable input diagnostics (6 actions) |
+| 3.31 | MonolithLoading | [specs/SPEC_MonolithLoading.md](specs/SPEC_MonolithLoading.md) | Read-only CommonLoadingScreen manager reason, processor candidate, settings/CVar, and optional Lyra loading handoff diagnostics (4 actions) |
 
 Merge audit specs live beside the module specs. The 0.15.0 CL 448 compact-merge decision record is [`specs/SPEC_Monolith0150CompactMerge.md`](specs/SPEC_Monolith0150CompactMerge.md).
 
