@@ -73,6 +73,15 @@ public:
 			  ToolTip="Emit successful tool JSON in structuredContent instead of duplicating it in text content."))
 	bool bEnableStructuredToolResults = false;
 
+	/** Compact failure envelopes: exactly one machine-readable copy of
+	 *  related_actions/hints/error_data per error response and no top-level
+	 *  error_data flattening. Disable only for legacy clients that read the
+	 *  flattened duplicated error shape. */
+	UPROPERTY(config, EditAnywhere, Category="MCP Server|Results",
+		meta=(DisplayName="Compact Error Envelope",
+			  ToolTip="Emit failure results without duplicated hints/error_data copies. Off reproduces the legacy flattened error shape."))
+	bool bCompactErrorEnvelope = true;
+
 	/** Enables persistent MCP session/request state, progress, and cancellation
 	 *  once the execution-context implementation is present. */
 	UPROPERTY(config, EditAnywhere, Category="MCP Server|Sessions",

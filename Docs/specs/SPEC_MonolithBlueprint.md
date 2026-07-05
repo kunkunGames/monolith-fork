@@ -42,7 +42,7 @@
 | `get_parent_class` | `asset_path` | Return the parent class of the Blueprint |
 | `get_interfaces` | `asset_path` | List all implemented interfaces |
 | `get_construction_script` | `asset_path` | Get the construction script graph |
-| `search_functions` | `query?`, `class_filter?`, `include_inherited?`, `pure_only?`, `limit?`, `detail_level?` | Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. Default `detail_level=minimal` returns function identity plus `input_count`/`output_count`; use `detail_level=standard` to include `inputs[]`/`outputs[]` parameter arrays. |
+| `search_functions` | `query?`, `class_filter?`, `include_inherited?`, `pure_only?`, `limit?`, `detail_level?`, `offset?`, `cursor?`, `fields?` | Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. Default `detail_level=minimal` returns function identity plus `input_count`/`output_count`; use `detail_level=standard` to include `inputs[]`/`outputs[]` parameter arrays. `offset` pages matches (session-cache order) and the response adds the common list-projection contract (`total`, `returned`, `next_cursor`, `limits`, `projection`); `fields` projects rows to the requested keys with a warning for unknown names. |
 
 **Variable CRUD (7)**
 | Action | Params | Description |

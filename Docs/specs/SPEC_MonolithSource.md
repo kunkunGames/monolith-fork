@@ -113,6 +113,20 @@ source-symbol, lexical/local).
 `impact_radius`/`find_overrides`/`risk_score`/`review_hotspots`/`review_context` live in
 `FMonolithSourceReview` (`Private/MonolithSourceReview.{h,cpp}`) using only
 public DB queries or DB-owned helpers.
+**`find_overrides` list-projection contract (additive, 2026-07-04).** Optional `offset`
+(or `cursor` from a prior `next_cursor`, which takes precedence and reuses the Core
+`FMonolithProjectionUtils::ReadCursorOffset` numeric-cursor convention)
+pages the `overrides` window over the BFS emission order (stable while the index is
+unchanged) and optional `fields` (array or comma-separated) projects each override row to
+`id`/`name`/`qualified_name`/`kind`/`file`/`path_status`/`line`/`depth`, warning on unknown
+names. The response adds `total`, `returned`, `next_cursor` (the next offset, emitted while
+more rows remain — including when the fetch window itself truncated the traversal), and a
+`projection` echo next to the legacy fields. `total` counts the rows emitted by the current
+fetch window (`offset + max_results`), not the full population — absence of `next_cursor`
+is the completion signal. The traversal cannot page past the 2000-row
+emission cap and warns when the cap is reached. The offline
+`monolith_query.exe source find_overrides` mirrors the contract with `--offset`/`--fields`,
+a 1000-row cap, and offline row keys `line_start`/`line_end`/`signature` instead of `line`.
 **Symbol-not-found is a real error envelope.** `risk_score`, `review_context`, and
 `impact_radius` report a missing symbol in the result body as `status:"error"` with a
 `"Symbol not found: <sym>"` summary; the handlers promote that body status to a real
@@ -127,7 +141,8 @@ Source-of-truth specification now lives in this file and `Docs/API_REFERENCE.md`
 Tests: `Monolith.IndexGuard.Source.*` in `Private/Tests/MonolithSourceQueryTests.cpp`,
 including cycle guards, exact `call`/`type` edge filtering, orphan-symbol/reference health
 warnings, repair dry-run/degraded source-FTS handling, CRG cache rebuild/cache-hit
-coverage, token-boundary sensitivity scoring, override traversal, review-hotspot ranking, known-path source provenance, and minimal review-context
+coverage, token-boundary sensitivity scoring, override traversal, override paging/field
+projection (`FindOverridesPagesAndProjects`), review-hotspot ranking, known-path source provenance, and minimal review-context
 output-contract coverage.
 
 Invariants honored by the implementation:

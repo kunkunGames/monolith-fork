@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithToolResultUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -147,7 +148,8 @@ bool FMonolithToolResultStructuredErrorTest::RunTest(const FString& Parameters)
 		.WithHint(TEXT("asset_path is required"))
 		.WithErrorData(ErrorData);
 
-	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, true);
+	// Legacy envelope (bCompactErrorEnvelope=false): duplicated structured error shape.
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, true, false, false);
 	TestTrue(TEXT("Error result isError"), Result->GetBoolField(TEXT("isError")));
 	TestTrue(TEXT("Error text keeps hint"), FirstTextContent(Result).Contains(TEXT("asset_path is required")));
 
@@ -184,7 +186,8 @@ bool FMonolithToolResultLegacyErrorDataTest::RunTest(const FString& Parameters)
 	FMonolithActionResult ActionResult = FMonolithActionResult::Error(TEXT("bad params"), -32602);
 	ActionResult.WithErrorData(ErrorData);
 
-	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false);
+	// Legacy envelope (bCompactErrorEnvelope=false): error_data fields stay flattened at top level.
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false, false, false);
 	TestTrue(TEXT("Legacy error result isError"), Result->GetBoolField(TEXT("isError")));
 	TestEqual(TEXT("Legacy error keeps flattened failure cause"), Result->GetStringField(TEXT("failure_cause")), TEXT("invalid_param"));
 
@@ -251,6 +254,124 @@ bool FMonolithToolResultMediaBlockGatingTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("Media block carries base64 data"), Second->GetStringField(TEXT("data")), TEXT("QUJD"));
 		}
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultCompactStructuredErrorTest,
+	"Monolith.Core.ToolResults.CompactStructuredError",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultCompactStructuredErrorTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetStringField(TEXT("retry"), TEXT("adjust_params"));
+
+	FMonolithActionResult ActionResult = FMonolithActionResult::Error(TEXT("bad params"), -32602);
+	ActionResult
+		.WithRelatedAction(TEXT("compile_blueprint"))
+		.WithHint(TEXT("asset_path is required"))
+		.WithErrorData(ErrorData);
+
+	// Compact default: single machine-readable copy in structuredContent, one-line text pointer.
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, true);
+	TestTrue(TEXT("Compact error isError"), Result->GetBoolField(TEXT("isError")));
+	TestEqual(TEXT("Compact error text is a one-line pointer"), FirstTextContent(Result), TEXT("bad params; see structuredContent."));
+	TestFalse(TEXT("No top-level hints duplicate"), Result->HasField(TEXT("hints")));
+	TestFalse(TEXT("No top-level error_data duplicate"), Result->HasField(TEXT("error_data")));
+	TestFalse(TEXT("No top-level related_actions duplicate"), Result->HasField(TEXT("related_actions")));
+	TestFalse(TEXT("No flattened error_data field"), Result->HasField(TEXT("retry")));
+
+	const TSharedPtr<FJsonObject>* Structured = nullptr;
+	TestTrue(TEXT("structuredContent exists"), Result->TryGetObjectField(TEXT("structuredContent"), Structured));
+	if (Structured && Structured->IsValid())
+	{
+		TestFalse(TEXT("structured ok=false"), (*Structured)->GetBoolField(TEXT("ok")));
+		TestEqual(TEXT("structured error code"), (*Structured)->GetIntegerField(TEXT("error_code")), -32602);
+		TestTrue(TEXT("structured keeps error_data"), (*Structured)->HasTypedField<EJson::Object>(TEXT("error_data")));
+		TestTrue(TEXT("structured keeps hints"), (*Structured)->HasTypedField<EJson::Array>(TEXT("hints")));
+		TestTrue(TEXT("structured keeps related_actions"), (*Structured)->HasTypedField<EJson::Array>(TEXT("related_actions")));
+	}
+
+	const TSharedPtr<FJsonObject>* Meta = nullptr;
+	TestTrue(TEXT("_meta exists"), Result->TryGetObjectField(TEXT("_meta"), Meta));
+	if (Meta && Meta->IsValid())
+	{
+		TestEqual(TEXT("content text mode is compact_pointer"), (*Meta)->GetStringField(TEXT("content_text_mode")), TEXT("compact_pointer"));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultCompactTextErrorTest,
+	"Monolith.Core.ToolResults.CompactTextError",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultCompactTextErrorTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	ErrorData->SetStringField(TEXT("failure_cause"), TEXT("invalid_param"));
+
+	FMonolithActionResult ActionResult = FMonolithActionResult::Error(TEXT("bad params"), -32602);
+	ActionResult
+		.WithHint(TEXT("asset_path is required"))
+		.WithErrorData(ErrorData);
+
+	// Compact without structuredContent: full error text for text-only clients,
+	// single top-level copies, no flattening.
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, false);
+	TestTrue(TEXT("Compact text error isError"), Result->GetBoolField(TEXT("isError")));
+	TestTrue(TEXT("Text keeps full error text with hint"), FirstTextContent(Result).Contains(TEXT("asset_path is required")));
+	TestTrue(TEXT("Top-level error_data kept once"), Result->HasTypedField<EJson::Object>(TEXT("error_data")));
+	TestTrue(TEXT("Top-level hints kept once"), Result->HasTypedField<EJson::Array>(TEXT("hints")));
+	TestFalse(TEXT("No flattened failure_cause at top level"), Result->HasField(TEXT("failure_cause")));
+	TestFalse(TEXT("No structuredContent without the flag"), Result->HasField(TEXT("structuredContent")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithToolResultCompactErrorSizeTest,
+	"Monolith.Core.ToolResults.CompactErrorSize",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithToolResultCompactErrorSizeTest::RunTest(const FString& Parameters)
+{
+	// Representative missing-required-param failure: required_params with
+	// name/type/aliases, provided keys, and next actions.
+	TSharedPtr<FJsonObject> RequiredParam = MakeShared<FJsonObject>();
+	RequiredParam->SetStringField(TEXT("name"), TEXT("asset_path"));
+	RequiredParam->SetStringField(TEXT("type"), TEXT("string"));
+	{
+		TArray<TSharedPtr<FJsonValue>> Aliases;
+		Aliases.Add(MakeShared<FJsonValueString>(TEXT("path")));
+		Aliases.Add(MakeShared<FJsonValueString>(TEXT("asset")));
+		RequiredParam->SetArrayField(TEXT("aliases"), Aliases);
+	}
+
+	TSharedPtr<FJsonObject> ErrorData = MakeShared<FJsonObject>();
+	{
+		TArray<TSharedPtr<FJsonValue>> RequiredParams;
+		RequiredParams.Add(MakeShared<FJsonValueObject>(RequiredParam));
+		ErrorData->SetArrayField(TEXT("required_params"), RequiredParams);
+
+		TArray<TSharedPtr<FJsonValue>> ProvidedKeys;
+		ProvidedKeys.Add(MakeShared<FJsonValueString>(TEXT("query")));
+		ProvidedKeys.Add(MakeShared<FJsonValueString>(TEXT("limit")));
+		ErrorData->SetArrayField(TEXT("provided_keys"), ProvidedKeys);
+
+		TArray<TSharedPtr<FJsonValue>> NextActions;
+		NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.discover(namespace, action) for the exact schema")));
+		ErrorData->SetArrayField(TEXT("next_actions"), NextActions);
+	}
+
+	FMonolithActionResult ActionResult = FMonolithActionResult::Error(
+		TEXT("Missing required param(s): [asset_path]. Provided keys: [query, limit]"), -32602);
+	ActionResult
+		.WithHint(TEXT("Inspect exact parameters with monolith_discover"))
+		.WithHint(TEXT("Aliases path/asset map to asset_path"))
+		.WithErrorData(ErrorData);
+
+	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(ActionResult, true);
+	const FString Serialized = FMonolithJsonUtils::Serialize(Result);
+	TestTrue(FString::Printf(TEXT("Compact missing-param error stays <= 1536 bytes (got %d)"), Serialized.Len()),
+		Serialized.Len() <= 1536);
 	return true;
 }
 

@@ -3151,8 +3151,70 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         std::string detail = lower_copy(args.opt("detail_level", "minimal"));
         bool standard = detail == "standard" || detail == "full";
         if (!standard && detail != "minimal") die("find_overrides --detail-level must be minimal or standard");
-        json root = source_impact_radius_json(symbol, "override", direction, max_depth, max_results);
-        root["overrides"] = root.value("impacted_symbols", json::array());
+        int offset = clamp_int(args.opt_int("offset", 0), 0, 1000);
+        int cursor_in = args.opt_int("cursor", 0);
+        if (cursor_in > 0) offset = clamp_int(cursor_in, 0, 1000);
+        static const std::vector<std::string> valid_fields = {
+            "id", "name", "qualified_name", "kind", "file", "path_status",
+            "line_start", "line_end", "signature", "depth"};
+        std::vector<std::string> projected_fields;
+        std::vector<std::string> unknown_fields;
+        {
+            std::string csv = args.opt("fields", "");
+            std::string token;
+            std::stringstream ss(csv);
+            while (std::getline(ss, token, ',')) {
+                size_t begin = token.find_first_not_of(" \t");
+                size_t end = token.find_last_not_of(" \t");
+                if (begin == std::string::npos) continue;
+                std::string trimmed = lower_copy(token.substr(begin, end - begin + 1));
+                if (std::find(valid_fields.begin(), valid_fields.end(), trimmed) != valid_fields.end()) {
+                    if (std::find(projected_fields.begin(), projected_fields.end(), trimmed) == projected_fields.end()) projected_fields.push_back(trimmed);
+                } else if (std::find(unknown_fields.begin(), unknown_fields.end(), trimmed) == unknown_fields.end()) {
+                    unknown_fields.push_back(trimmed);
+                }
+            }
+        }
+        int requested = clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000);
+        // The traversal emits at most the 1000-row CLI cap; the offset window must fit under it.
+        int fetch = clamp_int(offset + requested, 1, 1000);
+        json root = source_impact_radius_json(symbol, "override", direction, max_depth, fetch);
+        json all_overrides = root.value("impacted_symbols", json::array());
+        int total = (int)all_overrides.size();
+        json window = json::array();
+        for (int i = offset; i < total && (int)window.size() < requested; ++i) {
+            if (!projected_fields.empty() && all_overrides[i].is_object()) {
+                json projected = json::object();
+                for (const auto& field : projected_fields) {
+                    if (all_overrides[i].contains(field)) projected[field] = all_overrides[i][field];
+                }
+                window.push_back(projected);
+            } else {
+                window.push_back(all_overrides[i]);
+            }
+        }
+        int returned = (int)window.size();
+        root["overrides"] = window;
+        root["total"] = total;
+        root["returned"] = returned;
+        // A fetch-window truncation means deeper rows exist even though total == offset+returned;
+        // the next page re-runs the traversal with a larger fetch window (up to the 1000-row CLI cap).
+        bool traversal_truncated = root.value("truncated", false);
+        int next_offset = offset + returned;
+        if (next_offset < total || (traversal_truncated && next_offset < 1000)) root["next_cursor"] = std::to_string(next_offset);
+        if (traversal_truncated && next_offset >= 1000) {
+            if (!root.contains("warnings")) root["warnings"] = json::array();
+            root["warnings"].push_back("Traversal emission cap (1000) reached; narrow direction, max_depth, or the seed symbol to see further overrides");
+        }
+        json projection = {{"detail", standard ? "standard" : "minimal"}, {"offset", offset}, {"max_results", requested}};
+        if (!projected_fields.empty()) projection["fields"] = projected_fields; else projection["fields"] = "all";
+        root["projection"] = projection;
+        if (!unknown_fields.empty()) {
+            std::string joined;
+            for (const auto& f : unknown_fields) { if (!joined.empty()) joined += ", "; joined += f; }
+            if (!root.contains("warnings")) root["warnings"] = json::array();
+            root["warnings"].push_back("Unknown fields ignored: " + joined + ". Valid fields: id, name, qualified_name, kind, file, path_status, line_start, line_end, signature, depth");
+        }
         root["direct_override_edges"] = json::array();
         root["detail_level"] = standard ? "standard" : "minimal";
 
@@ -3194,9 +3256,11 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         } else {
             root["edges_truncated"] = false;
         }
-        root["summary"] = std::to_string(root["overrides"].size()) + " override-related symbol(s) within depth "
+        root["summary"] = std::to_string(returned) + " of " + std::to_string(total)
+            + " override-related symbol(s) within depth "
             + std::to_string(clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8))
-            + " (" + direction + ") of " + symbol;
+            + " (" + direction + ") of " + symbol
+            + (offset > 0 ? " [offset " + std::to_string(offset) + "]" : "");
         add_next(root, {"source.impact_radius", "source.review_context", "source.risk_score"});
         print_json(root);
     }

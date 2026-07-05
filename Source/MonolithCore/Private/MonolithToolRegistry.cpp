@@ -1,6 +1,7 @@
 #include "MonolithToolRegistry.h"
 #include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithFuzzyMatch.h"
+#include "MonolithHashUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithCrashBreadcrumb.h"
@@ -2177,6 +2178,55 @@ int32 FMonolithToolRegistry::GetNamespaceActionCount(const FString& Namespace) c
 		return Count;
 	}
 	return 0;
+}
+
+FString FMonolithToolRegistry::GetCatalogFingerprint() const
+{
+	FScopeLock Lock(&RegistryLock);
+
+	TArray<FString> Keys;
+	Actions.GetKeys(Keys);
+	Keys.Sort();
+
+	FMonolithToolProfileManager& Profiles = FMonolithToolProfileManager::Get();
+	TStringBuilder<262144> Builder;
+	Builder << Profiles.GetActiveProfileId() << TEXT("\n");
+	for (const FString& Key : Keys)
+	{
+		const FRegisteredAction& RegAction = Actions.FindChecked(Key);
+		const FMonolithActionInfo& Info = RegAction.Info;
+		if (!Profiles.IsActionAllowed(Info.Namespace, Info.Action))
+		{
+			continue;
+		}
+		Builder << Key
+			<< TEXT("|") << Info.Description
+			<< TEXT("|") << Info.Category
+			<< TEXT("|") << Info.ExecutionPolicy.PolicyId
+			<< TEXT("|") << (Info.ParamSchema.IsValid() ? FMonolithJsonUtils::Serialize(Info.ParamSchema) : FString())
+			<< TEXT("|") << FString::Join(Info.SearchMetadata.Keywords, TEXT(","))
+			<< TEXT("|") << FString::Join(Info.SearchMetadata.Aliases, TEXT(","))
+			<< TEXT("|") << FString::Join(Info.SearchMetadata.Examples, TEXT(","))
+			<< TEXT("|") << Info.PlanningMetadata.Skill
+			<< TEXT("|") << FString::Join(Info.PlanningMetadata.Preconditions, TEXT(","))
+			<< TEXT("|") << FString::Join(Info.PlanningMetadata.Outputs, TEXT(","))
+			<< TEXT("|") << FString::Join(Info.PlanningMetadata.NextActions, TEXT(","))
+			<< TEXT("|") << (Info.bReadOnlyHint ? TEXT("r") : TEXT(""))
+			<< (Info.bDestructiveHint ? TEXT("d") : TEXT(""))
+			<< (Info.bIdempotentHint ? TEXT("i") : TEXT(""))
+			<< TEXT("|") << Info.Title
+			<< TEXT("\n");
+	}
+
+	// Sha256TextWithFallback already prefixes the algorithm ("sha256:<hex>" or
+	// "hash:<md5>"); keep that prefix and truncate the digest to 16 chars.
+	FString Fingerprint = FMonolithHashUtils::Sha256TextWithFallback(Builder.ToString());
+	int32 ColonIndex = INDEX_NONE;
+	if (Fingerprint.FindChar(TEXT(':'), ColonIndex) && Fingerprint.Len() > ColonIndex + 1 + 16)
+	{
+		Fingerprint.LeftInline(ColonIndex + 1 + 16);
+	}
+	return Fingerprint;
 }
 
 TArray<FString> FMonolithToolRegistry::FindSimilarActions(const FString& Namespace, const FString& ActionName, int32 MaxResults) const

@@ -39,7 +39,19 @@ Report one watchdog health/process sample and exit. Never builds, recovers, or
 launches the editor.
 
 .PARAMETER MaxRestartAttempts
-Maximum build+restart cycles before exiting. 0 means unlimited.
+Maximum build+restart cycles before backing off. 0 means unlimited. Past the
+limit the watchdog stops attempting restarts and escalates its probe sleep
+(exponential backoff up to -RestartLimitBackoffMaxSec) instead of spinning; a
+later healthy probe resets the budget.
+
+.PARAMETER RestartLimitBackoffMaxSec
+Upper bound in seconds for the escalated probe sleep after MaxRestartAttempts
+is exceeded. Default 600.
+
+.PARAMETER RecoverInvokeGraceSec
+Extra seconds granted to one recover_mcp.ps1 child invocation beyond
+-RecoverTimeoutSec before the watchdog kills it and reports
+RESULT=RECOVER_TIMEOUT. Default 300.
 
 .PARAMETER Once
 Run one probe/recover cycle and exit.
@@ -100,10 +112,14 @@ breaks, are printed as a header line followed by the payload on the next line.
 The same structured events are appended to
 `<plugin>/Logs/<yyyyMMdd>/watchdog.jsonl`.
 Notable events:
+  WatchdogStart         watchdog instance started (instance boundary marker)
   McpUp                 endpoint is reachable
   McpDown               endpoint is down in -ProbeOnly mode
   BuildFailed           UBT failed, editor was not restarted
-  RestartLimit          MaxRestartAttempts reached
+  RestartLimit          MaxRestartAttempts exceeded; probe sleep backs off
+  RestartAttemptsReset  healthy probe cleared the restart budget
+  RecoverTimeout        recover child exceeded its invoke timeout and was killed
+  Fatal                 unhandled terminating error; watchdog exits 9
   DailyReindexOk        scheduled/manual index maintenance succeeded
   DailyReindexFailed    scheduled/manual index maintenance failed
   RestartReindexOk      restart-triggered index maintenance succeeded
@@ -117,7 +133,9 @@ Exit codes:
   4  build failed before restart
   7  restart limit reached
   8  index maintenance failed in -Once mode
+  9  unhandled terminating error (RESULT=FATAL logged as the last line)
   otherwise recover_mcp.ps1 exit code when -Once is used and recovery fails
+  (a recover child killed on timeout surfaces as recover exit code 124)
 #>
 [CmdletBinding()]
 param(
@@ -128,6 +146,8 @@ param(
     [switch]$NoBuildBeforeRestart,
     [switch]$ProbeOnly,
     [int]$MaxRestartAttempts = 0,
+    [int]$RestartLimitBackoffMaxSec = 600,
+    [int]$RecoverInvokeGraceSec = 300,
     [switch]$Once,
     [switch]$DisableDailyReindex,
     [string]$DailyReindexTime = '05:00',
@@ -1050,10 +1070,55 @@ function Invoke-Recover {
         $args += '-ForceLaunch'
     }
 
-    Write-Watchdog ("recover_start force_launch={0}" -f [bool]$ForceLaunch)
-    $output = & powershell @args 2>&1
-    $exitCode = $LASTEXITCODE
+    # Bounded child invocation: the 2026-07-03 23:33 incident hung inside a
+    # synchronous recover call until the next reboot killed the watchdog with
+    # no terminal log line. Run recover in a monitored child process and kill
+    # it past RecoverTimeoutSec + RecoverInvokeGraceSec.
+    $invokeTimeoutSec = $RecoverTimeoutSec + $RecoverInvokeGraceSec
+    Write-Watchdog ("recover_start force_launch={0} invoke_timeout_sec={1}" -f [bool]$ForceLaunch, $invokeTimeoutSec)
+
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    if (-not (Test-Path -LiteralPath $psExe -PathType Leaf)) {
+        $psExe = 'powershell.exe'
+    }
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $argLine = ($args | ForEach-Object {
+            $text = [string]$_
+            if ($text -match '\s') { '"{0}"' -f $text } else { $text }
+        }) -join ' '
+
+    $timedOut = $false
+    try {
+        $proc = Start-Process -FilePath $psExe -ArgumentList $argLine -NoNewWindow -PassThru `
+            -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+        if (-not $proc.WaitForExit($invokeTimeoutSec * 1000)) {
+            $timedOut = $true
+            try { $proc.Kill() } catch {}
+            [void]$proc.WaitForExit(15000)
+        }
+        $exitCode = if ($timedOut) { 124 } else { $proc.ExitCode }
+    }
+    catch {
+        Write-Watchdog ("RESULT=BLOCKED reason=recover_spawn_failed error={0}" -f (Format-WatchdogValue $_.Exception.Message))
+        Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+        return [PSCustomObject]@{ ExitCode = 3; Result = 'RESULT=BLOCKED' }
+    }
+
+    $output = @()
+    foreach ($file in @($stdoutFile, $stderrFile)) {
+        if (Test-Path -LiteralPath $file) {
+            $output += @(Get-Content -LiteralPath $file -ErrorAction SilentlyContinue)
+        }
+    }
+    Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+
     $output | ForEach-Object { Write-Watchdog ("recover_output detail={0}" -f (Format-WatchdogValue $_)) }
+    if ($timedOut) {
+        Write-Watchdog ("RESULT=RECOVER_TIMEOUT invoke_timeout_sec={0}" -f $invokeTimeoutSec)
+        return [PSCustomObject]@{ ExitCode = 124; Result = 'RESULT=RECOVER_TIMEOUT' }
+    }
+
     $resultLine = ($output | Select-String -Pattern 'RESULT=' | Select-Object -Last 1).Line
     if (-not $resultLine) {
         $resultLine = 'RESULT=UNKNOWN'
@@ -1090,8 +1155,13 @@ function Invoke-RestartSequence {
 
     $script:restartAttempts++
     if ($MaxRestartAttempts -gt 0 -and $script:restartAttempts -gt $MaxRestartAttempts) {
-        Write-Watchdog ("RESULT=RESTART_LIMIT attempts={0}" -f ($script:restartAttempts - 1))
-        return [PSCustomObject]@{ ExitCode = 7; Result = 'RESULT=RESTART_LIMIT' }
+        # Past the limit: escalate the probe sleep instead of spinning a
+        # restart attempt every PollIntervalSec (2026-07-03 23:30 incident:
+        # RESULT=RESTART_LIMIT logged every ~18s for minutes).
+        $overBy = [Math]::Min($script:restartAttempts - $MaxRestartAttempts, 6)
+        $backoffSec = [int][Math]::Min($PollIntervalSec * [Math]::Pow(2, $overBy), $RestartLimitBackoffMaxSec)
+        Write-Watchdog ("RESULT=RESTART_LIMIT attempts={0} backoff_seconds={1}" -f ($script:restartAttempts - 1), $backoffSec)
+        return [PSCustomObject]@{ ExitCode = 7; Result = 'RESULT=RESTART_LIMIT'; BackoffSeconds = $backoffSec }
     }
 
     Write-Watchdog ("restart_sequence_start reason={0} restart_attempt={1}" -f $Reason, $script:restartAttempts)
@@ -1144,11 +1214,31 @@ if (-not $DisableDailyReindex -and -not $ProbeOnly) {
 
 $restartAttempts = 0
 
+# Terminal logging guarantee: every abnormal end must leave a last line in
+# watchdog.jsonl (2026-07-03/04 incidents ended with no terminal record).
+trap {
+    try {
+        Write-Watchdog ("RESULT=FATAL error={0}" -f (Format-WatchdogValue $_.Exception.Message))
+    }
+    catch {}
+    exit 9
+}
+
+Write-Watchdog ("watchdog_start watchdog_pid={0} poll_interval_sec={1} max_restart_attempts={2} probe_only={3} once={4} project_root={5}" -f `
+        $PID, $PollIntervalSec, $MaxRestartAttempts, [bool]$ProbeOnly, [bool]$Once, $(if ($ProjectRoot) { $ProjectRoot } else { '-' }))
+
 while ($true) {
     $health = Get-MonolithHealth
     if ($health) {
         Write-Watchdog ("RESULT=MCP_UP version={0} tools_registered={1} pid={2} uptime_seconds={3}" -f `
                 $health.version, $health.tools_registered, $health.pid, [int]$health.uptime_seconds)
+        if ($script:restartAttempts -ne 0) {
+            # A healthy endpoint clears the restart budget; without this the
+            # counter accumulates across weeks and eventually locks the
+            # watchdog into permanent RESTART_LIMIT.
+            Write-Watchdog ("restart_attempts_reset previous={0}" -f $script:restartAttempts)
+            $script:restartAttempts = 0
+        }
         $dailyResult = Invoke-DailyReindexIfDue
         if ($dailyResult.Ran -and -not $dailyResult.Succeeded -and $Once) {
             exit $dailyResult.ExitCode
@@ -1203,5 +1293,9 @@ while ($true) {
         exit $recoverResult.ExitCode
     }
 
-    Start-Sleep -Seconds $PollIntervalSec
+    $sleepSec = $PollIntervalSec
+    if ($recoverResult -and $recoverResult.PSObject.Properties['BackoffSeconds'] -and $recoverResult.BackoffSeconds -gt 0) {
+        $sleepSec = $recoverResult.BackoffSeconds
+    }
+    Start-Sleep -Seconds $sleepSec
 }

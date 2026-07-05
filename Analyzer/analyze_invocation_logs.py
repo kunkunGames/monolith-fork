@@ -1434,7 +1434,7 @@ def normalize_event(raw: Dict[str, Any], path: Path, line_number: int, repo_root
     outcome, error_class, error_code, message = extract_error_shape(raw, agent_signal)
     payload_bytes = extract_payload_bytes(raw, agent_signal, return_summary)
     tags = tuple(str(tag) for tag in agent_signal.get("improvement_tags") or [])
-    noise_class = classify_noise(surface, namespace, action, tool_name, tags, call, message)
+    noise_class = classify_noise(surface, namespace, action, tool_name, tags, call, message, environment)
     escape_cluster = escape_hatch_cluster(call) if noise_class == "escape_hatch" else ""
     parse_warnings = build_event_warnings(raw, namespace, action)
     source_file = shorten_path(path, repo_root, include_paths)
@@ -1559,7 +1559,13 @@ def classify_noise(
     tags: Sequence[str],
     call: Optional[Dict[str, Any]] = None,
     message: str = "",
+    environment: Optional[Dict[str, Any]] = None,
 ) -> str:
+    # v3 logger environment stamp is the primary synthetic signal. Marker and
+    # per-action fixture whitelists below stay only as fallback for legacy rows
+    # written before environment.is_automation_test existed.
+    if environment and environment.get("is_automation_test") is True:
+        return "synthetic_test"
     ns_action = "{0}.{1}".format(namespace, action).lower()
     tool_lower = tool_name.lower()
     if ns_action in {"monolith.status", "mcp.monolith_status"} or action.lower() == "monolith_status":

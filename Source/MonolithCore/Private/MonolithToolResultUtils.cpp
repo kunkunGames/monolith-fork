@@ -22,7 +22,8 @@ namespace
 TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 	const FMonolithActionResult& ActionResult,
 	bool bEnableStructuredContent,
-	bool bEnableTypedMedia)
+	bool bEnableTypedMedia,
+	bool bCompactErrorEnvelope)
 {
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> Content;
@@ -78,31 +79,66 @@ TSharedPtr<FJsonObject> FMonolithToolResultUtils::BuildMcpToolResult(
 	{
 		TSharedPtr<FJsonObject> TextContent = MakeShared<FJsonObject>();
 		TextContent->SetStringField(TEXT("type"), TEXT("text"));
-		TextContent->SetStringField(TEXT("text"), BuildErrorText(ActionResult));
-		Content.Add(MakeShared<FJsonValueObject>(TextContent));
 		Result->SetBoolField(TEXT("isError"), true);
 
-		if (ActionResult.RelatedActions.Num() > 0)
+		if (bCompactErrorEnvelope && bEnableStructuredContent)
 		{
-			Result->SetArrayField(TEXT("related_actions"), ToolResultStringArrayToJsonValues(ActionResult.RelatedActions));
+			// Compact + structured: the single machine-readable copy lives in
+			// structuredContent; text is a one-line pointer mirroring the
+			// structured-success shape.
+			TextContent->SetStringField(TEXT("text"), ActionResult.ErrorMessage + TEXT("; see structuredContent."));
+			Content.Add(MakeShared<FJsonValueObject>(TextContent));
+			Result->SetObjectField(TEXT("structuredContent"), BuildStructuredErrorContent(ActionResult));
+			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("error"), TEXT("compact_pointer")));
 		}
-		if (ActionResult.Hints.Num() > 0)
+		else if (bCompactErrorEnvelope)
 		{
-			Result->SetArrayField(TEXT("hints"), ToolResultStringArrayToJsonValues(ActionResult.Hints));
-		}
-		if (ActionResult.ErrorData.IsValid())
-		{
-			Result->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
-			for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionResult.ErrorData))
+			// Compact without structuredContent: text keeps the full error text
+			// for text-only clients; related/hints/error_data appear once at the
+			// top level and error_data fields are NOT flattened alongside it.
+			TextContent->SetStringField(TEXT("text"), BuildErrorText(ActionResult));
+			Content.Add(MakeShared<FJsonValueObject>(TextContent));
+			if (ActionResult.RelatedActions.Num() > 0)
 			{
-				Result->SetField(Pair.Key, Pair.Value);
+				Result->SetArrayField(TEXT("related_actions"), ToolResultStringArrayToJsonValues(ActionResult.RelatedActions));
+			}
+			if (ActionResult.Hints.Num() > 0)
+			{
+				Result->SetArrayField(TEXT("hints"), ToolResultStringArrayToJsonValues(ActionResult.Hints));
+			}
+			if (ActionResult.ErrorData.IsValid())
+			{
+				Result->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
 			}
 		}
-
-		if (bEnableStructuredContent)
+		else
 		{
-			Result->SetObjectField(TEXT("structuredContent"), BuildStructuredErrorContent(ActionResult));
-			Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("error"), TEXT("error_text")));
+			// Legacy duplicated shape, byte-for-byte: full error text plus
+			// top-level fields plus error_data flattening plus structured copy.
+			TextContent->SetStringField(TEXT("text"), BuildErrorText(ActionResult));
+			Content.Add(MakeShared<FJsonValueObject>(TextContent));
+			if (ActionResult.RelatedActions.Num() > 0)
+			{
+				Result->SetArrayField(TEXT("related_actions"), ToolResultStringArrayToJsonValues(ActionResult.RelatedActions));
+			}
+			if (ActionResult.Hints.Num() > 0)
+			{
+				Result->SetArrayField(TEXT("hints"), ToolResultStringArrayToJsonValues(ActionResult.Hints));
+			}
+			if (ActionResult.ErrorData.IsValid())
+			{
+				Result->SetObjectField(TEXT("error_data"), ActionResult.ErrorData);
+				for (const auto& Pair : FMonolithJsonUtils::GetFields(ActionResult.ErrorData))
+				{
+					Result->SetField(Pair.Key, Pair.Value);
+				}
+			}
+
+			if (bEnableStructuredContent)
+			{
+				Result->SetObjectField(TEXT("structuredContent"), BuildStructuredErrorContent(ActionResult));
+				Result->SetObjectField(TEXT("_meta"), BuildMetaObject(TEXT("error"), TEXT("error_text")));
+			}
 		}
 	}
 

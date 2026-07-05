@@ -6,6 +6,7 @@
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithProjectionUtils.h"
 #include "MonolithCursorCodec.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -403,8 +404,11 @@ void FMonolithSourceActions::RegisterAll()
 			.Required(TEXT("symbol"), TEXT("string"), TEXT("Seed function symbol name"))
 			.Optional(TEXT("direction"), TEXT("string"), TEXT("in=child overrides, out=overridden parents, both"), TEXT("both"))
 			.Optional(TEXT("max_depth"), TEXT("integer"), TEXT("Max override traversal hops"), TEXT("2"))
-			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max override-related symbols"), TEXT("200"))
+			.Optional(TEXT("max_results"), TEXT("integer"), TEXT("Max override-related symbols per page"), TEXT("200"))
 			.Optional(TEXT("detail_level"), TEXT("string"), TEXT("minimal|standard. Default minimal omits duplicate impacted_symbols and samples edges; standard returns full edge arrays."), TEXT("minimal"))
+			.Optional(TEXT("offset"), TEXT("integer"), TEXT("Skip the first N override rows; response echoes total/returned and next_cursor (the next offset) while more rows remain. Cursor order is stable while the source index is unchanged."), TEXT("0"))
+			.Optional(TEXT("cursor"), TEXT("string"), TEXT("Pagination cursor from a prior next_cursor; takes precedence over offset"))
+			.Optional(TEXT("fields"), TEXT("array|string"), TEXT("Project each override row to these fields (array or comma-separated): id, name, qualified_name, kind, file, path_status, line, depth. Default returns all fields."))
 			.Build());
 
 	Registry.RegisterAction(TEXT("source"), TEXT("health"),
@@ -717,11 +721,43 @@ FMonolithActionResult FMonolithSourceActions::HandleFindOverrides(const TSharedP
 	{
 		return FMonolithActionResult::Error(TEXT("Source index database not available"));
 	}
+	TArray<FString> Fields;
+	{
+		const TArray<TSharedPtr<FJsonValue>>* FieldArr = nullptr;
+		if (Params->TryGetArrayField(TEXT("fields"), FieldArr) && FieldArr)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
+			{
+				FString S;
+				if (Value.IsValid() && Value->TryGetString(S) && !S.IsEmpty())
+				{
+					Fields.Add(S);
+				}
+			}
+		}
+		else
+		{
+			const FString FieldsCsv = FMonolithSourceReview::PStr(Params, TEXT("fields"));
+			if (!FieldsCsv.IsEmpty())
+			{
+				FieldsCsv.ParseIntoArray(Fields, TEXT(","), true);
+			}
+		}
+	}
+	int32 CursorOffset = 0;
+	FString CursorError;
+	if (!FMonolithProjectionUtils::ReadCursorOffset(Params, CursorOffset, CursorError))
+	{
+		return FMonolithActionResult::Error(CursorError, -32602);
+	}
+	const int32 Offset = CursorOffset > 0 ? CursorOffset : FMonolithSourceReview::PInt(Params, TEXT("offset"), 0);
 	TSharedPtr<FJsonObject> R = FMonolithSourceReview::FindOverrides(*DB, Symbol,
 		FMonolithSourceReview::PStr(Params, TEXT("direction"), TEXT("both")),
 		FMonolithSourceReview::PInt(Params, TEXT("max_depth"), 2),
 		FMonolithSourceReview::PInt(Params, TEXT("max_results"), 200),
-		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")));
+		FMonolithSourceReview::PStr(Params, TEXT("detail_level"), TEXT("minimal")),
+		Offset,
+		Fields);
 	return FMonolithActionResult::Success(R);
 }
 

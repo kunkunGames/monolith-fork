@@ -613,6 +613,123 @@ bool FMonolithFindWeightedScoringTest::RunTest(const FString& Parameters)
 	return bOk;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindProjectionTest,
+	"Monolith.Core.FindProjection",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithFindProjectionTest::RunTest(const FString& Parameters)
+{
+	FMonolithCoreTools::RegisterAll();
+
+	auto RunFind = [](const TSharedPtr<FJsonObject>& Params)
+	{
+		return FMonolithCoreTools::HandleFind(Params);
+	};
+
+	// Default planning detail is compact: counts instead of the heavy arrays.
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("search"));
+		Params->SetNumberField(TEXT("limit"), 1.0);
+		const FMonolithActionResult Result = RunFind(Params);
+		if (!TestTrue(TEXT("compact find succeeds"), Result.bSuccess && Result.Result.IsValid()))
+		{
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Matches = nullptr;
+		TestTrue(TEXT("compact matches exist"), Result.Result->TryGetArrayField(TEXT("matches"), Matches) && Matches && Matches->Num() == 1);
+		if (Matches && Matches->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject> Row = (*Matches)[0]->AsObject();
+			TestTrue(TEXT("compact row valid"), Row.IsValid());
+			if (Row.IsValid())
+			{
+				TestEqual(TEXT("row planning_detail compact"), Row->GetStringField(TEXT("planning_detail")), FString(TEXT("compact")));
+				TestFalse(TEXT("compact omits planning_signals"), Row->HasField(TEXT("planning_signals")));
+				TestFalse(TEXT("compact omits precondition_details"), Row->HasField(TEXT("precondition_details")));
+				TestTrue(TEXT("compact keeps planning_signal_count"), Row->HasField(TEXT("planning_signal_count")));
+			}
+		}
+		TestTrue(TEXT("common contract total present"), Result.Result->HasField(TEXT("total")));
+		TestTrue(TEXT("common contract projection present"), Result.Result->HasField(TEXT("projection")));
+
+		// planning_detail=full restores the arrays for callers that need them.
+		Params->SetStringField(TEXT("planning_detail"), TEXT("full"));
+		const FMonolithActionResult FullResult = RunFind(Params);
+		const TArray<TSharedPtr<FJsonValue>>* FullMatches = nullptr;
+		if (FullResult.bSuccess && FullResult.Result.IsValid()
+			&& FullResult.Result->TryGetArrayField(TEXT("matches"), FullMatches) && FullMatches && FullMatches->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject> FullRow = (*FullMatches)[0]->AsObject();
+			TestTrue(TEXT("full keeps planning_signals"), FullRow.IsValid() && FullRow->HasField(TEXT("planning_signals")));
+		}
+		else
+		{
+			AddError(TEXT("planning_detail=full find failed"));
+		}
+	}
+
+	// Offset/cursor paging chains without overlap; fields project rows.
+	{
+		TSharedPtr<FJsonObject> Page1Params = MakeShared<FJsonObject>();
+		Page1Params->SetStringField(TEXT("query"), TEXT("search"));
+		Page1Params->SetNumberField(TEXT("limit"), 1.0);
+		const FMonolithActionResult Page1 = RunFind(Page1Params);
+		if (!TestTrue(TEXT("page1 succeeds"), Page1.bSuccess && Page1.Result.IsValid()))
+		{
+			return false;
+		}
+		TestEqual(TEXT("page1 next_cursor"), Page1.Result->GetStringField(TEXT("next_cursor")), FString(TEXT("1")));
+
+		TSharedPtr<FJsonObject> Page2Params = MakeShared<FJsonObject>();
+		Page2Params->SetStringField(TEXT("query"), TEXT("search"));
+		Page2Params->SetNumberField(TEXT("limit"), 1.0);
+		Page2Params->SetStringField(TEXT("cursor"), TEXT("1"));
+		Page2Params->SetStringField(TEXT("fields"), TEXT("action_id,score,bogus_field"));
+		const FMonolithActionResult Page2 = RunFind(Page2Params);
+		if (!TestTrue(TEXT("page2 succeeds"), Page2.bSuccess && Page2.Result.IsValid()))
+		{
+			return false;
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Page1Matches = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* Page2Matches = nullptr;
+		Page1.Result->TryGetArrayField(TEXT("matches"), Page1Matches);
+		Page2.Result->TryGetArrayField(TEXT("matches"), Page2Matches);
+		if (Page1Matches && Page2Matches && Page1Matches->Num() == 1 && Page2Matches->Num() == 1)
+		{
+			const TSharedPtr<FJsonObject> Row1 = (*Page1Matches)[0]->AsObject();
+			const TSharedPtr<FJsonObject> Row2 = (*Page2Matches)[0]->AsObject();
+			TestTrue(TEXT("page rows valid"), Row1.IsValid() && Row2.IsValid());
+			if (Row1.IsValid() && Row2.IsValid())
+			{
+				TestNotEqual(TEXT("pages do not overlap"),
+					Row1->GetStringField(TEXT("action_id")), Row2->GetStringField(TEXT("action_id")));
+				TestTrue(TEXT("projected row keeps action_id"), Row2->HasField(TEXT("action_id")));
+				TestTrue(TEXT("projected row keeps score"), Row2->HasField(TEXT("score")));
+				TestFalse(TEXT("projected row drops description"), Row2->HasField(TEXT("description")));
+			}
+		}
+		else
+		{
+			AddError(TEXT("paging matches missing"));
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
+		bool bUnknownFieldWarning = false;
+		if (Page2.Result->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings)
+		{
+			for (const TSharedPtr<FJsonValue>& WarningValue : *Warnings)
+			{
+				FString Warning;
+				if (WarningValue->TryGetString(Warning) && Warning.Contains(TEXT("bogus_field")))
+				{
+					bUnknownFieldWarning = true;
+				}
+			}
+		}
+		TestTrue(TEXT("unknown field produces warning"), bUnknownFieldWarning);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindGoldenQueriesTest,
 	"Monolith.Core.FindGoldenQueries",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

@@ -328,7 +328,7 @@ Noise classes:
 | Class | Default handling | Examples |
 |---|---|---|
 | `heartbeat` | Summarize counts and duration, exclude from ROI ranking unless `--include-heartbeats` is passed. | `monolith.status`, `monolith_status` proxy calls |
-| `synthetic_test` | Summarize separately, exclude from missing-action recommendations unless `--include-synthetic-tests` is passed. | `__missing_action_for_headless_log_test`, `__cc05_dispatch_ns__` |
+| `synthetic_test` | Summarize separately, exclude from missing-action recommendations unless `--include-synthetic-tests` is passed. Primary signal: `environment.is_automation_test == true` on v3 rows (stamped from `GIsAutomationTesting`); synthetic argument markers and per-action fixture whitelists remain only as fallback for legacy rows without the stamp. | `__missing_action_for_headless_log_test`, `__cc05_dispatch_ns__` |
 | `maintenance` | Include in ROI ranking only when repeated, slow, or failing. | `source.repair_crg_cache`, `source.build_crg_graph`, `source.health` |
 | `expected_slow_domain` | Rank by error/retry rate first, duration second. | image generation actions |
 | `escape_hatch` | Always rank when frequent enough to suggest missing first-class actions. | `editor.run_python` |

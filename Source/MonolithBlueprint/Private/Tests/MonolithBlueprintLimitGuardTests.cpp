@@ -72,6 +72,115 @@ bool FMonolithBlueprintSearchFunctionsLimitTest::RunTest(const FString& Paramete
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithBlueprintSearchFunctionsPagingTest, "Monolith.LimitGuard.Blueprint.SearchFunctionsPagesAndProjects", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithBlueprintSearchFunctionsPagingTest::RunTest(const FString& Parameters)
+{
+	auto GetString = [](const FMonolithActionResult& Result, const TCHAR* Key) -> FString
+	{
+		FString Value;
+		if (Result.Result.IsValid()) Result.Result->TryGetStringField(Key, Value);
+		return Value;
+	};
+	auto GetFirstRow = [](const FMonolithActionResult& Result) -> TSharedPtr<FJsonObject>
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Results = nullptr;
+		if (Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("results"), Results) && Results && Results->Num() > 0)
+		{
+			return (*Results)[0]->AsObject();
+		}
+		return nullptr;
+	};
+
+	// Page 1 and page 2 must chain through next_cursor without overlapping rows.
+	TSharedPtr<FJsonObject> Page1Params = MakeShared<FJsonObject>();
+	Page1Params->SetStringField(TEXT("query"), TEXT("Get"));
+	Page1Params->SetNumberField(TEXT("limit"), 1.0);
+	FMonolithActionResult Page1 = ExecuteSearchFunctions(Page1Params);
+	double Total1 = 0.0, Returned1 = 0.0;
+	TestTrue(TEXT("page1 total present"), Page1.Result.IsValid() && Page1.Result->TryGetNumberField(TEXT("total"), Total1));
+	TestTrue(TEXT("page1 returned present"), Page1.Result.IsValid() && Page1.Result->TryGetNumberField(TEXT("returned"), Returned1));
+	TestEqual(TEXT("page1 returned one row"), (int32)Returned1, 1);
+	TestTrue(TEXT("page1 matches more than one function"), Total1 > 1.0);
+	TestEqual(TEXT("page1 next_cursor is the next offset"), GetString(Page1, TEXT("next_cursor")), FString(TEXT("1")));
+
+	TSharedPtr<FJsonObject> Page2Params = MakeShared<FJsonObject>();
+	Page2Params->SetStringField(TEXT("query"), TEXT("Get"));
+	Page2Params->SetNumberField(TEXT("limit"), 1.0);
+	Page2Params->SetNumberField(TEXT("offset"), 1.0);
+	FMonolithActionResult Page2 = ExecuteSearchFunctions(Page2Params);
+	TestEqual(TEXT("page2 next_cursor is the next offset"), GetString(Page2, TEXT("next_cursor")), FString(TEXT("2")));
+	const TSharedPtr<FJsonObject> Row1 = GetFirstRow(Page1);
+	const TSharedPtr<FJsonObject> Row2 = GetFirstRow(Page2);
+	TestTrue(TEXT("page rows present"), Row1.IsValid() && Row2.IsValid());
+	if (Row1.IsValid() && Row2.IsValid())
+	{
+		const FString Key1 = Row1->GetStringField(TEXT("class_name")) + TEXT("::") + Row1->GetStringField(TEXT("function_name"));
+		const FString Key2 = Row2->GetStringField(TEXT("class_name")) + TEXT("::") + Row2->GetStringField(TEXT("function_name"));
+		TestNotEqual(TEXT("pages do not overlap"), Key1, Key2);
+	}
+	bool bTruncated2 = false;
+	if (Page2.Result.IsValid() && Page2.Result->TryGetBoolField(TEXT("truncated"), bTruncated2))
+	{
+		TestTrue(TEXT("page2 mid-stream is truncated"), bTruncated2);
+	}
+
+	// A cursor from a prior next_cursor must land on the same page as the equivalent offset.
+	TSharedPtr<FJsonObject> CursorParams = MakeShared<FJsonObject>();
+	CursorParams->SetStringField(TEXT("query"), TEXT("Get"));
+	CursorParams->SetNumberField(TEXT("limit"), 1.0);
+	CursorParams->SetStringField(TEXT("cursor"), TEXT("1"));
+	FMonolithActionResult CursorPage = ExecuteSearchFunctions(CursorParams);
+	const TSharedPtr<FJsonObject> CursorRow = GetFirstRow(CursorPage);
+	TestTrue(TEXT("cursor page row present"), CursorRow.IsValid());
+	if (CursorRow.IsValid() && Row2.IsValid())
+	{
+		TestEqual(TEXT("cursor page matches offset page"),
+			CursorRow->GetStringField(TEXT("function_name")), Row2->GetStringField(TEXT("function_name")));
+	}
+
+	// Fields projection keeps only requested keys and warns on unknown ones.
+	TSharedPtr<FJsonObject> ProjectedParams = MakeShared<FJsonObject>();
+	ProjectedParams->SetStringField(TEXT("query"), TEXT("Get"));
+	ProjectedParams->SetNumberField(TEXT("limit"), 3.0);
+	ProjectedParams->SetStringField(TEXT("fields"), TEXT("function_name,class_name,bogus_field"));
+	FMonolithActionResult Projected = ExecuteSearchFunctions(ProjectedParams);
+	const TSharedPtr<FJsonObject> ProjectedRow = GetFirstRow(Projected);
+	TestTrue(TEXT("projected row present"), ProjectedRow.IsValid());
+	if (ProjectedRow.IsValid())
+	{
+		TestTrue(TEXT("projected row keeps function_name"), ProjectedRow->HasField(TEXT("function_name")));
+		TestTrue(TEXT("projected row keeps class_name"), ProjectedRow->HasField(TEXT("class_name")));
+		TestFalse(TEXT("projected row drops category"), ProjectedRow->HasField(TEXT("category")));
+		TestFalse(TEXT("projected row drops is_pure"), ProjectedRow->HasField(TEXT("is_pure")));
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
+	bool bUnknownFieldWarning = false;
+	if (Projected.Result.IsValid() && Projected.Result->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings)
+	{
+		for (const TSharedPtr<FJsonValue>& WarningValue : *Warnings)
+		{
+			FString Warning;
+			if (WarningValue->TryGetString(Warning) && Warning.Contains(TEXT("bogus_field")))
+			{
+				bUnknownFieldWarning = true;
+			}
+		}
+	}
+	TestTrue(TEXT("unknown field produces a warning"), bUnknownFieldWarning);
+
+	// Offset=0 keeps the legacy shape intact for existing consumers.
+	TSharedPtr<FJsonObject> LegacyParams = MakeShared<FJsonObject>();
+	LegacyParams->SetStringField(TEXT("query"), TEXT("Get"));
+	LegacyParams->SetNumberField(TEXT("limit"), 2.0);
+	FMonolithActionResult Legacy = ExecuteSearchFunctions(LegacyParams);
+	TestTrue(TEXT("legacy matched_count still present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("matched_count")));
+	TestTrue(TEXT("legacy returned_count still present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("returned_count")));
+	TestTrue(TEXT("limits contract present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("limits")));
+	TestTrue(TEXT("projection contract present"), Legacy.Result.IsValid() && Legacy.Result->HasField(TEXT("projection")));
+
+	return true;
+}
+
 namespace
 {
 FMonolithActionResult ExecuteBatchExecute(const TSharedPtr<FJsonObject>& Params)

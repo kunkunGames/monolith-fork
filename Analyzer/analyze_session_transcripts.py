@@ -293,6 +293,13 @@ def main():
             "endpoint uptime at localhost:9316 and the recover_mcp.ps1 / RunHeadlessEditor reconnect path "
             "(CLAUDE.md s14); server_captured errors are already covered by analyze_invocation_logs.py."
         ),
+        "measurement_caveat": (
+            "This scan only sees tool RESULTS. A client that cannot connect at all (ConnectionRefused at "
+            "MCP handshake/reconnect) produces no tool result and is NOT counted as a transport failure. "
+            "A low transport count in a window with near-zero Monolith calls is therefore not evidence of "
+            "endpoint health; cross-check watchdog.jsonl uptime and per-source call volume against the "
+            "baseline window before claiming an availability improvement."
+        ),
     }
     if args.include_samples:
         finding["transport_samples"] = samples
@@ -323,6 +330,7 @@ def main():
         for d, c in sorted(by_day.items()):
             md.append(f"| {d} | {c['calls']} | {c['errors']} | {c['transport_availability']} |")
     md.append(f"\n## Recommendation\n\n{finding['recommendation']}\n")
+    md.append(f"\n## Measurement caveat\n\n{finding['measurement_caveat']}\n")
     with open(os.path.join(out, "summary.md"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(md))
 

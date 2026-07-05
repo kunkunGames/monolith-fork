@@ -376,12 +376,15 @@ Add low-cardinality context that helps compare runs without exposing secrets.
 | Field | Surface | Notes |
 |---|---|---|
 | `environment.plugin_version` | proxy/action/query | Monolith version when available. |
+| `environment.binary_build_utc` | action | ISO-8601 link timestamp of the running `MonolithCore` module binary. Distinguishes records from a stale editor binary vs a rebuilt one; `plugin_version` alone cannot (2026-07-04: HEAD fixes were live in source while the running editor still served old behavior). |
 | `environment.engine_version` | action | UE version when available. |
 | `environment.project_name_hash` | action/query | Hash or redacted project identifier, not raw user-specific path. |
 | `environment.headless` | action | True when `-NullRHI`, unattended, or configured headless wrapper is detected. |
 | `environment.p4_enabled` | action | Source control provider availability summary. |
 | `environment.index_health` | action/query | Compact `ok`, `missing`, `stale`, or `unknown` for relevant DBs. |
 | `environment.active_profile_id` | action | Tool profile id already available in execution guard. |
+| `environment.is_automation_test` | action | Present and `true` only while `GIsAutomationTesting` is set. Primary synthetic-fixture signal for the analyzer; absent on legacy rows and normal calls. |
+| `environment.automation_test_name` | action | Full automation test name when the framework exposes a current test; only written alongside `is_automation_test`. |
 
 ### 5.2.7 Privacy And Redaction Rules
 

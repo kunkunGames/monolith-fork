@@ -71,11 +71,12 @@ Beyond the core tools, the `monolith` namespace carries server-management action
 | Action | Params (req* opt? =default) | Use |
 |--------|------------------------------|-----|
 | `discover` | `namespace?`, `action?`, `category?`, `mode=summary` (summary/actions/schema) | Same as `monolith_discover`. |
-| `find` | `query*`, `namespace?`, `limit=8` (1..50), `include_schema=false` | Same as `monolith_find`. |
+| `find` | `query*`, `namespace?`, `limit=8` (1..50), `include_schema=false`, `planning_detail=compact`, `offset?`/`cursor?`, `fields?` | Same as `monolith_find`. Rows default to compact planning counts; page with `next_cursor`, project rows with `fields`. |
+| `execute_plan` | `steps*` (max 25 of `{id?, namespace, action, params?}`), `dry_run=false`, `stop_on_error=true`, `confirm=false`, `allow_destructive=false`, `transaction=auto` | Run a validated multi-step plan in one call; `"$steps.<id>.result.<path>"` strings reuse earlier step results (all-digit segments index arrays). Mutating steps need `confirm=true`; start with `dry_run=true` to see the classified plan. `transaction=auto` rolls back undoable edits on a `stop_on_error` halt (saves/disk/source-control are NOT undoable — see `transaction.caveat`). |
 | `guide` | `section?` (onboarding/recipes/decisions/errors/skills_map/gotchas) | Cross-namespace workflow guide. |
 | `get_effective_discovery` | `namespace?`, `category?` | Discovery output after the active tool profile is applied. |
 | `get_mcp_discovery_state` | (none) | Current live-registry discovery snapshot + refresh semantics. |
-| `get_action_metadata_coverage` | `namespace?`, `skill?`, `sample_limit=10` (0..50) | Count `skill`, `preconditions_status`, `planning_signals_status`, `output_contract_status`, and `next_actions_status` coverage; `not_declared` is an explicit absence state, not predicted workflow data. |
+| `get_action_metadata_coverage` | `namespace?`, `skill?`, `sample_limit=10` (0..50), `detail=full` (full/summary) | Count `skill`, `preconditions_status`, `planning_signals_status`, `output_contract_status`, and `next_actions_status` coverage; `not_declared` is an explicit absence state, not predicted workflow data. `detail=summary` keeps totals+gate and drops the per-bucket rows. |
 
 **Tool profiles** (scope the action surface)
 

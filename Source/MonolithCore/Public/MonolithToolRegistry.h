@@ -298,6 +298,17 @@ public:
 	int32 GetNamespaceActionCount(const FString& Namespace) const;
 
 	/**
+	 * Stable content fingerprint ("sha256:<16 hex>") of the profile-visible catalog:
+	 * sorted action keys, descriptions, categories, execution policy ids, param
+	 * schemas, search/planning metadata, MCP annotations, and the active profile id.
+	 * Changes whenever discovery output could change; drives the
+	 * monolith.status/discover `catalog_version` + `if_version` short-circuit.
+	 * Computed on demand without a cache: catalog mutations happen at module
+	 * startup/shutdown while status/discover calls are low-frequency.
+	 */
+	FString GetCatalogFingerprint() const;
+
+	/**
 	 * CC-05: Find action names in a namespace that are similar to the given name.
 	 * Uses prefix match + Levenshtein distance to surface "did you mean" suggestions.
 	 * Returns up to MaxResults names, ordered by best match first.

@@ -11,6 +11,8 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 > For the most current param schemas, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` at runtime — it returns live schemas straight out of the plugin. This document is a curated reference, not a source-of-truth substitute.
 >
 > **0.15.0:** the namespace counts in the Table of Contents and the per-namespace body sections below are a curated in-tree reference. The 2026-05-26 live Go snapshot is 1584 actions / 45 namespaces with sibling/private plugins loaded. For the exhaustive live param schema of any action, call `monolith_discover({ "namespace": "<namespace>", "action": "<action>", "mode": "schema" })` or `describe_query("action_schema", ...)`.
+>
+> **Failure envelope (2026-07-04, `UMonolithSettings::bCompactErrorEnvelope=true` default):** error results carry exactly one machine-readable copy of `related_actions`/`hints`/`error_data`. With `bEnableStructuredToolResults=true` that copy lives in `structuredContent` and `content[0].text` is a one-line `"<message>; see structuredContent."` pointer; without structured results the copy stays in the top-level fields and `content[0].text` keeps the full error text. `error_data` fields are no longer flattened into the result's top level — read `error_data.<field>` instead of `<field>`. Set `bCompactErrorEnvelope=false` to reproduce the legacy duplicated/flattened shape.
 
 ---
 
@@ -135,10 +137,52 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 | `mode` | enum | optional | `summary`, `actions`, or `schema`. Default is summary-style namespace discovery unless a legacy caller requests the namespace payload. |
 | `planning_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which keeps planning status/count fields but omits heavy `precondition_details` and `planning_signals` arrays; pass `full` when auditing those arrays. |
 | `schema_detail` | enum | optional | `compact` or `full`. Namespace action listings default to `compact`, which uses terse action descriptions and omits `search_metadata` plus per-param descriptions from inline `params`; focused `mode="schema"` defaults to `full`. |
+| `if_version` | string | optional | Catalog version from a prior `monolith.status`/`monolith.discover` response. When it matches the live catalog, the response is a small `{status:"unchanged", catalog_version, total_actions, namespaces}` payload (<1KB) instead of the full listing. |
 | `offset` | integer | optional | Pagination offset applied after category/filter. |
 | `limit` | integer | optional | Pagination limit. Defaults to `50`; `0` is accepted for older callers but normalized to the default bounded page. Namespace listings with `detail=true` are capped to the default page size even when a larger limit is requested; continue with `next_cursor`/`offset`. |
 
-**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action.
+**Returns:** Namespace summaries, action rows, or exact param schemas depending on `mode`; every non-short-circuit response also carries top-level `catalog_version`. Namespace action listings expose `planning_detail` / `schema_detail` plus hints when compact projections are active. AI clients also receive MCP tool schemas in `tools/list` at session start, so callers should request focused schema mode when they need exact params for one action. Recommended session routine: call `monolith.status` once, remember `catalog_version`, and pass it as `if_version` on repeat discovers.
+
+---
+
+### `monolith.find`
+
+Fuzzy-rank profile-allowed actions by task text, namespace, category, action name, description, search metadata, and schema text. Use before `monolith.discover` when the exact action is unclear.
+
+Match rows default to `planning_detail=compact` (planning status/count fields, no `precondition_details`/`planning_signals` arrays — the 2026-07-04 measurement showed the full arrays made the average find response ~37KB). The response carries the common list-projection contract next to the legacy `count`/`truncated` fields: `total`, `returned`, `next_cursor` (the next `offset` while more ranked matches remain), and a `projection` echo. Ranked order is deterministic for an unchanged catalog, so cursor pages do not overlap.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Task or action text, e.g. "find caller graph action" |
+| `namespace` | string | optional | Namespace filter |
+| `limit` | integer | optional | Max matches per page. Default: `8`, max `50` |
+| `include_schema` | bool | optional | Include each match's param schema. Default: `false` |
+| `planning_detail` | enum | optional | `compact` (default) or `full` |
+| `offset` | integer | optional | Skip the first N ranked matches; chain pages through `next_cursor` |
+| `cursor` | string | optional | Pagination cursor from a prior `next_cursor`; takes precedence over `offset` |
+| `fields` | array\|string | optional | Project match rows to these fields (array or comma-separated), e.g. `action_id, description, score, skill`. Names absent from every row are reported in a warning listing the available fields |
+
+---
+
+### `monolith.execute_plan`
+
+Execute a validated multi-step plan of registered actions in one call (v1, 2026-07-04). Steps run sequentially through the normal dispatch pipeline — profile gating, alias rewriting, schema validation, execution guards, and invocation logging apply to every child exactly as for a direct call, and child log records inherit the plan's trace with the plan action as parent span.
+
+Whole-string params of the form `"$steps.<id>.result.<field.path>"` are replaced with a prior step's result value (object-field dot paths; all-digit segments index into arrays, e.g. `"$steps.s1.result.items.0.name"`; references to later steps are rejected at plan time). Plan-time validation checks every step's action existence, profile permission, aliases, required params (references count as provided), and typed/range/enum constraints before anything executes. Successful step results larger than `max_result_bytes_per_step` are summarized in the plan response (`result_truncated`, `result_bytes`, `result_top_keys`); the full result still reaches the invocation log.
+
+**Transaction rollback (v2).** With `transaction=auto` (default) a mutating plan runs inside one outermost editor transaction. When `stop_on_error` halts the plan on a failure, the transaction is **cancelled** — every executed mutating step's undoable object edits roll back (each such step row gets `rolled_back:"editor_transaction"`), and no `partial_state_note` is emitted. The response `transaction` object reports `{mode, state}` (`state` ∈ `none`/`active`/`committed`/`cancelled`/`unavailable`/`off`) plus a `caveat`: **only undoable object edits roll back — saves, disk writes, source-control, and external-process effects stay applied.** `transaction=off` (or `stop_on_error=false`, which opts into partial state) commits surviving mutations and restores the v1 `partial_state_note` / `rollback_available:false` markers.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `steps` | array | **required** | Plan steps, each `{id?, namespace, action, params?}`. Max `25`; default ids `s1..sN` |
+| `dry_run` | bool | optional | Validate every step and return the plan (per-step `policy_id`/`mutating`/`destructive`/`references`, `requires_confirm`, `requires_allow_destructive`) without executing. Default: `false` |
+| `stop_on_error` | bool | optional | Stop at the first failing step and mark the rest `skipped`. `false` continues (opts into partial state); steps referencing a failed step still fail. Default: `true` |
+| `confirm` | bool | optional | Required `true` when any step is mutating (execution policy other than `read_only`). Default: `false` |
+| `allow_destructive` | bool | optional | Required `true` when any step is annotated destructive. Default: `false` |
+| `transaction` | enum | optional | `auto` wraps a mutating plan in one outermost editor transaction, cancelled on a `stop_on_error` halt; `off` disables the wrapper. Default: `auto` |
+| `max_result_bytes_per_step` | integer | optional | Per-step result size cap in the plan response. Default: `16384`, range `1024..262144` |
+
+**Returns:** `status` (`ok`/`partial`/`error`), `succeeded`/`failed`/`skipped` counters, a `transaction` object, and per-step rows `{id, action_id, policy_id, mutating, destructive, references, status, duration_ms, result|error, rolled_back?}`. Nested `execute_plan` steps are rejected.
 
 ---
 
@@ -147,6 +191,8 @@ List available tool namespaces and their actions. Pass `namespace` to filter; pa
 Get Monolith server health: version, uptime, port, registered action count, namespace count, engine version, project name, module load status.
 
 *No parameters.*
+
+**Returns (catalog cache fields):** `catalog_version` (stable `sha256:<16>` fingerprint of the profile-visible catalog — names, schemas, planning/search metadata, annotations, active profile), `catalog_action_count`, `catalog_namespace_count`. Pass `catalog_version` to `monolith.discover(if_version=...)` to skip re-fetching an unchanged catalog.
 
 ---
 
@@ -276,13 +322,18 @@ Reads full reflected properties for a named Blueprint component. The lookup cove
 
 Search Blueprint-callable native functions. At least one of `query` or `class_filter` is required. The default `detail_level=minimal` returns function identity plus parameter counts; use `detail_level=standard` to include full `inputs[]` and `outputs[]` arrays.
 
+The response carries the common list-projection contract next to the legacy `matched_count`/`returned_count` fields: `total`, `returned`, `next_cursor` (the next `offset`, present while more matches remain), `limits` (`default_limit=50`, `max_limit=1000`), and a `projection` echo (`detail`, `offset`, `fields`). Match order is stable within an editor session (session function cache), so pages chained through `next_cursor` do not overlap.
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | string | optional | Case-insensitive substring over function name, class name, and category |
 | `class_filter` | string | optional | Case-insensitive class-name substring |
 | `pure_only` | bool | optional | Only return pure functions. Default: `false` |
-| `limit` | integer | optional | Default: `50`, hard max `1000` |
+| `limit` | integer | optional | Max results per page. Default: `50`, hard max `1000` |
 | `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
+| `offset` | integer | optional | Skip the first N matches; chain pages through `next_cursor`. Default: `0` |
+| `cursor` | string | optional | Pagination cursor from a prior `next_cursor`; takes precedence over `offset` |
+| `fields` | array\|string | optional | Project result rows to these fields (array or comma-separated): `function_name`, `class_name`, `category`, `is_pure`, `is_static`, `k2_name`, `friendly_name`, `input_count`, `output_count`, `inputs`, `outputs`. Unknown names are ignored with a warning |
 
 ### `blueprint.build_blueprint_from_spec`
 
@@ -1488,13 +1539,18 @@ Bounded BFS over call/type references, inheritance and function overrides: who i
 
 Override-only traversal for virtual/function symbols. The default `detail_level=minimal` keeps `overrides[]`, reports `edge_count`, samples `edges[]`, and omits the duplicate `impacted_symbols` array. Use `detail_level=standard` for full edge arrays and the full impact payload.
 
+The response carries the common list-projection contract next to the legacy fields: `total`, `returned`, `next_cursor` (the next `offset`, present while more rows remain), and a `projection` echo (`detail`, `offset`, `max_results`, `fields`). `total` counts the rows emitted by the current fetch window (`offset + max_results`), not the full population — it grows as later pages fetch deeper, so treat the absence of `next_cursor` as the completion signal. Cursor order is stable while the source index is unchanged; the traversal cannot page past the 2000-row emission cap (a warning is emitted when the cap is hit). The offline CLI mirrors the contract with `--offset`/`--fields` and a 1000-row cap; offline rows expose `line_start`/`line_end`/`signature` instead of the live `line`.
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `symbol` | string | **required** | Function symbol, preferably qualified |
 | `direction` | string | optional | `in`, `out`, or `both`. Default: `both` |
 | `max_depth` | integer | optional | Default: `2` |
-| `max_results` | integer | optional | Default: `200` |
+| `max_results` | integer | optional | Max override rows per page. Default: `200` |
 | `detail_level` | string | optional | `minimal` or `standard`. Default: `minimal` |
+| `offset` | integer | optional | Skip the first N override rows; chain pages through `next_cursor`. Default: `0` |
+| `cursor` | string | optional | Pagination cursor from a prior `next_cursor`; takes precedence over `offset` |
+| `fields` | array\|string | optional | Project override rows to these fields (array or comma-separated): `id`, `name`, `qualified_name`, `kind`, `file`, `path_status`, `line`, `depth`. Unknown names are ignored with a warning |
 
 ### `source.health`
 

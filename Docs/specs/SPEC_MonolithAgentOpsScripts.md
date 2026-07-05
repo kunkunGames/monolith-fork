@@ -73,7 +73,9 @@ Sequence: repeat GET `<McpUrl with /health>` (3s timeout, 200 = up). If up, prin
 | `-RecoverPollIntervalSec` | 5 | Passed to `recover_mcp.ps1 -PollIntervalSec` |
 | `-NoBuildBeforeRestart` | off | Skips the UBT step; for launch diagnostics only, not normal agent operation |
 | `-ProbeOnly` | off | Report one health/process sample and exit; never builds, recovers, launches, or runs index maintenance |
-| `-MaxRestartAttempts` | 0 | 0 means unlimited; otherwise exits with `[pid:<mcp-pid>][yyyy-MM-dd HH:mm:ss][RestartLimit] attempts=<n>` after the bound is reached |
+| `-MaxRestartAttempts` | 0 | 0 means unlimited. Past the bound the watchdog stops attempting restarts and escalates the probe sleep (exponential backoff, capped by `-RestartLimitBackoffMaxSec`) while logging `[RestartLimit] attempts=<n> backoffSeconds=<s>`; it does not spin one attempt per poll. A later healthy probe logs `[RestartAttemptsReset]` and clears the budget |
+| `-RestartLimitBackoffMaxSec` | 600 | Upper bound for the escalated probe sleep after `-MaxRestartAttempts` is exceeded |
+| `-RecoverInvokeGraceSec` | 300 | One `recover_mcp.ps1` child invocation is killed after `-RecoverTimeoutSec + -RecoverInvokeGraceSec` seconds and reported as `[RecoverTimeout]` with recover exit code 124; the watchdog itself keeps running |
 | `-Once` | off | Run one probe/recover cycle and exit, suitable for smoke checks |
 | `-DisableDailyReindex` | off | Disable scheduled asset/source/graph maintenance |
 | `-DailyReindexTime` | `05:00` | HH:mm start time interpreted in `-DailyReindexTimeZone` |
@@ -102,6 +104,7 @@ exitCode=0 detail="{ \"after\": { \"edges\": 1125252, \"files\": 89551 }, \"grap
 
 - `BuildFailed` keeps the exit code and prints the UBT log path as a trailing detail instead of `log=<path>`, for example `[pid:45652][2026-07-04 00:27:48][BuildFailed] exitCode=6, D:\P4\speed\Saved\Monolith\Watchdog\UBT-20260704_002020.log`.
 - Every watchdog event is also appended as one JSON object per line to `Plugins\Monolith\Logs\<yyyyMMdd>\watchdog.jsonl` with `timestamp`, `displayTimestamp`, `pid`, `event`, `fields`, and `message`.
+- Terminal-state guarantees (2026-07-04 hardening): every instance logs `[WatchdogStart] watchdogPid=<pid> ...` as its first event so instance boundaries are visible in `watchdog.jsonl`; an unhandled terminating error logs `RESULT=FATAL` as the last line and exits 9; `recover_mcp.ps1` runs as a bounded child process and is killed past `-RecoverTimeoutSec + -RecoverInvokeGraceSec` (`[RecoverTimeout]`, recover exit code 124) instead of hanging the watchdog indefinitely.
 - The script resolves the engine root through the host checkout's `Build\BatchFiles\Script\ResolveUnrealEngine.ps1` and the host `.uproject` `EngineAssociation`. It does not hard-code engine paths or substitute another checkout.
 - The editor target is the first `Source\*Editor.Target.cs` name when present, otherwise `<ProjectName>Editor`.
 - The UBT command is `<Target> Win64 Development "-Project=<uproject>" -WaitMutex -NoHotReloadFromIDE`.
@@ -124,6 +127,7 @@ Interactive Task Scheduler startup:
 - For developer workstations, the persistent watchdog should be registered as a per-user Task Scheduler job, not as a Windows Service. Use an interactive logon trigger so the watchdog inherits the developer user's profile, checkout paths, Perforce/Git environment, and display session. Avoid `LocalSystem` and avoid "Run whether user is logged on or not" when the intended operator model is a visible watchdog window.
 - The scheduled action should run `Binaries\monolith_watchdog.exe "<checkout>"`, with the working directory set to the host project root. The wrapper intentionally remains alive while `watch_mcp.ps1` runs, so Task Manager shows a recognizable `monolith_watchdog.exe` process instead of only `powershell.exe`.
 - Use `-MultipleInstances IgnoreNew` and `-ExecutionTimeLimit ([TimeSpan]::Zero)` so repeated logon triggers do not spawn duplicate watchdogs and Task Scheduler does not stop the long-running supervisor after the default runtime limit.
+- Register a second time trigger repeating every 30 minutes (10-year duration; Task Scheduler rejects `[TimeSpan]::MaxValue` as a repetition duration). With `IgnoreNew` this is a no-op while the watchdog lives, and re-arms a watchdog that died mid-session (closed console window, crash, reboot race) within 30 minutes. The 2026-07-04 incident — supervision silently absent for hours after the interactive instance ended — is the class this closes.
 
 Reference registration for the Speed checkout:
 
@@ -134,13 +138,15 @@ $watchdogExe = Join-Path $projectRoot 'Plugins\Monolith\Binaries\monolith_watchd
 $user = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
 
 $action = New-ScheduledTaskAction -Execute $watchdogExe -Argument "`"$projectRoot`"" -WorkingDirectory $projectRoot
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$rearmTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(30) `
+    -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $logonTrigger, $rearmTrigger `
     -Principal $principal -Settings $settings `
     -Description 'Keeps the Speed Monolith MCP endpoint supervised in an interactive watchdog PowerShell window.' `
     -Force
@@ -163,7 +169,8 @@ Unregister-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed' -Confirm:$fal
 | 4 | UBT build failed before restart |
 | 7 | Restart limit reached |
 | 8 | Index maintenance failed in `-Once` mode |
-| other | `recover_mcp.ps1` exit code when `-Once` is used and recovery fails |
+| 9 | Unhandled terminating error; `RESULT=FATAL` is the last logged line |
+| other | `recover_mcp.ps1` exit code when `-Once` is used and recovery fails; a recover child killed on invoke timeout surfaces as recover exit code 124 |
 
 ## 5. `check_index_freshness.ps1` Contract
 

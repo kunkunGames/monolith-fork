@@ -29,14 +29,20 @@ public:
 		int32 MaxDepth,
 		int32 MaxResults);
 
-	/** Override-only impact view: child override methods and parent overridden methods. */
+	/**
+	 * Override-only impact view: child override methods and parent overridden methods.
+	 * Offset pages the `overrides` window over the BFS emission order (stable while the
+	 * index is unchanged); Fields projects each override row to the requested keys.
+	 */
 	static TSharedPtr<FJsonObject> FindOverrides(
 		FMonolithSourceDatabase& Db,
 		const FString& Symbol,
 		const FString& Direction,
 		int32 MaxDepth,
 		int32 MaxResults,
-		const FString& DetailLevel);
+		const FString& DetailLevel,
+		int32 Offset = 0,
+		const TArray<FString>& Fields = TArray<FString>());
 
 	/** Query-time risk: caller/callee degree, descendants, UE macro, fan. */
 	static TSharedPtr<FJsonObject> RiskScore(

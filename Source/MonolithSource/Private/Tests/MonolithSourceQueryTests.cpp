@@ -568,6 +568,93 @@ bool FSourceFindOverridesHandlesDiamondDepthTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceFindOverridesPagesAndProjectsTest, "Monolith.IndexGuard.Source.FindOverridesPagesAndProjects", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FSourceFindOverridesPagesAndProjectsTest::RunTest(const FString& Parameters)
+{
+	FTempOverrideSourceDb T;
+	TestTrue(TEXT("temp override source db built"), T.Build());
+
+	// Default window: all three depth-1 overrides fit, so no cursor is emitted.
+	TSharedPtr<FJsonObject> Full = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200, TEXT("minimal"));
+	TestEqual(TEXT("full window total"), Full->GetIntegerField(TEXT("total")), 3);
+	TestEqual(TEXT("full window returned"), Full->GetIntegerField(TEXT("returned")), 3);
+	TestFalse(TEXT("full window has no next_cursor"), Full->HasField(TEXT("next_cursor")));
+	const TSharedPtr<FJsonObject> FullProjection = Full->GetObjectField(TEXT("projection"));
+	TestTrue(TEXT("full window projection present"), FullProjection.IsValid());
+	if (FullProjection.IsValid())
+	{
+		TestEqual(TEXT("full window projects all fields"), FullProjection->GetStringField(TEXT("fields")), FString(TEXT("all")));
+	}
+
+	// Page 1 and page 2 must not overlap and must chain through next_cursor.
+	// total counts the rows emitted by the current fetch window (offset + max_results),
+	// so a 1-row page reports total=1 with a cursor from the truncated traversal.
+	TSharedPtr<FJsonObject> Page1 = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 1, TEXT("minimal"));
+	TestEqual(TEXT("page1 returned"), Page1->GetIntegerField(TEXT("returned")), 1);
+	TestEqual(TEXT("page1 total"), Page1->GetIntegerField(TEXT("total")), 1);
+	TestEqual(TEXT("page1 next_cursor"), Page1->GetStringField(TEXT("next_cursor")), FString(TEXT("1")));
+	TSharedPtr<FJsonObject> Page2 = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 1, TEXT("minimal"), 1);
+	TestEqual(TEXT("page2 returned"), Page2->GetIntegerField(TEXT("returned")), 1);
+	TestEqual(TEXT("page2 total grows with the deeper fetch window"), Page2->GetIntegerField(TEXT("total")), 2);
+	TestEqual(TEXT("page2 next_cursor"), Page2->GetStringField(TEXT("next_cursor")), FString(TEXT("2")));
+	const TArray<TSharedPtr<FJsonValue>>* Page1Rows = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Page2Rows = nullptr;
+	TestTrue(TEXT("page1 rows present"), Page1->TryGetArrayField(TEXT("overrides"), Page1Rows) && Page1Rows && Page1Rows->Num() == 1);
+	TestTrue(TEXT("page2 rows present"), Page2->TryGetArrayField(TEXT("overrides"), Page2Rows) && Page2Rows && Page2Rows->Num() == 1);
+	if (Page1Rows && Page2Rows && Page1Rows->Num() == 1 && Page2Rows->Num() == 1)
+	{
+		const TSharedPtr<FJsonObject> Row1 = (*Page1Rows)[0]->AsObject();
+		const TSharedPtr<FJsonObject> Row2 = (*Page2Rows)[0]->AsObject();
+		TestTrue(TEXT("page rows valid"), Row1.IsValid() && Row2.IsValid());
+		if (Row1.IsValid() && Row2.IsValid())
+		{
+			TestNotEqual(TEXT("pages do not overlap"),
+				Row1->GetStringField(TEXT("qualified_name")), Row2->GetStringField(TEXT("qualified_name")));
+		}
+	}
+
+	// Tail page past the last row returns the remainder without a cursor.
+	TSharedPtr<FJsonObject> Tail = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 5, TEXT("minimal"), 2);
+	TestEqual(TEXT("tail returned"), Tail->GetIntegerField(TEXT("returned")), 1);
+	TestFalse(TEXT("tail has no next_cursor"), Tail->HasField(TEXT("next_cursor")));
+
+	// Fields projection keeps only requested keys and warns on unknown ones.
+	TArray<FString> Fields = { TEXT("name"), TEXT("line"), TEXT("bogus_field") };
+	TSharedPtr<FJsonObject> Projected = FMonolithSourceReview::FindOverrides(T.Db, TEXT("M::Base::Tick"), TEXT("in"), 1, 200, TEXT("minimal"), 0, Fields);
+	const TArray<TSharedPtr<FJsonValue>>* ProjectedRows = nullptr;
+	TestTrue(TEXT("projected rows present"), Projected->TryGetArrayField(TEXT("overrides"), ProjectedRows) && ProjectedRows && ProjectedRows->Num() == 3);
+	if (ProjectedRows)
+	{
+		for (const TSharedPtr<FJsonValue>& RowValue : *ProjectedRows)
+		{
+			const TSharedPtr<FJsonObject> Row = RowValue->AsObject();
+			TestTrue(TEXT("projected row valid"), Row.IsValid());
+			if (Row.IsValid())
+			{
+				TestTrue(TEXT("projected row keeps name"), Row->HasField(TEXT("name")));
+				TestTrue(TEXT("projected row keeps line"), Row->HasField(TEXT("line")));
+				TestFalse(TEXT("projected row drops qualified_name"), Row->HasField(TEXT("qualified_name")));
+				TestFalse(TEXT("projected row drops file"), Row->HasField(TEXT("file")));
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Warnings = nullptr;
+	bool bUnknownFieldWarning = false;
+	if (Projected->TryGetArrayField(TEXT("warnings"), Warnings) && Warnings)
+	{
+		for (const TSharedPtr<FJsonValue>& WarningValue : *Warnings)
+		{
+			FString Warning;
+			if (WarningValue->TryGetString(Warning) && Warning.Contains(TEXT("bogus_field")))
+			{
+				bUnknownFieldWarning = true;
+			}
+		}
+	}
+	TestTrue(TEXT("unknown field produces a warning"), bUnknownFieldWarning);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceRiskScoreIncludesOverrideFanoutTest, "Monolith.IndexGuard.Source.RiskScoreIncludesOverrideFanout", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FSourceRiskScoreIncludesOverrideFanoutTest::RunTest(const FString& Parameters)
 {

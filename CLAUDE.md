@@ -131,13 +131,17 @@ $watchdogExe = Join-Path $projectRoot 'Plugins\Monolith\Binaries\monolith_watchd
 $user = if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
 
 $action = New-ScheduledTaskAction -Execute $watchdogExe -Argument "`"$projectRoot`"" -WorkingDirectory $projectRoot
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+# Re-arm trigger: a watchdog killed mid-session (closed console window, crash,
+# reboot race) is restarted within 30 minutes; IgnoreNew keeps it single-instance.
+$rearmTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(30) `
+    -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $logonTrigger, $rearmTrigger `
     -Principal $principal -Settings $settings `
     -Description 'Keeps the Speed Monolith MCP endpoint supervised in an interactive watchdog PowerShell window.' `
     -Force

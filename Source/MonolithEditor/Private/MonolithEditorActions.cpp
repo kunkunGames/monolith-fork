@@ -2,6 +2,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithProjectionUtils.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
 #include "EditorValidatorSubsystem.h"
@@ -1009,10 +1010,13 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("list_automation_tests"),
-		TEXT("List all registered automation tests, optionally filtered by prefix"),
+		TEXT("List registered automation tests, optionally filtered by prefix. Results are paged (default 500 per page); chain pages through next_cursor."),
 		FMonolithActionHandler::CreateStatic(&HandleListAutomationTests),
 		FParamSchemaBuilder()
 			.Optional(TEXT("prefix"), TEXT("string"), TEXT("Filter tests whose full path starts with this prefix (e.g. 'MazeLegends.Bow')"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Max tests per page (default: 500, max: 5000)"))
+			.Optional(TEXT("offset"), TEXT("integer"), TEXT("Skip the first N tests; response echoes total/returned and next_cursor (the next offset) while more tests remain"))
+			.Optional(TEXT("cursor"), TEXT("string"), TEXT("Pagination cursor from a prior next_cursor; takes precedence over offset"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("find_automation_tests"),
@@ -6188,25 +6192,69 @@ namespace
 FMonolithActionResult FMonolithEditorActions::HandleListAutomationTests(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Prefix;
+	int32 Limit = 500;
+	int32 Offset = 0;
 	if (Params.IsValid())
 	{
 		Params->TryGetStringField(TEXT("prefix"), Prefix);
+
+		double LimitNum = static_cast<double>(Limit);
+		if (Params->HasField(TEXT("limit")))
+		{
+			if (!Params->TryGetNumberField(TEXT("limit"), LimitNum))
+			{
+				return FMonolithActionResult::Error(TEXT("limit must be a number"));
+			}
+			Limit = FMath::Clamp(FMath::FloorToInt(LimitNum), 1, 5000);
+		}
+
+		double OffsetNum = 0.0;
+		if (Params->TryGetNumberField(TEXT("offset"), OffsetNum) && OffsetNum > 0)
+		{
+			Offset = FMath::FloorToInt(OffsetNum);
+		}
+		int32 CursorOffset = 0;
+		FString CursorError;
+		if (!FMonolithProjectionUtils::ReadCursorOffset(Params, CursorOffset, CursorError))
+		{
+			return FMonolithActionResult::Error(CursorError);
+		}
+		if (CursorOffset > 0)
+		{
+			Offset = CursorOffset;
+		}
 	}
 
 	TArray<FAutomationTestInfo> Tests;
 	MonolithAutomationDetail::CollectMatchingTests(Prefix, Tests);
 
+	const int32 Total = Tests.Num();
+	const int32 EffectiveOffset = FMath::Min(Offset, Total);
+	const int32 Count = FMath::Min(Limit, Total - EffectiveOffset);
 	TArray<TSharedPtr<FJsonValue>> TestsJson;
-	TestsJson.Reserve(Tests.Num());
-	for (const FAutomationTestInfo& Info : Tests)
+	TestsJson.Reserve(Count);
+	for (int32 Index = EffectiveOffset; Index < EffectiveOffset + Count; ++Index)
 	{
-		TestsJson.Add(MakeShared<FJsonValueObject>(MonolithAutomationDetail::TestInfoToJson(Info)));
+		TestsJson.Add(MakeShared<FJsonValueObject>(MonolithAutomationDetail::TestInfoToJson(Tests[Index])));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetStringField(TEXT("prefix"), Prefix);
-	Result->SetNumberField(TEXT("count"), Tests.Num());
+	Result->SetNumberField(TEXT("count"), Total);
 	Result->SetArrayField(TEXT("tests"), TestsJson);
+	// Common list-projection contract (additive next to the legacy count field).
+	Result->SetNumberField(TEXT("total"), Total);
+	Result->SetNumberField(TEXT("returned"), TestsJson.Num());
+	Result->SetBoolField(TEXT("truncated"), Total > EffectiveOffset + TestsJson.Num());
+	if (EffectiveOffset + TestsJson.Num() < Total)
+	{
+		Result->SetStringField(TEXT("next_cursor"), FString::FromInt(EffectiveOffset + TestsJson.Num()));
+	}
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("default_limit"), 500);
+	Limits->SetNumberField(TEXT("max_limit"), 5000);
+	Limits->SetNumberField(TEXT("offset"), EffectiveOffset);
+	Result->SetObjectField(TEXT("limits"), Limits);
 	return FMonolithActionResult::Success(Result);
 }
 

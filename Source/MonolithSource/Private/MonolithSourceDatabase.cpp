@@ -771,7 +771,7 @@ static void AddNextActions(const TSharedPtr<FJsonObject>& Root, const TArray<FSt
 	Root->SetArrayField(TEXT("next_actions"), Arr);
 }
 
-static TArray<TSharedPtr<FJsonValue>> MakeStringArray(const TArray<FString>& Values)
+static TArray<TSharedPtr<FJsonValue>> MakeSourceDbStringArray(const TArray<FString>& Values)
 {
 	TArray<TSharedPtr<FJsonValue>> Arr;
 	Arr.Reserve(Values.Num());
@@ -4590,12 +4590,12 @@ TSharedPtr<FJsonObject> FMonolithSourceDatabase::ComputeHealth(bool bIncludeCoun
 	Maintenance->SetBoolField(TEXT("repair_override_edges_required"), bNeedsOverrideRepair);
 	Maintenance->SetBoolField(TEXT("deep_health_ran"), bRunExpensiveChecks);
 	Maintenance->SetBoolField(TEXT("routine_deep_health_recommended"), !bRunExpensiveChecks && !bHealthy);
-	Maintenance->SetArrayField(TEXT("reason_codes"), MakeStringArray(MaintenanceReasons));
+	Maintenance->SetArrayField(TEXT("reason_codes"), MakeSourceDbStringArray(MaintenanceReasons));
 	if (!bRunExpensiveChecks)
 	{
 		TArray<FString> DiagnosticActions;
 		DiagnosticActions.Add(TEXT("source.health include_deep_checks=true"));
-		Maintenance->SetArrayField(TEXT("optional_diagnostic_actions"), MakeStringArray(DiagnosticActions));
+		Maintenance->SetArrayField(TEXT("optional_diagnostic_actions"), MakeSourceDbStringArray(DiagnosticActions));
 	}
 	Maintenance->SetStringField(TEXT("summary"), bMaintenanceRequired
 		? TEXT("Source health found a concrete maintenance requirement; follow next_actions.")

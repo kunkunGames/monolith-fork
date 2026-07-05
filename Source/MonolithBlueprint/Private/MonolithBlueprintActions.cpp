@@ -2,6 +2,7 @@
 #include "MonolithBlueprintInternal.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
+#include "MonolithProjectionUtils.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
 #include "Engine/SimpleConstructionScript.h"
@@ -133,8 +134,11 @@ void FMonolithBlueprintActions::RegisterActions()
 			.Optional(TEXT("class_filter"),      TEXT("string"),  TEXT("Restrict results to a specific class name (case-insensitive contains). Required if query is empty."))
 			.Optional(TEXT("include_inherited"), TEXT("boolean"), TEXT("Include inherited functions (default: true)"))
 			.Optional(TEXT("pure_only"),         TEXT("boolean"), TEXT("Only return pure (no exec pins) functions (default: false)"))
-			.Optional(TEXT("limit"),             TEXT("integer"), TEXT("Max results to return (default: 50, hard max 1000)"))
+			.Optional(TEXT("limit"),             TEXT("integer"), TEXT("Max results per page (default: 50, hard max 1000)"))
 			.Optional(TEXT("detail_level"),      TEXT("string"),  TEXT("minimal|standard. Default minimal returns param counts; standard includes inputs/outputs arrays."), TEXT("minimal"))
+			.Optional(TEXT("offset"),            TEXT("integer"), TEXT("Skip the first N matches; response echoes total/returned and next_cursor (the next offset) while more matches remain. Match order is stable within an editor session (session function cache)."), TEXT("0"))
+			.Optional(TEXT("cursor"),            TEXT("string"),  TEXT("Pagination cursor from a prior next_cursor; takes precedence over offset"))
+			.Optional(TEXT("fields"),            TEXT("array|string"), TEXT("Project each result row to these fields (array or comma-separated): function_name, class_name, category, is_pure, is_static, k2_name, friendly_name, input_count, output_count, inputs, outputs. Default returns all fields for the active detail_level."))
 			.Build());
 
 	Registry.RegisterAction(TEXT("blueprint"), TEXT("get_node_details"),
@@ -1611,6 +1615,66 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 		}
 	}
 
+	int32 Offset = 0;
+	{
+		int32 CursorOffset = 0;
+		FString CursorError;
+		if (!FMonolithProjectionUtils::ReadCursorOffset(Params, CursorOffset, CursorError))
+		{
+			return FMonolithActionResult::Error(CursorError, -32602);
+		}
+		double OffsetNum = 0.0;
+		if (Params->TryGetNumberField(TEXT("offset"), OffsetNum) && OffsetNum > 0)
+		{
+			Offset = (int32)OffsetNum;
+		}
+		if (CursorOffset > 0)
+		{
+			Offset = CursorOffset;
+		}
+	}
+
+	static const TCHAR* ValidFieldNames[] = {
+		TEXT("function_name"), TEXT("class_name"), TEXT("category"), TEXT("is_pure"), TEXT("is_static"),
+		TEXT("k2_name"), TEXT("friendly_name"), TEXT("input_count"), TEXT("output_count"),
+		TEXT("inputs"), TEXT("outputs") };
+	TArray<FString> ProjectedFields;
+	TArray<FString> UnknownFields;
+	{
+		TArray<FString> RawFields;
+		const TArray<TSharedPtr<FJsonValue>>* FieldArr = nullptr;
+		if (Params->TryGetArrayField(TEXT("fields"), FieldArr) && FieldArr)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
+			{
+				FString S;
+				if (Value.IsValid() && Value->TryGetString(S) && !S.IsEmpty())
+				{
+					RawFields.Add(S);
+				}
+			}
+		}
+		else
+		{
+			FString FieldsCsv;
+			if (Params->TryGetStringField(TEXT("fields"), FieldsCsv) && !FieldsCsv.IsEmpty())
+			{
+				FieldsCsv.ParseIntoArray(RawFields, TEXT(","), true);
+			}
+		}
+		for (const FString& Field : RawFields)
+		{
+			const FString Trimmed = Field.TrimStartAndEnd();
+			if (Trimmed.IsEmpty()) continue;
+			bool bKnown = false;
+			for (const TCHAR* Valid : ValidFieldNames)
+			{
+				if (Trimmed.Equals(Valid, ESearchCase::IgnoreCase)) { bKnown = true; ProjectedFields.AddUnique(Valid); break; }
+			}
+			if (!bKnown) UnknownFields.AddUnique(Trimmed);
+		}
+	}
+
 	const FString QueryLower       = Query.ToLower();
 	const FString ClassFilterLower = ClassFilter.ToLower();
 
@@ -1651,7 +1715,7 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 		}
 
 		MatchedCount++;
-		if (Results.Num() >= Limit)
+		if (MatchedCount <= Offset || Results.Num() >= Limit)
 		{
 			continue;
 		}
@@ -1697,6 +1761,19 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 			RObj->SetArrayField(TEXT("outputs"), OutputsArr);
 		}
 
+		if (ProjectedFields.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> Projected = MakeShared<FJsonObject>();
+			for (const FString& Field : ProjectedFields)
+			{
+				if (const TSharedPtr<FJsonValue> FieldValue = RObj->TryGetField(Field))
+				{
+					Projected->SetField(Field, FieldValue);
+				}
+			}
+			RObj = Projected;
+		}
+
 		Results.Add(MakeShared<FJsonValueObject>(RObj));
 	}
 
@@ -1707,8 +1784,42 @@ FMonolithActionResult FMonolithBlueprintActions::HandleSearchFunctions(const TSh
 	Root->SetNumberField(TEXT("matched_count"), MatchedCount);
 	Root->SetNumberField(TEXT("limit"), Limit);
 	Root->SetNumberField(TEXT("cache_size"), Cache.Num());
-	Root->SetBoolField(TEXT("truncated"), MatchedCount > Results.Num());
+	Root->SetBoolField(TEXT("truncated"), MatchedCount > Offset + Results.Num());
 	Root->SetStringField(TEXT("detail_level"), bIncludeParams ? TEXT("standard") : TEXT("minimal"));
+
+	// Common list-projection contract (additive next to the legacy fields above).
+	Root->SetNumberField(TEXT("total"), MatchedCount);
+	Root->SetNumberField(TEXT("returned"), Results.Num());
+	if (Offset + Results.Num() < MatchedCount)
+	{
+		Root->SetStringField(TEXT("next_cursor"), FString::FromInt(Offset + Results.Num()));
+	}
+	TSharedPtr<FJsonObject> Limits = MakeShared<FJsonObject>();
+	Limits->SetNumberField(TEXT("default_limit"), 50);
+	Limits->SetNumberField(TEXT("max_limit"), 1000);
+	Root->SetObjectField(TEXT("limits"), Limits);
+	TSharedPtr<FJsonObject> Projection = MakeShared<FJsonObject>();
+	Projection->SetStringField(TEXT("detail"), bIncludeParams ? TEXT("standard") : TEXT("minimal"));
+	Projection->SetNumberField(TEXT("offset"), Offset);
+	if (ProjectedFields.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> FieldArr;
+		for (const FString& Field : ProjectedFields) FieldArr.Add(MakeShared<FJsonValueString>(Field));
+		Projection->SetArrayField(TEXT("fields"), FieldArr);
+	}
+	else
+	{
+		Projection->SetStringField(TEXT("fields"), TEXT("all"));
+	}
+	Root->SetObjectField(TEXT("projection"), Projection);
+	if (UnknownFields.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> Warnings;
+		Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+			TEXT("Unknown fields ignored: %s. Valid fields: function_name, class_name, category, is_pure, is_static, k2_name, friendly_name, input_count, output_count, inputs, outputs"),
+			*FString::Join(UnknownFields, TEXT(", ")))));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+	}
 
 	return FMonolithActionResult::Success(Root);
 }

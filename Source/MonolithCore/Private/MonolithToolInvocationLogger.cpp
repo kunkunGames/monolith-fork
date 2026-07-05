@@ -1,5 +1,6 @@
 #include "MonolithToolInvocationLogger.h"
 
+#include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformProcess.h"
@@ -8,10 +9,12 @@
 #include "ISourceControlModule.h"
 #include "ISourceControlProvider.h"
 #include "Misc/App.h"
+#include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Modules/ModuleManager.h"
 #include "MonolithHashUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
@@ -322,6 +325,29 @@ namespace
 		return (bSource && bProject) ? TEXT("ok") : TEXT("missing");
 	}
 
+	// Link timestamp of the running MonolithCore binary. Distinguishes log
+	// records produced by a stale editor binary from records produced after a
+	// rebuild (2026-07-04: compact-discover and alias fixes were in HEAD while
+	// the running editor still served the old behavior, which is invisible in
+	// plugin_version).
+	FString BinaryBuildStamp()
+	{
+		static const FString Stamp = []() -> FString
+		{
+			const FString ModulePath = FModuleManager::Get().GetModuleFilename(TEXT("MonolithCore"));
+			if (!ModulePath.IsEmpty())
+			{
+				const FDateTime FileTime = IFileManager::Get().GetTimeStamp(*ModulePath);
+				if (FileTime != FDateTime::MinValue())
+				{
+					return FileTime.ToIso8601();
+				}
+			}
+			return FString();
+		}();
+		return Stamp;
+	}
+
 	TSharedPtr<FJsonObject> MakeEnvironment(const FString& Namespace)
 	{
 		TSharedPtr<FJsonObject> Environment = MakeShared<FJsonObject>();
@@ -329,12 +355,21 @@ namespace
 		{
 			Environment->SetStringField(TEXT("plugin_version"), Plugin->GetDescriptor().VersionName);
 		}
+		Environment->SetStringField(TEXT("binary_build_utc"), BinaryBuildStamp());
 		Environment->SetStringField(TEXT("engine_version"), FEngineVersion::Current().ToString());
 		Environment->SetStringField(TEXT("project_name_hash"), Sha256Text(FApp::GetProjectName()));
 		Environment->SetBoolField(TEXT("headless"), IsRunningCommandlet() || FApp::IsUnattended() || FParse::Param(FCommandLine::Get(), TEXT("NullRHI")));
 		Environment->SetBoolField(TEXT("p4_enabled"), ISourceControlModule::Get().IsEnabled() && ISourceControlModule::Get().GetProvider().IsAvailable());
 		Environment->SetStringField(TEXT("index_health"), IndexHealthForAction(Namespace));
 		Environment->SetStringField(TEXT("active_profile_id"), FMonolithToolProfileManager::Get().GetActiveProfileId());
+		if (GIsAutomationTesting)
+		{
+			Environment->SetBoolField(TEXT("is_automation_test"), true);
+			if (const FAutomationTestBase* CurrentTest = FAutomationTestFramework::Get().GetCurrentTest())
+			{
+				Environment->SetStringField(TEXT("automation_test_name"), CurrentTest->GetTestFullName());
+			}
+		}
 		PruneEmptyFields(Environment);
 		return Environment;
 	}

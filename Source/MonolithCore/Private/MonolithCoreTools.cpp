@@ -8,6 +8,8 @@
 #include "MonolithHttpServer.h"
 #include "MonolithMcpSessionTracker.h"
 #include "MonolithParamSchema.h"
+#include "MonolithPlanExecutor.h"
+#include "MonolithProjectionUtils.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithSettings.h"
 #include "MonolithToolProfileManager.h"
@@ -1542,12 +1544,21 @@ void FMonolithCoreTools::RegisterAll()
 				.EnableValidation()
 				.Required(TEXT("query"), TEXT("string"), TEXT("Task or action text to search for, for example 'find caller graph action'."))
 				.Optional(TEXT("namespace"), TEXT("string"), TEXT("Optional namespace filter such as source, blueprint, ui, or monolith."))
-				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum matches to return."), TEXT("8"))
+				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum matches per page."), TEXT("8"))
 				.Range(TEXT("limit"), 1, 50)
 				.Optional(TEXT("include_schema"), TEXT("boolean"), TEXT("When true, include schemas for matched actions."), TEXT("false"))
+				.Optional(TEXT("planning_detail"), TEXT("string"), TEXT("compact replaces per-match precondition_details/planning_signals arrays with counts; full includes them. Use monolith_discover(mode=schema) for one action's full planning payload."), TEXT("compact"))
+				.Enum(TEXT("planning_detail"), { TEXT("compact"), TEXT("full") })
+				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Skip the first N ranked matches; response echoes total/returned and next_cursor (the next offset) while more matches remain."), TEXT("0"))
+				.Range(TEXT("offset"), 0, 10000)
+				.Optional(TEXT("cursor"), TEXT("string"), TEXT("Pagination cursor from a prior next_cursor; takes precedence over offset"))
+				.Optional(TEXT("fields"), TEXT("array|string"), TEXT("Project each match row to these fields (array or comma-separated), e.g. action_id, description, score, skill. Names absent from every row are reported in a warning."))
 				.Build()
 		);
 	}
+
+	// monolith_execute_plan
+	FMonolithPlanExecutor::RegisterActions(Registry);
 
 	// monolith_discover
 	{
@@ -1566,6 +1577,7 @@ void FMonolithCoreTools::RegisterAll()
 				.Optional(TEXT("planning_detail"), TEXT("string"), TEXT("compact omits heavy per-action planning arrays; full includes precondition_details and planning_signals."), TEXT("compact"))
 				.Optional(TEXT("schema_detail"), TEXT("string"), TEXT("compact omits bulk textual docs/search metadata from namespace action rows; full includes complete descriptions, search metadata, and per-param descriptions."), TEXT("compact"))
 				.Optional(TEXT("filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter over action name or description."))
+				.Optional(TEXT("if_version"), TEXT("string"), TEXT("Catalog version from a prior monolith.status/discover response. When it matches the live catalog, returns a small {status:'unchanged', catalog_version, total_actions, namespaces} payload instead of the full listing."))
 				.Optional(TEXT("offset"), TEXT("integer"), TEXT("Pagination offset applied after category/filter."), TEXT("0"))
 				.Range(TEXT("offset"), 0, 1000000)
 				.Optional(TEXT("limit"), TEXT("integer"), TEXT("Pagination limit. Defaults to 50; values below 1 are normalized to the default to keep discovery bounded."), TEXT("50"))
@@ -1735,6 +1747,8 @@ void FMonolithCoreTools::RegisterAll()
 			.Range(TEXT("min_contract_ratio"), 0, 1)
 			.Optional(TEXT("gate_scope"), TEXT("string"), TEXT("Coverage gate scope: high_traffic, filtered, all, or off."), TEXT("high_traffic"))
 			.Enum(TEXT("gate_scope"), { TEXT("high_traffic"), TEXT("filtered"), TEXT("all"), TEXT("off") })
+			.Optional(TEXT("detail"), TEXT("string"), TEXT("full includes per-namespace/per-skill bucket rows; summary returns totals, gate, and bucket counts only."), TEXT("full"))
+			.Enum(TEXT("detail"), { TEXT("full"), TEXT("summary") })
 			.Build()
 	);
 
@@ -1879,6 +1893,78 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	FString PlanningDetailText = TEXT("compact");
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("planning_detail"), PlanningDetailText, ErrMsg, PlanningDetailText, true))
+	{
+		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	PlanningDetailText.TrimStartAndEndInline();
+	PlanningDetailText.ToLowerInline();
+	if (!PlanningDetailText.IsEmpty() && PlanningDetailText != TEXT("compact") && PlanningDetailText != TEXT("full"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Parameter 'planning_detail' must be 'compact' or 'full'; got '%s'"), *PlanningDetailText),
+			FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const EMonolithPlanningDetail PlanningDetail = PlanningDetailText == TEXT("full")
+		? EMonolithPlanningDetail::Full
+		: EMonolithPlanningDetail::Compact;
+
+	double OffsetValue = 0.0;
+	if (!MonolithParamUtils::GetOptionalClampedDoubleParam(Params, TEXT("offset"), OffsetValue, ErrMsg, OffsetValue, 0, 10000))
+	{
+		return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+	}
+	int32 Offset = static_cast<int32>(OffsetValue);
+	{
+		int32 CursorOffset = 0;
+		if (!FMonolithProjectionUtils::ReadCursorOffset(Params, CursorOffset, ErrMsg))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (CursorOffset > 0)
+		{
+			Offset = CursorOffset;
+		}
+	}
+
+	TArray<FString> RequestedFields;
+	{
+		const TArray<TSharedPtr<FJsonValue>>* FieldArr = nullptr;
+		if (Params->TryGetArrayField(TEXT("fields"), FieldArr) && FieldArr)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
+			{
+				FString S;
+				if (Value.IsValid() && Value->TryGetString(S))
+				{
+					S.TrimStartAndEndInline();
+					if (!S.IsEmpty())
+					{
+						RequestedFields.AddUnique(S);
+					}
+				}
+			}
+		}
+		else
+		{
+			FString FieldsCsv;
+			if (Params->TryGetStringField(TEXT("fields"), FieldsCsv) && !FieldsCsv.IsEmpty())
+			{
+				TArray<FString> Parts;
+				FieldsCsv.ParseIntoArray(Parts, TEXT(","), true);
+				for (FString& Part : Parts)
+				{
+					Part.TrimStartAndEndInline();
+					if (!Part.IsEmpty())
+					{
+						RequestedFields.AddUnique(Part);
+					}
+				}
+			}
+		}
+	}
+
 	const int32 Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 50);
 	const FString QueryNormalized = FMonolithFuzzyMatch::NormalizeText(Query);
 	const TArray<FString> QueryTokens = FMonolithFuzzyMatch::Tokenize(Query, &GetFindAliasTable());
@@ -2012,9 +2098,12 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	});
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
-	const int32 Count = FMath::Min(Limit, Matches.Num());
+	const int32 Total = Matches.Num();
+	const int32 EffectiveOffset = FMath::Min(Offset, Total);
+	const int32 Count = FMath::Min(Limit, Total - EffectiveOffset);
 	Rows.Reserve(Count);
-	for (int32 Index = 0; Index < Count; ++Index)
+	TSet<FString> SeenRowKeys;
+	for (int32 Index = EffectiveOffset; Index < EffectiveOffset + Count; ++Index)
 	{
 		const FFindMatch& Match = Matches[Index];
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -2035,7 +2124,23 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 		{
 			Row->SetObjectField(TEXT("params"), Match.Info.ParamSchema);
 		}
-		AddPlanningFields(Row, Match.Info);
+		AddPlanningFields(Row, Match.Info, PlanningDetail);
+		if (RequestedFields.Num() > 0)
+		{
+			TSharedPtr<FJsonObject> Projected = MakeShared<FJsonObject>();
+			for (const auto& Pair : FMonolithJsonUtils::GetFields(Row))
+			{
+				SeenRowKeys.Add(FMonolithJsonUtils::FieldKeyToString(Pair.Key));
+			}
+			for (const FString& Field : RequestedFields)
+			{
+				if (const TSharedPtr<FJsonValue> FieldValue = Row->TryGetField(Field))
+				{
+					Projected->SetField(Field, FieldValue);
+				}
+			}
+			Row = Projected;
+		}
 		Rows.Add(MakeShared<FJsonValueObject>(Row));
 	}
 
@@ -2048,8 +2153,52 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 		Result->SetStringField(TEXT("namespace"), NamespaceFilter);
 	}
 	Result->SetNumberField(TEXT("count"), Rows.Num());
-	Result->SetBoolField(TEXT("truncated"), Matches.Num() > Rows.Num());
+	Result->SetBoolField(TEXT("truncated"), Total > EffectiveOffset + Rows.Num());
 	Result->SetArrayField(TEXT("matches"), Rows);
+
+	// Common list-projection contract (additive next to the legacy fields above).
+	Result->SetNumberField(TEXT("total"), Total);
+	Result->SetNumberField(TEXT("returned"), Rows.Num());
+	if (EffectiveOffset + Rows.Num() < Total)
+	{
+		Result->SetStringField(TEXT("next_cursor"), FString::FromInt(EffectiveOffset + Rows.Num()));
+	}
+	TSharedPtr<FJsonObject> Projection = MakeShared<FJsonObject>();
+	Projection->SetStringField(TEXT("planning_detail"), MonolithPlanningDetailToString(PlanningDetail));
+	Projection->SetNumberField(TEXT("offset"), EffectiveOffset);
+	Projection->SetNumberField(TEXT("limit"), Limit);
+	if (RequestedFields.Num() > 0)
+	{
+		Projection->SetArrayField(TEXT("fields"), StringArrayToJson(RequestedFields));
+	}
+	else
+	{
+		Projection->SetStringField(TEXT("fields"), TEXT("all"));
+	}
+	Result->SetObjectField(TEXT("projection"), Projection);
+	if (RequestedFields.Num() > 0 && Rows.Num() > 0)
+	{
+		TArray<FString> UnknownFields;
+		for (const FString& Field : RequestedFields)
+		{
+			if (!SeenRowKeys.Contains(Field))
+			{
+				UnknownFields.Add(Field);
+			}
+		}
+		if (UnknownFields.Num() > 0)
+		{
+			TArray<FString> AvailableKeys = SeenRowKeys.Array();
+			AvailableKeys.Sort();
+			TArray<TSharedPtr<FJsonValue>> Warnings;
+			Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+				TEXT("Fields not present on any match row: %s. Available fields: %s"),
+				*FString::Join(UnknownFields, TEXT(", ")),
+				*FString::Join(AvailableKeys, TEXT(", ")))));
+			Result->SetArrayField(TEXT("warnings"), Warnings);
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> NextActions;
 	NextActions.Add(MakeShared<FJsonValueString>(TEXT("monolith.discover")));
 	Result->SetArrayField(TEXT("next_actions"), NextActions);
@@ -2086,6 +2235,23 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
+	}
+	FString Detail = TEXT("full");
+	if (Params.IsValid())
+	{
+		FString ErrMsg;
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("detail"), Detail, ErrMsg, Detail, true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
+	Detail.TrimStartAndEndInline();
+	Detail.ToLowerInline();
+	if (Detail != TEXT("full") && Detail != TEXT("summary"))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Parameter 'detail' must be 'full' or 'summary'; got '%s'"), *Detail),
+			FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FilterNamespace.TrimStartAndEndInline();
 	FilterSkill.TrimStartAndEndInline();
@@ -2142,9 +2308,21 @@ FMonolithActionResult FMonolithCoreTools::HandleGetActionMetadataCoverage(const 
 	{
 		Result->SetStringField(TEXT("skill"), FilterSkill);
 	}
+	Result->SetStringField(TEXT("detail"), Detail);
 	Result->SetObjectField(TEXT("totals"), CoverageBucketToJson(Totals, SampleLimit));
-	Result->SetArrayField(TEXT("by_namespace"), CoverageBucketMapToRows(ByNamespace, TEXT("namespace"), SampleLimit));
-	Result->SetArrayField(TEXT("by_skill"), CoverageBucketMapToRows(BySkill, TEXT("skill"), SampleLimit));
+	if (Detail == TEXT("summary"))
+	{
+		// Summary keeps the gate/totals decision surface and drops the per-bucket rows,
+		// which dominate the full payload; re-run with detail=full (optionally filtered
+		// by namespace/skill) to inspect individual buckets.
+		Result->SetNumberField(TEXT("by_namespace_count"), ByNamespace.Num());
+		Result->SetNumberField(TEXT("by_skill_count"), BySkill.Num());
+	}
+	else
+	{
+		Result->SetArrayField(TEXT("by_namespace"), CoverageBucketMapToRows(ByNamespace, TEXT("namespace"), SampleLimit));
+		Result->SetArrayField(TEXT("by_skill"), CoverageBucketMapToRows(BySkill, TEXT("skill"), SampleLimit));
+	}
 	Result->SetObjectField(TEXT("gate"), Gate);
 	return FMonolithActionResult::Success(Result);
 }
@@ -2157,6 +2335,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 	FString FilterAction;
 	FString FilterCategory;
 	FString Mode;
+	FString IfVersion;
 	FString ErrMsg;
 	if (Params.IsValid())
 	{
@@ -2176,6 +2355,11 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		}
 
 		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("mode"), Mode, ErrMsg, TEXT(""), true))
+		{
+			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
+		}
+
+		if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("if_version"), IfVersion, ErrMsg, TEXT(""), true))
 		{
 			return FMonolithActionResult::Error(ErrMsg, FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -2206,7 +2390,28 @@ FMonolithActionResult FMonolithCoreTools::HandleDiscover(const TSharedPtr<FJsonO
 		return FMonolithActionResult::Error(TEXT("Parameter 'mode=schema' requires both 'namespace' and 'action'. Use detail=true for full namespace schemas."), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	// if_version short-circuit: repeated same-session discovers pay ~1KB instead
+	// of re-serializing the catalog. Clients pick the version up from
+	// monolith.status.catalog_version or any prior discover response.
+	IfVersion.TrimStartAndEndInline();
+	const FString CatalogVersion = Registry.GetCatalogFingerprint();
+	if (!IfVersion.IsEmpty() && IfVersion == CatalogVersion)
+	{
+		TSharedPtr<FJsonObject> Unchanged = MakeShared<FJsonObject>();
+		Unchanged->SetStringField(TEXT("status"), TEXT("unchanged"));
+		Unchanged->SetStringField(TEXT("catalog_version"), CatalogVersion);
+		Unchanged->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
+		TArray<TSharedPtr<FJsonValue>> UnchangedNamespaces;
+		for (const FString& NamespaceName : Registry.GetNamespaces())
+		{
+			UnchangedNamespaces.Add(MakeShared<FJsonValueString>(NamespaceName));
+		}
+		Unchanged->SetArrayField(TEXT("namespaces"), UnchangedNamespaces);
+		return FMonolithActionResult::Success(Unchanged);
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("catalog_version"), CatalogVersion);
 
 	TArray<FString> Namespaces = Registry.GetNamespaces();
 
@@ -2618,6 +2823,13 @@ FMonolithActionResult FMonolithCoreTools::HandleStatus(const TSharedPtr<FJsonObj
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 	Result->SetNumberField(TEXT("total_actions"), Registry.GetActionCount());
 	Result->SetNumberField(TEXT("namespaces"), Registry.GetNamespaceCount());
+
+	// Catalog cache protocol: clients call status first, then pass
+	// catalog_version as monolith.discover(if_version=...) to skip re-fetching
+	// an unchanged catalog.
+	Result->SetStringField(TEXT("catalog_version"), Registry.GetCatalogFingerprint());
+	Result->SetNumberField(TEXT("catalog_action_count"), Registry.GetActionCount());
+	Result->SetNumberField(TEXT("catalog_namespace_count"), Registry.GetNamespaceCount());
 
 	// Engine info
 	Result->SetStringField(TEXT("engine_version"), FApp::GetBuildVersion());

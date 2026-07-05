@@ -568,31 +568,135 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
 	const FString& Direction,
 	int32 MaxDepth,
 	int32 MaxResults,
-	const FString& DetailLevel)
+	const FString& DetailLevel,
+	int32 Offset,
+	const TArray<FString>& Fields)
 {
 	const FString EffectiveDirection = Direction.IsEmpty() ? TEXT("both") : Direction;
 	const bool bStandardDetail = DetailLevel.Equals(TEXT("standard"), ESearchCase::IgnoreCase)
 		|| DetailLevel.Equals(TEXT("full"), ESearchCase::IgnoreCase);
+	// The BFS emits at most ClampResults' ceiling; the offset window must fit under it.
+	const int32 EffectiveOffset = FMath::Clamp(Offset, 0, 2000);
+	const int32 RequestedResults = ClampResults(MaxResults);
+	const int32 FetchResults = ClampResults(EffectiveOffset + RequestedResults);
 	TSharedPtr<FJsonObject> Root = ImpactRadius(
 		Db,
 		Symbol,
 		TEXT("override"),
 		EffectiveDirection,
 		MaxDepth,
-		MaxResults);
+		FetchResults);
 
+	static const TCHAR* ValidFieldNames[] = {
+		TEXT("id"), TEXT("name"), TEXT("qualified_name"), TEXT("kind"),
+		TEXT("file"), TEXT("path_status"), TEXT("line"), TEXT("depth") };
+	TArray<FString> ProjectedFields;
+	TArray<FString> UnknownFields;
+	for (const FString& Field : Fields)
+	{
+		const FString Trimmed = Field.TrimStartAndEnd();
+		if (Trimmed.IsEmpty()) continue;
+		bool bKnown = false;
+		for (const TCHAR* Valid : ValidFieldNames)
+		{
+			if (Trimmed.Equals(Valid, ESearchCase::IgnoreCase)) { bKnown = true; ProjectedFields.AddUnique(Valid); break; }
+		}
+		if (!bKnown) UnknownFields.AddUnique(Trimmed);
+	}
+
+	int32 TotalAvailable = 0;
+	int32 Returned = 0;
 	const TArray<TSharedPtr<FJsonValue>>* Impacted = nullptr;
 	if (Root->TryGetArrayField(TEXT("impacted_symbols"), Impacted) && Impacted)
 	{
-		Root->SetArrayField(TEXT("overrides"), *Impacted);
+		TotalAvailable = Impacted->Num();
+		FJsonArr Window;
+		for (int32 Index = EffectiveOffset; Index < TotalAvailable && Window.Num() < RequestedResults; ++Index)
+		{
+			TSharedPtr<FJsonValue> RowValue = (*Impacted)[Index];
+			if (ProjectedFields.Num() > 0)
+			{
+				const TSharedPtr<FJsonObject> RowObj = RowValue->AsObject();
+				if (RowObj.IsValid())
+				{
+					TSharedPtr<FJsonObject> Projected = MakeShared<FJsonObject>();
+					for (const FString& Field : ProjectedFields)
+					{
+						if (const TSharedPtr<FJsonValue> FieldValue = RowObj->TryGetField(Field))
+						{
+							Projected->SetField(Field, FieldValue);
+						}
+					}
+					RowValue = MakeShared<FJsonValueObject>(Projected);
+				}
+			}
+			Window.Add(RowValue);
+		}
+		Returned = Window.Num();
+		Root->SetArrayField(TEXT("overrides"), Window);
 		Root->SetStringField(TEXT("summary"), FString::Printf(
-			TEXT("%d override-related symbol(s) within depth %d (%s) of %s"),
-			Impacted->Num(),
+			TEXT("%d of %d override-related symbol(s) within depth %d (%s) of %s%s"),
+			Returned,
+			TotalAvailable,
 			ClampDepth(MaxDepth),
 			*EffectiveDirection,
-			*Symbol));
+			*Symbol,
+			EffectiveOffset > 0 ? *FString::Printf(TEXT(" [offset %d]"), EffectiveOffset) : TEXT("")));
 	}
 	Root->SetStringField(TEXT("detail_level"), bStandardDetail ? TEXT("standard") : TEXT("minimal"));
+
+	Root->SetNumberField(TEXT("total"), TotalAvailable);
+	Root->SetNumberField(TEXT("returned"), Returned);
+	// A fetch-window truncation means deeper rows exist even though total == offset+returned;
+	// the next page re-runs the traversal with a larger fetch window.
+	bool bTraversalTruncated = false;
+	Root->TryGetBoolField(TEXT("truncated"), bTraversalTruncated);
+	const int32 NextOffset = EffectiveOffset + Returned;
+	if (NextOffset < TotalAvailable || (bTraversalTruncated && NextOffset < 2000))
+	{
+		Root->SetStringField(TEXT("next_cursor"), FString::FromInt(NextOffset));
+	}
+	TSharedPtr<FJsonObject> Projection = MakeShared<FJsonObject>();
+	Projection->SetStringField(TEXT("detail"), bStandardDetail ? TEXT("standard") : TEXT("minimal"));
+	Projection->SetNumberField(TEXT("offset"), EffectiveOffset);
+	Projection->SetNumberField(TEXT("max_results"), RequestedResults);
+	if (ProjectedFields.Num() > 0)
+	{
+		FJsonArr FieldArr;
+		for (const FString& Field : ProjectedFields) FieldArr.Add(MakeShared<FJsonValueString>(Field));
+		Projection->SetArrayField(TEXT("fields"), FieldArr);
+	}
+	else
+	{
+		Projection->SetStringField(TEXT("fields"), TEXT("all"));
+	}
+	Root->SetObjectField(TEXT("projection"), Projection);
+	if (UnknownFields.Num() > 0)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* ExistingWarnings = nullptr;
+		FJsonArr Warnings;
+		if (Root->TryGetArrayField(TEXT("warnings"), ExistingWarnings) && ExistingWarnings)
+		{
+			Warnings = *ExistingWarnings;
+		}
+		Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+			TEXT("Unknown fields ignored: %s. Valid fields: id, name, qualified_name, kind, file, path_status, line, depth"),
+			*FString::Join(UnknownFields, TEXT(", ")))));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+	}
+	// The BFS emission cannot page past ClampResults' ceiling regardless of offset.
+	if (bTraversalTruncated && NextOffset >= 2000)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* ExistingWarnings = nullptr;
+		FJsonArr Warnings;
+		if (Root->TryGetArrayField(TEXT("warnings"), ExistingWarnings) && ExistingWarnings)
+		{
+			Warnings = *ExistingWarnings;
+		}
+		Warnings.Add(MakeShared<FJsonValueString>(TEXT(
+			"Traversal emission cap (2000) reached; narrow direction, max_depth, or the seed symbol to see further overrides")));
+		Root->SetArrayField(TEXT("warnings"), Warnings);
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Edges = nullptr;
 	if (Root->TryGetArrayField(TEXT("edges"), Edges) && Edges)

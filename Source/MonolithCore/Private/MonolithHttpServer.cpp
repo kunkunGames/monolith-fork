@@ -1584,7 +1584,8 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	TSharedPtr<FJsonObject> Result = FMonolithToolResultUtils::BuildMcpToolResult(
 		ActionResult,
 		Settings && Settings->bEnableStructuredToolResults,
-		Settings && Settings->bEnableTypedMediaResults);
+		Settings && Settings->bEnableTypedMediaResults,
+		!Settings || Settings->bCompactErrorEnvelope);
 
 	return FMonolithJsonUtils::SuccessResponse(Id, MakeShared<FJsonValueObject>(Result));
 }
