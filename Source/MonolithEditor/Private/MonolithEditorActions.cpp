@@ -1331,8 +1331,12 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildErrors(const TShared
 	// noise is bucketed (visible) — never silently dropped.
 	TArray<FString> ExcludeCategories;
 	const TArray<TSharedPtr<FJsonValue>>* ExclArr = nullptr;
-	if (Params->TryGetArrayField(TEXT("exclude_categories"), ExclArr) && ExclArr)
+	if (Params->HasField(TEXT("exclude_categories")))
 	{
+		if (!Params->TryGetArrayField(TEXT("exclude_categories"), ExclArr) || !ExclArr)
+		{
+			return FMonolithActionResult::Error(TEXT("exclude_categories must be an array of strings"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		for (const TSharedPtr<FJsonValue>& Val : *ExclArr)
 		{
 			FString C;

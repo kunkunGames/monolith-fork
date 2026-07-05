@@ -83,5 +83,15 @@ bool FMonolithEditorGetBuildErrorsMalformedTest::RunTest(const FString& Paramete
 		TestTrue(TEXT("Error should name the parameter since_iso"), Result.ErrorMessage.Contains(TEXT("since_iso")));
 	}
 
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("exclude_categories"), TEXT("not_an_array"));
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleGetBuildErrors(Payload);
+
+		TestFalse(TEXT("Malformed exclude_categories should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter exclude_categories"), Result.ErrorMessage.Contains(TEXT("exclude_categories")));
+	}
+
 	return true;
 }
