@@ -2530,14 +2530,14 @@ FMonolithActionResult FMonolithWorkflowActions::HandleGameReadyAssetStaticMesh(c
 		AssetValidation->SetObjectField(TEXT("mesh"), MeshProof);
 		if (MeshProof.IsValid() && MeshProof->HasField(TEXT("result")))
 		{
-			TSharedPtr<FJsonObject> ResultObj;
-			if (MeshProof->TryGetObjectField(TEXT("result"), ResultObj) && ResultObj)
+			const TSharedPtr<FJsonObject>* ResultObj = nullptr;
+			if (MeshProof->TryGetObjectField(TEXT("result"), ResultObj) && ResultObj && ResultObj->IsValid())
 			{
-				Budget->SetObjectField(TEXT("mesh"), ResultObj);
+				Budget->SetObjectField(TEXT("mesh"), *ResultObj);
 			}
 			else
 			{
-				return FMonolithActionResult::Error(-32602, TEXT("Invalid params: mesh proof result is not an object"), FMonolithJsonUtils::ErrInvalidParams);
+				return FMonolithActionResult::Error(TEXT("Invalid params: mesh proof result is not an object"), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 	}
@@ -2887,12 +2887,18 @@ FMonolithActionResult FMonolithWorkflowActions::HandleGameplayFeatureManifest(co
 			? TEXT("runtime_proof_required=true, but this first slice does not start PIE or inject input.")
 			: TEXT("Runtime proof is declared as a later PIE workflow step."));
 	TArray<TSharedPtr<FJsonValue>> RuntimeNext;
-	TSharedPtr<FJsonObject> TriggerAction;
-	TSharedPtr<FJsonObject> TriggerParams;
+	const TSharedPtr<FJsonObject>* TriggerAction = nullptr;
+	const TSharedPtr<FJsonObject>* TriggerParams = nullptr;
 	TSharedPtr<FJsonObject> MakeRuntimeProofParamsResult = MakeRuntimeProofParams(RuntimeSection);
-	if (!MakeRuntimeProofParamsResult.IsValid() || !MakeRuntimeProofParamsResult->TryGetObjectField(TEXT("trigger_action"), TriggerAction) || !TriggerAction.IsValid() || !TriggerAction->TryGetObjectField(TEXT("params"), TriggerParams))
+	if (!MakeRuntimeProofParamsResult.IsValid()
+		|| !MakeRuntimeProofParamsResult->TryGetObjectField(TEXT("trigger_action"), TriggerAction)
+		|| !TriggerAction
+		|| !TriggerAction->IsValid()
+		|| !(*TriggerAction)->TryGetObjectField(TEXT("params"), TriggerParams)
+		|| !TriggerParams
+		|| !TriggerParams->IsValid())
 	{
-		return FMonolithActionResult::Error(-32602, TEXT("Invalid params: trigger_action params are not an object"), FMonolithJsonUtils::ErrInvalidParams);
+		return FMonolithActionResult::Error(TEXT("Invalid params: trigger_action params are not an object"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	RuntimeNext.Add(MakeShared<FJsonValueObject>(MakeNextAction(
@@ -2900,7 +2906,7 @@ FMonolithActionResult FMonolithWorkflowActions::HandleGameplayFeatureManifest(co
 		FMonolithToolRegistry::Get().HasAction(TEXT("editor"), TEXT("pie_inject_input_action")),
 		true,
 		TEXT("Inject the manifest input action during a confirmed PIE proof slice."),
-		TriggerParams)));
+		*TriggerParams)));
 	RuntimeNext.Add(MakeShared<FJsonValueObject>(MakeNextAction(
 		TEXT("gas.expect_event_cue"),
 		FMonolithToolRegistry::Get().HasAction(TEXT("gas"), TEXT("expect_event_cue")),
@@ -3364,7 +3370,7 @@ FMonolithActionResult FMonolithWorkflowActions::HandleUiShippingWidgetBlueprint(
 		}
 		else
 		{
-			return FMonolithActionResult::Error(-32602, TEXT("Invalid params: visual profile proof status is not a string"), FMonolithJsonUtils::ErrInvalidParams);
+			return FMonolithActionResult::Error(TEXT("Invalid params: visual profile proof status is not a string"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 	UiEvidence->SetStringField(TEXT("visual_artifacts_status"),
