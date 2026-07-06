@@ -1112,13 +1112,20 @@ static std::string handle_initialize(const json& msg)
     result["capabilities"] = {{"tools", {{"listChanged", true}}}};
     result["serverInfo"] = {{"name", PROXY_NAME}, {"version", PROXY_VERSION}};
     result["instructions"] =
-        "Monolith MCP proxy for Unreal Engine. Tools are forwarded to the Unreal Editor. "
-        "Before calling a domain action, check its schema instead of guessing: "
-        "monolith_discover() lists namespaces, monolith_discover('<namespace>') lists a "
-        "namespace's actions, and describe_query('action_schema', ...) returns an action's "
-        "exact parameter schema. monolith_guide(section='recipes') gives cross-namespace "
-        "workflows, decision matrices, and gotchas. "
-        "If tools return errors about the editor not running, wait and retry.";
+        "Monolith MCP proxy for Unreal Engine. Tools forward to the Unreal Editor.\n"
+        "\n"
+        "ROUTING:\n"
+        "  monolith_find(query)                            — find the right action\n"
+        "  monolith_discover()                             — list all namespaces\n"
+        "  monolith_discover(namespace)                    — list actions in a namespace\n"
+        "  monolith_discover(namespace, action, 'schema')  — fetch exact param schema\n"
+        "  monolith_query({namespace, action, params})     — execute any action\n"
+        "\n"
+        "SKILL LOADING: domain skills live in Skills/<namespace>/SKILL.md and document\n"
+        "available actions and params for that namespace.\n"
+        "\n"
+        "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n"
+        "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge/console reads.";
 
     return make_result(msg.value("id", json()), result);
 }
