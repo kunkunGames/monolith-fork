@@ -1189,7 +1189,11 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::GetLevelActors(const
 		{
 			return FMonolithActionResult::Error(TEXT("Parameter 'limit' must be a number"));
 		}
-		Limit = FMath::Clamp(static_cast<int32>(LimitD), 1, 10000);
+		if (LimitD > 10000.0)
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("limit must be <= 10000, got %g"), LimitD));
+		}
+		Limit = FMath::Max(1, static_cast<int32>(LimitD));
 	}
 
 	// Resolve volume bounds if specified
