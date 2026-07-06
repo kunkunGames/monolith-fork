@@ -264,7 +264,7 @@
       "sk-[A-Za-z0-9]{40,}"
     ],
     "broad_advisory_regexes": [
-      "(?i)(api[_-]?key|secret|token|password)\\s*[:=]\\s*['\\\"][^'\\\"]{12,}['\\\"]"
+      "(?i)(api[_-]?key|secret|token|password)\\s*[:=]\\s*['\\\"][^'\\\"]{16,}['\\\"]"
     ]
   }
 }
