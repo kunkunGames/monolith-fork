@@ -79,12 +79,14 @@ namespace MonolithBulkFillActionsInternal
 		if (Desc.EnumValues.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> Vals;
+			Vals.Reserve(Desc.EnumValues.Num());
 			for (const FString& E : Desc.EnumValues) { Vals.Add(MakeShared<FJsonValueString>(E)); }
 			O->SetArrayField(TEXT("enum_values"), Vals);
 		}
 		if (Desc.Children.Num() > 0)
 		{
 			TArray<TSharedPtr<FJsonValue>> Kids;
+			Kids.Reserve(Desc.Children.Num());
 			for (const FSchemaDescriptor& C : Desc.Children)
 			{
 				Kids.Add(MakeShared<FJsonValueObject>(DescriptorToJson(C)));

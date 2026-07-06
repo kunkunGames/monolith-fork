@@ -40,6 +40,7 @@ namespace
 	void AddNext(const TSharedPtr<FJsonObject>& Root, std::initializer_list<const TCHAR*> Acts)
 	{
 		FJsonArr Arr;
+		Arr.Reserve(Acts.size());
 		for (const TCHAR* A : Acts) Arr.Add(MakeShared<FJsonValueString>(FString(A)));
 		Root->SetArrayField(TEXT("next_actions"), Arr);
 	}
@@ -663,6 +664,7 @@ TSharedPtr<FJsonObject> FMonolithSourceReview::FindOverrides(
 	if (ProjectedFields.Num() > 0)
 	{
 		FJsonArr FieldArr;
+		FieldArr.Reserve(ProjectedFields.Num());
 		for (const FString& Field : ProjectedFields) FieldArr.Add(MakeShared<FJsonValueString>(Field));
 		Projection->SetArrayField(TEXT("fields"), FieldArr);
 	}
