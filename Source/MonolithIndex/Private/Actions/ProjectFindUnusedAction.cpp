@@ -23,7 +23,7 @@ FMonolithActionResult FProjectFindUnusedAction::Execute(const TSharedPtr<FJsonOb
 	if (Params->HasField(TEXT("limit")))
 	{
 		double LimitValue = 0.0;
-		if (!Params->TryGetNumberField(TEXT("limit"), LimitValue))
+		if (!Params->HasTypedField(TEXT("limit"), EJson::Number) || !Params->TryGetNumberField(TEXT("limit"), LimitValue))
 		{
 			return FMonolithActionResult::Error(TEXT("'limit' parameter must be a number"), -32602);
 		}
