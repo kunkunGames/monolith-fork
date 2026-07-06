@@ -110,9 +110,21 @@ namespace MonolithPieObject
 		}
 
 		FString ActorLabel, ObjectName, ClassName;
-		Params->TryGetStringField(TEXT("actor_label"), ActorLabel);
-		Params->TryGetStringField(TEXT("object_name"), ObjectName);
-		Params->TryGetStringField(TEXT("class_name"), ClassName);
+		if (Params->HasField(TEXT("actor_label")) && !Params->TryGetStringField(TEXT("actor_label"), ActorLabel))
+		{
+			Out.Error = TEXT("actor_label must be a string");
+			return Out;
+		}
+		if (Params->HasField(TEXT("object_name")) && !Params->TryGetStringField(TEXT("object_name"), ObjectName))
+		{
+			Out.Error = TEXT("object_name must be a string");
+			return Out;
+		}
+		if (Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+		{
+			Out.Error = TEXT("class_name must be a string");
+			return Out;
+		}
 		if (ActorLabel.IsEmpty() && ObjectName.IsEmpty() && ClassName.IsEmpty())
 		{
 			Out.Error = TEXT("Require one of: actor_label, object_name, class_name");
@@ -131,10 +143,19 @@ namespace MonolithPieObject
 
 		// Optional component hop.
 		FString ComponentName;
-		const bool bHasComponent = Params->TryGetStringField(TEXT("component_name"), ComponentName) && !ComponentName.IsEmpty();
+		if (Params->HasField(TEXT("component_name")) && !Params->TryGetStringField(TEXT("component_name"), ComponentName))
+		{
+			Out.Error = TEXT("component_name must be a string");
+			return Out;
+		}
+		const bool bHasComponent = !ComponentName.IsEmpty();
 
 		bool bWantAnimInstance = false;
-		Params->TryGetBoolField(TEXT("anim_instance"), bWantAnimInstance);
+		if (Params->HasField(TEXT("anim_instance")) && !Params->TryGetBoolField(TEXT("anim_instance"), bWantAnimInstance))
+		{
+			Out.Error = TEXT("anim_instance must be a boolean");
+			return Out;
+		}
 
 		if (bWantAnimInstance)
 		{
@@ -558,7 +579,10 @@ FMonolithActionResult FMonolithPieObjectActions::HandleCallFunction(const TShare
 	}
 
 	bool bAllowNonCallable = false;
-	Params->TryGetBoolField(TEXT("allow_non_callable"), bAllowNonCallable);
+	if (Params->HasField(TEXT("allow_non_callable")) && !Params->TryGetBoolField(TEXT("allow_non_callable"), bAllowNonCallable))
+	{
+		return FMonolithActionResult::Error(TEXT("allow_non_callable must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!bAllowNonCallable && !Function->HasAnyFunctionFlags(FUNC_BlueprintCallable))
 	{
 		return FMonolithActionResult::Error(FString::Printf(
@@ -573,7 +597,11 @@ FMonolithActionResult FMonolithPieObjectActions::HandleCallFunction(const TShare
 	}
 
 	const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
-	const bool bHasArgs = Params->TryGetObjectField(TEXT("args"), ArgsObj) && ArgsObj && (*ArgsObj).IsValid();
+	if (Params->HasField(TEXT("args")) && (!Params->TryGetObjectField(TEXT("args"), ArgsObj) || !ArgsObj || !(*ArgsObj).IsValid()))
+	{
+		return FMonolithActionResult::Error(TEXT("args must be an object"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const bool bHasArgs = ArgsObj && (*ArgsObj).IsValid();
 
 	// Marshal each input parameter (CPF_Parm, not Return, not pure-Out) from args by name.
 	for (TFieldIterator<FProperty> It(Function); It && (It->PropertyFlags & CPF_Parm); ++It)
