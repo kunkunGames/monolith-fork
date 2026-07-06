@@ -2872,7 +2872,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleSetBTNodeProperty(co
 	TSharedPtr<FJsonValue> Value = Params->TryGetField(TEXT("value"));
 	if (!Value.IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: value"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set BT Node Property")));
@@ -2980,7 +2980,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleReorderBTChildren(co
 	const TArray<TSharedPtr<FJsonValue>>* NewOrderArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("new_order"), NewOrderArr) || !NewOrderArr)
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_order (array of node GUIDs)"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_order (array of node GUIDs)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Get current children
@@ -3635,7 +3635,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	const TSharedPtr<FJsonObject>* SpecObjPtr = nullptr;
 	if (!Params->TryGetObjectField(TEXT("spec"), SpecObjPtr) || !SpecObjPtr || !(*SpecObjPtr).IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: spec (JSON object)"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: spec (JSON object)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	const TSharedPtr<FJsonObject>& Spec = *SpecObjPtr;
 
@@ -3990,7 +3990,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleImportBTSpec(const T
 	const TSharedPtr<FJsonObject>* SpecObjPtr = nullptr;
 	if (!Params->TryGetObjectField(TEXT("spec"), SpecObjPtr) || !SpecObjPtr || !(*SpecObjPtr).IsValid())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: spec (JSON object)"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: spec (JSON object)"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	const TSharedPtr<FJsonObject>& Spec = *SpecObjPtr;
 

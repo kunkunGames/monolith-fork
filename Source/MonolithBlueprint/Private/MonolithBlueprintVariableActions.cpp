@@ -221,14 +221,14 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddVariable(const
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TypeStr;
 	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Normalize common aliases so users get sensible errors instead of silent bool fallback.
@@ -385,7 +385,7 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRemoveVariable(co
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FName VarName(*Name);
@@ -435,11 +435,11 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRenameVariable(co
 
 	if (OldName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: old_name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (NewName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: new_name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FName OldVarName(*OldName);
@@ -506,14 +506,14 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableType(c
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TypeStr;
 	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FName VarName(*Name);
@@ -562,7 +562,7 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleSetVariableDefaul
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FName VarName(*Name);
@@ -636,21 +636,21 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddLocalVariable(
 	Params->TryGetStringField(TEXT("function_name"), FunctionName);
 	if (FunctionName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Name;
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TypeStr;
 	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UEdGraph* FuncGraph = MonolithBlueprintInternal::FindGraphByName(BP, FunctionName);
@@ -719,14 +719,14 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleRemoveLocalVariab
 	Params->TryGetStringField(TEXT("function_name"), FunctionName);
 	if (FunctionName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: function_name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString Name;
 	Params->TryGetStringField(TEXT("name"), Name);
 	if (Name.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UEdGraph* FuncGraph = MonolithBlueprintInternal::FindGraphByName(BP, FunctionName);
@@ -798,14 +798,14 @@ FMonolithActionResult FMonolithBlueprintVariableActions::HandleAddReplicatedVari
 	Params->TryGetStringField(TEXT("variable_name"), VarNameStr);
 	if (VarNameStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: variable_name"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString TypeStr;
 	Params->TryGetStringField(TEXT("type"), TypeStr);
 	if (TypeStr.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"));
+		return FMonolithActionResult::Error(TEXT("Missing required parameter: type"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Normalize type string the same way HandleAddVariable does
