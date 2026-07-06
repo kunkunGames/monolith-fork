@@ -172,6 +172,11 @@
 			"Name": "PaperZD",
 			"Enabled": true,
 			"Optional": true
+		},
+		{
+			"Name": "ToolsetRegistry",
+			"Enabled": true,
+			"Optional": true
 		}
 	],
 	"Modules": [
