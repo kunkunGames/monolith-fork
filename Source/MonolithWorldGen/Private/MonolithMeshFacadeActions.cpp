@@ -128,14 +128,46 @@ bool FMonolithMeshFacadeActions::LoadFacadeStyle(const FString& StyleName, FFaca
 	if (Json->TryGetObjectField(TEXT("window"), WinObj) && WinObj && (*WinObj).IsValid())
 	{
 		auto& W = *(*WinObj);
-		if (W.HasField(TEXT("width")))       OutStyle.WindowWidth = static_cast<float>(W.GetNumberField(TEXT("width")));
-		if (W.HasField(TEXT("height")))      OutStyle.WindowHeight = static_cast<float>(W.GetNumberField(TEXT("height")));
-		if (W.HasField(TEXT("frame_width"))) OutStyle.FrameWidth = static_cast<float>(W.GetNumberField(TEXT("frame_width")));
-		if (W.HasField(TEXT("frame_depth"))) OutStyle.FrameDepth = static_cast<float>(W.GetNumberField(TEXT("frame_depth")));
-		if (W.HasField(TEXT("sill_depth")))  OutStyle.SillDepth = static_cast<float>(W.GetNumberField(TEXT("sill_depth")));
-		if (W.HasField(TEXT("sill_height"))) OutStyle.SillHeight = static_cast<float>(W.GetNumberField(TEXT("sill_height")));
-		if (W.HasField(TEXT("lintel_height"))) OutStyle.LintelHeight = static_cast<float>(W.GetNumberField(TEXT("lintel_height")));
-		if (W.HasField(TEXT("arch")))        OutStyle.bArch = W.GetBoolField(TEXT("arch"));
+		double Tmp_width = 0.0;
+		if (W.HasField(TEXT("width"))) {
+			if (!W.TryGetNumberField(TEXT("width"), Tmp_width)) return false;
+			OutStyle.WindowWidth = static_cast<float>(Tmp_width);
+		}
+		double Tmp_height = 0.0;
+		if (W.HasField(TEXT("height"))) {
+			if (!W.TryGetNumberField(TEXT("height"), Tmp_height)) return false;
+			OutStyle.WindowHeight = static_cast<float>(Tmp_height);
+		}
+		double Tmp_frame_width = 0.0;
+		if (W.HasField(TEXT("frame_width"))) {
+			if (!W.TryGetNumberField(TEXT("frame_width"), Tmp_frame_width)) return false;
+			OutStyle.FrameWidth = static_cast<float>(Tmp_frame_width);
+		}
+		double Tmp_frame_depth = 0.0;
+		if (W.HasField(TEXT("frame_depth"))) {
+			if (!W.TryGetNumberField(TEXT("frame_depth"), Tmp_frame_depth)) return false;
+			OutStyle.FrameDepth = static_cast<float>(Tmp_frame_depth);
+		}
+		double Tmp_sill_depth = 0.0;
+		if (W.HasField(TEXT("sill_depth"))) {
+			if (!W.TryGetNumberField(TEXT("sill_depth"), Tmp_sill_depth)) return false;
+			OutStyle.SillDepth = static_cast<float>(Tmp_sill_depth);
+		}
+		double Tmp_sill_height = 0.0;
+		if (W.HasField(TEXT("sill_height"))) {
+			if (!W.TryGetNumberField(TEXT("sill_height"), Tmp_sill_height)) return false;
+			OutStyle.SillHeight = static_cast<float>(Tmp_sill_height);
+		}
+		double Tmp_lintel_height = 0.0;
+		if (W.HasField(TEXT("lintel_height"))) {
+			if (!W.TryGetNumberField(TEXT("lintel_height"), Tmp_lintel_height)) return false;
+			OutStyle.LintelHeight = static_cast<float>(Tmp_lintel_height);
+		}
+		bool Tmp_arch = false;
+		if (W.HasField(TEXT("arch"))) {
+			if (!W.TryGetBoolField(TEXT("arch"), Tmp_arch)) return false;
+			OutStyle.bArch = Tmp_arch;
+		}
 	}
 
 	// Trim
@@ -143,10 +175,26 @@ bool FMonolithMeshFacadeActions::LoadFacadeStyle(const FString& StyleName, FFaca
 	if (Json->TryGetObjectField(TEXT("trim"), TrimObj) && TrimObj && (*TrimObj).IsValid())
 	{
 		auto& T = *(*TrimObj);
-		if (T.HasField(TEXT("corner_width")))       OutStyle.CornerWidth = static_cast<float>(T.GetNumberField(TEXT("corner_width")));
-		if (T.HasField(TEXT("corner_depth")))        OutStyle.CornerDepth = static_cast<float>(T.GetNumberField(TEXT("corner_depth")));
-		if (T.HasField(TEXT("belt_course_height")))  OutStyle.BeltCourseHeight = static_cast<float>(T.GetNumberField(TEXT("belt_course_height")));
-		if (T.HasField(TEXT("belt_course_depth")))   OutStyle.BeltCourseDepth = static_cast<float>(T.GetNumberField(TEXT("belt_course_depth")));
+		double Tmp_corner_width = 0.0;
+		if (T.HasField(TEXT("corner_width"))) {
+			if (!T.TryGetNumberField(TEXT("corner_width"), Tmp_corner_width)) return false;
+			OutStyle.CornerWidth = static_cast<float>(Tmp_corner_width);
+		}
+		double Tmp_corner_depth = 0.0;
+		if (T.HasField(TEXT("corner_depth"))) {
+			if (!T.TryGetNumberField(TEXT("corner_depth"), Tmp_corner_depth)) return false;
+			OutStyle.CornerDepth = static_cast<float>(Tmp_corner_depth);
+		}
+		double Tmp_belt_course_height = 0.0;
+		if (T.HasField(TEXT("belt_course_height"))) {
+			if (!T.TryGetNumberField(TEXT("belt_course_height"), Tmp_belt_course_height)) return false;
+			OutStyle.BeltCourseHeight = static_cast<float>(Tmp_belt_course_height);
+		}
+		double Tmp_belt_course_depth = 0.0;
+		if (T.HasField(TEXT("belt_course_depth"))) {
+			if (!T.TryGetNumberField(TEXT("belt_course_depth"), Tmp_belt_course_depth)) return false;
+			OutStyle.BeltCourseDepth = static_cast<float>(Tmp_belt_course_depth);
+		}
 	}
 
 	// Cornice
@@ -154,8 +202,16 @@ bool FMonolithMeshFacadeActions::LoadFacadeStyle(const FString& StyleName, FFaca
 	if (Json->TryGetObjectField(TEXT("cornice"), CorniceObj) && CorniceObj && (*CorniceObj).IsValid())
 	{
 		auto& C = *(*CorniceObj);
-		if (C.HasField(TEXT("height")))  OutStyle.CorniceHeight = static_cast<float>(C.GetNumberField(TEXT("height")));
-		if (C.HasField(TEXT("depth")))   OutStyle.CorniceDepth = static_cast<float>(C.GetNumberField(TEXT("depth")));
+		double Tmp_height = 0.0;
+		if (C.HasField(TEXT("height"))) {
+			if (!C.TryGetNumberField(TEXT("height"), Tmp_height)) return false;
+			OutStyle.CorniceHeight = static_cast<float>(Tmp_height);
+		}
+		double Tmp_depth = 0.0;
+		if (C.HasField(TEXT("depth"))) {
+			if (!C.TryGetNumberField(TEXT("depth"), Tmp_depth)) return false;
+			OutStyle.CorniceDepth = static_cast<float>(Tmp_depth);
+		}
 		C.TryGetStringField(TEXT("profile"), OutStyle.CorniceProfile);
 	}
 
@@ -164,10 +220,26 @@ bool FMonolithMeshFacadeActions::LoadFacadeStyle(const FString& StyleName, FFaca
 	if (Json->TryGetObjectField(TEXT("ground_floor"), GfObj) && GfObj && (*GfObj).IsValid())
 	{
 		auto& G = *(*GfObj);
-		if (G.HasField(TEXT("height_multiplier"))) OutStyle.GroundFloorHeightMultiplier = static_cast<float>(G.GetNumberField(TEXT("height_multiplier")));
-		if (G.HasField(TEXT("storefront_depth")))  OutStyle.StorefrontDepth = static_cast<float>(G.GetNumberField(TEXT("storefront_depth")));
-		if (G.HasField(TEXT("door_width")))         OutStyle.DoorWidth = static_cast<float>(G.GetNumberField(TEXT("door_width")));
-		if (G.HasField(TEXT("door_height")))        OutStyle.DoorHeight = static_cast<float>(G.GetNumberField(TEXT("door_height")));
+		double Tmp_height_multiplier = 0.0;
+		if (G.HasField(TEXT("height_multiplier"))) {
+			if (!G.TryGetNumberField(TEXT("height_multiplier"), Tmp_height_multiplier)) return false;
+			OutStyle.GroundFloorHeightMultiplier = static_cast<float>(Tmp_height_multiplier);
+		}
+		double Tmp_storefront_depth = 0.0;
+		if (G.HasField(TEXT("storefront_depth"))) {
+			if (!G.TryGetNumberField(TEXT("storefront_depth"), Tmp_storefront_depth)) return false;
+			OutStyle.StorefrontDepth = static_cast<float>(Tmp_storefront_depth);
+		}
+		double Tmp_door_width = 0.0;
+		if (G.HasField(TEXT("door_width"))) {
+			if (!G.TryGetNumberField(TEXT("door_width"), Tmp_door_width)) return false;
+			OutStyle.DoorWidth = static_cast<float>(Tmp_door_width);
+		}
+		double Tmp_door_height = 0.0;
+		if (G.HasField(TEXT("door_height"))) {
+			if (!G.TryGetNumberField(TEXT("door_height"), Tmp_door_height)) return false;
+			OutStyle.DoorHeight = static_cast<float>(Tmp_door_height);
+		}
 	}
 
 	// Material slots
@@ -175,12 +247,36 @@ bool FMonolithMeshFacadeActions::LoadFacadeStyle(const FString& StyleName, FFaca
 	if (Json->TryGetObjectField(TEXT("material_slots"), MatObj) && MatObj && (*MatObj).IsValid())
 	{
 		auto& M = *(*MatObj);
-		if (M.HasField(TEXT("wall")))          OutStyle.WallMaterialId = static_cast<int32>(M.GetNumberField(TEXT("wall")));
-		if (M.HasField(TEXT("trim")))          OutStyle.TrimMaterialId = static_cast<int32>(M.GetNumberField(TEXT("trim")));
-		if (M.HasField(TEXT("window_frame")))  OutStyle.WindowFrameMaterialId = static_cast<int32>(M.GetNumberField(TEXT("window_frame")));
-		if (M.HasField(TEXT("cornice")))       OutStyle.CorniceMaterialId = static_cast<int32>(M.GetNumberField(TEXT("cornice")));
-		if (M.HasField(TEXT("glass")))         OutStyle.GlassMaterialId = static_cast<int32>(M.GetNumberField(TEXT("glass")));
-		if (M.HasField(TEXT("door")))          OutStyle.DoorMaterialId = static_cast<int32>(M.GetNumberField(TEXT("door")));
+		double Tmp_wall = 0.0;
+		if (M.HasField(TEXT("wall"))) {
+			if (!M.TryGetNumberField(TEXT("wall"), Tmp_wall)) return false;
+			OutStyle.WallMaterialId = static_cast<int32>(Tmp_wall);
+		}
+		double Tmp_trim = 0.0;
+		if (M.HasField(TEXT("trim"))) {
+			if (!M.TryGetNumberField(TEXT("trim"), Tmp_trim)) return false;
+			OutStyle.TrimMaterialId = static_cast<int32>(Tmp_trim);
+		}
+		double Tmp_window_frame = 0.0;
+		if (M.HasField(TEXT("window_frame"))) {
+			if (!M.TryGetNumberField(TEXT("window_frame"), Tmp_window_frame)) return false;
+			OutStyle.WindowFrameMaterialId = static_cast<int32>(Tmp_window_frame);
+		}
+		double Tmp_cornice = 0.0;
+		if (M.HasField(TEXT("cornice"))) {
+			if (!M.TryGetNumberField(TEXT("cornice"), Tmp_cornice)) return false;
+			OutStyle.CorniceMaterialId = static_cast<int32>(Tmp_cornice);
+		}
+		double Tmp_glass = 0.0;
+		if (M.HasField(TEXT("glass"))) {
+			if (!M.TryGetNumberField(TEXT("glass"), Tmp_glass)) return false;
+			OutStyle.GlassMaterialId = static_cast<int32>(Tmp_glass);
+		}
+		double Tmp_door = 0.0;
+		if (M.HasField(TEXT("door"))) {
+			if (!M.TryGetNumberField(TEXT("door"), Tmp_door)) return false;
+			OutStyle.DoorMaterialId = static_cast<int32>(Tmp_door);
+		}
 	}
 
 	return true;
@@ -1067,12 +1163,21 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 
 		FExteriorFaceDef F;
 		(*FaceObj)->TryGetStringField(TEXT("wall"), F.Wall);
-		if ((*FaceObj)->HasField(TEXT("floor_index")))
-			F.FloorIndex = static_cast<int32>((*FaceObj)->GetNumberField(TEXT("floor_index")));
-		if ((*FaceObj)->HasField(TEXT("width")))
-			F.Width = static_cast<float>((*FaceObj)->GetNumberField(TEXT("width")));
-		if ((*FaceObj)->HasField(TEXT("height")))
-			F.Height = static_cast<float>((*FaceObj)->GetNumberField(TEXT("height")));
+		double Tmp_floor_index = 0.0;
+		if ((*FaceObj)->HasField(TEXT("floor_index"))) {
+			if (!(*FaceObj)->TryGetNumberField(TEXT("floor_index"), Tmp_floor_index)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'floor_index', must be a number"));
+			F.FloorIndex = static_cast<int32>(Tmp_floor_index);
+		}
+		double Tmp_width = 0.0;
+		if ((*FaceObj)->HasField(TEXT("width"))) {
+			if (!(*FaceObj)->TryGetNumberField(TEXT("width"), Tmp_width)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'width', must be a number"));
+			F.Width = static_cast<float>(Tmp_width);
+		}
+		double Tmp_height = 0.0;
+		if ((*FaceObj)->HasField(TEXT("height"))) {
+			if (!(*FaceObj)->TryGetNumberField(TEXT("height"), Tmp_height)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'height', must be a number"));
+			F.Height = static_cast<float>(Tmp_height);
+		}
 
 		const TArray<TSharedPtr<FJsonValue>>* OriginArr = nullptr;
 		if ((*FaceObj)->TryGetArrayField(TEXT("world_origin"), OriginArr) && OriginArr && OriginArr->Num() >= 3)
@@ -1112,17 +1217,34 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 	}
 
 	// ---- Override style with explicit params ----
-	if (Params->HasField(TEXT("window_width")))
-		Style.WindowWidth = static_cast<float>(Params->GetNumberField(TEXT("window_width")));
-	if (Params->HasField(TEXT("window_height")))
-		Style.WindowHeight = static_cast<float>(Params->GetNumberField(TEXT("window_height")));
-	if (Params->HasField(TEXT("sill_height")))
-		Style.SillHeight = static_cast<float>(Params->GetNumberField(TEXT("sill_height")));
+	double Tmp_window_width = 0.0;
+	if (Params->HasField(TEXT("window_width"))) {
+		if (!Params->TryGetNumberField(TEXT("window_width"), Tmp_window_width)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'window_width', must be a number"));
+		Style.WindowWidth = static_cast<float>(Tmp_window_width);
+	}
+	double Tmp_window_height = 0.0;
+	if (Params->HasField(TEXT("window_height"))) {
+		if (!Params->TryGetNumberField(TEXT("window_height"), Tmp_window_height)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'window_height', must be a number"));
+		Style.WindowHeight = static_cast<float>(Tmp_window_height);
+	}
+	double Tmp_sill_height = 0.0;
+	if (Params->HasField(TEXT("sill_height"))) {
+		if (!Params->TryGetNumberField(TEXT("sill_height"), Tmp_sill_height)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'sill_height', must be a number"));
+		Style.SillHeight = static_cast<float>(Tmp_sill_height);
+	}
 
-	bool bHasCornice = !Params->HasField(TEXT("has_cornice")) || Params->GetBoolField(TEXT("has_cornice"));
+	bool bHasCornice = true;
+	if (Params->HasField(TEXT("has_cornice"))) {
+		if (!Params->TryGetBoolField(TEXT("has_cornice"), bHasCornice)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'has_cornice', must be a boolean"));
+	}
 	FString GroundFloorStyle = TEXT("residential");
 	Params->TryGetStringField(TEXT("ground_floor_style"), GroundFloorStyle);
-	int32 Seed = Params->HasField(TEXT("seed")) ? static_cast<int32>(Params->GetNumberField(TEXT("seed"))) : 0;
+	int32 Seed = 0;
+	double Tmp_seed = 0.0;
+	if (Params->HasField(TEXT("seed"))) {
+		if (!Params->TryGetNumberField(TEXT("seed"), Tmp_seed)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'seed', must be a number"));
+		Seed = static_cast<int32>(Tmp_seed);
+	}
 
 	// ---- Determine building height (max floor Z + height) ----
 	float TotalBuildingHeight = 0.0f;
@@ -1153,8 +1275,11 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 	const TSharedPtr<FJsonObject>* WallThickObj = nullptr;
 	if ((*DescObj)->TryGetObjectField(TEXT("wall_thickness"), WallThickObj) && WallThickObj && (*WallThickObj).IsValid())
 	{
-		if ((*WallThickObj)->HasField(TEXT("exterior")))
-			WallThickness = static_cast<float>((*WallThickObj)->GetNumberField(TEXT("exterior")));
+		double Tmp_exterior = 0.0;
+		if ((*WallThickObj)->HasField(TEXT("exterior"))) {
+			if (!(*WallThickObj)->TryGetNumberField(TEXT("exterior"), Tmp_exterior)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'exterior', must be a number"));
+			WallThickness = static_cast<float>(Tmp_exterior);
+		}
 	}
 
 	// ---- Create mesh ----
@@ -1343,7 +1468,10 @@ FMonolithActionResult FMonolithMeshFacadeActions::GenerateFacade(const TSharedPt
 	int32 TriCount = Mesh->GetTriangleCount();
 
 	// ---- Save mesh ----
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite"))) {
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'overwrite', must be a boolean"));
+	}
 	FString SaveErr;
 	if (!FMonolithMeshProceduralActions::SaveMeshToAsset(Mesh, SavePath, bOverwrite, SaveErr))
 	{
@@ -1677,7 +1805,10 @@ FMonolithActionResult FMonolithMeshFacadeActions::ApplyHorrorDamage(const TShare
 		DamageSavePath = FString::Printf(TEXT("/Game/Procedural/Damage/%s_Damage"), *TargetActorName);
 	}
 
-	bool bOverwrite = Params->HasField(TEXT("overwrite")) ? Params->GetBoolField(TEXT("overwrite")) : false;
+	bool bOverwrite = false;
+	if (Params->HasField(TEXT("overwrite"))) {
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite)) return FMonolithActionResult::Error(TEXT("Invalid type for parameter 'overwrite', must be a boolean"));
+	}
 	FString SaveErr;
 	if (!FMonolithMeshProceduralActions::SaveMeshToAsset(DamageMesh, DamageSavePath, bOverwrite, SaveErr))
 	{
