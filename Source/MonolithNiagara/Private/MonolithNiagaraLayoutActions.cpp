@@ -242,7 +242,7 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 	FString AssetPath;
 	if (!NL_TryGetAssetPath(Params, AssetPath, Error))
 	{
-		return FMonolithActionResult::Error(Error);
+		return FMonolithActionResult::Error(Error, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (AssetPath.IsEmpty())
 	{
@@ -252,17 +252,17 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 	FString EmitterFilter;
 	if (Params->HasField(TEXT("emitter")) && !Params->TryGetStringField(TEXT("emitter"), EmitterFilter))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString ScriptUsageStr;
 	if (Params->HasField(TEXT("script_usage")) && !Params->TryGetStringField(TEXT("script_usage"), ScriptUsageStr))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'script_usage' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'script_usage' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	FString Formatter;
 	if (Params->HasField(TEXT("formatter")) && !Params->TryGetStringField(TEXT("formatter"), Formatter))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (Formatter.IsEmpty()) Formatter = TEXT("auto");
 
