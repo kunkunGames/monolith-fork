@@ -41,7 +41,95 @@ bool FMonolithLevelDesignSetActorMaterialTest::RunTest(const FString& Parameters
 		TestTrue(TEXT("Error message should mention material"), Result.ErrorMessage.Contains(TEXT("material")));
 	}
 
+	// 5. Valid parameters
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("type"), TEXT("point"));
+		TArray<TSharedPtr<FJsonValue>> LocArr;
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), LocArr);
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestTrue(TEXT("Valid parameters should succeed"), Result.bSuccess);
+	}
+
 	return true;
+
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignPlaceLightTest, "Monolith.Sentinel.LevelDesign.PlaceLightParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
+{
+	// 1. Missing type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> LocArr;
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), LocArr);
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestFalse(TEXT("Missing type should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention type"), Result.ErrorMessage.Contains(TEXT("type")));
+	}
+
+	// 2. Invalid type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("type"), TEXT("invalid_light_type"));
+		TArray<TSharedPtr<FJsonValue>> LocArr;
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), LocArr);
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestFalse(TEXT("Invalid type should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention invalid light type"), Result.ErrorMessage.Contains(TEXT("Invalid light type")));
+	}
+
+	// 3. Missing location
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("type"), TEXT("point"));
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestFalse(TEXT("Missing location should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention location"), Result.ErrorMessage.Contains(TEXT("location")));
+	}
+
+	// 4. Invalid location type
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("type"), TEXT("point"));
+		Params->SetStringField(TEXT("location"), TEXT("NotAnArray"));
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestFalse(TEXT("Invalid location type should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention location"), Result.ErrorMessage.Contains(TEXT("location")));
+	}
+
+	// 5. Valid parameters
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("type"), TEXT("point"));
+		TArray<TSharedPtr<FJsonValue>> LocArr;
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		LocArr.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("location"), LocArr);
+
+		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		TestTrue(TEXT("Valid parameters should succeed"), Result.bSuccess);
+	}
+
+	return true;
+
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
