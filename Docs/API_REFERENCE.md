@@ -65,6 +65,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [cppreflect](#cppreflect) | 6 | **New v0.17.0.** Reflection Intelligence — UE 5.7 UHT reflection-edge queries (UCLASS / UPROPERTY / UFUNCTION / UINTERFACE + cpp↔asset edges + specifier discovery) |
 | [network](#network) | 4 | **New v0.17.0.** Reflection Intelligence — UE 5.7 replication inspection (replicated classes, RPCs, OnRep handlers, unbalanced-OnRep audit) |
 | [pipeline](#pipeline) | 2 | **New v0.17.0.** Reflection Intelligence — read-only composer actions (`pr_review`, `release_readiness`) |
+| [slate](#slate) | 6 | Slate inspector status, window listing, widget snapshot/describe/capture, type- or text-based widget wait (gated by `bEnableSlateInspectorActions`) |
 | [imagegen](#imagegen) | 10 | Generated Texture2D/PNG/SVG/MSDF image workflows and ima2 bridge |
 | [bridge](#bridge) | 5 | Read-only RX-6 bridge integration |
 | [reflect](#reflect) | 1 | **New [Unreleased].** Reflection Intelligence — index maintenance (`rebuild_reflection_index`, project-only force-rebuild of the RI reflection tables; WRITE/maintenance) |
@@ -1757,6 +1758,21 @@ Provider rate limits return `error_data.error_class="provider_rate_limited"`, `r
 | `get_generated_asset_provenance` | `asset_path` |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithImageGen.md` for the deep dive.
+
+## slate
+
+Report Slate inspector flag state, Slate availability, visible window count, ref generation, and gated read-only actions. **Default-disabled gate:** by default `UMonolithSettings::bEnableSlateInspectorActions=false`, so only `get_inspector_status` is registered; the remaining actions require enabling that setting first. **Waits:** `wait_for_widget` accepts either `text_contains` (substring match on widget text/labels) or `type` (UMG/Slate class name); at least one must be non-empty.
+
+| Action | Params |
+|--------|--------|
+| `get_inspector_status` | none |
+| `list_windows` | `include_titles` |
+| `snapshot_widgets` | `window_index` |
+| `describe_widget` | `ref` (required) |
+| `capture_widget` | `ref` |
+| `wait_for_widget` | `text_contains` or `type` |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithSlate.md` for the deep dive.
 
 ## ui
 
