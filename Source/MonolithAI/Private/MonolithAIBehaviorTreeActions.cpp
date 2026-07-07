@@ -1931,7 +1931,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBehaviorTree(c
 
 	FString AssetName;
 
-	Params->TryGetStringField(TEXT("name"), AssetName);
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -1967,7 +1970,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBehaviorTree(c
 
 	// Optionally link blackboard
 	FString BBPath;
-	Params->TryGetStringField(TEXT("blackboard_path"), BBPath);
+	if (Params->HasField(TEXT("blackboard_path")) && !Params->TryGetStringField(TEXT("blackboard_path"), BBPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'blackboard_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!BBPath.IsEmpty())
 	{
 		UBlackboardData* BB = Cast<UBlackboardData>(FMonolithAssetUtils::LoadAssetByPath(UBlackboardData::StaticClass(), BBPath));
@@ -2075,7 +2081,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleListBehaviorTrees(co
 
 	FString PathFilter;
 
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'path_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	for (const FAssetData& Asset : Assets)
@@ -2213,7 +2222,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleSetBTBlackboard(cons
 
 	FString BBPath;
 
-	Params->TryGetStringField(TEXT("blackboard_path"), BBPath);
+	if (Params->HasField(TEXT("blackboard_path")) && !Params->TryGetStringField(TEXT("blackboard_path"), BBPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'blackboard_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set BT Blackboard")));
 
@@ -2253,10 +2265,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleSetBTBlackboard(cons
 FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleListBTNodeClasses(const TSharedPtr<FJsonObject>& Params)
 {
 	FString CategoryFilter;
-	if (Params->TryGetStringField(TEXT("category"), CategoryFilter))
+	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), CategoryFilter))
 	{
-		CategoryFilter = CategoryFilter.ToLower();
+		return FMonolithActionResult::Error(TEXT("Parameter 'category' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
+	CategoryFilter = CategoryFilter.ToLower();
 
 	TArray<TSharedPtr<FJsonValue>> NodeClasses;
 
@@ -2328,7 +2341,19 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTNode(const TSha
 
 	// Find the parent graph node
 	FString ParentIdStr;
-	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
+	if (Params->HasField(TEXT("parent_id")))
+	{
+		const TSharedPtr<FJsonValue> ParentIdVal = Params->TryGetField(TEXT("parent_id"));
+		if (ParentIdVal.IsValid() && ParentIdVal->IsNull())
+		{
+			// Explicit null means root
+			ParentIdStr.Empty();
+		}
+		else if (!Params->TryGetStringField(TEXT("parent_id"), ParentIdStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'parent_id' must be a string or null"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 
 	if (ParentIdStr.IsEmpty())
@@ -2655,7 +2680,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleRemoveBTDecorator(co
 	double DecoratorIndexDouble = 0.0;
 	if (!Params->TryGetNumberField(TEXT("decorator_index"), DecoratorIndexDouble))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'decorator_index' must be a number"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'decorator_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 DecoratorIndex = (int32)DecoratorIndexDouble;
 
@@ -2793,7 +2818,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleRemoveBTService(cons
 	double ServiceIndexDouble = 0.0;
 	if (!Params->TryGetNumberField(TEXT("service_index"), ServiceIndexDouble))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'service_index' must be a number"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'service_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 ServiceIndex = (int32)ServiceIndexDouble;
 
@@ -3121,7 +3146,19 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 
 	// Find parent
 	FString ParentIdStr;
-	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
+	if (Params->HasField(TEXT("parent_id")))
+	{
+		const TSharedPtr<FJsonValue> ParentIdVal = Params->TryGetField(TEXT("parent_id"));
+		if (ParentIdVal.IsValid() && ParentIdVal->IsNull())
+		{
+			// Explicit null means root
+			ParentIdStr.Empty();
+		}
+		else if (!Params->TryGetStringField(TEXT("parent_id"), ParentIdStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'parent_id' must be a string or null"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 	if (ParentIdStr.IsEmpty())
 	{
@@ -3144,6 +3181,12 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 	if (TOptional<FString> ParentErr = ValidateParentForChildTask(ParentGraphNode, TEXT("add_bt_run_eqs_task")))
 	{
 		return FMonolithActionResult::Error(MoveTemp(*ParentErr));
+	}
+
+	FString RunMode;
+	if (Params->HasField(TEXT("run_mode")) && !Params->TryGetStringField(TEXT("run_mode"), RunMode))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'run_mode' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Add RunEQSQuery Task")));
@@ -3177,9 +3220,6 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 	// Also try BlackboardKey as some versions use that
 	SetPropertyValue(TaskNode, TEXT("BlackboardKey"), BBKeyVal, BT, PropError);
 
-	FString RunMode;
-
-	Params->TryGetStringField(TEXT("run_mode"), RunMode);
 	if (!RunMode.IsEmpty())
 	{
 		TSharedPtr<FJsonValue> RunModeVal = MakeShared<FJsonValueString>(RunMode);
@@ -3267,7 +3307,19 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTSmartObjectTask
 
 	// Find parent
 	FString ParentIdStr;
-	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
+	if (Params->HasField(TEXT("parent_id")))
+	{
+		const TSharedPtr<FJsonValue> ParentIdVal = Params->TryGetField(TEXT("parent_id"));
+		if (ParentIdVal.IsValid() && ParentIdVal->IsNull())
+		{
+			// Explicit null means root
+			ParentIdStr.Empty();
+		}
+		else if (!Params->TryGetStringField(TEXT("parent_id"), ParentIdStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'parent_id' must be a string or null"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 	if (ParentIdStr.IsEmpty())
 	{
@@ -3327,12 +3379,9 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTSmartObjectTask
 
 	// Apply search radius
 	double SearchRadius = 5000.0;
-	if (Params->HasField(TEXT("search_radius")))
+	if (Params->HasField(TEXT("search_radius")) && !Params->TryGetNumberField(TEXT("search_radius"), SearchRadius))
 	{
-		if (!Params->TryGetNumberField(TEXT("search_radius"), SearchRadius))
-		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'search_radius' must be a number"));
-		}
+		return FMonolithActionResult::Error(TEXT("Parameter 'search_radius' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	TSharedPtr<FJsonValue> RadiusVal = MakeShared<FJsonValueNumber>(SearchRadius);
 	SetPropertyValue(TaskNode, TEXT("SearchRadius"), RadiusVal, BT, PropError);
@@ -3375,8 +3424,12 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 
 	// 2. Mutual-exclusion validation
 	FString AbilityClassPath;
-	const bool bHasAbilityClass = Params->TryGetStringField(TEXT("ability_class"), AbilityClassPath)
-		&& !AbilityClassPath.IsEmpty();
+	const bool bHasAbilityClass = Params->HasField(TEXT("ability_class"));
+	if (bHasAbilityClass && !Params->TryGetStringField(TEXT("ability_class"), AbilityClassPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'ability_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	const bool bHasValidAbilityClass = bHasAbilityClass && !AbilityClassPath.IsEmpty();
 
 	// ability_tags accepts either a comma-separated string OR a JSON array of strings
 	TArray<FString> RawTagList;
@@ -3398,7 +3451,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 		else
 		{
 			FString TagsStr;
-			if (Params->TryGetStringField(TEXT("ability_tags"), TagsStr) && !TagsStr.IsEmpty())
+			if (Params->HasField(TEXT("ability_tags")) && !Params->TryGetStringField(TEXT("ability_tags"), TagsStr))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'ability_tags' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			if (!TagsStr.IsEmpty())
 			{
 				TagsStr.ParseIntoArray(RawTagList, TEXT(","), /*InCullEmpty=*/true);
 				for (FString& T : RawTagList) { T.TrimStartAndEndInline(); }
@@ -3420,7 +3477,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 
 	// 3. Resolve ability class (asset path -> Blueprint -> GeneratedClass; or native class name)
 	UClass* ResolvedAbilityClass = nullptr;
-	if (bHasAbilityClass)
+	if (bHasValidAbilityClass)
 	{
 		// Asset path form (e.g. /Game/AI/Abilities/GA_Roar) — load the Blueprint, take its GeneratedClass.
 		if (AbilityClassPath.StartsWith(TEXT("/")))
@@ -3494,7 +3551,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 	FGameplayTag EventTag;
 	{
 		FString EventTagStr;
-		if (Params->TryGetStringField(TEXT("event_tag"), EventTagStr) && !EventTagStr.IsEmpty())
+		if (Params->HasField(TEXT("event_tag")) && !Params->TryGetStringField(TEXT("event_tag"), EventTagStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'event_tag' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!EventTagStr.IsEmpty())
 		{
 			EventTag = FGameplayTag::RequestGameplayTag(*EventTagStr, /*ErrorIfNotFound=*/false);
 			if (!EventTag.IsValid())
@@ -3508,7 +3569,19 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 
 	// 6. Find parent
 	FString ParentIdStr;
-	Params->TryGetStringField(TEXT("parent_id"), ParentIdStr);
+	if (Params->HasField(TEXT("parent_id")))
+	{
+		const TSharedPtr<FJsonValue> ParentIdVal = Params->TryGetField(TEXT("parent_id"));
+		if (ParentIdVal.IsValid() && ParentIdVal->IsNull())
+		{
+			// Explicit null means root
+			ParentIdStr.Empty();
+		}
+		else if (!Params->TryGetStringField(TEXT("parent_id"), ParentIdStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'parent_id' must be a string or null"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 	UBehaviorTreeGraphNode* ParentGraphNode = nullptr;
 	if (ParentIdStr.IsEmpty())
 	{
@@ -3567,11 +3640,17 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 	}
 
 	bool bWaitForEnd = true;
-	Params->TryGetBoolField(TEXT("wait_for_end"), bWaitForEnd);
+	if (Params->HasField(TEXT("wait_for_end")) && !Params->TryGetBoolField(TEXT("wait_for_end"), bWaitForEnd))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'wait_for_end' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	TaskNode->bWaitForEnd = bWaitForEnd;
 
 	bool bSucceedOnBlocked = false;
-	Params->TryGetBoolField(TEXT("succeed_on_blocked"), bSucceedOnBlocked);
+	if (Params->HasField(TEXT("succeed_on_blocked")) && !Params->TryGetBoolField(TEXT("succeed_on_blocked"), bSucceedOnBlocked))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'succeed_on_blocked' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	TaskNode->bSucceedOnBlocked = bSucceedOnBlocked;
 
 	if (EventTag.IsValid())
@@ -3581,7 +3660,11 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 
 	// Optional node-name override
 	FString NodeName;
-	if (Params->TryGetStringField(TEXT("node_name"), NodeName) && !NodeName.IsEmpty())
+	if (Params->HasField(TEXT("node_name")) && !Params->TryGetStringField(TEXT("node_name"), NodeName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'node_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!NodeName.IsEmpty())
 	{
 		TaskNode->NodeName = NodeName;
 	}
@@ -3640,7 +3723,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleBuildBTFromSpec(cons
 	const TSharedPtr<FJsonObject>& Spec = *SpecObjPtr;
 
 	bool bStrictMode = false;
-	Params->TryGetBoolField(TEXT("strict_mode"), bStrictMode);
+	if (Params->HasField(TEXT("strict_mode")) && !Params->TryGetBoolField(TEXT("strict_mode"), bStrictMode))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'strict_mode' must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// Validate root exists
 	const TSharedPtr<FJsonObject>* RootObjPtr = nullptr;
@@ -4244,7 +4330,18 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCloneBTSubtree(const
 
 	FString DestParentIdStr;
 
-	Params->TryGetStringField(TEXT("dest_parent_id"), DestParentIdStr);
+	if (Params->HasField(TEXT("dest_parent_id")))
+	{
+		const TSharedPtr<FJsonValue> DestParentIdVal = Params->TryGetField(TEXT("dest_parent_id"));
+		if (DestParentIdVal.IsValid() && DestParentIdVal->IsNull())
+		{
+			DestParentIdStr.Empty();
+		}
+		else if (!Params->TryGetStringField(TEXT("dest_parent_id"), DestParentIdStr))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'dest_parent_id' must be a string or null"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	// Load source BT
 	FString SrcError;
@@ -4494,7 +4591,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAutoArrangeBT(const 
 
 	if (Params->HasField(TEXT("formatter")) && !Params->TryGetStringField(TEXT("formatter"), FormatterPref))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'formatter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (FormatterPref.IsEmpty()) FormatterPref = TEXT("default");
 	FormatterPref = FormatterPref.ToLower();
@@ -4792,7 +4889,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTTaskBlueprin
 
 	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// Resolve parent class
@@ -4880,7 +4977,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTDecoratorBlu
 
 	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UClass* ParentClass = UBTDecorator_BlueprintBase::StaticClass();
@@ -4959,7 +5056,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleCreateBTServiceBluep
 
 	if (Params->HasField(TEXT("parent_class")) && !Params->TryGetStringField(TEXT("parent_class"), ParentClassName))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'parent_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	UClass* ParentClass = UBTService_BlueprintBase::StaticClass();
@@ -5041,7 +5138,7 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleGenerateBTDiagram(co
 
 	if (Params->HasField(TEXT("format")) && !Params->TryGetStringField(TEXT("format"), Format))
 	{
-		return FMonolithActionResult::Error(TEXT("Parameter 'format' must be a string"));
+		return FMonolithActionResult::Error(TEXT("Parameter 'format' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (Format.IsEmpty()) Format = TEXT("ascii");
 
