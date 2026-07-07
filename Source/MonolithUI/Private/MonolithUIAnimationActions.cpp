@@ -2557,10 +2557,12 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleApplyAnimationDelta(con
     }
 
     TArray<TSharedPtr<FJsonValue>> SupportedOps;
+    SupportedOps.Reserve(2);
     SupportedOps.Add(MakeShared<FJsonValueString>(TEXT("upsert_float_key")));
     SupportedOps.Add(MakeShared<FJsonValueString>(TEXT("delete_float_key")));
 
     TArray<TSharedPtr<FJsonValue>> SupportedPropertyGroups;
+    SupportedPropertyGroups.Reserve(6);
     SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderOpacity")));
     SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Translation.X/Y via property=transform component=tx/ty")));
     SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("RenderTransform.Angle via property=transform component=angle")));
@@ -2569,6 +2571,7 @@ FMonolithActionResult FMonolithUIAnimationActions::HandleApplyAnimationDelta(con
     SupportedPropertyGroups.Add(MakeShared<FJsonValueString>(TEXT("ColorAndOpacity.R/G/B/A via property=color component=r/g/b/a")));
 
     TArray<TSharedPtr<FJsonValue>> UnsupportedOps;
+    UnsupportedOps.Reserve(2);
     UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("event key writes require endpoint/function validation and are deferred")));
     UnsupportedOps.Add(MakeShared<FJsonValueString>(TEXT("vector/object track delta is deferred")));
 
