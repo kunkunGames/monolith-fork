@@ -516,11 +516,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleGetSMStatistics(co
 	if (AssetPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'asset_path'"));
 
 	FString LoadError;
-	UBlueprint* SMBlueprint = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!SMBlueprint) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(SMBlueprint);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* SMBlueprint = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, SMBlueprint, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	int32 StateCount = 0, TransitionCount = 0, ConduitCount = 0;
 	int32 NestedSMCount = 0, AnyStateCount = 0, EntryCount = 0;
@@ -725,11 +726,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddTransition(cons
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* SourceNode = MonolithLD::FindNodeByGuid(RootGraph, SourceGuid);
 	if (!SourceNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Source node not found: %s"), *SourceGuid));
@@ -822,11 +824,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddConduit(const T
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UClass* ConduitClass = MonolithLD::GetSMGraphNodeConduitClass();
 	if (!ConduitClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_ConduitNode class not found"));
@@ -886,11 +889,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddStateMachineNod
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UClass* SMNodeClass = MonolithLD::GetSMGraphNodeSMClass();
 	if (!SMNodeClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_StateMachineStateNode class not found"));
@@ -943,11 +947,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAddAnyStateNode(co
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UClass* AnyStateClass = MonolithLD::GetSMGraphNodeAnyStateClass();
 	if (!AnyStateClass) return FMonolithActionResult::Error(TEXT("SMGraphNode_AnyStateNode class not found"));
@@ -972,11 +977,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleRemoveNode(const T
 	if (NodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_guid'"));
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1029,11 +1035,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetNodeProperties(
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1101,11 +1108,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetInitialState(co
 	if (NodeGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'node_guid'"));
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* TargetNode = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!TargetNode) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1195,11 +1203,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetEndState(const 
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1240,11 +1249,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleSetNodeClass(const
 	if (ClassPath.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'class_path'"));
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1320,11 +1330,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleRenameNode(const T
 	if (NewName.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required param 'new_name'"));
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1371,11 +1382,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleMoveNode(const TSh
 	PosY = static_cast<int32>(TmpY);
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	UEdGraphNode* Node = MonolithLD::FindNodeByGuid(RootGraph, NodeGuid);
 	if (!Node) return FMonolithActionResult::Error(FString::Printf(TEXT("Node not found with GUID '%s'"), *NodeGuid));
@@ -1424,11 +1436,12 @@ FMonolithActionResult FMonolithLogicDriverGraphActions::HandleAutoArrangeGraph(c
 	}
 
 	FString LoadError;
-	UBlueprint* BP = MonolithLD::LoadSMBlueprint(AssetPath, LoadError);
-	if (!BP) return FMonolithActionResult::Error(LoadError);
-
-	UEdGraph* RootGraph = MonolithLD::GetRootGraph(BP);
-	if (!RootGraph) return FMonolithActionResult::Error(TEXT("No root SM graph found"));
+	UBlueprint* BP = nullptr;
+	UEdGraph* RootGraph = nullptr;
+	if (!MonolithLD::LoadSMBlueprintAndRootGraph(AssetPath, BP, RootGraph, LoadError))
+	{
+		return FMonolithActionResult::Error(LoadError);
+	}
 
 	// Try IMonolithGraphFormatter if not explicitly requesting builtin
 	if (FormatterMode != TEXT("builtin") && bMayUseExternalFormatter)
