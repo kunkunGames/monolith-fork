@@ -664,7 +664,7 @@ Build summary, search-build-log-by-pattern, structured compile report. See `desc
 
 ### `editor.get_recent_logs` · `editor.search_logs` · `editor.tail_log` · `editor.get_log_categories` · `editor.get_log_stats`
 
-Editor log inspection. `search_logs` accepts `pattern`, `category`, `verbosity`, `limit`. `tail_log` and `get_recent_logs` take `count`.
+Editor log inspection. `search_logs` accepts `pattern`, `category`, `verbosity`, `limit`. `tail_log` and `get_recent_logs` take `count` (alias: `max` for `get_recent_logs`).
 
 ### `editor.get_crash_context`
 

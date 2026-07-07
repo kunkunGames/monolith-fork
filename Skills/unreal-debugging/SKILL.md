@@ -36,7 +36,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `get_build_status` | Compiling / last_result / errors_since_compile / patch_applied | (none) |
 | `get_build_summary` | Last build errors, warnings, time | (none) |
 | `search_build_output` | Search build log output by pattern | `pattern*` `limit?=100` |
-| `get_recent_logs` | N most recent log entries | `count?=50` |
+| `get_recent_logs` | N most recent log entries | `count?=50` (alias: max) |
 | `search_logs` | Search by pattern, category, verbosity | `pattern?` `category?` `verbosity?` (error/warning/log/verbose) `limit?=100` |
 | `tail_log` [w] | Last N log lines (like `tail -f`) | `count?=50` |
 | `get_log_categories` | All active log categories | (none) |

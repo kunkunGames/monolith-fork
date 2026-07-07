@@ -96,6 +96,7 @@ bool FMonolithEditorGetBuildErrorsMalformedTest::RunTest(const FString& Paramete
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSearchLogsMalformedTest, "Monolith.ParamGuard.Editor.SearchLogsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithEditorSearchLogsMalformedTest::RunTest(const FString& Parameters)
@@ -128,6 +129,49 @@ bool FMonolithEditorSearchLogsMalformedTest::RunTest(const FString& Parameters)
 
 		TestFalse(TEXT("Malformed verbosity should return an error"), Result.bSuccess);
 		TestTrue(TEXT("Error should name the parameter verbosity"), Result.ErrorMessage.Contains(TEXT("verbosity")));
+	}
+
+	return true;
+}
+
+
+#include "MonolithToolRegistry.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorGetRecentLogsAliasTest, "Monolith.Registry.Editor.GetRecentLogsAcceptsMaxAlias", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorGetRecentLogsAliasTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+
+	// Test malformed type for canonical param
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("count"), TEXT("not_a_number"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("editor"), TEXT("get_recent_logs"), Payload);
+
+		TestFalse(TEXT("Malformed count should return an error"), Result.bSuccess);
+	}
+
+	// Test malformed type for alias param
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetStringField(TEXT("max"), TEXT("not_a_number"));
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("editor"), TEXT("get_recent_logs"), Payload);
+
+		TestFalse(TEXT("Malformed max alias should return an error"), Result.bSuccess);
+	}
+
+	// Test collision
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("count"), 10);
+		Payload->SetNumberField(TEXT("max"), 20);
+
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("editor"), TEXT("get_recent_logs"), Payload);
+
+		TestFalse(TEXT("Providing both count and max alias should return an error"), Result.bSuccess);
 	}
 
 	return true;
