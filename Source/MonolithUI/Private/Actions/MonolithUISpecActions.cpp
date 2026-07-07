@@ -17,6 +17,7 @@
 
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
+#include "MonolithJsonUtils.h"
 
 #include "Spec/UISpec.h"
 #include "Spec/UISpecValidator.h"
@@ -4164,11 +4165,22 @@ namespace MonolithUI::SpecActionsInternal
         }
 
         bool bCheckOverlap = true;
+        if (Params->HasField(TEXT("check_overlap")) && !Params->TryGetBoolField(TEXT("check_overlap"), bCheckOverlap))
+        {
+            return FMonolithActionResult::Error(TEXT("check_overlap must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+        }
+
         bool bCheckSafeZone = true;
-        Params->TryGetBoolField(TEXT("check_overlap"), bCheckOverlap);
-        Params->TryGetBoolField(TEXT("check_safe_zone"), bCheckSafeZone);
+        if (Params->HasField(TEXT("check_safe_zone")) && !Params->TryGetBoolField(TEXT("check_safe_zone"), bCheckSafeZone))
+        {
+            return FMonolithActionResult::Error(TEXT("check_safe_zone must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+        }
+
         double MaxAllowedOverlapRatio = 0.0;
-        Params->TryGetNumberField(TEXT("max_allowed_overlap_ratio"), MaxAllowedOverlapRatio);
+        if (Params->HasField(TEXT("max_allowed_overlap_ratio")) && !Params->TryGetNumberField(TEXT("max_allowed_overlap_ratio"), MaxAllowedOverlapRatio))
+        {
+            return FMonolithActionResult::Error(TEXT("max_allowed_overlap_ratio must be a number."), FMonolithJsonUtils::ErrInvalidParams);
+        }
         MaxAllowedOverlapRatio = FMath::Clamp(MaxAllowedOverlapRatio, 0.0, 1.0);
 
         FUISpecSerializerInputs DumpInputs;

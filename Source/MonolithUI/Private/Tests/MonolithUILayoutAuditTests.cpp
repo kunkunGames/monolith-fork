@@ -7,6 +7,7 @@
 #include "MonolithUICommon.h"
 #include "MonolithPackagePathValidator.h"
 #include "MonolithToolRegistry.h"
+#include "MonolithJsonUtils.h"
 #include "Tests/Hoisted/MonolithUITestFixtureUtils.h"
 
 #include "Blueprint/WidgetTree.h"
@@ -1183,6 +1184,44 @@ bool FMonolithUIMaterialLifecycleAuditTickDynamicMaterialTest::RunTest(const FSt
         TestTrue(TEXT("at least one DMI creation call scanned"), DmiCount >= 1);
         TestTrue(TEXT("at least one lifecycle error reported"), ErrorCount >= 1);
     }
+    return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardAuditLayoutTest, "Monolith.ParamGuard.UI.AuditLayout.MalformedParams", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+bool FMonolithUIParamGuardAuditLayoutTest::RunTest(const FString& Parameters)
+{
+    EnsureLayoutAuditActionRegistered();
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_DummyTest"));
+    Params->SetStringField(TEXT("check_overlap"), TEXT("wrong_type_string")); // Malformed
+
+    const FMonolithActionResult Result = MonolithUI::HandleAuditLayout(Params);
+
+    TestFalse(TEXT("Malformed check_overlap should fail"), Result.bSuccess);
+    TestTrue(TEXT("Result is error payload"), Result.Result.IsValid());
+    if (Result.Result.IsValid())
+    {
+        int32 ErrCode = 0;
+        Result.Result->TryGetNumberField(TEXT("error_code"), ErrCode);
+        TestEqual(TEXT("Error code is invalid params"), ErrCode, FMonolithJsonUtils::ErrInvalidParams);
+    }
+
+    Params->RemoveField(TEXT("check_overlap"));
+
+    TSharedPtr<FJsonObject> MaxOverlapArray = MakeShared<FJsonObject>(); // Malformed
+    Params->SetObjectField(TEXT("max_allowed_overlap_ratio"), MaxOverlapArray);
+
+    const FMonolithActionResult Result2 = MonolithUI::HandleAuditLayout(Params);
+    TestFalse(TEXT("Malformed max_allowed_overlap_ratio should fail"), Result2.bSuccess);
+    if (Result2.Result.IsValid())
+    {
+        int32 ErrCode = 0;
+        Result2.Result->TryGetNumberField(TEXT("error_code"), ErrCode);
+        TestEqual(TEXT("Error code is invalid params for ratio"), ErrCode, FMonolithJsonUtils::ErrInvalidParams);
+    }
+
     return true;
 }
 
