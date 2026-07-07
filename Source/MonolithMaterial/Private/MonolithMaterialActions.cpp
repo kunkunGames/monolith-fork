@@ -8626,6 +8626,9 @@ FMonolithActionResult FMonolithMaterialActions::GetFunctionInfo(const TSharedPtr
 	const UEnum* InputTypeEnum = StaticEnum<EFunctionInputType>();
 
 	TConstArrayView<TObjectPtr<UMaterialExpression>> FuncExprs = MatFunc->GetExpressions();
+	InputsJson.Reserve(FuncExprs.Num());
+	OutputsJson.Reserve(FuncExprs.Num());
+	ExpressionsJson.Reserve(FuncExprs.Num());
 	for (const TObjectPtr<UMaterialExpression>& Expr : FuncExprs)
 	{
 		if (!Expr)
