@@ -562,7 +562,7 @@ def check_agent_tools(ctx: CheckContext) -> None:
             ctx.advisory("agent-tools", message, agents_dir)
         return
 
-    dispatcher_re = re.compile(re.escape(dispatcher_prefix) + r"[A-Za-z0-9_-]+")
+    dispatcher_re = re.compile(re.escape(dispatcher_prefix) + r"[a-zA-Z_-][a-zA-Z0-9_-]*")
     for path in sorted(agents_dir.glob("*.md")):
         text = read_text(path)
         tools = parse_agent_tools_frontmatter(text)
