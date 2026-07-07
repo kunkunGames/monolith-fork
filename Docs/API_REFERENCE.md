@@ -34,6 +34,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [project](#project) | 7 | Project-wide asset index (SQLite + FTS5) |
 | [collection](#collection) | 13 | Content Browser collection CRUD and manipulation |
 | [source](#source) | 12 | Unreal Engine C++ source code navigation |
+| [hlod](#hlod) | | World Partition Hierarchical Level of Detail (HLOD) configuration and legacy migration |
 | [mesh](#mesh) | 194 | Mesh inspection, scene manipulation, spatial queries, blockout, GeometryScript, procedural geo, lighting, audio, performance, mesh import (incl. skeletal + animation). +45 town gen registers only with `bEnableProceduralTownGen=true` (experimental, not in the public count) |
 | [ui](#ui) | live | UMG widget CRUD, explicit session/request work context, templates, styling, animation v1+v2 plus read inspection, EffectSurface, UIExtension points, CommonFramework diagnostics/authoring, Spec Builder, Type Registry, settings scaffolding, headline scaffolders, navigation/conversion gap-closure, accessibility, CommonUI, GAS UI bindings |
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
@@ -1634,6 +1635,12 @@ See `Docs/specs/SPEC_MonolithScene.md` for the deep dive.
 Procedural building/city/facade/roof/terrain generation, floor-plan generation, furnishing, blockout authoring, room/genre templates, asset presets, and context-prop placement. (Split out of `mesh` on 2026-05-20).
 
 See `Docs/specs/SPEC_MonolithWorldGen.md` for the deep dive.
+
+---
+
+## hlod
+
+World Partition Hierarchical Level of Detail (HLOD) layer configuration, builder orchestration, generation stats, and legacy HLOD migration/clearance actions. Registered via the MonolithMesh module.
 
 ---
 
