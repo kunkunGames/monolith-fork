@@ -164,7 +164,7 @@ RegisterIndexer(MakeShared<FMyIndexer>());
 
 ### 3. Add DB tables if needed
 
-If your indexer needs new tables, execute the schema during indexing using `DB.GetRawDatabase()` (or add it to `GCreateTablesSQL` in `FMonolithIndexDatabase.cpp`). Follow the existing pattern with `CREATE TABLE IF NOT EXISTS`.
+If your indexer needs new tables, execute the schema during indexing using `DB.GetRawDatabase()` (or add it to `GCreateTablesSQL` in `MonolithIndexDatabase.cpp`). Follow the existing pattern with `CREATE TABLE IF NOT EXISTS`.
 
 ---
 
