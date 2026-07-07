@@ -47,7 +47,10 @@ namespace
 		FString ComponentName;
 		if (Params->HasField(TEXT("component_name")))
 		{
-			ComponentName = Params->GetStringField(TEXT("component_name"));
+			if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'component_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+			}
 		}
 
 		FWorldContext* PIEContext = GEditor ? GEditor->GetPIEWorldContext() : nullptr;
