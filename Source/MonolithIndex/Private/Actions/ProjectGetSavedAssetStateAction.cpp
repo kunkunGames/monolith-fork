@@ -10,7 +10,7 @@ FMonolithActionResult FProjectGetSavedAssetStateAction::Execute(const TSharedPtr
 	FString PackagePath;
 	if (Params->HasField(TEXT("asset_path")))
 	{
-		if (!Params->HasTypedField<EJson::String>(TEXT("asset_path")) ||
+		if (!Params->HasTypedField(TEXT("asset_path"), EJson::String) ||
 			!Params->TryGetStringField(TEXT("asset_path"), PackagePath))
 		{
 			return FMonolithActionResult::Error(TEXT("'asset_path' parameter must be a string"), -32602);
@@ -20,7 +20,7 @@ FMonolithActionResult FProjectGetSavedAssetStateAction::Execute(const TSharedPtr
 	}
 	if (PackagePath.IsEmpty() && Params->HasField(TEXT("package_path")))
 	{
-		if (!Params->HasTypedField<EJson::String>(TEXT("package_path")) ||
+		if (!Params->HasTypedField(TEXT("package_path"), EJson::String) ||
 			!Params->TryGetStringField(TEXT("package_path"), PackagePath))
 		{
 			return FMonolithActionResult::Error(TEXT("'package_path' parameter must be a string"), -32602);
