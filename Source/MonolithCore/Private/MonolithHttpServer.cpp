@@ -1231,8 +1231,23 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesList(const TSharedPt
 
 TSharedPtr<FJsonObject> FMonolithHttpServer::HandleResourcesRead(const TSharedPtr<FJsonValue>& Id, const TSharedPtr<FJsonObject>& Params)
 {
+	if (!Params.IsValid())
+	{
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Missing params"));
+	}
+
 	FString Uri;
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("uri"), Uri) || Uri.IsEmpty())
+	if (Params->HasField(TEXT("uri")) && !Params->TryGetStringField(TEXT("uri"), Uri))
+	{
+		return FMonolithJsonUtils::ErrorResponse(
+			Id,
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Parameter 'uri' must be a string"));
+	}
+	if (Uri.IsEmpty())
 	{
 		return FMonolithJsonUtils::ErrorResponse(
 			Id,
@@ -1274,7 +1289,18 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	}
 
 	FString ToolName;
-	if (!Params->TryGetStringField(TEXT("name"), ToolName))
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), ToolName))
+	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			TEXT(""),
+			TEXT(""),
+			TEXT(""),
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Parameter 'name' must be a string"));
+		return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'name' must be a string."));
+	}
+	if (ToolName.IsEmpty())
 	{
 		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 			TEXT(""),
@@ -1289,7 +1315,18 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 	// Get arguments
 	TSharedPtr<FJsonObject> Arguments;
 	const TSharedPtr<FJsonObject>* ArgsObj = nullptr;
-	if (Params->TryGetObjectField(TEXT("arguments"), ArgsObj) && ArgsObj)
+	if (Params->HasField(TEXT("arguments")) && !Params->TryGetObjectField(TEXT("arguments"), ArgsObj))
+	{
+		FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+			ToolName,
+			TEXT(""),
+			TEXT(""),
+			TEXT("malformed_dispatch"),
+			FMonolithJsonUtils::ErrInvalidParams,
+			TEXT("Parameter 'arguments' must be an object"));
+		return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'arguments' must be an object."));
+	}
+	if (ArgsObj)
 	{
 		Arguments = *ArgsObj;
 	}
@@ -1307,7 +1344,15 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// Single cross-namespace dispatcher: arguments carry {namespace, action, params}.
 		// Checked before the generic monolith_ branch because "monolith_query" also
 		// starts with "monolith_" but must route to the namespace named in arguments.
-		if (!Arguments->TryGetStringField(TEXT("namespace"), Namespace) || Namespace.IsEmpty())
+		if (Arguments->HasField(TEXT("namespace")) && !Arguments->TryGetStringField(TEXT("namespace"), Namespace))
+			{
+				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+					ToolName, TEXT(""), TEXT(""), TEXT("malformed_dispatch"),
+					FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'namespace' must be a string"));
+				return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+					TEXT("Parameter 'namespace' must be a string."));
+			}
+			if (Namespace.IsEmpty())
 		{
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				ToolName, TEXT(""), TEXT(""), TEXT("malformed_dispatch"),
@@ -1315,7 +1360,15 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 			return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
 				TEXT("Missing 'namespace' — monolith_query requires arguments.namespace; call monolith_discover() to enumerate namespaces."));
 		}
-		if (!Arguments->TryGetStringField(TEXT("action"), Action) || Action.IsEmpty())
+		if (Arguments->HasField(TEXT("action")) && !Arguments->TryGetStringField(TEXT("action"), Action))
+			{
+				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+					ToolName, Namespace, TEXT(""), TEXT("malformed_dispatch"),
+					FMonolithJsonUtils::ErrInvalidParams, TEXT("Parameter 'action' must be a string"));
+				return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+					TEXT("Parameter 'action' must be a string."));
+			}
+			if (Action.IsEmpty())
 		{
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				ToolName, Namespace, TEXT(""), TEXT("malformed_dispatch"),
@@ -1453,7 +1506,19 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		// Domain tool: blueprint_query (or legacy blueprint.query) -> namespace="blueprint"
 		Namespace = ToolName.Left(ToolName.Len() - 6); // strip "_query" or ".query"
 
-		if (!Arguments->TryGetStringField(TEXT("action"), Action))
+		if (Arguments->HasField(TEXT("action")) && !Arguments->TryGetStringField(TEXT("action"), Action))
+			{
+				FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
+					ToolName,
+					Namespace,
+					TEXT(""),
+					TEXT("malformed_dispatch"),
+					FMonolithJsonUtils::ErrInvalidParams,
+					TEXT("Parameter 'action' must be a string"));
+				return FMonolithJsonUtils::ErrorResponse(Id, FMonolithJsonUtils::ErrInvalidParams,
+					TEXT("Parameter 'action' must be a string."));
+			}
+			if (Action.IsEmpty())
 		{
 			FMonolithActionExecutionGuard::Get().RecordRejectedToolCall(
 				ToolName,
