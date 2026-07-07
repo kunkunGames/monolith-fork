@@ -95,3 +95,40 @@ bool FMonolithEditorGetBuildErrorsMalformedTest::RunTest(const FString& Paramete
 
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithEditorSearchLogsMalformedTest, "Monolith.ParamGuard.Editor.SearchLogsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithEditorSearchLogsMalformedTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("pattern"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleSearchLogs(Payload);
+
+		TestFalse(TEXT("Malformed pattern should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter pattern"), Result.ErrorMessage.Contains(TEXT("pattern")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("category"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleSearchLogs(Payload);
+
+		TestFalse(TEXT("Malformed category should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter category"), Result.ErrorMessage.Contains(TEXT("category")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Payload = MakeShared<FJsonObject>();
+		Payload->SetNumberField(TEXT("verbosity"), 12345);
+
+		FMonolithActionResult Result = FMonolithEditorActions::HandleSearchLogs(Payload);
+
+		TestFalse(TEXT("Malformed verbosity should return an error"), Result.bSuccess);
+		TestTrue(TEXT("Error should name the parameter verbosity"), Result.ErrorMessage.Contains(TEXT("verbosity")));
+	}
+
+	return true;
+}

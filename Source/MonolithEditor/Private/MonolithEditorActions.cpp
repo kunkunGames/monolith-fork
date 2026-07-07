@@ -1680,10 +1680,9 @@ FMonolithActionResult FMonolithEditorActions::HandleGetBuildSummary(const TShare
 FMonolithActionResult FMonolithEditorActions::HandleSearchBuildOutput(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Pattern;
-	Params->TryGetStringField(TEXT("pattern"), Pattern);
-	if (Pattern.IsEmpty())
+	if (!Params->TryGetStringField(TEXT("pattern"), Pattern) || Pattern.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required parameter: pattern"));
+		return FMonolithActionResult::Error(TEXT("Missing or invalid parameter: 'pattern' must be a non-empty string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	int32 Limit = 100;
@@ -1958,11 +1957,23 @@ FMonolithActionResult FMonolithEditorActions::HandleGetRecentLogs(const TSharedP
 FMonolithActionResult FMonolithEditorActions::HandleSearchLogs(const TSharedPtr<FJsonObject>& Params)
 {
 	FString Pattern;
-	Params->TryGetStringField(TEXT("pattern"), Pattern);
+	if (Params->HasField(TEXT("pattern")) && !Params->TryGetStringField(TEXT("pattern"), Pattern))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'pattern' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString Category;
-	Params->TryGetStringField(TEXT("category"), Category);
+	if (Params->HasField(TEXT("category")) && !Params->TryGetStringField(TEXT("category"), Category))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'category' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	FString VerbosityStr;
-	Params->TryGetStringField(TEXT("verbosity"), VerbosityStr);
+	if (Params->HasField(TEXT("verbosity")) && !Params->TryGetStringField(TEXT("verbosity"), VerbosityStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid param: 'verbosity' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+
 	ELogVerbosity::Type MaxVerbosity = VerbosityStr.IsEmpty() ? ELogVerbosity::VeryVerbose : StringToVerbosity(VerbosityStr);
 
 	int32 Limit = 200;
