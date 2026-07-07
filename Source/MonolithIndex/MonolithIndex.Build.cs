@@ -121,7 +121,7 @@ public class MonolithIndex : ModuleRules
 		// hard-link the PaperZD module -> build break. When enabled, FPaperZDIndexer indexes
 		// UPaperZDAnimSequence_Flipbook (~1665) + UPaperZDAnimBP (~114); when absent it is gated
 		// out by WITH_PAPERZD in the indexer header/cpp and its registration.
-		bool bHasPaperZD = IsPluginEnabled(Target, "PaperZD");
+		bool bHasPaperZD = !bReleaseBuild && IsPluginEnabled(Target, "PaperZD");
 		if (bHasPaperZD)
 		{
 			PrivateDependencyModuleNames.Add("PaperZD");
