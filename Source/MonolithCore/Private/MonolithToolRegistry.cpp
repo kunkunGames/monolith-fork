@@ -1021,6 +1021,7 @@ bool FMonolithParamSchema::ValidateTypedParams(
 			if (ParamValue->TryGetString(ActualValue))
 			{
 				TArray<FString> AllowedValues;
+				AllowedValues.Reserve(EnumValues->Num());
 				for (const TSharedPtr<FJsonValue>& EnumValue : *EnumValues)
 				{
 					FString Allowed;
