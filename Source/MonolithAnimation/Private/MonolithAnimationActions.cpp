@@ -4096,6 +4096,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetCurveKeys(const TShare
 	const TArray<FRichCurveKey>& Keys = FloatCurve->FloatCurve.GetConstRefOfKeys();
 
 	TArray<TSharedPtr<FJsonValue>> KeysArray;
+	KeysArray.Reserve(Keys.Num());
 	for (const FRichCurveKey& Key : Keys)
 	{
 		TSharedPtr<FJsonObject> KeyObj = MakeShared<FJsonObject>();
