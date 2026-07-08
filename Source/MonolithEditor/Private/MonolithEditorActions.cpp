@@ -9975,6 +9975,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 		: 0;
 
 	TArray<TSharedPtr<FJsonValue>> AssetRows;
+	AssetRows.Reserve(AssetsToValidate.Num());
 	for (const FAssetData& AssetData : AssetsToValidate)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
@@ -9986,6 +9987,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 	}
 
 	TArray<TSharedPtr<FJsonValue>> DetailRows;
+	DetailRows.Reserve(ValidationResults.AssetsDetails.Num());
 	for (const TPair<FString, FValidateAssetsDetails>& Pair : ValidationResults.AssetsDetails)
 	{
 		const FValidateAssetsDetails& Details = Pair.Value;
@@ -9996,6 +9998,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 		Row->SetStringField(TEXT("result"), ResultToString(Details.Result));
 
 		TArray<TSharedPtr<FJsonValue>> Errors;
+		Errors.Reserve(Details.ValidationErrors.Num());
 		for (const FText& Text : Details.ValidationErrors)
 		{
 			Errors.Add(MakeShared<FJsonValueString>(Text.ToString()));
@@ -10003,6 +10006,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 		Row->SetArrayField(TEXT("errors"), Errors);
 
 		TArray<TSharedPtr<FJsonValue>> Warnings;
+		Warnings.Reserve(Details.ValidationWarnings.Num());
 		for (const FText& Text : Details.ValidationWarnings)
 		{
 			Warnings.Add(MakeShared<FJsonValueString>(Text.ToString()));
@@ -10010,6 +10014,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 		Row->SetArrayField(TEXT("warnings"), Warnings);
 
 		TArray<TSharedPtr<FJsonValue>> Messages;
+		Messages.Reserve(Details.ValidationMessages.Num());
 		for (const TSharedRef<FTokenizedMessage>& Message : Details.ValidationMessages)
 		{
 			Messages.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
@@ -10019,6 +10024,7 @@ FMonolithActionResult FMonolithEditorActions::HandleValidateAssets(const TShared
 	}
 
 	TArray<TSharedPtr<FJsonValue>> ValidatorMessages;
+	ValidatorMessages.Reserve(ValidationResults.ValidatorMessages.Num());
 	for (const TSharedRef<FTokenizedMessage>& Message : ValidationResults.ValidatorMessages)
 	{
 		ValidatorMessages.Add(MakeShared<FJsonValueString>(Message->ToText().ToString()));
