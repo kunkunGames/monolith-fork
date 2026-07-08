@@ -199,6 +199,7 @@ namespace MonolithBuildArtifact
 	static TArray<TSharedPtr<FJsonValue>> StringsToJson(const TArray<FString>& Values)
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Values.Num());
 		for (const FString& Value : Values)
 		{
 			Rows.Add(MakeShared<FJsonValueString>(Value));
@@ -308,6 +309,7 @@ namespace MonolithBuildArtifact
 	static TArray<TSharedPtr<FJsonValue>> FileRows(const TArray<FString>& Files, const FString& RootPath = FString())
 	{
 		TArray<TSharedPtr<FJsonValue>> Rows;
+		Rows.Reserve(Files.Num());
 		for (const FString& File : Files)
 		{
 			Rows.Add(MakeShared<FJsonValueObject>(FileRow(File, RootPath)));
@@ -727,6 +729,7 @@ FMonolithActionResult FMonolithBuildArtifactActions::MirrorScreenshotEvidence(co
 	const TArray<FString> Files = ScreenshotFilesFromParams(Params, Limit);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
+	Rows.Reserve(Files.Num());
 	int32 ExistingCount = 0;
 	int32 CopiedCount = 0;
 	IFileManager::Get().MakeDirectory(*DestDir, true);
