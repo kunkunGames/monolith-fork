@@ -1702,42 +1702,42 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	double TmpCellSize = 50.0;
 	if (Params->HasField(TEXT("cell_size")) && !Params->TryGetNumberField(TEXT("cell_size"), TmpCellSize))
 	{
-		return FMonolithActionResult::Error(TEXT("cell_size must be a number"));
+		return FMonolithActionResult::Error(TEXT("cell_size must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	float CellSize = static_cast<float>(TmpCellSize);
 
 	double TmpExteriorT = 15.0;
 	if (Params->HasField(TEXT("exterior_wall_thickness")) && !Params->TryGetNumberField(TEXT("exterior_wall_thickness"), TmpExteriorT))
 	{
-		return FMonolithActionResult::Error(TEXT("exterior_wall_thickness must be a number"));
+		return FMonolithActionResult::Error(TEXT("exterior_wall_thickness must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	float ExteriorT = static_cast<float>(TmpExteriorT);
 
 	double TmpInteriorT = 10.0;
 	if (Params->HasField(TEXT("interior_wall_thickness")) && !Params->TryGetNumberField(TEXT("interior_wall_thickness"), TmpInteriorT))
 	{
-		return FMonolithActionResult::Error(TEXT("interior_wall_thickness must be a number"));
+		return FMonolithActionResult::Error(TEXT("interior_wall_thickness must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	float InteriorT = static_cast<float>(TmpInteriorT);
 
 	double TmpFloorHeight = 270.0;
 	if (Params->HasField(TEXT("floor_height")) && !Params->TryGetNumberField(TEXT("floor_height"), TmpFloorHeight))
 	{
-		return FMonolithActionResult::Error(TEXT("floor_height must be a number"));
+		return FMonolithActionResult::Error(TEXT("floor_height must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	float FloorHeight = static_cast<float>(TmpFloorHeight);
 
 	double TmpFloorThick = 3.0;
 	if (Params->HasField(TEXT("floor_thickness")) && !Params->TryGetNumberField(TEXT("floor_thickness"), TmpFloorThick))
 	{
-		return FMonolithActionResult::Error(TEXT("floor_thickness must be a number"));
+		return FMonolithActionResult::Error(TEXT("floor_thickness must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	float FloorThick = static_cast<float>(TmpFloorThick);
 
 	FString SavePath;
 	if (!Params->TryGetStringField(TEXT("save_path"), SavePath) || SavePath.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: save_path"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: save_path"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString BuildingId;
@@ -1763,31 +1763,31 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	FString ParseErr;
 	if (!ParseGrid(Params, Grid, GridW, GridH, ParseErr))
 	{
-		return FMonolithActionResult::Error(ParseErr);
+		return FMonolithActionResult::Error(ParseErr, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// ---- Parse rooms ----
 	const TArray<TSharedPtr<FJsonValue>>* RoomsArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("rooms"), RoomsArr) || !RoomsArr)
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: rooms"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: rooms"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	TArray<FRoomDef> Rooms;
 	if (!ParseRooms(*RoomsArr, Rooms, ParseErr))
 	{
-		return FMonolithActionResult::Error(ParseErr);
+		return FMonolithActionResult::Error(ParseErr, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// ---- Parse doors ----
 	const TArray<TSharedPtr<FJsonValue>>* DoorsArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("doors"), DoorsArr) || !DoorsArr)
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param: doors"));
+		return FMonolithActionResult::Error(TEXT("Missing required param: doors"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	TArray<FDoorDef> Doors;
 	if (!ParseDoors(*DoorsArr, Doors, ParseErr))
 	{
-		return FMonolithActionResult::Error(ParseErr);
+		return FMonolithActionResult::Error(ParseErr, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// ---- Parse stairwells (optional) ----
@@ -1797,7 +1797,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	{
 		if (!ParseStairwells(*StairArr, Stairwells, ParseErr))
 		{
-			return FMonolithActionResult::Error(ParseErr);
+			return FMonolithActionResult::Error(ParseErr, FMonolithJsonUtils::ErrInvalidParams);
 		}
 	}
 
@@ -1805,19 +1805,19 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	bool bOmitExteriorWalls = false;
 	if (Params->HasField(TEXT("omit_exterior_walls")) && !Params->TryGetBoolField(TEXT("omit_exterior_walls"), bOmitExteriorWalls))
 	{
-		return FMonolithActionResult::Error(TEXT("omit_exterior_walls must be a boolean"));
+		return FMonolithActionResult::Error(TEXT("omit_exterior_walls must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	bool bOverwrite = false;
 	if (Params->HasField(TEXT("overwrite")) && !Params->TryGetBoolField(TEXT("overwrite"), bOverwrite))
 	{
-		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"));
+		return FMonolithActionResult::Error(TEXT("overwrite must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	bool bSnapToFloor = true;
 	if (Params->HasField(TEXT("snap_to_floor")) && !Params->TryGetBoolField(TEXT("snap_to_floor"), bSnapToFloor))
 	{
-		return FMonolithActionResult::Error(TEXT("snap_to_floor must be a boolean"));
+		return FMonolithActionResult::Error(TEXT("snap_to_floor must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	// ---- Facade style (v3 integrated facade) ----
@@ -1828,7 +1828,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateBuildingFromGrid(const
 	double TmpFacadeSeed = 0.0;
 	if (Params->HasField(TEXT("facade_seed")) && !Params->TryGetNumberField(TEXT("facade_seed"), TmpFacadeSeed))
 	{
-		return FMonolithActionResult::Error(TEXT("facade_seed must be a number"));
+		return FMonolithActionResult::Error(TEXT("facade_seed must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 FacadeSeed = static_cast<int32>(TmpFacadeSeed);
 
@@ -2099,7 +2099,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 	const TArray<TSharedPtr<FJsonValue>>* RoomsArr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("rooms"), RoomsArr) || !RoomsArr || RoomsArr->Num() == 0)
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or empty 'rooms' array"));
+		return FMonolithActionResult::Error(TEXT("Missing or empty 'rooms' array"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	float CellSize = 50.0f;
@@ -2108,7 +2108,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 		double TmpCellSize;
 		if (!Params->TryGetNumberField(TEXT("cell_size"), TmpCellSize))
 		{
-			return FMonolithActionResult::Error(TEXT("cell_size must be a number"));
+			return FMonolithActionResult::Error(TEXT("cell_size must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		CellSize = static_cast<float>(TmpCellSize);
 	}
@@ -2128,13 +2128,13 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 		const TSharedPtr<FJsonObject>* RoomObj = nullptr;
 		if (!(*RoomsArr)[i]->TryGetObject(RoomObj) || !RoomObj || !(*RoomObj).IsValid())
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] is not an object"), i));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] is not an object"), i), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		FRoomRect Rect;
 		if (!(*RoomObj)->TryGetStringField(TEXT("room_id"), Rect.RoomId))
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing 'room_id'"), i));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing 'room_id'"), i), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		(*RoomObj)->TryGetStringField(TEXT("room_type"), Rect.RoomType);
 
@@ -2144,7 +2144,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 			!(*RoomObj)->TryGetNumberField(TEXT("width"), TmpW) ||
 			!(*RoomObj)->TryGetNumberField(TEXT("height"), TmpH))
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing or invalid x, y, width, or height"), i));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] missing or invalid x, y, width, or height"), i), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		Rect.X = static_cast<int32>(TmpX);
@@ -2154,7 +2154,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 
 		if (Rect.Width <= 0 || Rect.Height <= 0)
 		{
-			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] has invalid dimensions"), i));
+			return FMonolithActionResult::Error(FString::Printf(TEXT("rooms[%d] has invalid dimensions"), i), FMonolithJsonUtils::ErrInvalidParams);
 		}
 
 		MaxX = FMath::Max(MaxX, Rect.X + Rect.Width);
@@ -2189,7 +2189,7 @@ FMonolithActionResult FMonolithMeshBuildingActions::CreateGridFromRooms(const TS
 				if (Grid[Y][X] != -1)
 				{
 					return FMonolithActionResult::Error(FString::Printf(
-						TEXT("rooms[%d] ('%s') overlaps with room at cell (%d,%d)"), i, *Rect.RoomId, X, Y));
+						TEXT("rooms[%d] ('%s') overlaps with room at cell (%d,%d)"), i, *Rect.RoomId, X, Y), FMonolithJsonUtils::ErrInvalidParams);
 				}
 				Grid[Y][X] = i;
 
