@@ -577,8 +577,14 @@ namespace MonolithUIRegistryPhase2
         {
             const TSharedPtr<FJsonObject> ChildCapacity = MakeLiveChildCapacityEntry(LiveWidget, Entry);
             Result->SetObjectField(TEXT("live_child_capacity"), ChildCapacity);
-            Result->SetNumberField(TEXT("live_child_count"), ChildCapacity->GetNumberField(TEXT("child_count")));
-            Result->SetBoolField(TEXT("live_can_add_child"), ChildCapacity->GetBoolField(TEXT("can_add_child")));
+
+            double LiveChildCount = 0.0;
+            ChildCapacity->TryGetNumberField(TEXT("child_count"), LiveChildCount);
+            Result->SetNumberField(TEXT("live_child_count"), LiveChildCount);
+
+            bool bLiveCanAddChild = false;
+            ChildCapacity->TryGetBoolField(TEXT("can_add_child"), bLiveCanAddChild);
+            Result->SetBoolField(TEXT("live_can_add_child"), bLiveCanAddChild);
         }
         Result->SetArrayField(TEXT("properties"), Properties);
         Result->SetArrayField(TEXT("slot_properties"), SlotProperties);
