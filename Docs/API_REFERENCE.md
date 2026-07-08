@@ -2914,7 +2914,7 @@ Apply a JSON-tree fill to an asset via the target namespace's adapter. Walks the
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_namespace` | string | **required** | Adapter namespace: `blueprint`, `gas`, `ui`, `ai`, `niagara`, `material`, `audio`, `mesh`, `animation`, `logicdriver`, `combograph` (plus the sibling `inventory` adapter when present) |
+| `target_namespace` | string | **required** | Adapter namespace: `blueprint`, `gas`, `ui`, `ai`, `niagara`, `material`, `audio`, `mesh`, `animation`, `logicdriver`, `combograph` (plus the sibling `inventory` adapter when present). Aliases: `namespace`, `domain` |
 | `target` | string | **required** | Asset path or adapter-defined target (e.g. `/Game/Items/DA_HealingPotion`) |
 | `tree` | object | **required** | Nested JSON of properties to walk against the target's reflection schema |
 | `dry_run` | boolean | optional | Validate only — emit would-be writes but do not persist. Default: `false` |
