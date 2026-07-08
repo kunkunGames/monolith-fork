@@ -24,6 +24,7 @@
 #include "Spec/UISpecBuilder.h"
 // Phase J: dump_ui_spec serializer.
 #include "Spec/UISpecSerializer.h"
+#include "MonolithAssetUtils.h"
 
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "Registry/UITypeRegistry.h"
@@ -3356,8 +3357,9 @@ namespace MonolithUI::SpecActionsInternal
             TSharedPtr<FJsonObject> AssetOut = MakeShared<FJsonObject>();
             AssetOut->SetStringField(TEXT("asset_path"), CurrentAssetPath);
 
-            UWidgetBlueprint* WBP = LoadObject<UWidgetBlueprint>(nullptr, *CurrentAssetPath);
-            if (!WBP)
+            UWidgetBlueprint* WBP = nullptr;
+            FString ResolvedPath, LoadError;
+            if (!FMonolithAssetUtils::TryLoadAssetByPath<UWidgetBlueprint>(CurrentAssetPath, WBP, ResolvedPath, LoadError))
             {
                 ++LoadErrors;
                 AssetOut->SetBoolField(TEXT("load_success"), false);
