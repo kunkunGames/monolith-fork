@@ -24,6 +24,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [blueprint](#blueprint) | ~120 | Blueprint read/write, variable/component/graph CRUD, graph export/clone/remap, node ops, compile, auto-layout, spawn actors, dataset read/edit pack (DataTable/CurveTable/StringTable + `seed_data_asset`), cross-class property access, parent-function overrides |
 | [material](#material) | 49 | Material graph editing, inspection, CRUD, material functions, PBR pipeline |
 | [animation](#animation) | 145 | Curves, bone tracks, sync markers, root motion, compression, blend spaces (incl. baking + interpolation control), ABPs (incl. an AnimGraph-authoring pack — additive/slot/cached-pose/blend (by int + by enum)/sync/layered-blend/Control Rig/linked-layer/conduit nodes + output wiring — custom anim-graph nodes + state-machine teardown + compound expression transition rules), montages, skeletons, PoseSearch, IKRig, Control Rig |
+| [cloth](#cloth) | 2 | Optional read-only Chaos Cloth/Outfit workflow discovery and asset listing |
 | [niagara](#niagara) | 119 | Niagara VFX (emitters, modules, params, renderers, HLSL, dynamic inputs, event handlers, sim stages, effect types, event-aware summaries + validate_system event-chain reasoning, temporal-control composite writers + read aggregators, stateless-emitter factory) |
 | [editor](#editor) | 33 | Live Coding builds, compile output capture, editor logs, scene capture, texture import, map/world-settings authoring, DataValidation, changelist validation planning, module status, automation test list/run, Python escape-hatch, persistent-level swap |
 | [build](#build) | 2 | Unreal engine root resolution and guarded UAT BuildCookRun command construction |
@@ -572,6 +573,19 @@ Animation curves, bone tracks, sync markers, root motion, compression, blend spa
 | Physics asset | 3 | `get_physics_asset_info`, `set_body_properties`, `set_constraint_properties` |
 | PoseSearch | 13 | `get_pose_search_schema`, `get_pose_search_database`, `add_database_sequence`, `remove_database_sequence`, `get_database_stats`, `create_pose_search_schema`, `create_pose_search_database`, `set_database_sequence_properties`, `add_schema_channel`, `remove_schema_channel`, `set_channel_weight`, `rebuild_pose_search_index`, `set_database_search_mode` |
 | Layout / batch | 2 | `auto_layout`, `batch_execute` |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
+## cloth
+
+Optional Chaos Cloth/Outfit workflow discovery. Read-only probes; does not load vertex data, weight maps, or mutate assets. **2 actions.**
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_clothing_assets` | `package_path` (optional string), `limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
