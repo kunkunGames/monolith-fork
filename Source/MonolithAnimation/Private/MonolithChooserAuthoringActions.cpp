@@ -537,12 +537,21 @@ FMonolithActionResult FMonolithChooserAuthoringActions::HandleCreateChooserTable
 {
 	const FString AssetPath = Params->GetStringField(TEXT("asset_path"));
 
-	const FString OutputType = Params->HasField(TEXT("output_type"))
-		? Params->GetStringField(TEXT("output_type")) : TEXT("Object");
-	const FString OutputClassPath = Params->HasField(TEXT("output_class"))
-		? Params->GetStringField(TEXT("output_class")) : FString();
-	const FString ContextClassPath = Params->HasField(TEXT("context_class"))
-		? Params->GetStringField(TEXT("context_class")) : FString();
+	FString OutputType = TEXT("Object");
+	if (Params->HasField(TEXT("output_type")) && !Params->TryGetStringField(TEXT("output_type"), OutputType))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'output_type' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString OutputClassPath;
+	if (Params->HasField(TEXT("output_class")) && !Params->TryGetStringField(TEXT("output_class"), OutputClassPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'output_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString ContextClassPath;
+	if (Params->HasField(TEXT("context_class")) && !Params->TryGetStringField(TEXT("context_class"), ContextClassPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'context_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	EObjectChooserResultType ResultType;
 	if (!ParseChooserResultType(OutputType, ResultType))
@@ -628,10 +637,16 @@ FMonolithActionResult FMonolithChooserAuthoringActions::HandleAddChooserColumn(c
 {
 	const FString AssetPath  = Params->GetStringField(TEXT("asset_path"));
 	const FString ColumnKind = Params->GetStringField(TEXT("column_kind"));
-	const FString BindingProp = Params->HasField(TEXT("binding_property"))
-		? Params->GetStringField(TEXT("binding_property")) : FString();
-	const FString EnumClassStr = Params->HasField(TEXT("enum_class"))
-		? Params->GetStringField(TEXT("enum_class")) : FString();
+	FString BindingProp;
+	if (Params->HasField(TEXT("binding_property")) && !Params->TryGetStringField(TEXT("binding_property"), BindingProp))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'binding_property' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	FString EnumClassStr;
+	if (Params->HasField(TEXT("enum_class")) && !Params->TryGetStringField(TEXT("enum_class"), EnumClassStr))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'enum_class' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UChooserTable* Table = FMonolithAssetUtils::LoadAssetByPath<UChooserTable>(AssetPath);
 	if (!Table)

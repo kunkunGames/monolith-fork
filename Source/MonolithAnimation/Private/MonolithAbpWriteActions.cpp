@@ -2505,8 +2505,13 @@ FMonolithActionResult ApplyAdditiveImpl(const TSharedPtr<FJsonObject>& Params, b
 	FString AlphaWarning;
 	if (Params->HasField(TEXT("alpha")))
 	{
+		double TempAlpha;
+		if (!Params->TryGetNumberField(TEXT("alpha"), TempAlpha))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'alpha' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		bAlphaSupplied = true;
-		const float Alpha = static_cast<float>(Params->GetNumberField(TEXT("alpha")));
+		const float Alpha = static_cast<float>(TempAlpha);
 		UScriptStruct* NodeStruct = nullptr; void* NodeAddr = nullptr; FString ResolveErr;
 		if (ResolveInnerAnimNode(NewNode, NodeStruct, NodeAddr, ResolveErr))
 		{

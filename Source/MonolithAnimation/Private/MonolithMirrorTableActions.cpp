@@ -179,7 +179,12 @@ FMonolithActionResult FMonolithMirrorTableActions::HandleSetSchemaMirrorDataTabl
 	int32 SkeletonIndex = 0;
 	if (Params->HasField(TEXT("skeleton_index")))
 	{
-		SkeletonIndex = static_cast<int32>(Params->GetNumberField(TEXT("skeleton_index")));
+		double TempVal;
+		if (!Params->TryGetNumberField(TEXT("skeleton_index"), TempVal))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'skeleton_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
+		SkeletonIndex = static_cast<int32>(TempVal);
 	}
 
 	UPoseSearchSchema* Schema = FMonolithAssetUtils::LoadAssetByPath<UPoseSearchSchema>(SchemaPath);
