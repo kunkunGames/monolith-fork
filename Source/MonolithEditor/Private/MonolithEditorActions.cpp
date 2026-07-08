@@ -1918,21 +1918,26 @@ FMonolithActionResult FMonolithEditorActions::HandleGetRecentLogs(const TSharedP
 {
 	int32 Count = 100;
 	double CountValue = 0.0;
-	if (Params->TryGetNumberField(TEXT("count"), CountValue))
+	TSharedPtr<FJsonValue> CountJson = Params->TryGetField(TEXT("count"));
+	if (CountJson.IsValid())
 	{
+		if (CountJson->Type != EJson::Number || !CountJson->TryGetNumber(CountValue))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'count' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		Count = static_cast<int32>(CountValue);
 	}
-	else if (Params->HasField(TEXT("count")))
+	else
 	{
-		return FMonolithActionResult::Error(TEXT("Invalid param: 'count' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
-	}
-	else if (Params->TryGetNumberField(TEXT("max"), CountValue))
-	{
-		Count = static_cast<int32>(CountValue);
-	}
-	else if (Params->HasField(TEXT("max")))
-	{
-		return FMonolithActionResult::Error(TEXT("Invalid param: 'max' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		TSharedPtr<FJsonValue> MaxJson = Params->TryGetField(TEXT("max"));
+		if (MaxJson.IsValid())
+		{
+			if (MaxJson->Type != EJson::Number || !MaxJson->TryGetNumber(CountValue))
+			{
+				return FMonolithActionResult::Error(TEXT("Invalid param: 'max' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+			}
+			Count = static_cast<int32>(CountValue);
+		}
 	}
 	Count = FMath::Clamp(Count, 1, 1000);
 
