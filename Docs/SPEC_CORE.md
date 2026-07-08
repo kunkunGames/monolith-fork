@@ -513,7 +513,7 @@ This folder is both the working copy and the git repo (`git@github.com:tumourlov
    ```bash
    gh release create vX.Y.Z "../../Monolith-vX.Y.Z.zip" "../../Monolith-vX.Y.Z-UE5.7.zip" "../../Monolith-vX.Y.Z-UE5.8.zip" --title "Monolith vX.Y.Z" --notes-file release_notes.md
    ```
-   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-UE5.7: <hash>` / `Monolith-SHA256-UE5.8: <hash>`, macOS uses `Monolith-macOS-SHA256: <hash>`, Linux uses `Monolith-Linux-SHA256: <hash>`, and the script also prints legacy `Monolith-SHA256: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
+   **Crucial:** You must copy the exact SHA256 marker lines printed by the release script into the release notes body before publishing. Per-engine assets use `Monolith-SHA256-UE5.7: <hash>` / `Monolith-SHA256-UE5.8: <hash>`, and the script also prints legacy `Monolith-SHA256: <hash>` for compatibility. If the matching platform/engine marker is missing, the auto-updater logs a warning and proceeds without the release-notes integrity check.
 
 **Important:** Release zips MUST include pre-compiled DLLs (`Binaries/Win64/*.dll`) so Blueprint-only users can use the plugin without rebuilding. The `make_release.ps1` script builds these cleanly (with optional dependencies disabled), packages them into the zip, and sets `"Installed": true` in the zip's `.uplugin` to suppress rebuild prompts. The local dev copy keeps `"Installed": false`.
 
