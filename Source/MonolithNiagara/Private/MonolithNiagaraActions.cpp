@@ -15904,17 +15904,27 @@ FMonolithActionResult FMonolithNiagaraActions::HandleListSystems(const TSharedPt
 FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString SrcEmitter = Params->GetStringField(TEXT("source_emitter"));
-	FString SrcModuleGuid = Params->GetStringField(TEXT("source_module_node"));
+	FString SrcEmitter;
+	if (!Params->TryGetStringField(TEXT("source_emitter"), SrcEmitter))
+		return FMonolithActionResult::Error(TEXT("Parameter 'source_emitter' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
+	FString SrcModuleGuid;
+	if (!Params->TryGetStringField(TEXT("source_module_node"), SrcModuleGuid))
+		return FMonolithActionResult::Error(TEXT("Parameter 'source_module_node' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	if (SystemPath.IsEmpty() || SrcEmitter.IsEmpty() || SrcModuleGuid.IsEmpty())
-		return FMonolithActionResult::Error(TEXT("asset_path, source_emitter, and source_module_node are required"));
+		return FMonolithActionResult::Error(TEXT("asset_path, source_emitter, and source_module_node are required"), FMonolithJsonUtils::ErrInvalidParams);
 
 	FString TgtEmitter = SrcEmitter;
-	Params->TryGetStringField(TEXT("target_emitter"), TgtEmitter);
+	if (Params->HasField(TEXT("target_emitter")) && !Params->TryGetStringField(TEXT("target_emitter"), TgtEmitter))
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
 	int32 TgtIndex = -1;
 	double TgtIndex_Double = TgtIndex;
-	if (Params->TryGetNumberField(TEXT("target_index"), TgtIndex_Double)) TgtIndex = static_cast<int32>(TgtIndex_Double);
+	if (Params->HasField(TEXT("target_index")) && !Params->TryGetNumberField(TEXT("target_index"), TgtIndex_Double))
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+	else if (Params->HasField(TEXT("target_index")))
+		TgtIndex = static_cast<int32>(TgtIndex_Double);
 
 	// Load system and find source module
 	UNiagaraSystem* System = LoadSystem(SystemPath);
@@ -15935,7 +15945,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	if (Params->HasField(TEXT("target_usage")))
 	{
 		if (!Params->TryGetStringField(TEXT("target_usage"), TgtUsageStr))
-			return FMonolithActionResult::Error(TEXT("Invalid param 'target_usage': must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_usage' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	else
 	{
@@ -15954,7 +15964,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	{
 		FString TgtStageName;
 		if (!Params->TryGetStringField(TEXT("target_stage_name"), TgtStageName))
-			return FMonolithActionResult::Error(TEXT("Invalid param 'target_stage_name': must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'target_stage_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		AddParams->SetStringField(TEXT("stage_name"), TgtStageName);
 	}
 
@@ -15962,7 +15972,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	{
 		FString UsageIdStrParam;
 		if (!Params->TryGetStringField(TEXT("usage_id"), UsageIdStrParam))
-			return FMonolithActionResult::Error(TEXT("Invalid param 'usage_id': must be a string"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'usage_id' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 		AddParams->SetStringField(TEXT("usage_id"), UsageIdStrParam);
 	}
 
@@ -15970,7 +15980,7 @@ FMonolithActionResult FMonolithNiagaraActions::HandleDuplicateModule(const TShar
 	{
 		double StageIndexParam;
 		if (!Params->TryGetNumberField(TEXT("stage_index"), StageIndexParam))
-			return FMonolithActionResult::Error(TEXT("Invalid param 'stage_index': must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'stage_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		AddParams->SetNumberField(TEXT("stage_index"), StageIndexParam);
 	}
 
