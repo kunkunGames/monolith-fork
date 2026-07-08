@@ -152,6 +152,9 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] scaffold_save_subsystem` | `class_name*`, `module_name*`, `save_game_class*` | Save management subsystem C++ |
 | `[w] scaffold_audio_settings` | `categories?` (default Master/Music/SFX/Voice/Ambient) | Audio settings wiring info |
 | `[w] scaffold_input_remapping` | `actions?` (input action names) | Keybinding remapping setup |
+| `[w] scaffold_main_menu` | `save_path*`, `button_names?`, `parent_class?`, `action_button_class?`, `action_table?`, `default_style_palette?` | One-shot main-menu WBP with buttons + bound action bar |
+| `[w] scaffold_settings_panel_with_tabs` | `save_path*`, `tab_names?`, `parent_class?`, `action_table?`, `action_button_class?` | One-shot settings-panel WBP with tab list + switcher + action bar |
+| `[w] scaffold_pause_menu` | `save_path*`, `action_table*`, `button_names?`, `parent_class?`, `action_button_class?` | One-shot pause-menu WBP with buttons + action bar |
 | **Accessibility (4)** | | |
 | `[w] scaffold_accessibility_subsystem` | `class_name*`, `module_name*` | Accessibility settings subsystem C++ |
 | `[w] audit_accessibility` | `asset_path*` | Audit font size, focus, navigation, tooltips |

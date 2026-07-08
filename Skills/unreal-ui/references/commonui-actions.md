@@ -115,6 +115,14 @@ Param notation as in the Action Reference above: `name*` required, `name?` optio
 | `[w] set_text_scale_binding` | `folder_path*` | Stamp bHonorAccessibilityTextScale on WBP CDOs |
 | `[w] apply_high_contrast_variant` | `folder_path*`, `normal_style*`, `high_contrast_style*` | Swap style class refs to HC variant |
 
+### J: Templates / Scaffolders
+
+| Action | Params | Purpose |
+|---|---|---|
+| `[w] scaffold_main_menu` | `save_path*`, `button_names?` (array), `parent_class?`, `action_button_class?`, `action_table?`, `default_style_palette?` | One-shot main-menu WBP with buttons + bound action bar |
+| `[w] scaffold_settings_panel_with_tabs` | `save_path*`, `tab_names?` (array), `parent_class?`, `action_table?`, `action_button_class?` | One-shot settings-panel WBP with tab list + switcher + action bar |
+| `[w] scaffold_pause_menu` | `save_path*`, `action_table*`, `button_names?` (array), `parent_class?`, `action_button_class?` | One-shot pause-menu WBP with buttons + action bar |
+
 ### CommonUI Known Limitations (v0.14.0)
 
 - `convert_button_to_common` does NOT auto-transfer UButton children — UCommonButtonBase uses internal widget tree. Rewire manually.
