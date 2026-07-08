@@ -17,6 +17,8 @@
 // they never touch the real EngineSource.db. Test fixture lives at
 // `Source/MonolithReflectionIntel/Private/Tests/Fixtures/CppReflectCorpus/`.
 
+#include "MonolithToolRegistry.h"
+#include "CppReflect/FCppReflectQueryAdapter.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -428,6 +430,52 @@ bool FCppReflectFindSpecifierTest::RunTest(const FString& /*Parameters*/)
 	Db.Close();
 	IFileManager::Get().Delete(*DbPath, false, true);
 	IFileManager::Get().DeleteDirectory(*WorkRoot, false, true);
+	return true;
+}
+
+
+// ---------------------------------------------------------------------------
+// Test 5: ParamGuard - HandleFindClassSpecifier with wrong type
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCppReflectFindClassSpecifierParamGuardTest,
+	"Monolith.ParamGuard.ReflectionIntel.FindClassSpecifierWrongType",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCppReflectFindClassSpecifierParamGuardTest::RunTest(const FString& /*Parameters*/)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("cppreflect_query"), TEXT("find_class_specifier")))
+	{
+		FCppReflectQueryAdapter::RegisterActions(Registry);
+	}
+
+	// Success case
+	{
+		TSharedPtr<FJsonObject> ValidParams = MakeShared<FJsonObject>();
+		ValidParams->SetStringField(TEXT("specifier_name"), TEXT("BlueprintType"));
+		ValidParams->SetNumberField(TEXT("limit"), 10);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect_query"), TEXT("find_class_specifier"), ValidParams);
+		// EngineSource.db may not exist in this transient environment, but it shouldn't fail with param guard error
+		TestTrue(TEXT("Valid params should not return invalid params error"), Result.ErrorCode != FMonolithJsonUtils::ErrInvalidParams);
+	}
+
+	// Failure case
+	{
+		TSharedPtr<FJsonObject> BadParams = MakeShared<FJsonObject>();
+		BadParams->SetStringField(TEXT("specifier_name"), TEXT("BlueprintType"));
+		// Setting limit as string instead of number
+		BadParams->SetStringField(TEXT("limit"), TEXT("10"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect_query"), TEXT("find_class_specifier"), BadParams);
+
+		TestFalse(TEXT("Wrong limit type should fail safely"), Result.bSuccess);
+		if (!Result.bSuccess)
+		{
+			TestEqual(TEXT("Error should be invalid params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+			TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
+		}
+	}
+
 	return true;
 }
 

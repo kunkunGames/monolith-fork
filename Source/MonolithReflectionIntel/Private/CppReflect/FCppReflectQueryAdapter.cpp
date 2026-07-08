@@ -376,14 +376,17 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleGetUClass(const TSharedPtr<
 			     "or build the project at least once so UHT artefacts exist."));
 	}
 
-	const FString ClassName = Params->GetStringField(TEXT("class_name"));
-	if (ClassName.IsEmpty())
+	FString ClassName;
+	if (!Params->TryGetStringField(TEXT("class_name"), ClassName) || ClassName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("`class_name` is required."),
+		return FMonolithActionResult::Error(TEXT("`class_name` is required and must be a string."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
-	const FString ModuleFilter = Params->HasField(TEXT("module_name"))
-		? Params->GetStringField(TEXT("module_name")) : FString();
+	FString ModuleFilter;
+	if (Params->HasField(TEXT("module_name")) && !Params->TryGetStringField(TEXT("module_name"), ModuleFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("`module_name` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	// --- UClass row(s) ---
 	FString ClassSql = TEXT(
@@ -555,10 +558,16 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUProperties(const TShar
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params->HasField(TEXT("class_name"))
-		? Params->GetStringField(TEXT("class_name")) : FString();
-	const bool bBpOnly = Params->HasField(TEXT("blueprint_visible_only"))
-		? Params->GetBoolField(TEXT("blueprint_visible_only")) : false;
+	FString ClassName;
+	if (Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("`class_name` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	bool bBpOnly = false;
+	if (Params->HasField(TEXT("blueprint_visible_only")) && !Params->TryGetBoolField(TEXT("blueprint_visible_only"), bBpOnly))
+	{
+		return FMonolithActionResult::Error(TEXT("`blueprint_visible_only` must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double LimitDouble = 50.0;
 	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
@@ -575,8 +584,11 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUProperties(const TShar
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, bBpOnly ? TEXT("1") : TEXT("0") });
@@ -682,10 +694,16 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUFunctions(const TShare
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params->HasField(TEXT("class_name"))
-		? Params->GetStringField(TEXT("class_name")) : FString();
-	const bool bBpOnly = Params->HasField(TEXT("blueprint_callable_only"))
-		? Params->GetBoolField(TEXT("blueprint_callable_only")) : false;
+	FString ClassName;
+	if (Params->HasField(TEXT("class_name")) && !Params->TryGetStringField(TEXT("class_name"), ClassName))
+	{
+		return FMonolithActionResult::Error(TEXT("`class_name` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	bool bBpOnly = false;
+	if (Params->HasField(TEXT("blueprint_callable_only")) && !Params->TryGetBoolField(TEXT("blueprint_callable_only"), bBpOnly))
+	{
+		return FMonolithActionResult::Error(TEXT("`blueprint_callable_only` must be a boolean."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	double LimitDouble = 50.0;
 	if (Params->HasField(TEXT("limit")) && !Params->TryGetNumberField(TEXT("limit"), LimitDouble))
@@ -702,8 +720,11 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleListUFunctions(const TShare
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, bBpOnly ? TEXT("1") : TEXT("0") });
@@ -820,10 +841,10 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleFindInterfaceImpls(const TS
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString InterfaceName = Params->GetStringField(TEXT("interface_name"));
-	if (InterfaceName.IsEmpty())
+	FString InterfaceName;
+	if (!Params->TryGetStringField(TEXT("interface_name"), InterfaceName) || InterfaceName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("`interface_name` is required."),
+		return FMonolithActionResult::Error(TEXT("`interface_name` is required and must be a string."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -873,10 +894,10 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleFindClassSpecifier(const TS
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString SpecifierName = Params->GetStringField(TEXT("specifier_name"));
-	if (SpecifierName.IsEmpty())
+	FString SpecifierName;
+	if (!Params->TryGetStringField(TEXT("specifier_name"), SpecifierName) || SpecifierName.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("`specifier_name` is required."),
+		return FMonolithActionResult::Error(TEXT("`specifier_name` is required and must be a string."),
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -938,8 +959,11 @@ FMonolithActionResult FCppReflectQueryAdapter::HandleFindClassSpecifier(const TS
 			FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
-		? Params->GetStringField(TEXT("cursor")) : FString();
+	FString CursorIn;
+	if (Params->HasField(TEXT("cursor")) && !Params->TryGetStringField(TEXT("cursor"), CursorIn))
+	{
+		return FMonolithActionResult::Error(TEXT("`cursor` must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	const int32 Limit = ReqLimit;
 	const uint32 FilterHash = RIComputeFilterHash({ SpecifierName });
