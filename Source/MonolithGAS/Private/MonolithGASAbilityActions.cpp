@@ -4163,7 +4163,9 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	}
 
 	// ── Build the GENERATED_UCLASS_BODY API string for the module ──
-	FString ModuleAPI = TEXT("LEVIATHAN_API");
+	MonolithGAS::FProjectCodeModuleInfo ModuleInfo;
+	MonolithGAS::ResolveProjectCodeModule(ModuleInfo);
+	FString ModuleAPI = ModuleInfo.ApiMacro.IsEmpty() ? TEXT("MYPROJECT_API") : ModuleInfo.ApiMacro;
 
 	// ── Generate Header ──
 	FString Header;
@@ -4278,7 +4280,7 @@ FMonolithActionResult FMonolithGASAbilityActions::HandleScaffoldCustomAbilityTas
 	Source += TEXT("}\n");
 
 	// ── Write files ──
-	FString ProjectSourceDir = FPaths::ProjectDir() / TEXT("Source") / TEXT("Leviathan");
+	FString ProjectSourceDir = MonolithGAS::GetProjectSourceDir();
 	FString HeaderPath = ProjectSourceDir / FString::Printf(TEXT("%s.h"), *ShortName);
 	FString SourcePath = ProjectSourceDir / FString::Printf(TEXT("%s.cpp"), *ShortName);
 
