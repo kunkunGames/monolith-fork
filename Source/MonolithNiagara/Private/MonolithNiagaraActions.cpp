@@ -14539,13 +14539,18 @@ FMonolithActionResult FMonolithNiagaraActions::HandleCloneModuleOverrides(const 
 {
 	FString SystemPath = NA_GetAssetPath(Params);
 	FString SrcEmitterId, SrcModuleGuid, TgtEmitterId, TgtModuleGuid;
-	Params->TryGetStringField(TEXT("source_emitter"), SrcEmitterId);
-	Params->TryGetStringField(TEXT("source_module"), SrcModuleGuid);
-	Params->TryGetStringField(TEXT("target_emitter"), TgtEmitterId);
-	Params->TryGetStringField(TEXT("target_module"), TgtModuleGuid);
 
-	if (SrcModuleGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: source_module"));
-	if (TgtModuleGuid.IsEmpty()) return FMonolithActionResult::Error(TEXT("Missing required field: target_module"));
+	if (Params->HasField(TEXT("source_emitter")) && !Params->TryGetStringField(TEXT("source_emitter"), SrcEmitterId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'source_emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
+	if (!Params->TryGetStringField(TEXT("source_module"), SrcModuleGuid) || SrcModuleGuid.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Parameter 'source_module' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
+	if (Params->HasField(TEXT("target_emitter")) && !Params->TryGetStringField(TEXT("target_emitter"), TgtEmitterId))
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_emitter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+
+	if (!Params->TryGetStringField(TEXT("target_module"), TgtModuleGuid) || TgtModuleGuid.IsEmpty())
+		return FMonolithActionResult::Error(TEXT("Parameter 'target_module' is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 
 	UNiagaraSystem* System = LoadSystem(SystemPath);
 	if (!System) return FMonolithActionResult::Error(TEXT("Failed to load system"));
