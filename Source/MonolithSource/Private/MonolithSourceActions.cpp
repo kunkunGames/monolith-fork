@@ -2719,12 +2719,16 @@ FMonolithActionResult FMonolithSourceActions::HandleGetSymbolContext(const TShar
 	FString Symbol;
 	if (!Params->TryGetStringField(TEXT("symbol"), Symbol) || Symbol.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"));
+		return FMonolithActionResult::Error(TEXT("\'symbol\' parameter is required and must be a string"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 	int32 ContextLines = 20;
-	double RawContextLines = 0;
-	if (Params->TryGetNumberField(TEXT("context_lines"), RawContextLines))
+	if (Params->HasField(TEXT("context_lines")))
 	{
+		double RawContextLines = 0;
+		if (!Params->TryGetNumberField(TEXT("context_lines"), RawContextLines))
+		{
+			return FMonolithActionResult::Error(TEXT("'context_lines' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
+		}
 		ContextLines = FMath::Clamp(static_cast<int32>(RawContextLines), 1, 1000);
 	}
 
