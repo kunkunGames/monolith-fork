@@ -736,7 +736,10 @@ def _sanitize_cache_part(value: str) -> str:
 
 
 def _tools_cache_path() -> Path:
-    base = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir())
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir())
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
     cache_dir = base / "Monolith"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1150,7 +1153,7 @@ Environment:
   MONOLITH_TOOL_LOG_ENABLED            Set 0 to disable daily proxy logs.
   MONOLITH_TOOL_LOG_DIR                Redirect Logs/yyyyMMdd/proxy.jsonl.
   MONOLITH_TOOL_LOG_MAX_FIELD_BYTES    Bound captured log fields.
-  LOCALAPPDATA / temp directory        Used for script-proxy tool cache fallback paths.
+  LOCALAPPDATA / XDG_CACHE_HOME        Used for script-proxy tool cache fallback paths.
 
 Runtime support notes:
   MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST, and

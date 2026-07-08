@@ -657,7 +657,9 @@ function sanitizeCachePart(value) {
 }
 
 function getToolsCachePath() {
-  const base = process.env.LOCALAPPDATA || os.tmpdir();
+  const base = process.platform === "win32"
+    ? (process.env.LOCALAPPDATA || os.tmpdir())
+    : (process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache"));
   const cacheDir = path.join(base, "Monolith");
   fs.mkdirSync(cacheDir, { recursive: true });
 
@@ -1060,7 +1062,7 @@ Environment:
   MONOLITH_TOOL_LOG_ENABLED            Set 0 to disable daily proxy logs.
   MONOLITH_TOOL_LOG_DIR                Redirect Logs/yyyyMMdd/proxy.jsonl.
   MONOLITH_TOOL_LOG_MAX_FIELD_BYTES    Bound captured log fields.
-  LOCALAPPDATA / temp directory        Used for script-proxy tool cache fallback paths.
+  LOCALAPPDATA / XDG_CACHE_HOME        Used for script-proxy tool cache fallback paths.
 
 Runtime support notes:
   MONOLITH_SPLIT_EDITOR_QUERY, MONOLITH_EDITOR_ACTION_ALLOWLIST, and
