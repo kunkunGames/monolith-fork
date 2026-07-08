@@ -139,7 +139,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleCreateAIController(con
 	}
 
 	FString AssetName;
-	Params->TryGetStringField(TEXT("name"), AssetName);
+	if (Params->HasField(TEXT("name")) && !Params->TryGetStringField(TEXT("name"), AssetName))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (AssetName.IsEmpty())
 	{
 		AssetName = FPackageName::GetShortName(SavePath);
@@ -181,9 +184,15 @@ FMonolithActionResult FMonolithAIControllerActions::HandleCreateAIController(con
 	// happens at runtime in the controller's OnPossess → RunBehaviorTree flow.
 	// Users should override RunBehaviorTree in their BP or set the BT in BeginPlay.
 	FString BTPath;
-	Params->TryGetStringField(TEXT("bt_path"), BTPath);
+	if (Params->HasField(TEXT("bt_path")) && !Params->TryGetStringField(TEXT("bt_path"), BTPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'bt_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	FString BBPath;
-	Params->TryGetStringField(TEXT("bb_path"), BBPath);
+	if (Params->HasField(TEXT("bb_path")) && !Params->TryGetStringField(TEXT("bb_path"), BBPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'bb_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	bool bBTValid = false;
 
 	if (!BTPath.IsEmpty())
@@ -314,7 +323,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleListAIControllers(cons
 	AR.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), Assets);
 
 	FString PathFilter;
-	Params->TryGetStringField(TEXT("path_filter"), PathFilter);
+	if (Params->HasField(TEXT("path_filter")) && !Params->TryGetStringField(TEXT("path_filter"), PathFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'path_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Items;
 	Items.Reserve(Assets.Num());
@@ -383,7 +395,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSetAIControllerBT(cons
 
 	// Optionally load BB (use BT's BB if not specified)
 	FString BBPath;
-	Params->TryGetStringField(TEXT("bb_path"), BBPath);
+	if (Params->HasField(TEXT("bb_path")) && !Params->TryGetStringField(TEXT("bb_path"), BBPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'bb_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	UBlackboardData* BB = nullptr;
 	if (!BBPath.IsEmpty())
 	{
@@ -780,7 +795,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSpawnAIActor(const TSh
 
 	// Set label if provided
 	FString Label;
-	Params->TryGetStringField(TEXT("label"), Label);
+	if (Params->HasField(TEXT("label")) && !Params->TryGetStringField(TEXT("label"), Label))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'label' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (!Label.IsEmpty())
 	{
 		SpawnedActor->SetActorLabel(Label);
@@ -788,7 +806,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleSpawnAIActor(const TSh
 
 	// Set folder path — ALWAYS set, default to "AI"
 	FString FolderPath;
-	Params->TryGetStringField(TEXT("folder_path"), FolderPath);
+	if (Params->HasField(TEXT("folder_path")) && !Params->TryGetStringField(TEXT("folder_path"), FolderPath))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'folder_path' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 	if (FolderPath.IsEmpty())
 	{
 		FolderPath = TEXT("AI");
@@ -818,7 +839,10 @@ FMonolithActionResult FMonolithAIControllerActions::HandleGetAIActors(const TSha
 	}
 
 	FString ClassFilter;
-	Params->TryGetStringField(TEXT("class_filter"), ClassFilter);
+	if (Params->HasField(TEXT("class_filter")) && !Params->TryGetStringField(TEXT("class_filter"), ClassFilter))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'class_filter' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> ActorArr;
 
