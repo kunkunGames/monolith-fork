@@ -234,6 +234,7 @@ namespace MonolithUI::ContextActionsInternal
 	{
 		TArray<TSharedPtr<FJsonValue>> Values;
 		const int32 ClampedLimit = FMath::Clamp(Limit, 0, MaxRecentContexts);
+		Values.Reserve(FMath::Min(Recent.Num(), ClampedLimit));
 		for (int32 Index = 0; Index < Recent.Num() && Values.Num() < ClampedLimit; ++Index)
 		{
 			const FWidgetContextEntry& Entry = Recent[Index];
