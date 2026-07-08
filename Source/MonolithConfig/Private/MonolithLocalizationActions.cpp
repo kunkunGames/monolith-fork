@@ -40,28 +40,39 @@ namespace
 		TMap<FString, FString> Metadata;
 	};
 
-	int32 GetClampedLimit(const TSharedPtr<FJsonObject>& Params, int32 DefaultValue)
+	bool GetClampedLimit(const TSharedPtr<FJsonObject>& Params, int32 DefaultValue, int32& OutLimit, FString& OutError)
 	{
 		double LimitNumber = static_cast<double>(DefaultValue);
 		if (Params.IsValid())
 		{
-			Params->TryGetNumberField(TEXT("limit"), LimitNumber);
+			const TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
+			if (LimitField.IsValid() && !LimitField->IsNull() && !LimitField->TryGetNumber(LimitNumber))
+			{
+				OutError = TEXT("Malformed parameter: limit must be a number");
+				return false;
+			}
 		}
-		return FMath::Clamp(static_cast<int32>(LimitNumber), 1, 1000);
+		OutLimit = FMath::Clamp(static_cast<int32>(LimitNumber), 1, 1000);
+		return true;
 	}
 
-	FString GetPathParam(const TSharedPtr<FJsonObject>& Params)
+	bool GetPathParam(const TSharedPtr<FJsonObject>& Params, FString& OutPath, FString& OutError)
 	{
-		FString Path = TEXT("/Game");
+		OutPath = TEXT("/Game");
 		if (Params.IsValid())
 		{
-			Params->TryGetStringField(TEXT("path"), Path);
+			const TSharedPtr<FJsonValue> PathField = Params->TryGetField(TEXT("path"));
+			if (PathField.IsValid() && !PathField->IsNull() && !PathField->TryGetString(OutPath))
+			{
+				OutError = TEXT("Malformed parameter: path must be a string");
+				return false;
+			}
 		}
-		if (Path.IsEmpty())
+		if (OutPath.IsEmpty())
 		{
-			Path = TEXT("/Game");
+			OutPath = TEXT("/Game");
 		}
-		return Path;
+		return true;
 	}
 
 	bool IsProjectContentPath(const FString& Path)
@@ -71,10 +82,19 @@ namespace
 
 	bool ResolveProjectContentPath(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, FString& OutPath, FString& OutError)
 	{
-		FString Path = GetPathParam(Params);
+		FString Path;
+		if (!GetPathParam(Params, Path, OutError))
+		{
+			return false;
+		}
 		if (FieldName && Params.IsValid())
 		{
-			Params->TryGetStringField(FieldName, Path);
+			const TSharedPtr<FJsonValue> Field = Params->TryGetField(FieldName);
+			if (Field.IsValid() && !Field->IsNull() && !Field->TryGetString(Path))
+			{
+				OutError = FString::Printf(TEXT("Malformed parameter: %s must be a string"), FieldName);
+				return false;
+			}
 		}
 
 		OutPath = FMonolithAssetUtils::ResolveAssetPath(Path);
@@ -591,7 +611,18 @@ namespace
 
 	UStringTable* LoadStringTableFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 	{
-		if (!Params.IsValid() || !Params->TryGetStringField(TEXT("asset_path"), OutAssetPath) || OutAssetPath.IsEmpty())
+		if (!Params.IsValid())
+		{
+			OutError = TEXT("Missing required param 'asset_path'");
+			return nullptr;
+		}
+		const TSharedPtr<FJsonValue> AssetPathField = Params->TryGetField(TEXT("asset_path"));
+		if (AssetPathField.IsValid() && !AssetPathField->IsNull() && !AssetPathField->TryGetString(OutAssetPath))
+		{
+			OutError = TEXT("Malformed parameter: asset_path must be a string");
+			return nullptr;
+		}
+		if (!AssetPathField.IsValid() || AssetPathField->IsNull() || OutAssetPath.IsEmpty())
 		{
 			OutError = TEXT("Missing required param 'asset_path'");
 			return nullptr;
@@ -729,9 +760,18 @@ FMonolithActionResult FMonolithLocalizationActions::ListCultures(const TSharedPt
 	bool bIncludeDerived = true;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("include_derived"), bIncludeDerived);
+		const TSharedPtr<FJsonValue> IncludeDerivedField = Params->TryGetField(TEXT("include_derived"));
+		if (IncludeDerivedField.IsValid() && !IncludeDerivedField->IsNull() && !IncludeDerivedField->TryGetBool(bIncludeDerived))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: include_derived must be a boolean"));
+		}
+		const TSharedPtr<FJsonValue> CultureNamesField = Params->TryGetField(TEXT("culture_names"));
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
-		if (Params->TryGetArrayField(TEXT("culture_names"), Values) && Values)
+		if (CultureNamesField.IsValid() && !CultureNamesField->IsNull() && (!CultureNamesField->TryGetArray(Values) || Values == nullptr))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: culture_names must be an array"));
+		}
+		if (Values)
 		{
 			for (const TSharedPtr<FJsonValue>& Value : *Values)
 			{
@@ -778,13 +818,26 @@ FMonolithActionResult FMonolithLocalizationActions::ListStringTables(const TShar
 		return FMonolithActionResult::Error(Error);
 	}
 
-	const int32 Limit = GetClampedLimit(Params, 100);
+	int32 Limit;
+	FString LimitError;
+	if (!GetClampedLimit(Params, 100, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError);
+	}
 	bool bIncludeEntries = false;
 	bool bIncludeMetadata = false;
 	if (Params.IsValid())
 	{
-		Params->TryGetBoolField(TEXT("include_entries"), bIncludeEntries);
-		Params->TryGetBoolField(TEXT("include_metadata"), bIncludeMetadata);
+		const TSharedPtr<FJsonValue> IncludeEntriesField = Params->TryGetField(TEXT("include_entries"));
+		if (IncludeEntriesField.IsValid() && !IncludeEntriesField->IsNull() && !IncludeEntriesField->TryGetBool(bIncludeEntries))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: include_entries must be a boolean"));
+		}
+		const TSharedPtr<FJsonValue> IncludeMetadataField = Params->TryGetField(TEXT("include_metadata"));
+		if (IncludeMetadataField.IsValid() && !IncludeMetadataField->IsNull() && !IncludeMetadataField->TryGetBool(bIncludeMetadata))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: include_metadata must be a boolean"));
+		}
 	}
 
 	TArray<UStringTable*> Tables = LoadStringTablesUnderPath(Path);
@@ -821,8 +874,20 @@ FMonolithActionResult FMonolithLocalizationActions::GetStringTable(const TShared
 	}
 
 	bool bIncludeMetadata = true;
-	Params->TryGetBoolField(TEXT("include_metadata"), bIncludeMetadata);
-	const int32 Limit = GetClampedLimit(Params, 200);
+	if (Params.IsValid())
+	{
+		const TSharedPtr<FJsonValue> IncludeMetadataField = Params->TryGetField(TEXT("include_metadata"));
+		if (IncludeMetadataField.IsValid() && !IncludeMetadataField->IsNull() && !IncludeMetadataField->TryGetBool(bIncludeMetadata))
+		{
+			return FMonolithActionResult::Error(TEXT("Malformed parameter: include_metadata must be a boolean"));
+		}
+	}
+	int32 Limit;
+	FString LimitError;
+	if (!GetClampedLimit(Params, 200, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError);
+	}
 
 	TSharedPtr<FJsonObject> Result = StringTableSummaryToJson(Table, true, Limit, bIncludeMetadata);
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
@@ -1024,7 +1089,7 @@ FMonolithActionResult FMonolithLocalizationActions::SetStringEntry(const TShared
 	if (Params.IsValid())
 	{
 		const TSharedPtr<FJsonValue> MetadataField = Params->TryGetField(TEXT("metadata"));
-		if (MetadataField.IsValid() && !MetadataField->IsNull() && !Params->TryGetObjectField(TEXT("metadata"), MetadataObject))
+		if (MetadataField.IsValid() && !MetadataField->IsNull() && (!MetadataField->TryGetObject(MetadataObject) || MetadataObject == nullptr))
 		{
 			return FMonolithActionResult::Error(TEXT("Malformed parameter: metadata must be an object"));
 		}
