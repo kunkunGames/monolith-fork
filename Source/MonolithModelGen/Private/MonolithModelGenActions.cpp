@@ -609,7 +609,10 @@ FMonolithActionResult FMonolithModelGenActions::ImportGeneratedModel(const TShar
 	ImportParams->SetStringField(TEXT("destination"), Destination);
 
 	bool bReplaceExisting = false;
-	Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting);
+	if (Params->HasField(TEXT("replace_existing")) && !Params->TryGetBoolField(TEXT("replace_existing"), bReplaceExisting))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'replace_existing', expected boolean"), -32602);
+	}
 	ImportParams->SetBoolField(TEXT("replace_existing"), bReplaceExisting);
 	ImportParams->SetBoolField(TEXT("combine_meshes"), true);
 	ImportParams->SetBoolField(TEXT("generate_lightmap_uvs"), true);
@@ -659,7 +662,10 @@ FMonolithActionResult FMonolithModelGenActions::ImportGeneratedModel(const TShar
 	}
 
 	bool bSave = true;
-	Params->TryGetBoolField(TEXT("save"), bSave);
+	if (Params->HasField(TEXT("save")) && !Params->TryGetBoolField(TEXT("save"), bSave))
+	{
+		return FMonolithActionResult::Error(TEXT("Invalid type for param 'save', expected boolean"), -32602);
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* ImportedArray = nullptr;
 	TArray<TSharedPtr<FJsonValue>> GeneratedMeshes;

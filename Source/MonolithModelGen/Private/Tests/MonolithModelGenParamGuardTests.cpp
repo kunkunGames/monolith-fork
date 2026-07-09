@@ -198,6 +198,26 @@ bool FMonolithParamGuardModelGenImportJobMalformedParamsTest::RunTest(const FStr
 		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
 	}
 
+	// Test 2: Invalid type for replace_existing
+	{
+		TSharedPtr<FJsonObject> InvalidReplaceExisting = MakeShared<FJsonObject>();
+		InvalidReplaceExisting->SetStringField(TEXT("job_id"), TEXT("test-job-id"));
+		InvalidReplaceExisting->SetStringField(TEXT("replace_existing"), TEXT("true")); // Should be a bool
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("modelgen"), TEXT("import_generated_model"), InvalidReplaceExisting);
+		TestFalse(TEXT("ImportJob with invalid replace_existing should fail"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
+	// Test 3: Invalid type for save
+	{
+		TSharedPtr<FJsonObject> InvalidSave = MakeShared<FJsonObject>();
+		InvalidSave->SetStringField(TEXT("job_id"), TEXT("test-job-id"));
+		InvalidSave->SetStringField(TEXT("save"), TEXT("false")); // Should be a bool
+		FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("modelgen"), TEXT("import_generated_model"), InvalidSave);
+		TestFalse(TEXT("ImportJob with invalid save should fail"), Result.bSuccess);
+		TestEqual(TEXT("Error code should be invalid params"), Result.ErrorCode, -32602);
+	}
+
 	return true;
 }
 
