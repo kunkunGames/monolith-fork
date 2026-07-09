@@ -5783,7 +5783,9 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 		return {};
 	};
 
-	for (const TSharedPtr<FJsonValue>& Val : GetJsonArray(Params, TEXT("inputs")))
+	const TArray<TSharedPtr<FJsonValue>> JsonInputs = GetJsonArray(Params, TEXT("inputs"));
+	ParsedInputs.Reserve(JsonInputs.Num());
+	for (const TSharedPtr<FJsonValue>& Val : JsonInputs)
 	{
 		TSharedPtr<FJsonObject> Obj = AsObjectOrParseString(Val);
 		if (!Obj.IsValid() || Obj->Values.Num() == 0) continue;
@@ -5801,7 +5803,9 @@ FMonolithActionResult FMonolithNiagaraActions::CreateScriptFromHLSL(const TShare
 		ParsedInputs.Add({ PinName, ResolvedType });
 	}
 
-	for (const TSharedPtr<FJsonValue>& Val : GetJsonArray(Params, TEXT("outputs")))
+	const TArray<TSharedPtr<FJsonValue>> JsonOutputs = GetJsonArray(Params, TEXT("outputs"));
+	ParsedOutputs.Reserve(JsonOutputs.Num());
+	for (const TSharedPtr<FJsonValue>& Val : JsonOutputs)
 	{
 		TSharedPtr<FJsonObject> Obj = AsObjectOrParseString(Val);
 		if (!Obj.IsValid() || Obj->Values.Num() == 0) continue;
