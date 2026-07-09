@@ -10201,7 +10201,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("slot_index"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'slot_index' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		SlotIndex = static_cast<int32>(TempVal);
 	}
@@ -10212,7 +10212,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("play_rate"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'play_rate' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'play_rate' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		PlayRate = static_cast<float>(TempVal);
 	}
@@ -10223,7 +10223,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("looping_count"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'looping_count' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'looping_count' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		LoopingCount = static_cast<int32>(TempVal);
 	}
@@ -10246,7 +10246,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("start_pos"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'start_pos' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'start_pos' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		StartPos = static_cast<float>(TempVal);
 	}
@@ -10264,7 +10264,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("anim_start_time"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'anim_start_time' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'anim_start_time' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		AnimStartTime = static_cast<float>(TempVal);
 	}
@@ -10275,7 +10275,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddMontageAnimSegment(con
 		double TempVal;
 		if (!Params->TryGetNumberField(TEXT("anim_end_time"), TempVal))
 		{
-			return FMonolithActionResult::Error(TEXT("Parameter 'anim_end_time' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Parameter 'anim_end_time' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		AnimEndTime = static_cast<float>(TempVal);
 	}
