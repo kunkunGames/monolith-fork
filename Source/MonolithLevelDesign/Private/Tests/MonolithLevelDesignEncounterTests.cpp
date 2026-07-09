@@ -150,4 +150,39 @@ bool FMonolithLevelDesignGenerateScareSequenceParamGuardTest::RunTest(const FStr
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignAnalyzeAiTerritoryParamGuardTest, "Monolith.Sentinel.LevelDesign.AnalyzeAiTerritoryParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignAnalyzeAiTerritoryParamGuardTest::RunTest(const FString& Parameters)
+{
+	// 1. Missing region
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = ExecuteEncounterAction(TEXT("analyze_ai_territory"), Params);
+		TestFalse(TEXT("Missing region should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention region"), Result.ErrorMessage.Contains(TEXT("region")));
+	}
+
+	// 2. Wrong type for region
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("region"), TEXT("not_an_object"));
+		FMonolithActionResult Result = ExecuteEncounterAction(TEXT("analyze_ai_territory"), Params);
+		TestFalse(TEXT("Wrong type for region should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention region"), Result.ErrorMessage.Contains(TEXT("region")));
+	}
+
+	// 3. Valid parameters
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetObjectField(TEXT("region"), CreateValidRegion());
+
+		FMonolithActionResult Result = ExecuteEncounterAction(TEXT("analyze_ai_territory"), Params);
+		bool bIsExpectedResult = Result.bSuccess || Result.ErrorMessage.Contains(TEXT("Missing or invalid required param")) == false;
+		TestTrue(TEXT("Valid params should succeed or fail cleanly"), bIsExpectedResult);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
