@@ -2261,6 +2261,17 @@ Behavior Trees, State Trees, EQS, Blackboards, AI Controllers, Perception, Smart
 
 > **Phase J F15:** all BT-related actions now return `{ "error": "<code>", "detail": "<human>" }` instead of mixed prose. Update your error parsers.
 
+### `ai.add_perception_to_actor` · NEW in Phase J F8
+
+Add `UAIPerceptionComponent` to ANY Actor BP (not just AIControllers) and configure senses in one call.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `actor_bp_path` | string | **required** | Actor Blueprint asset path (e.g. `/Game/Tests/BP_TestActor`) |
+| `senses` | array | **required** | Array of sense names. Supported: `["Sight", "Hearing", "Damage"]`. |
+| `sight_radius` | number | optional | Sight radius (cm). Only applied to Sight sense if present. Default: `1500` |
+| `hearing_range` | number | optional | Hearing range (cm). Only applied to Hearing sense if present. Default: `3000` |
+
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's a long one.
 
 ---
