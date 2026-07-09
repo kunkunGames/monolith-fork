@@ -1070,4 +1070,42 @@ bool FMonolithParamGuardLogicDriverCompileStateMachineRejectsMalformedParamsTest
 	return true;
 }
 
+// ------------------------------------------------------------------------------------------------
+// Monolith.ParamGuard.LogicDriver.FindNodesByTypeRejectsMalformedParams
+// Validates that find_nodes_by_type rejects malformed params.
+// ------------------------------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardLogicDriverFindNodesByTypeRejectsMalformedParamsTest, "Monolith.ParamGuard.LogicDriver.FindNodesByTypeRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithParamGuardLogicDriverFindNodesByTypeRejectsMalformedParamsTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("logicdriver"), TEXT("find_nodes_by_type")))
+	{
+		FMonolithLogicDriverGraphActions::RegisterActions(Registry);
+	}
+
+	{
+		TSharedPtr<FJsonObject> EmptyParams = MakeShared<FJsonObject>();
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_type"), EmptyParams);
+		TestTrue(TEXT("find_nodes_by_type rejects missing asset_path"), !Result.bSuccess);
+		TestTrue(TEXT("find_nodes_by_type reports missing asset_path"), Result.ErrorMessage.Contains(TEXT("Missing required param 'asset_path'")));
+	}
+	{
+		TSharedPtr<FJsonObject> MissingTypeParams = MakeShared<FJsonObject>();
+		MissingTypeParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_type"), MissingTypeParams);
+		TestTrue(TEXT("find_nodes_by_type rejects missing node_type"), !Result.bSuccess);
+		TestTrue(TEXT("find_nodes_by_type reports missing node_type"), Result.ErrorMessage.Contains(TEXT("Missing required param 'node_type'")));
+	}
+	{
+		TSharedPtr<FJsonObject> InvalidTypeParams = MakeShared<FJsonObject>();
+		InvalidTypeParams->SetStringField(TEXT("asset_path"), TEXT("/Game/SM_Test.SM_Test"));
+		InvalidTypeParams->SetStringField(TEXT("node_type"), TEXT("invalid_type"));
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("logicdriver"), TEXT("find_nodes_by_type"), InvalidTypeParams);
+		TestTrue(TEXT("find_nodes_by_type rejects invalid node_type"), !Result.bSuccess);
+		TestTrue(TEXT("find_nodes_by_type reports invalid node_type"), Result.ErrorMessage.Contains(TEXT("Invalid node_type")));
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS && WITH_LOGICDRIVER
