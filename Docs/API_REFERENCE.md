@@ -3555,6 +3555,83 @@ Read-only RX-6 bridge between ProjectIndex assets and EngineSource symbols.
 | `asset_path` | string | optional | Project asset package path seed |
 | `symbol` | string | optional | Source symbol seed |
 
+## `dataflow` namespace
+
+Read-only Dataflow/Chaos graph discovery support without adding hard Dataflow link dependencies.
+
+### `dataflow.get_status`
+
+Report read-only Dataflow/Chaos graph discovery support without adding hard Dataflow link dependencies.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+
+### `dataflow.list_assets`
+
+List Dataflow asset metadata under /Game using AssetRegistry only. Does not load, evaluate, regenerate, or mutate assets.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `package_path` | string | optional | Content package path under /Game. Default: `/Game` |
+| `limit` | integer | optional | Maximum assets to return, clamped to 1..500. Default: `100` |
+
+### `dataflow.get_dataflow_graph`
+
+Read a bounded Dataflow graph summary from a UDataflow asset. Does not mutate, evaluate, regenerate, or mark packages dirty.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
+| `node_limit` | integer | optional | Maximum node rows to return, clamped to 1..500. Default: `128` |
+| `connection_limit` | integer | optional | Maximum connection rows to return after node_limit filtering, clamped to 1..5000. Default: `1000` |
+| `include_properties` | boolean | optional | Include editable UPROPERTY snapshots for each returned node. Default: `false` |
+
+### `dataflow.list_dataflow_node_types`
+
+List registered Dataflow node factory types with optional filtering and pin summaries.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `filter` | string | optional | Substring filter across type, display name, category, and tags |
+| `common_only` | boolean | optional | Exclude deprecated and experimental node types. Default: `true` |
+| `limit` | integer | optional | Maximum type rows to return, clamped to 1..1000. Default: `200` |
+| `include_pins` | boolean | optional | Include default input/output pins for each returned type. Default: `false` |
+
+### `dataflow.get_dataflow_node_schema`
+
+Return schema details for one registered Dataflow node type.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type_name` | string | **required** | Registered Dataflow node type name, e.g. FAddFloatsDataflowNode |
+| `include_properties` | boolean | optional | Include editable UPROPERTY defaults for this node type. Default: `true` |
+
+### `dataflow.validate_dataflow_graph`
+
+Validate a Dataflow graph for duplicate node identifiers and broken connection references without mutation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
+
+### `dataflow.list_dataflow_variables`
+
+List UDataflow property bag variables with descriptor metadata and serialized values without mutation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
+
+### `dataflow.list_dataflow_comments`
+
+List Dataflow editor comment boxes with bounded node membership hints without mutation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Dataflow asset path, e.g. /Game/Geometry/DF_Fracture |
+| `node_limit` | integer | optional | Maximum contained-node rows per comment, clamped to 1..500. Default: `128` |
+
+
 ## Public C++ Surface (MonolithCore)
 
 New public C++ symbols from the UnrealMCP-port slices. These are for sibling plugins / in-tree modules that produce async jobs, emit typed media, or contribute resource families. All are dark-by-default at the MCP wire level (flag-gated at the call site).
