@@ -63,15 +63,6 @@ public class MonolithGameFeatures : ModuleRules
 			return true;
 		}
 
-		string[] Dirs = Directory.Exists(BaseDir) ? Directory.GetDirectories(BaseDir, PluginName + "_*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
-		{
-			if (File.Exists(Path.Combine(Dir, PluginName + ".uplugin")))
-			{
-				return true;
-			}
-		}
-
 		return false;
 	}
 
