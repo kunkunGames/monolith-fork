@@ -15626,9 +15626,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleGetScalabilitySettings(cons
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
-	UNiagaraEffectType* EffectType = LoadObject<UNiagaraEffectType>(nullptr, *AssetPath);
-	if (!EffectType)
+	UNiagaraEffectType* EffectType = nullptr;
+	FString ResolvedPath, LoadError;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UNiagaraEffectType>(AssetPath, EffectType, ResolvedPath, LoadError))
+	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load effect type '%s'"), *AssetPath));
+	}
 
 	const FNiagaraSystemScalabilitySettingsArray& SSArr = EffectType->GetSystemScalabilitySettings();
 
@@ -15705,9 +15708,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetScalabilitySettings(cons
 	if (AssetPath.IsEmpty())
 		return FMonolithActionResult::Error(TEXT("Missing required param: asset_path"));
 
-	UNiagaraEffectType* EffectType = LoadObject<UNiagaraEffectType>(nullptr, *AssetPath);
-	if (!EffectType)
+	UNiagaraEffectType* EffectType = nullptr;
+	FString ResolvedPath, LoadError;
+	if (!FMonolithAssetUtils::TryLoadAssetByPath<UNiagaraEffectType>(AssetPath, EffectType, ResolvedPath, LoadError))
+	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to load effect type '%s'"), *AssetPath));
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* SettingsJsonArrPtr = nullptr;
 	if (!Params->TryGetArrayField(TEXT("settings"), SettingsJsonArrPtr) || !SettingsJsonArrPtr)
