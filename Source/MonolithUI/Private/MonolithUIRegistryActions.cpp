@@ -476,7 +476,8 @@ namespace MonolithUIRegistryPhase2
                     LiveSlotClass,
                     Status,
                     bSlotSettable);
-                if (bSlotPath && LiveSlotClass && !PropertyEntry->GetBoolField(TEXT("settable")))
+                bool bSettableValue = false;
+                if (bSlotPath && LiveSlotClass && (!PropertyEntry->TryGetBoolField(TEXT("settable"), bSettableValue) || !bSettableValue))
                 {
                     ++IncompatibleLiveSlotPathCount;
                 }
