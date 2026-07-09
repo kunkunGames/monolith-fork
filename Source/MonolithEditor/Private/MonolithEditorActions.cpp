@@ -9246,6 +9246,7 @@ FMonolithActionResult FMonolithEditorActions::HandleCreateNavHarnessMap(const TS
 		const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
 		if (Params->TryGetArrayField(TEXT("actors"), ActorsArr) && ActorsArr)
 		{
+			ActorReports.Reserve(ActorsArr->Num());
 			for (const TSharedPtr<FJsonValue>& Val : *ActorsArr)
 			{
 				const TSharedPtr<FJsonObject> ActorObj = Val.IsValid() ? Val->AsObject() : nullptr;
@@ -9557,6 +9558,7 @@ FMonolithActionResult FMonolithEditorActions::HandleAuthorMapSettings(const TSha
 		const TArray<TSharedPtr<FJsonValue>>* ActorsArr = nullptr;
 		if (Params->TryGetArrayField(TEXT("actors"), ActorsArr) && ActorsArr)
 		{
+			ActorReports.Reserve(ActorsArr->Num());
 			for (const TSharedPtr<FJsonValue>& Val : *ActorsArr)
 			{
 				const TSharedPtr<FJsonObject> ActorObj = Val.IsValid() ? Val->AsObject() : nullptr;
