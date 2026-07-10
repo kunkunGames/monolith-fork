@@ -578,6 +578,19 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
 
 ---
 
+## metahuman
+
+Read-only MetaHuman capability status and asset discovery.
+
+| Action | Params |
+|--------|--------|
+| `get_status` | none |
+| `list_character_assets` | `package_path` (optional string), `limit` (optional integer) |
+
+See `Plugins/Monolith/Docs/specs/SPEC_MonolithAnimation.md` for the deep dive.
+
+---
+
 ## cloth
 
 Optional Chaos Cloth/Outfit workflow discovery. Read-only probes; does not load vertex data, weight maps, or mutate assets. **2 actions.**
