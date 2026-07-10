@@ -448,6 +448,7 @@ namespace
 			return Result;
 		}
 
+		Result.Reserve(Values->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *Values)
 		{
 			FString StringValue;
