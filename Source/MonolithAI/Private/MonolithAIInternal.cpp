@@ -32,7 +32,11 @@ UObject* ResolveAsset(UClass* ExpectedClass, const FString& Path)
 
 UBlackboardData* LoadBlackboardFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 {
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath))
+	{
+		OutError = TEXT("Missing required parameter: asset_path");
+		return nullptr;
+	}
 	if (OutAssetPath.IsEmpty())
 	{
 		OutError = TEXT("Missing required parameter: asset_path");
@@ -50,7 +54,11 @@ UBlackboardData* LoadBlackboardFromParams(const TSharedPtr<FJsonObject>& Params,
 
 UBehaviorTree* LoadBehaviorTreeFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 {
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath))
+	{
+		OutError = TEXT("Missing required parameter: asset_path");
+		return nullptr;
+	}
 	if (OutAssetPath.IsEmpty())
 	{
 		OutError = TEXT("Missing required parameter: asset_path");
@@ -68,7 +76,11 @@ UBehaviorTree* LoadBehaviorTreeFromParams(const TSharedPtr<FJsonObject>& Params,
 
 UBlueprint* LoadAIControllerFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)
 {
-	OutAssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (!Params->TryGetStringField(TEXT("asset_path"), OutAssetPath))
+	{
+		OutError = TEXT("Missing required parameter: asset_path");
+		return nullptr;
+	}
 	if (OutAssetPath.IsEmpty())
 	{
 		OutError = TEXT("Missing required parameter: asset_path");
@@ -133,7 +145,11 @@ UPackage* GetOrCreatePackage(const FString& SavePath, FString& OutError)
 
 bool RequireStringParam(const TSharedPtr<FJsonObject>& Params, const FString& ParamName, FString& OutValue, FMonolithActionResult& OutError)
 {
-	OutValue = Params->GetStringField(ParamName);
+	if (!Params->TryGetStringField(ParamName, OutValue))
+	{
+		OutError = FMonolithActionResult::Error(FString::Printf(TEXT("Missing required parameter: %s"), *ParamName));
+		return false;
+	}
 	if (OutValue.IsEmpty())
 	{
 		OutError = FMonolithActionResult::Error(
