@@ -1104,6 +1104,11 @@ FMonolithActionResult FMonolithUIFontRepairActions::HandleCloneCompositeFontWith
         return FMonolithActionResult::Success(ResultJson);
     }
 
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(DestinationPackagePath); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError, FMonolithJsonUtils::ErrInvalidParams);
+    }
+
     UPackage* DestinationPackage = CreatePackage(*DestinationPackagePath);
     if (!DestinationPackage)
     {
