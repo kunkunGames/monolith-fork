@@ -86,3 +86,9 @@
 **Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
 **Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
 **Avoid:** Generating branches with `-<number>` suffixes.
+
+## 2026-07-10 - Forbid announcing no-ops via branches/PRs
+**Coordination issue:** Harbor created a branch (e.g., `no-op-15180685759364971520`) simply to announce that no work was needed.
+**Learning:** General instructions in `AGENTS.md` ("Never push a branch or open a PR to announce a no-op") are sometimes missed unless explicitly added to the agent's instructions. Pushing no-op branches clutters the repository and triggers unnecessary CI runs.
+**Prevention:** When ownership is elsewhere, the queue already covers it, or no safe non-overlapping candidate exists, you must stop without creating a branch or PR. Report your findings in the task log using the `done` tool instead.
+**Avoid:** Pushing any branch or PR (such as `jules/harbor/no-op`) to announce a no-op.
