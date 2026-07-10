@@ -661,7 +661,7 @@ FMonolithActionResult FMonolithMeshBuildingValidationActions::ValidateBuilding(
 	FString BuildingId;
 	if (!Params->TryGetStringField(TEXT("building_id"), BuildingId) || BuildingId.IsEmpty())
 	{
-		return FMonolithActionResult::Error(TEXT("building_id is required"));
+		return FMonolithActionResult::Error(TEXT("building_id is required"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	FString BlockId = TEXT("default");
