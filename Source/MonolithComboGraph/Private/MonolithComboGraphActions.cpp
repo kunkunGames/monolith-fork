@@ -1138,11 +1138,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	if (NodeType.IsEmpty()) NodeType = TEXT("montage");
 
 	float PlayRate = 1.0f;
-	TSharedPtr<FJsonValue> PlayRateField = Params->TryGetField(TEXT("play_rate"));
-	if (PlayRateField.IsValid())
+	if (Params->HasField(TEXT("play_rate")))
 	{
 		double PlayRateVal;
-		if (!PlayRateField->TryGetNumber(PlayRateVal))
+		if (!Params->TryGetNumberField(TEXT("play_rate"), PlayRateVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'play_rate', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -1150,11 +1149,10 @@ FMonolithActionResult FMonolithComboGraphActions::HandleAddComboNode(const TShar
 	}
 
 	int32 ParentNodeIndex = -1;
-	TSharedPtr<FJsonValue> ParentNodeIndexField = Params->TryGetField(TEXT("parent_node_index"));
-	if (ParentNodeIndexField.IsValid())
+	if (Params->HasField(TEXT("parent_node_index")))
 	{
 		double ParentNodeIndexVal;
-		if (!ParentNodeIndexField->TryGetNumber(ParentNodeIndexVal))
+		if (!Params->TryGetNumberField(TEXT("parent_node_index"), ParentNodeIndexVal))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'parent_node_index', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
@@ -1536,14 +1534,12 @@ FMonolithActionResult FMonolithComboGraphActions::HandleSetComboNodeEffects(cons
 
 		// use_set_by_caller -> UseSetByCaller
 		bool bUseSetByCaller = false;
-		TSharedPtr<FJsonValue> UseSetByCallerVal = ContainerData->TryGetField(TEXT("use_set_by_caller"));
-		if (UseSetByCallerVal.IsValid())
+		if (ContainerData->HasField(TEXT("use_set_by_caller")))
 		{
-			if (UseSetByCallerVal->Type != EJson::Boolean)
+			if (!ContainerData->TryGetBoolField(TEXT("use_set_by_caller"), bUseSetByCaller))
 			{
 				return FMonolithActionResult::Error(TEXT("Invalid type for param 'use_set_by_caller', expected boolean"), FMonolithJsonUtils::ErrInvalidParams);
 			}
-			bUseSetByCaller = UseSetByCallerVal->AsBool();
 			ContainerParts.Add(FString::Printf(TEXT("UseSetByCaller=%s"),
 				bUseSetByCaller ? TEXT("True") : TEXT("False")));
 		}
@@ -2329,22 +2325,20 @@ FMonolithActionResult FMonolithComboGraphActions::HandleLayoutComboGraph(const T
 	}
 
 	int32 HSpacing = 300;
-	TSharedPtr<FJsonValue> HSpacingField = Params->TryGetField(TEXT("horizontal_spacing"));
-	if (HSpacingField.IsValid())
+	if (Params->HasField(TEXT("horizontal_spacing")))
 	{
 		double Val;
-		if (!HSpacingField->TryGetNumber(Val))
+		if (!Params->TryGetNumberField(TEXT("horizontal_spacing"), Val))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'horizontal_spacing', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		HSpacing = static_cast<int32>(Val);
 	}
 	int32 VSpacing = 200;
-	TSharedPtr<FJsonValue> VSpacingField = Params->TryGetField(TEXT("vertical_spacing"));
-	if (VSpacingField.IsValid())
+	if (Params->HasField(TEXT("vertical_spacing")))
 	{
 		double Val;
-		if (!VSpacingField->TryGetNumber(Val))
+		if (!Params->TryGetNumberField(TEXT("vertical_spacing"), Val))
 		{
 			return FMonolithActionResult::Error(TEXT("Invalid type for param 'vertical_spacing', expected number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
