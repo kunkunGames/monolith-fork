@@ -51,63 +51,13 @@ public class MonolithComboGraph : ModuleRules
 		return false;
 	}
 
-	private bool FindComboGraphPlugin(string SearchDir)
-	{
-		if (!Directory.Exists(SearchDir))
-		{
-			return false;
-		}
-
-		if (File.Exists(Path.Combine(SearchDir, "ComboGraph", "ComboGraph.uplugin")))
-		{
-			return true;
-		}
-
-		string[] Dirs = Directory.Exists(SearchDir) ? Directory.GetDirectories(SearchDir, "ComboGraph_*", SearchOption.TopDirectoryOnly) : new string[0];
-		foreach (string Dir in Dirs)
-		{
-			if (File.Exists(Path.Combine(Dir, "ComboGraph.uplugin")))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
-
 	public MonolithComboGraph(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		// Release builds: set MONOLITH_RELEASE_BUILD=1 to force all optional deps off.
-		bool bHasComboGraph = false;
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-
-		if (!bReleaseBuild && IsPluginEnabled(Target, "ComboGraph"))
-		{
-			// 1. Check project Plugins/ folder
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(
-					Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasComboGraph = FindComboGraphPlugin(ProjectPluginsDir);
-			}
-
-			// 2. Check Engine Plugins/Marketplace/ folder (Fab install)
-			if (!bHasComboGraph)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string MarketplaceDir = Path.Combine(EngineDir, "Plugins", "Marketplace");
-				bHasComboGraph = FindComboGraphPlugin(MarketplaceDir);
-
-				// 3. Check Engine Plugins/ root
-				if (!bHasComboGraph)
-				{
-					string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-					bHasComboGraph = FindComboGraphPlugin(EnginePluginsDir);
-				}
-			}
-		}
+		bool bHasComboGraph = !bReleaseBuild && IsPluginEnabled(Target, "ComboGraph");
 
 		if (bHasComboGraph)
 		{
