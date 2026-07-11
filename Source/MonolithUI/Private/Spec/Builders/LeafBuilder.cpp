@@ -9,6 +9,7 @@
 
 #include "Spec/Builders/LeafBuilder.h"
 
+#include "MonolithAssetUtils.h"
 #include "Spec/UIBuildContext.h"
 #include "Spec/UISpec.h"
 #include "MonolithUICommon.h"
@@ -366,11 +367,11 @@ namespace MonolithUI::LeafBuilderInternal
         {
             if (!C.BrushPath.IsEmpty())
             {
-                if (UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *C.BrushPath))
+                if (UTexture2D* Tex = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(C.BrushPath))
                 {
                     I->SetBrushFromTexture(Tex);
                 }
-                else if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, *C.BrushPath))
+                else if (UMaterialInterface* Mat = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(C.BrushPath))
                 {
                     I->SetBrushFromMaterial(Mat);
                 }
@@ -391,11 +392,11 @@ namespace MonolithUI::LeafBuilderInternal
         {
             if (!C.BrushPath.IsEmpty())
             {
-                if (UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *C.BrushPath))
+                if (UTexture2D* Tex = FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(C.BrushPath))
                 {
                     B->SetBrushFromTexture(Tex);
                 }
-                else if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, *C.BrushPath))
+                else if (UMaterialInterface* Mat = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(C.BrushPath))
                 {
                     B->SetBrushFromMaterial(Mat);
                 }

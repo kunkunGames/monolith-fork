@@ -2761,7 +2761,7 @@ namespace MonolithUI::SpecActionsInternal
 
         if (!Node.Content.BrushPath.IsEmpty())
         {
-            if (UMaterialInterface* BoundMaterial = LoadObject<UMaterialInterface>(nullptr, *Node.Content.BrushPath))
+            if (UMaterialInterface* BoundMaterial = FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(Node.Content.BrushPath))
             {
                 if (!IsUiDomainMaterial(BoundMaterial))
                 {
@@ -5544,13 +5544,13 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
-        if (LoadObject<UTexture2D>(nullptr, *BrushPath))
+        if (FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(BrushPath))
         {
             SetStringIfMissing(Params, TEXT("texture_path"), BrushPath);
             return true;
         }
 
-        if (LoadObject<UMaterialInterface>(nullptr, *BrushPath))
+        if (FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(BrushPath))
         {
             SetStringIfMissing(Params, TEXT("material_path"), BrushPath);
             return true;
@@ -5573,13 +5573,13 @@ namespace MonolithUI::SpecActionsInternal
             return false;
         }
 
-        if (LoadObject<UTexture2D>(nullptr, *BrushPath))
+        if (FMonolithAssetUtils::LoadAssetByPath<UTexture2D>(BrushPath))
         {
             SetStringIfMissing(Params, TEXT("texture_path"), BrushPath);
             return true;
         }
 
-        if (LoadObject<UMaterialInterface>(nullptr, *BrushPath))
+        if (FMonolithAssetUtils::LoadAssetByPath<UMaterialInterface>(BrushPath))
         {
             SetStringIfMissing(Params, TEXT("material_path"), BrushPath);
             return true;
