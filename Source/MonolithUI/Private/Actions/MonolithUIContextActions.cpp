@@ -168,8 +168,12 @@ namespace MonolithUI::ContextActionsInternal
 			Resolved->SetBoolField(TEXT("animation_exists"), true);
 		}
 
-		const bool bStaleWidget = !Entry.WidgetName.IsEmpty() && !Resolved->GetBoolField(TEXT("widget_exists"));
-		const bool bStaleAnimation = !Entry.AnimationName.IsEmpty() && !Resolved->GetBoolField(TEXT("animation_exists"));
+		bool bWidgetExists = false;
+		bool bHasWidgetField = Resolved->TryGetBoolField(TEXT("widget_exists"), bWidgetExists);
+		const bool bStaleWidget = !Entry.WidgetName.IsEmpty() && bHasWidgetField && !bWidgetExists;
+		bool bAnimationExists = false;
+		bool bHasAnimationField = Resolved->TryGetBoolField(TEXT("animation_exists"), bAnimationExists);
+		const bool bStaleAnimation = !Entry.AnimationName.IsEmpty() && bHasAnimationField && !bAnimationExists;
 		Resolved->SetStringField(TEXT("status"), bStaleWidget || bStaleAnimation ? TEXT("stale_reference") : TEXT("fresh"));
 		return Resolved;
 	}
