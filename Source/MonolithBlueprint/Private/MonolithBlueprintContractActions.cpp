@@ -562,7 +562,13 @@ FMonolithActionResult FMonolithBlueprintContractActions::HandlePromoteVariablesT
 	}
 
 	FString Mode;
-	Params->TryGetStringField(TEXT("mode"), Mode);
+	if (const TSharedPtr<FJsonValue> ModeField = Params->TryGetField(TEXT("mode")))
+	{
+		if (!ModeField->TryGetString(Mode))
+		{
+			return FMonolithActionResult::Error(TEXT("Invalid parameter type: mode must be a string."));
+		}
+	}
 	if (Mode.IsEmpty()) Mode = TEXT("verify");
 	if (Mode != TEXT("verify") && Mode != TEXT("remove_shadowed"))
 	{
