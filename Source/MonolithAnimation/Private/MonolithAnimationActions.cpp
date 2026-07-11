@@ -11979,21 +11979,29 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchRetargetAnimations(c
 	USkeletalMesh* SourceMesh = nullptr;
 	USkeletalMesh* TargetMesh = nullptr;
 	FString SourceMeshPath, TargetMeshPath;
-	if (Params->TryGetStringField(TEXT("source_mesh"), SourceMeshPath) && !SourceMeshPath.IsEmpty())
+	if (Params->HasField(TEXT("source_mesh")))
 	{
-		SourceMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(SourceMeshPath);
-		if (!SourceMesh) return FMonolithActionResult::Error(FString::Printf(TEXT("Source mesh not found: %s"), *SourceMeshPath));
+		if (!Params->TryGetStringField(TEXT("source_mesh"), SourceMeshPath)) return FMonolithActionResult::Error(TEXT("Parameter 'source_mesh' must be a string"));
+		if (!SourceMeshPath.IsEmpty())
+		{
+			SourceMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(SourceMeshPath);
+			if (!SourceMesh) return FMonolithActionResult::Error(FString::Printf(TEXT("Source mesh not found: %s"), *SourceMeshPath));
+		}
 	}
-	else
+	if (!SourceMesh)
 	{
 		SourceMesh = C->GetPreviewMesh(ERetargetSourceOrTarget::Source);
 	}
-	if (Params->TryGetStringField(TEXT("target_mesh"), TargetMeshPath) && !TargetMeshPath.IsEmpty())
+	if (Params->HasField(TEXT("target_mesh")))
 	{
-		TargetMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(TargetMeshPath);
-		if (!TargetMesh) return FMonolithActionResult::Error(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
+		if (!Params->TryGetStringField(TEXT("target_mesh"), TargetMeshPath)) return FMonolithActionResult::Error(TEXT("Parameter 'target_mesh' must be a string"));
+		if (!TargetMeshPath.IsEmpty())
+		{
+			TargetMesh = FMonolithAssetUtils::LoadAssetByPath<USkeletalMesh>(TargetMeshPath);
+			if (!TargetMesh) return FMonolithActionResult::Error(FString::Printf(TEXT("Target mesh not found: %s"), *TargetMeshPath));
+		}
 	}
-	else
+	if (!TargetMesh)
 	{
 		TargetMesh = C->GetPreviewMesh(ERetargetSourceOrTarget::Target);
 	}
@@ -12040,16 +12048,25 @@ FMonolithActionResult FMonolithAnimationActions::HandleBatchRetargetAnimations(c
 	Context.bIncludeReferencedAssets = false;
 	Context.bOverwriteExistingFiles = false;
 
-	Params->TryGetStringField(TEXT("name_prefix"), Context.NameRule.Prefix);
-	Params->TryGetStringField(TEXT("name_suffix"), Context.NameRule.Suffix);
-	Params->TryGetStringField(TEXT("search"), Context.NameRule.ReplaceFrom);
-	Params->TryGetStringField(TEXT("replace"), Context.NameRule.ReplaceTo);
+	if (Params->HasField(TEXT("name_prefix")) && !Params->TryGetStringField(TEXT("name_prefix"), Context.NameRule.Prefix)) return FMonolithActionResult::Error(TEXT("Parameter 'name_prefix' must be a string"));
+	if (Params->HasField(TEXT("name_suffix")) && !Params->TryGetStringField(TEXT("name_suffix"), Context.NameRule.Suffix)) return FMonolithActionResult::Error(TEXT("Parameter 'name_suffix' must be a string"));
+	if (Params->HasField(TEXT("search")) && !Params->TryGetStringField(TEXT("search"), Context.NameRule.ReplaceFrom)) return FMonolithActionResult::Error(TEXT("Parameter 'search' must be a string"));
+	if (Params->HasField(TEXT("replace")) && !Params->TryGetStringField(TEXT("replace"), Context.NameRule.ReplaceTo)) return FMonolithActionResult::Error(TEXT("Parameter 'replace' must be a string"));
 	Context.NameRule.FolderPath = OutputFolder;
 
 	bool bIncludeRef = false;
-	if (Params->TryGetBoolField(TEXT("include_referenced"), bIncludeRef)) Context.bIncludeReferencedAssets = bIncludeRef;
+	if (Params->HasField(TEXT("include_referenced")))
+	{
+		if (!Params->TryGetBoolField(TEXT("include_referenced"), bIncludeRef)) return FMonolithActionResult::Error(TEXT("Parameter 'include_referenced' must be a boolean"));
+		Context.bIncludeReferencedAssets = bIncludeRef;
+	}
+
 	bool bOverwrite = false;
-	if (Params->TryGetBoolField(TEXT("overwrite"), bOverwrite)) Context.bOverwriteExistingFiles = bOverwrite;
+	if (Params->HasField(TEXT("overwrite")))
+	{
+		if (!Params->TryGetBoolField(TEXT("overwrite"), bOverwrite)) return FMonolithActionResult::Error(TEXT("Parameter 'overwrite' must be a boolean"));
+		Context.bOverwriteExistingFiles = bOverwrite;
+	}
 
 	if (!Context.IsValid())
 	{
