@@ -17,6 +17,7 @@
 #include "Misc/App.h"
 #include "Misc/Guid.h"
 #include "Misc/AutomationTest.h"
+#include "Algo/Reverse.h"
 #include "MonolithPackagePathValidator.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMemory.h"
@@ -212,11 +213,11 @@ TArray<FMonolithLogEntry> FMonolithLogCapture::SearchEntries(const FString& Patt
 
 	FString PatternLower = Pattern.ToLower();
 	int32 Total = RingBuffer.Num();
-	int32 Start = bWrapped ? WriteIndex : 0;
+	int32 Latest = bWrapped ? (WriteIndex - 1 + Total) % Total : Total - 1;
 
 	for (int32 i = 0; i < Total && Result.Num() < Limit; ++i)
 	{
-		int32 Idx = (Start + i) % Total;
+		int32 Idx = (Latest - i + Total) % Total;
 		const FMonolithLogEntry& Entry = RingBuffer[Idx];
 
 		if (Entry.Verbosity > MaxVerbosity) continue;
@@ -225,6 +226,8 @@ TArray<FMonolithLogEntry> FMonolithLogCapture::SearchEntries(const FString& Patt
 
 		Result.Add(Entry);
 	}
+
+	Algo::Reverse(Result);
 	return Result;
 }
 
