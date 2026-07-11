@@ -83,4 +83,54 @@ bool FMonolithLevelDesignAnalyzeRoomAcousticsTest::RunTest(const FString& Parame
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLevelDesignAnalyzeSoundPropagationTest, "Monolith.Sentinel.LevelDesign.AnalyzeSoundPropagationParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLevelDesignAnalyzeSoundPropagationTest::RunTest(const FString& Parameters)
+{
+	// 1. Missing from
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> ValidLoc;
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("to"), ValidLoc);
+
+		FMonolithActionResult Result = ExecuteAudioAction(TEXT("analyze_sound_propagation"), Params);
+		TestFalse(TEXT("Missing from should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention from"), Result.ErrorMessage.Contains(TEXT("from")));
+	}
+
+	// 2. Missing to
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> ValidLoc;
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("from"), ValidLoc);
+
+		FMonolithActionResult Result = ExecuteAudioAction(TEXT("analyze_sound_propagation"), Params);
+		TestFalse(TEXT("Missing to should fail"), Result.bSuccess);
+		TestTrue(TEXT("Error message should mention to"), Result.ErrorMessage.Contains(TEXT("to")));
+	}
+
+	// 3. Valid parameters
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		TArray<TSharedPtr<FJsonValue>> ValidLoc;
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		ValidLoc.Add(MakeShared<FJsonValueNumber>(0));
+		Params->SetArrayField(TEXT("from"), ValidLoc);
+		Params->SetArrayField(TEXT("to"), ValidLoc);
+
+		FMonolithActionResult Result = ExecuteAudioAction(TEXT("analyze_sound_propagation"), Params);
+		bool bIsExpectedResult = Result.bSuccess || Result.ErrorMessage.Contains(TEXT("No editor world available"));
+		TestTrue(TEXT("Valid params should succeed or fail cleanly on missing world"), bIsExpectedResult);
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
