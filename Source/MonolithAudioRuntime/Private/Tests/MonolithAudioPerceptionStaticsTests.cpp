@@ -6,6 +6,8 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // Note: A minimal smoke test scaffold for the perception statics without launching a live editor session.
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioPerceptionStaticsTest, "Monolith.AudioRuntime.PerceptionStatics.NullSafety", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -52,3 +54,5 @@ bool FMonolithAudioPerceptionStaticsTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

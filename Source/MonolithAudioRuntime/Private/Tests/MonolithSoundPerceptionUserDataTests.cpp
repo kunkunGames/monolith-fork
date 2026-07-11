@@ -3,6 +3,8 @@
 #include "MonolithSoundPerceptionUserData.h"
 #include "Sound/SoundWave.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSoundPerceptionUserDataTest, "Monolith.AudioRuntime.SoundPerceptionUserData", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithSoundPerceptionUserDataTest::RunTest(const FString& Parameters)
@@ -47,3 +49,5 @@ bool FMonolithSoundPerceptionUserDataTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS

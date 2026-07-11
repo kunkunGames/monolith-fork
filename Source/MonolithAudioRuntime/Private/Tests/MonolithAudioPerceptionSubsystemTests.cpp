@@ -8,6 +8,8 @@
 #include "Engine/World.h"
 #include "Perception/AISense_Hearing.h"
 
+#if WITH_DEV_AUTOMATION_TESTS
+
 // Note: A minimal smoke test scaffold for the perception subsystem without launching a live editor session.
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAudioPerceptionSubsystemTest, "Monolith.AudioRuntime.PerceptionSubsystem", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -38,3 +40,5 @@ bool FMonolithAudioPerceptionSubsystemTest::RunTest(const FString& Parameters)
 
     return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS
