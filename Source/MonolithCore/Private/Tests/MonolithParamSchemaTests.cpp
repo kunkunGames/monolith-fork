@@ -3,6 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithCoreTools.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithMcpSchemaUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithTestSupport.h"
 #include "MonolithToolProfileActions.h"
@@ -267,6 +268,158 @@ bool FMonolithParamSchemaTypedValidationTest::RunTest(const FString& Parameters)
 		TArray<FString> Errors;
 		TestTrue(TEXT("Explicit validation opt-out bypasses typed validation"), FMonolithParamSchema::ValidateTypedParams(OptOutSchema, Params, Errors));
 		TestEqual(TEXT("Opt-out produces no validation errors"), Errors.Num(), 0);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaMcpJsonSchemaPropertyTest,
+	"Monolith.ParamSchema.McpJsonSchemaProperty",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamSchemaMcpJsonSchemaPropertyTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Schema = FParamSchemaBuilder()
+		.EnableValidation()
+		.Required(TEXT("target"), TEXT("string"), TEXT("Target action"))
+		.Optional(TEXT("fields"), TEXT("array|string"), TEXT("Project fields"), { TEXT("select") })
+		.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Image resolution"))
+		.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Preview without mutation"))
+		.Optional(TEXT("value"), TEXT("any"), TEXT("Any JSON value"))
+		.Optional(TEXT("mode"), TEXT("string"), TEXT("Mode"))
+		.Enum(TEXT("mode"), { TEXT("summary"), TEXT("actions") })
+		.Build();
+
+	const TSharedPtr<FJsonObject>* FieldsDef = nullptr;
+	TestTrue(TEXT("fields param exists"), Schema->TryGetObjectField(TEXT("fields"), FieldsDef) && FieldsDef && FieldsDef->IsValid());
+	if (FieldsDef && FieldsDef->IsValid())
+	{
+		TSharedPtr<FJsonObject> FieldsProp = MonolithMcpSchemaUtils::BuildJsonSchemaProperty(*FieldsDef);
+		const TArray<TSharedPtr<FJsonValue>>* TypeValues = nullptr;
+		TestTrue(TEXT("union type exports as JSON Schema type array"),
+			FieldsProp->TryGetArrayField(TEXT("type"), TypeValues) && TypeValues && TypeValues->Num() == 2);
+		if (TypeValues && TypeValues->Num() == 2)
+		{
+			FString FirstType;
+			FString SecondType;
+			(*TypeValues)[0]->TryGetString(FirstType);
+			(*TypeValues)[1]->TryGetString(SecondType);
+			TestEqual(TEXT("first union type"), FirstType, FString(TEXT("array")));
+			TestEqual(TEXT("second union type"), SecondType, FString(TEXT("string")));
+		}
+
+		TestEqual(TEXT("description is forwarded"),
+			FieldsProp->GetStringField(TEXT("description")),
+			FString(TEXT("Project fields")));
+		TestFalse(TEXT("required marker is not forwarded to property schema"), FieldsProp->HasField(TEXT("required")));
+		TestFalse(TEXT("aliases are not forwarded to MCP JSON Schema"), FieldsProp->HasField(TEXT("aliases")));
+		TestFalse(TEXT("kind is not forwarded to MCP JSON Schema"), FieldsProp->HasField(TEXT("kind")));
+	}
+
+	const TSharedPtr<FJsonObject>* ModeDef = nullptr;
+	TestTrue(TEXT("mode param exists"), Schema->TryGetObjectField(TEXT("mode"), ModeDef) && ModeDef && ModeDef->IsValid());
+	if (ModeDef && ModeDef->IsValid())
+	{
+		TSharedPtr<FJsonObject> ModeProp = MonolithMcpSchemaUtils::BuildJsonSchemaProperty(*ModeDef);
+		FString ModeType;
+		TestTrue(TEXT("single type exports as JSON Schema string type"), ModeProp->TryGetStringField(TEXT("type"), ModeType));
+		TestEqual(TEXT("single type value"), ModeType, FString(TEXT("string")));
+		TestTrue(TEXT("enum is forwarded"), ModeProp->HasTypedField<EJson::Array>(TEXT("enum")));
+	}
+
+	TSharedPtr<FJsonObject> InputSchema = MonolithMcpSchemaUtils::BuildInputSchema(Schema);
+	FString InputType;
+	TestTrue(TEXT("input schema type is object"), InputSchema->TryGetStringField(TEXT("type"), InputType));
+	TestEqual(TEXT("input schema type value"), InputType, FString(TEXT("object")));
+	TestFalse(TEXT("internal validation marker is not exported as a property"), InputSchema->HasField(TEXT("_validate_types")));
+
+	const TSharedPtr<FJsonObject>* Properties = nullptr;
+	TestTrue(TEXT("input schema has properties"),
+		InputSchema->TryGetObjectField(TEXT("properties"), Properties) && Properties && Properties->IsValid());
+	if (Properties && Properties->IsValid())
+	{
+		TestFalse(TEXT("internal validation marker is not exported under properties"),
+			(*Properties)->HasField(TEXT("_validate_types")));
+		TestTrue(TEXT("fields property is exported"),
+			(*Properties)->HasTypedField<EJson::Object>(TEXT("fields")));
+		TestTrue(TEXT("target property is exported"),
+			(*Properties)->HasTypedField<EJson::Object>(TEXT("target")));
+
+		const TSharedPtr<FJsonObject>* DryRunProp = nullptr;
+		TestTrue(TEXT("dry_run property is exported"),
+			(*Properties)->TryGetObjectField(TEXT("dry_run"), DryRunProp) && DryRunProp && DryRunProp->IsValid());
+		if (DryRunProp && DryRunProp->IsValid())
+		{
+			FString DryRunType;
+			TestTrue(TEXT("internal bool exports as JSON Schema boolean"),
+				(*DryRunProp)->TryGetStringField(TEXT("type"), DryRunType));
+			TestEqual(TEXT("bool normalized to boolean"), DryRunType, FString(TEXT("boolean")));
+		}
+
+		const TSharedPtr<FJsonObject>* ValueProp = nullptr;
+		TestTrue(TEXT("value property is exported"),
+			(*Properties)->TryGetObjectField(TEXT("value"), ValueProp) && ValueProp && ValueProp->IsValid());
+		if (ValueProp && ValueProp->IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* AnyTypes = nullptr;
+			TestTrue(TEXT("internal any exports as JSON Schema type array"),
+				(*ValueProp)->TryGetArrayField(TEXT("type"), AnyTypes) && AnyTypes && AnyTypes->Num() == 7);
+			if (AnyTypes && AnyTypes->Num() == 7)
+			{
+				TArray<FString> TypeNames;
+				for (const TSharedPtr<FJsonValue>& TypeValue : *AnyTypes)
+				{
+					FString TypeName;
+					if (TypeValue.IsValid() && TypeValue->TryGetString(TypeName))
+					{
+						TypeNames.Add(TypeName);
+					}
+				}
+				TestTrue(TEXT("any includes array"), TypeNames.Contains(TEXT("array")));
+				TestTrue(TEXT("any includes boolean"), TypeNames.Contains(TEXT("boolean")));
+				TestTrue(TEXT("any includes integer"), TypeNames.Contains(TEXT("integer")));
+				TestTrue(TEXT("any includes number"), TypeNames.Contains(TEXT("number")));
+				TestTrue(TEXT("any includes object"), TypeNames.Contains(TEXT("object")));
+				TestTrue(TEXT("any includes string"), TypeNames.Contains(TEXT("string")));
+				TestTrue(TEXT("any includes null"), TypeNames.Contains(TEXT("null")));
+			}
+		}
+
+		const TSharedPtr<FJsonObject>* ResolutionProp = nullptr;
+		TestTrue(TEXT("resolution property is exported"),
+			(*Properties)->TryGetObjectField(TEXT("resolution"), ResolutionProp) && ResolutionProp && ResolutionProp->IsValid());
+		if (ResolutionProp && ResolutionProp->IsValid())
+		{
+			const TArray<TSharedPtr<FJsonValue>>* ResolutionTypes = nullptr;
+			TestTrue(TEXT("four-way union exports as JSON Schema type array"),
+				(*ResolutionProp)->TryGetArrayField(TEXT("type"), ResolutionTypes) && ResolutionTypes && ResolutionTypes->Num() == 4);
+			if (ResolutionTypes && ResolutionTypes->Num() == 4)
+			{
+				TArray<FString> TypeNames;
+				for (const TSharedPtr<FJsonValue>& TypeValue : *ResolutionTypes)
+				{
+					FString TypeName;
+					if (TypeValue.IsValid() && TypeValue->TryGetString(TypeName))
+					{
+						TypeNames.Add(TypeName);
+					}
+				}
+				TestTrue(TEXT("four-way union includes array"), TypeNames.Contains(TEXT("array")));
+				TestTrue(TEXT("four-way union includes string"), TypeNames.Contains(TEXT("string")));
+				TestTrue(TEXT("four-way union includes object"), TypeNames.Contains(TEXT("object")));
+				TestTrue(TEXT("four-way union includes number"), TypeNames.Contains(TEXT("number")));
+			}
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* RequiredValues = nullptr;
+	TestTrue(TEXT("input schema has required array"),
+		InputSchema->TryGetArrayField(TEXT("required"), RequiredValues) && RequiredValues && RequiredValues->Num() == 1);
+	if (RequiredValues && RequiredValues->Num() == 1)
+	{
+		FString RequiredName;
+		(*RequiredValues)[0]->TryGetString(RequiredName);
+		TestEqual(TEXT("required param is promoted to input schema required array"), RequiredName, FString(TEXT("target")));
 	}
 
 	return true;

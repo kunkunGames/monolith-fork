@@ -7,6 +7,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithHttpServer.h"
 #include "MonolithMcpSessionTracker.h"
+#include "MonolithMcpSchemaUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPlanExecutor.h"
 #include "MonolithProjectionUtils.h"
@@ -744,9 +745,11 @@ static TSharedPtr<FJsonObject> MakeDiscoverActionRow(
 	if (ActionInfo.ParamSchema.IsValid())
 	{
 		ActionObj->SetStringField(TEXT("schema_detail"), MonolithSchemaDetailToString(SchemaDetail));
-		ActionObj->SetObjectField(TEXT("params"), SchemaDetail == EMonolithSchemaDetail::Full
+		TSharedPtr<FJsonObject> OutputParams = SchemaDetail == EMonolithSchemaDetail::Full
 			? ActionInfo.ParamSchema
-			: MakeCompactParamSchema(ActionInfo.ParamSchema));
+			: MakeCompactParamSchema(ActionInfo.ParamSchema);
+		ActionObj->SetObjectField(TEXT("params"), OutputParams);
+		ActionObj->SetObjectField(TEXT("inputSchema"), MonolithMcpSchemaUtils::BuildInputSchema(OutputParams));
 	}
 	AddPlanningFields(ActionObj, ActionInfo, PlanningDetail);
 	return ActionObj;
@@ -2123,6 +2126,7 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 		if (bIncludeSchema && Match.Info.ParamSchema.IsValid())
 		{
 			Row->SetObjectField(TEXT("params"), Match.Info.ParamSchema);
+			Row->SetObjectField(TEXT("inputSchema"), MonolithMcpSchemaUtils::BuildInputSchema(Match.Info.ParamSchema));
 		}
 		AddPlanningFields(Row, Match.Info, PlanningDetail);
 		if (RequestedFields.Num() > 0)
@@ -3813,7 +3817,7 @@ FMonolithActionResult FMonolithCoreTools::HandleDescribeDomain(const TSharedPtr<
 		}
 		if (Action.ParamSchema.IsValid())
 		{
-			Row->SetObjectField(TEXT("inputSchema"), Action.ParamSchema);
+			Row->SetObjectField(TEXT("inputSchema"), MonolithMcpSchemaUtils::BuildInputSchema(Action.ParamSchema));
 			Row->SetObjectField(TEXT("params"), Action.ParamSchema);
 		}
 		AddPlanningFields(Row, Action);

@@ -5,6 +5,7 @@
 #include "MonolithExecutionContext.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithMcpSessionTracker.h"
+#include "MonolithMcpSchemaUtils.h"
 #include "MonolithProgressRegistry.h"
 #include "MonolithResourceRegistry.h"
 #include "MonolithToolRegistry.h"
@@ -966,55 +967,7 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 				CoreTool->SetStringField(TEXT("description"), ActionInfo.Description);
 
 				// Input schema — build a JSON-Schema-compliant inputSchema.
-				// ActionInfo.ParamSchema is a flat map where each entry carries
-				// Monolith-internal fields (required:bool, aliases, kind) that must
-				// not be forwarded to MCP clients.  Copy only standard JSON Schema
-				// keywords and promote required:bool entries to the top-level
-				// "required" array so clients can validate tool calls correctly.
-				TSharedPtr<FJsonObject> InputSchema = MakeShared<FJsonObject>();
-				InputSchema->SetStringField(TEXT("type"), TEXT("object"));
-
-				TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
-				TArray<TSharedPtr<FJsonValue>> RequiredArray;
-
-				if (ActionInfo.ParamSchema.IsValid())
-				{
-					RequiredArray.Reserve(ActionInfo.ParamSchema->Values.Num());
-					static const TCHAR* const kForwardFields[] = {
-						TEXT("type"), TEXT("description"), TEXT("default"),
-						TEXT("enum"), TEXT("minimum"), TEXT("maximum"),
-					};
-					for (const auto& SchemaEntry : FMonolithJsonUtils::GetFields(ActionInfo.ParamSchema))
-					{
-						// Root-level internal markers (keys prefixed with '_', e.g.
-						// _validate_types) are not parameters — skip them regardless
-						// of whether the JSON value is a bool or an object.
-						if (SchemaEntry.Key.StartsWith(TEXT("_"))) continue;
-						const TSharedPtr<FJsonObject> ParamObj = SchemaEntry.Value->AsObject();
-						if (!ParamObj.IsValid()) continue;
-
-						TSharedPtr<FJsonObject> CleanProp = MakeShared<FJsonObject>();
-						for (const TCHAR* Field : kForwardFields)
-						{
-							TSharedPtr<FJsonValue> Val = ParamObj->TryGetField(FString(Field));
-							if (Val.IsValid())
-							{
-								CleanProp->SetField(FString(Field), Val);
-							}
-						}
-						Properties->SetObjectField(SchemaEntry.Key, CleanProp);
-
-						bool bParamRequired = false;
-						if (ParamObj->TryGetBoolField(TEXT("required"), bParamRequired) && bParamRequired)
-						{
-							RequiredArray.Add(MakeShared<FJsonValueString>(SchemaEntry.Key));
-						}
-					}
-				}
-
-				InputSchema->SetObjectField(TEXT("properties"), Properties);
-				InputSchema->SetArrayField(TEXT("required"), RequiredArray);
-				CoreTool->SetObjectField(TEXT("inputSchema"), InputSchema);
+				CoreTool->SetObjectField(TEXT("inputSchema"), MonolithMcpSchemaUtils::BuildInputSchema(ActionInfo.ParamSchema));
 
 				// Survivor A (plan §3.A) — MCP-spec tool annotations. Only emit
 				// the `annotations` block when at least one hint is non-default;

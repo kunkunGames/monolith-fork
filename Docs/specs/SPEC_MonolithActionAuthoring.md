@@ -130,11 +130,11 @@ Registering an existing `(ns, action)` key logs a `Warning` and overwrites it ([
 
 ## 5. STEP 4 — Build the parameter schema with `FParamSchemaBuilder`
 
-`FParamSchemaBuilder` is fluent (each call returns `*this`); terminate with `.Build()`, which returns the `TSharedPtr<FJsonObject>` schema ([`MonolithParamSchema.h:214-217`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). Each entry stores `{type, description, required, optional default, optional aliases[], optional kind}` via the private `AddParam` ([`MonolithParamSchema.h:223-253`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
+`FParamSchemaBuilder` is fluent (each call returns `*this`); terminate with `.Build()`, which returns the `TSharedPtr<FJsonObject>` internal Monolith param schema ([`MonolithParamSchema.h:214-217`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). Each entry stores `{type, description, required, optional default, optional aliases[], optional kind}` via the private `AddParam` ([`MonolithParamSchema.h:223-253`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
 
 ### 5a. Required / Optional
 
-`.Required(name, type, desc)` and `.Required(name, type, desc, {aliases…})` ([`MonolithParamSchema.h:56-99`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). `.Optional(name, type, desc, default="")`, plus alias and no-default overloads ([`MonolithParamSchema.h:102-123`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). `type` is a string: `string`, `integer`, `number`, `bool`/`boolean`, `object`, `array`; pipe-unions like `array|string` are honored by validation ([`MonolithToolRegistry.cpp:120-134`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)). A non-empty `default` is emitted into the schema only when provided ([`MonolithParamSchema.h:231-234`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
+`.Required(name, type, desc)` and `.Required(name, type, desc, {aliases…})` ([`MonolithParamSchema.h:56-99`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). `.Optional(name, type, desc, default="")`, plus alias and no-default overloads ([`MonolithParamSchema.h:102-123`](../../Source/MonolithCore/Public/MonolithParamSchema.h)). Internal `type` is a string: `string`, `integer`, `number`, `bool`/`boolean`, `object`, `array`; pipe-unions like `array|string` or `array|string|object|number` are honored by validation ([`MonolithToolRegistry.cpp:120-134`](../../Source/MonolithCore/Private/MonolithToolRegistry.cpp)); internal `any` means the registry accepts any JSON value. MCP-facing `inputSchema` fields are produced by the private `MonolithMcpSchemaUtils::BuildInputSchema`, which converts pipe-unions into standard JSON Schema `type` arrays, normalizes internal `bool` to JSON Schema `boolean`, expands internal `any` to the full standard JSON Schema type set, and keeps internal markers such as `required`, `aliases`, `kind`, and `_validate_types` out of the exported property schema. A non-empty `default` is emitted into the schema only when provided ([`MonolithParamSchema.h:231-234`](../../Source/MonolithCore/Public/MonolithParamSchema.h)).
 
 ### 5b. Constraints
 
@@ -325,7 +325,7 @@ Cover: registered, empty params, missing-required, empty-required, invalid-enum 
 
 ### 10b. Registry/catalog test
 
-Catalog behavior is tested in [`MonolithDomainCatalogTests.cpp:20-40, 149`](../../Source/MonolithCore/Private/Tests/MonolithDomainCatalogTests.cpp): register a throwaway `catalogtest` namespace via `RegisterAction(..., FParamSchemaBuilder().Required(...).Build(), TEXT("Test"))`, assert `describe_domain` `action_count`, then `UnregisterNamespace(TEXT("catalogtest"))`. Param-schema mechanics (alias collision, unknown keys, `STRICT_PARAMS`, typed validation) are unit-tested in `Source/MonolithCore/Private/Tests/MonolithParamSchemaTests.cpp`.
+Catalog behavior is tested in [`MonolithDomainCatalogTests.cpp:20-40, 149`](../../Source/MonolithCore/Private/Tests/MonolithDomainCatalogTests.cpp): register a throwaway `catalogtest` namespace via `RegisterAction(..., FParamSchemaBuilder().Required(...).Build(), TEXT("Test"))`, assert `describe_domain` `action_count`, then `UnregisterNamespace(TEXT("catalogtest"))`. Param-schema mechanics (alias collision, unknown keys, `STRICT_PARAMS`, typed validation, MCP `inputSchema` conversion, and pipe-union JSON Schema export) are unit-tested in `Source/MonolithCore/Private/Tests/MonolithParamSchemaTests.cpp`.
 
 ---
 
