@@ -40,6 +40,12 @@ bool FMonolithWorldGenScatterPropsParamTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("scatter_props rejects invalid count 0"), Result.bSuccess);
 	TestTrue(TEXT("scatter_props reports invalid count"), Result.ErrorMessage.Contains(TEXT("count (must be > 0)")));
 
+	// Test count exceeding limit
+	Params->SetNumberField(TEXT("count"), 300);
+	Result = FMonolithToolRegistry::Get().ExecuteAction(TEXT("worldgen"), TEXT("scatter_props"), Params);
+	TestFalse(TEXT("scatter_props rejects count exceeding limit"), Result.bSuccess);
+	TestTrue(TEXT("scatter_props reports limit validation"), Result.ErrorMessage.Contains(TEXT("exceeds the maximum allowed (200)")));
+
 	// Test malformed collision_mode
 	Params->SetNumberField(TEXT("count"), 5);
 	Params->SetStringField(TEXT("collision_mode"), TEXT("invalid_mode"));

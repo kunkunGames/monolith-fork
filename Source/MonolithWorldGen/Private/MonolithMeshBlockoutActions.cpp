@@ -2523,7 +2523,11 @@ FMonolithActionResult FMonolithMeshBlockoutActions::ScatterProps(const TSharedPt
 	{
 		return FMonolithActionResult::Error(TEXT("Missing or invalid required param: count (must be > 0)"));
 	}
-	int32 Count = FMath::Clamp(static_cast<int32>(CountD), 1, 200);
+	if (CountD > 200.0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("count exceeds the maximum allowed (200), got %g"), CountD));
+	}
+	int32 Count = static_cast<int32>(CountD);
 
 	double MinSpacing = 50.0;
 	Params->TryGetNumberField(TEXT("min_spacing"), MinSpacing);
