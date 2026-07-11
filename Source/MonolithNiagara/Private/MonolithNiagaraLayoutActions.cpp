@@ -394,6 +394,7 @@ FMonolithActionResult FMonolithNiagaraLayoutActions::HandleAutoLayout(const TSha
 
 	// --- Format each graph ---
 	TArray<TSharedPtr<FJsonValue>> GraphResults;
+	GraphResults.Reserve(GraphsToFormat.Num());
 	int32 TotalNodesFormatted = 0;
 	int32 SuccessCount = 0;
 	int32 FailCount = 0;
