@@ -12724,9 +12724,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 		TSharedPtr<FJsonObject> O = AsObjectOrParseString(ValueJV);
 		if (O.IsValid())
 		{
-			FVector2f V2(O->GetNumberField(TEXT("x")), O->GetNumberField(TEXT("y")));
-			Store.SetParameterValue(V2, *Found);
-			bSet = true;
+			double OutX = 0.0, OutY = 0.0;
+			if (O->TryGetNumberField(TEXT("x"), OutX) && O->TryGetNumberField(TEXT("y"), OutY))
+			{
+				FVector2f V2(static_cast<float>(OutX), static_cast<float>(OutY));
+				Store.SetParameterValue(V2, *Found);
+				bSet = true;
+			}
 		}
 	}
 	else if (TD == FNiagaraTypeDefinition::GetVec3Def() || TD == FNiagaraTypeDefinition::GetPositionDef())
@@ -12734,9 +12738,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 		TSharedPtr<FJsonObject> O = AsObjectOrParseString(ValueJV);
 		if (O.IsValid())
 		{
-			FVector3f V3(O->GetNumberField(TEXT("x")), O->GetNumberField(TEXT("y")), O->GetNumberField(TEXT("z")));
-			Store.SetParameterValue(V3, *Found);
-			bSet = true;
+			double OutX = 0.0, OutY = 0.0, OutZ = 0.0;
+			if (O->TryGetNumberField(TEXT("x"), OutX) && O->TryGetNumberField(TEXT("y"), OutY) && O->TryGetNumberField(TEXT("z"), OutZ))
+			{
+				FVector3f V3(static_cast<float>(OutX), static_cast<float>(OutY), static_cast<float>(OutZ));
+				Store.SetParameterValue(V3, *Found);
+				bSet = true;
+			}
 		}
 	}
 	else if (TD == FNiagaraTypeDefinition::GetVec4Def())
@@ -12744,9 +12752,13 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 		TSharedPtr<FJsonObject> O = AsObjectOrParseString(ValueJV);
 		if (O.IsValid())
 		{
-			FVector4f V4(O->GetNumberField(TEXT("x")), O->GetNumberField(TEXT("y")), O->GetNumberField(TEXT("z")), O->GetNumberField(TEXT("w")));
-			Store.SetParameterValue(V4, *Found);
-			bSet = true;
+			double OutX = 0.0, OutY = 0.0, OutZ = 0.0, OutW = 0.0;
+			if (O->TryGetNumberField(TEXT("x"), OutX) && O->TryGetNumberField(TEXT("y"), OutY) && O->TryGetNumberField(TEXT("z"), OutZ) && O->TryGetNumberField(TEXT("w"), OutW))
+			{
+				FVector4f V4(static_cast<float>(OutX), static_cast<float>(OutY), static_cast<float>(OutZ), static_cast<float>(OutW));
+				Store.SetParameterValue(V4, *Found);
+				bSet = true;
+			}
 		}
 	}
 	else if (TD == FNiagaraTypeDefinition::GetColorDef())
@@ -12755,11 +12767,16 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetNPCDefault(const TShared
 		if (O.IsValid())
 		{
 			float LC_A = 1.0f;
-		double LC_A_Double = LC_A;
-		if (O->TryGetNumberField(TEXT("a"), LC_A_Double)) LC_A = static_cast<float>(LC_A_Double);
-		FLinearColor LC(static_cast<float>(O->GetNumberField(TEXT("r"))), static_cast<float>(O->GetNumberField(TEXT("g"))), static_cast<float>(O->GetNumberField(TEXT("b"))), LC_A);
-			Store.SetParameterValue(LC, *Found);
-			bSet = true;
+			double LC_A_Double = LC_A;
+			if (O->TryGetNumberField(TEXT("a"), LC_A_Double)) LC_A = static_cast<float>(LC_A_Double);
+
+			double OutR = 0.0, OutG = 0.0, OutB = 0.0;
+			if (O->TryGetNumberField(TEXT("r"), OutR) && O->TryGetNumberField(TEXT("g"), OutG) && O->TryGetNumberField(TEXT("b"), OutB))
+			{
+				FLinearColor LC(static_cast<float>(OutR), static_cast<float>(OutG), static_cast<float>(OutB), LC_A);
+				Store.SetParameterValue(LC, *Found);
+				bSet = true;
+			}
 		}
 	}
 

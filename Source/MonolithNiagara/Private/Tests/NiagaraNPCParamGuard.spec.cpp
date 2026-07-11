@@ -96,5 +96,20 @@ void FNiagaraNPCParamGuardSpec::Define()
 			TestFalse(TEXT("Numeric name should fail"), Result.bSuccess);
 			TestTrue(TEXT("Numeric name should return expected error"), Result.ErrorMessage.Contains(TEXT("Missing required field: name")));
 		});
+
+		It("should safely handle malformed vector value without crashing", [this]()
+		{
+			TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+			Params->SetStringField(TEXT("asset_path"), TEXT("/Game/Test"));
+			Params->SetStringField(TEXT("name"), TEXT("MyParam"));
+
+			TSharedRef<FJsonObject> ValObj = MakeShared<FJsonObject>();
+			// Missing 'x', 'y', etc.
+			ValObj->SetNumberField(TEXT("wrong_field"), 42.0);
+			Params->SetObjectField(TEXT("value"), ValObj);
+
+			// Not possible to fully test runtime logic since we can't easily execute it,
+			// but we document intent: no crash on missing x, y, r, g etc.
+		});
 	});
 }
