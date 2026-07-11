@@ -333,6 +333,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::ImportMesh(const TSharedPtr<F
 
 	// Build result
 	TArray<TSharedPtr<FJsonValue>> ImportedArray;
+	ImportedArray.Reserve(ImportedObjects.Num());
 	TArray<FString> Warnings;
 
 	for (UObject* Obj : ImportedObjects)
@@ -590,6 +591,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::FixMeshQuality(const TSharedP
 	Result->SetStringField(TEXT("asset_path"), AssetPath);
 
 	TArray<TSharedPtr<FJsonValue>> OpsArr;
+	OpsArr.Reserve(AppliedOps.Num());
 	for (const FString& Op : AppliedOps)
 	{
 		OpsArr.Add(MakeShared<FJsonValueString>(Op));
@@ -901,6 +903,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeTexelDensity(const TSh
 
 	// Analyze each actor
 	TArray<TSharedPtr<FJsonValue>> ActorResults;
+	ActorResults.Reserve(Actors.Num());
 	double SumDensity = 0.0;
 	double MinDensity = TNumericLimits<double>::Max();
 	double MaxDensity = 0.0;
@@ -1482,6 +1485,7 @@ FMonolithActionResult FMonolithMeshTechArtActions::AnalyzeLightmapDensity(const 
 
 	// Analyze lightmap density per actor
 	TArray<TSharedPtr<FJsonValue>> ActorResults;
+	ActorResults.Reserve(Actors.Num());
 
 	for (AActor* Actor : Actors)
 	{
