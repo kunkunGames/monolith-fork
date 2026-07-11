@@ -207,6 +207,7 @@ TArray<FString> ParseStringArray(const TSharedPtr<FJsonObject>& Params, const FS
 	const TArray<TSharedPtr<FJsonValue>>* Arr;
 	if (Params->TryGetArrayField(FieldName, Arr))
 	{
+		Result.Reserve(Arr->Num());
 		for (const auto& Val : *Arr)
 		{
 			FString Str;
