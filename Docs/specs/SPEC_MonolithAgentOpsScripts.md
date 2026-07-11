@@ -73,8 +73,10 @@ Sequence: repeat GET `<McpUrl with /health>` (3s timeout, 200 = up). If up, prin
 | `-RecoverPollIntervalSec` | 5 | Passed to `recover_mcp.ps1 -PollIntervalSec` |
 | `-NoBuildBeforeRestart` | off | Skips the UBT step; for launch diagnostics only, not normal agent operation |
 | `-ProbeOnly` | off | Report one health/process sample and exit; never builds, recovers, launches, or runs index maintenance |
+| `-ProbeBuildLocksOnly` | off | Probe the UBT link outputs for process locks and exit: `[BuildLocksClear]` exit 0 when free, `[BuildLocksPresent]` exit 2 when locked. Never builds, recovers, launches, or runs index maintenance |
 | `-MaxRestartAttempts` | 0 | 0 means unlimited. Past the bound the watchdog stops attempting restarts and escalates the probe sleep (exponential backoff, capped by `-RestartLimitBackoffMaxSec`) while logging `[RestartLimit] attempts=<n> backoffSeconds=<s>`; it does not spin one attempt per poll. A later healthy probe logs `[RestartAttemptsReset]` and clears the budget |
 | `-RestartLimitBackoffMaxSec` | 600 | Upper bound for the escalated probe sleep after `-MaxRestartAttempts` is exceeded |
+| `-BuildFailureBackoffMaxSec` | 600 | Upper bound for the escalated probe sleep after consecutive pre-restart build failures or locked-DLL build blocks; the streak doubles the sleep from `-PollIntervalSec` and resets on a successful build or healthy probe |
 | `-RecoverInvokeGraceSec` | 300 | One `recover_mcp.ps1` child invocation is killed after `-RecoverTimeoutSec + -RecoverInvokeGraceSec` seconds and reported as `[RecoverTimeout]` with recover exit code 124; the watchdog itself keeps running |
 | `-Once` | off | Run one probe/recover cycle and exit, suitable for smoke checks |
 | `-DisableDailyReindex` | off | Disable scheduled asset/source/graph maintenance |
@@ -110,6 +112,8 @@ exitCode=0 detail="{ \"after\": { \"edges\": 1125252, \"files\": 89551 }, \"grap
 - The UBT command is `<Target> Win64 Development "-Project=<uproject>" -WaitMutex -NoHotReloadFromIDE`.
 - UBT output is written under `Saved\Monolith\Watchdog\UBT-<timestamp>.log`.
 - The script never runs UBT while an editor-server candidate process is still alive. For `.cpp` body-only compile checks while the editor is up, agents should use the editor namespace Live Coding flow instead of this watchdog.
+- DLL-lock preflight (2026-07-10 hardening): before every pre-restart UBT invocation the watchdog write-probes the bounded link-output set (`Binaries\Win64\UnrealEditor-*.dll` at the project root, plus one- and two-level plugin `Binaries\Win64` globs). If any output is held by another process — including `-game`/`-server` clients that are deliberately not editor-server candidates — the build is skipped with `[BlockedDllLocked] lockedCount=<n> readonlyCount=<n> consecutiveBuildFailures=<n> backoffSeconds=<s> holderPidsBestEffort=<pids> lockedFiles=<first-8>` (exit 10 in `-Once` mode) instead of burning a UBT run into LNK1104. Read-only files are reported in `readonlyCount` but are not treated as process locks. This closes the 2026-07-06..10 incident class: 444 `BuildFailed` records in a retry loop while running clients held `CommonGame`/`SpeedCoreRuntime` DLLs.
+- Consecutive build-failure backoff (2026-07-10 hardening): each `BUILD_FAILED` or `BLOCKED_DLL_LOCKED` outcome increments a streak that doubles the next probe sleep from `-PollIntervalSec` up to `-BuildFailureBackoffMaxSec`. A successful build or a healthy probe resets the streak (the healthy-probe reset shares the `[RestartAttemptsReset]` event).
 - If an editor-server candidate is alive but `/health` still cannot recover before `-RecoverTimeoutSec`, the watchdog checks for headless-only candidates, stops those `-NullRHI`/`Saved\HeadlessMcp` processes, and only then runs the normal restart sequence. Non-headless `-server` or user-facing editor processes are not killed.
 - Restart-triggered source maintenance runs before relaunch through `UnrealEditor-Cmd.exe <uproject> -run=MonolithReindex -mode=project -unattended -nopause -nosplash -nullrhi`, writing `Saved\Monolith\Watchdog\MonolithReindex-<timestamp>.log`. `-RestartReindexMode full` maps to `-mode=full`.
 - Restart-triggered graph maintenance also runs before relaunch through `Binaries\monolith_query.exe source build_crg_graph --execute --cooldown_seconds=<N>`; full mode adds `--force`.
@@ -163,13 +167,14 @@ Unregister-ScheduledTask -TaskName 'Monolith MCP Watchdog - Speed' -Confirm:$fal
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Endpoint up, or recovery succeeded in `-Once` mode |
-| 2 | Down and `-ProbeOnly` was requested |
+| 0 | Endpoint up, or recovery succeeded in `-Once` mode, or `-ProbeBuildLocksOnly` found all link outputs free |
+| 2 | Down and `-ProbeOnly` was requested, or `-ProbeBuildLocksOnly` found locked link outputs |
 | 3 | Blocked: host root, `.uproject`, resolver, UBT, or recover script missing |
 | 4 | UBT build failed before restart |
 | 7 | Restart limit reached |
 | 8 | Index maintenance failed in `-Once` mode |
 | 9 | Unhandled terminating error; `RESULT=FATAL` is the last logged line |
+| 10 | Build skipped in `-Once` mode: UBT link outputs are locked by another process (`[BlockedDllLocked]`) |
 | other | `recover_mcp.ps1` exit code when `-Once` is used and recovery fails; a recover child killed on invoke timeout surfaces as recover exit code 124 |
 
 ## 5. `check_index_freshness.ps1` Contract

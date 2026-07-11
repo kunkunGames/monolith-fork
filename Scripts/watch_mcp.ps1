@@ -38,6 +38,13 @@ launch behavior; normal agent operation should build before restart.
 Report one watchdog health/process sample and exit. Never builds, recovers, or
 launches the editor.
 
+.PARAMETER ProbeBuildLocksOnly
+Probe the UBT link outputs (project and plugin UnrealEditor-*.dll files) for
+processes that hold them open and exit. Exit 0 when all outputs are free,
+exit 2 when at least one is locked. Never builds, recovers, or launches the
+editor. Use to verify the DLL-lock preflight against a live editor or game
+client.
+
 .PARAMETER MaxRestartAttempts
 Maximum build+restart cycles before backing off. 0 means unlimited. Past the
 limit the watchdog stops attempting restarts and escalates its probe sleep
@@ -47,6 +54,12 @@ later healthy probe resets the budget.
 .PARAMETER RestartLimitBackoffMaxSec
 Upper bound in seconds for the escalated probe sleep after MaxRestartAttempts
 is exceeded. Default 600.
+
+.PARAMETER BuildFailureBackoffMaxSec
+Upper bound in seconds for the escalated probe sleep after consecutive
+pre-restart build failures or locked-DLL build blocks. Starting from the second
+consecutive failure the sleep doubles from PollIntervalSec up to this cap; a
+successful build or a healthy probe resets the streak. Default 600.
 
 .PARAMETER RecoverInvokeGraceSec
 Extra seconds granted to one recover_mcp.ps1 child invocation beyond
@@ -116,6 +129,10 @@ Notable events:
   McpUp                 endpoint is reachable
   McpDown               endpoint is down in -ProbeOnly mode
   BuildFailed           UBT failed, editor was not restarted
+  BlockedDllLocked      UBT link outputs are held by another process; the
+                        build was skipped instead of failing with LNK1104
+  BuildLocksPresent     -ProbeBuildLocksOnly found locked link outputs
+  BuildLocksClear       -ProbeBuildLocksOnly found all link outputs free
   RestartLimit          MaxRestartAttempts exceeded; probe sleep backs off
   RestartAttemptsReset  healthy probe cleared the restart budget
   RecoverTimeout        recover child exceeded its invoke timeout and was killed
@@ -127,12 +144,15 @@ Notable events:
   Blocked               required project/wrapper/build files are missing
 
 Exit codes:
-  0  endpoint is up, or recover cycle succeeded in -Once mode
-  2  endpoint down and -ProbeOnly was requested
+  0  endpoint is up, or recover cycle succeeded in -Once mode, or
+     -ProbeBuildLocksOnly found all link outputs free
+  2  endpoint down and -ProbeOnly was requested, or -ProbeBuildLocksOnly
+     found locked link outputs
   3  blocked: host root, .uproject, resolver, UBT, or recover script missing
   4  build failed before restart
   7  restart limit reached
   8  index maintenance failed in -Once mode
+  10 build skipped: UBT link outputs are locked by another process
   9  unhandled terminating error (RESULT=FATAL logged as the last line)
   otherwise recover_mcp.ps1 exit code when -Once is used and recovery fails
   (a recover child killed on timeout surfaces as recover exit code 124)
@@ -145,8 +165,10 @@ param(
     [int]$RecoverPollIntervalSec = 5,
     [switch]$NoBuildBeforeRestart,
     [switch]$ProbeOnly,
+    [switch]$ProbeBuildLocksOnly,
     [int]$MaxRestartAttempts = 0,
     [int]$RestartLimitBackoffMaxSec = 600,
+    [int]$BuildFailureBackoffMaxSec = 600,
     [int]$RecoverInvokeGraceSec = 300,
     [switch]$Once,
     [switch]$DisableDailyReindex,
@@ -879,6 +901,88 @@ function Get-EditorTargetName {
     return ("{0}Editor" -f $ProjectName)
 }
 
+function Get-BuildLockCandidateFiles {
+    param([string]$Root)
+
+    # Bounded glob set over the primary UBT link outputs. Deliberately not a
+    # full recursive scan: project modules, one-level plugins, and two-level
+    # plugin groups (e.g. Plugins\GameFeatures\<Feature>) cover every LNK1104
+    # target observed in watchdog logs (2026-07-06..10 incident).
+    $patterns = @(
+        (Join-Path $Root 'Binaries\Win64\UnrealEditor-*.dll'),
+        (Join-Path $Root 'Plugins\*\Binaries\Win64\UnrealEditor-*.dll'),
+        (Join-Path $Root 'Plugins\*\*\Binaries\Win64\UnrealEditor-*.dll')
+    )
+    $files = @()
+    foreach ($pattern in $patterns) {
+        $files += @(Get-Item -Path $pattern -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer })
+    }
+    return ,@($files | Sort-Object -Property FullName -Unique)
+}
+
+function Get-BuildBlockingLocks {
+    param([string]$Root)
+
+    # The linker needs write access to replace each link output; a DLL mapped
+    # into any running process denies that with a sharing violation (LNK1104).
+    # Probe with the exact access the linker needs and maximal sharing so the
+    # only failure cause is another holder. Read-only files (Perforce state,
+    # ACL) are a different, persistent failure class: report them separately
+    # instead of treating them as process locks, because 116 prior watchdog
+    # builds succeeded with read-only files present.
+    $locked = @()
+    $readOnly = @()
+    $shareAll = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+    foreach ($file in (Get-BuildLockCandidateFiles -Root $Root)) {
+        if ($file.IsReadOnly) {
+            $readOnly += $file.FullName
+            continue
+        }
+        try {
+            $stream = [System.IO.File]::Open(
+                $file.FullName,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Write,
+                $shareAll)
+            $stream.Dispose()
+        }
+        catch [System.IO.IOException] {
+            $locked += $file.FullName
+        }
+        catch [System.UnauthorizedAccessException] {
+            $readOnly += $file.FullName
+        }
+        catch {}
+    }
+    return [PSCustomObject]@{
+        Locked   = @($locked)
+        ReadOnly = @($readOnly)
+    }
+}
+
+function Get-BuildLockHolderPids {
+    param([string]$Root)
+
+    # Best-effort holder attribution for the BlockedDllLocked event. Unlike
+    # Get-EditorServerCandidates this must NOT exclude -game/-server clients:
+    # they hold project DLLs without ever being editor-server candidates,
+    # which is precisely how the 2026-07-09 LNK1104 loop started.
+    $needle = $Root.TrimEnd('\', '/')
+    $pids = @()
+    Get-CimInstance Win32_Process -Filter "Name LIKE 'UnrealEditor%'" -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            if ($_.CommandLine -and $_.CommandLine.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $pids += [int]$_.ProcessId
+            }
+        }
+    return ,@($pids)
+}
+
+function Get-BuildFailureBackoffSeconds {
+    $exponent = [Math]::Min([Math]::Max($script:consecutiveBuildFailures - 1, 0), 6)
+    return [int][Math]::Min($PollIntervalSec * [Math]::Pow(2, $exponent), $BuildFailureBackoffMaxSec)
+}
+
 function Invoke-EditorBuild {
     param([string]$Root)
 
@@ -1166,9 +1270,27 @@ function Invoke-RestartSequence {
 
     Write-Watchdog ("restart_sequence_start reason={0} restart_attempt={1}" -f $Reason, $script:restartAttempts)
     if (-not $NoBuildBeforeRestart) {
-        if (-not (Invoke-EditorBuild -Root $Root)) {
-            return [PSCustomObject]@{ ExitCode = 4; Result = 'RESULT=BUILD_FAILED' }
+        # LNK1104 preflight: never hand UBT a link output some process still
+        # holds (2026-07-06..10 incident: 444 BuildFailed in a retry loop
+        # while -game clients kept CommonGame/SpeedCoreRuntime DLLs mapped).
+        $lockProbe = Get-BuildBlockingLocks -Root $Root
+        if ($lockProbe.Locked.Count -gt 0) {
+            $script:consecutiveBuildFailures++
+            $backoffSec = Get-BuildFailureBackoffSeconds
+            $holderPids = Get-BuildLockHolderPids -Root $Root
+            Write-Watchdog ("RESULT=BLOCKED_DLL_LOCKED locked_count={0} readonly_count={1} consecutive_build_failures={2} backoff_seconds={3} holder_pids_best_effort={4} locked_files={5}" -f `
+                    $lockProbe.Locked.Count, $lockProbe.ReadOnly.Count, $script:consecutiveBuildFailures, $backoffSec, `
+                    $(if ($holderPids.Count -gt 0) { $holderPids -join ',' } else { '-' }), `
+                    (Format-WatchdogValue (($lockProbe.Locked | Select-Object -First 8) -join ';')))
+            return [PSCustomObject]@{ ExitCode = 10; Result = 'RESULT=BLOCKED_DLL_LOCKED'; BackoffSeconds = $backoffSec }
         }
+
+        if (-not (Invoke-EditorBuild -Root $Root)) {
+            $script:consecutiveBuildFailures++
+            $backoffSec = Get-BuildFailureBackoffSeconds
+            return [PSCustomObject]@{ ExitCode = 4; Result = 'RESULT=BUILD_FAILED'; BackoffSeconds = $backoffSec }
+        }
+        $script:consecutiveBuildFailures = 0
     }
     else {
         Write-Watchdog 'build_skipped reason=NoBuildBeforeRestart'
@@ -1191,7 +1313,7 @@ $script:dailyReindexTimeZoneInfo = $null
 $script:lastDailyReindexAttemptDate = $null
 $script:runDailyReindexNowConsumed = $false
 
-if (-not $DisableDailyReindex -and -not $ProbeOnly) {
+if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnly) {
     if ($DailyReindexWaitTimeoutSec -lt 0 -or $DailyReindexWaitPollSec -le 0 -or
         $DailyReindexActionTimeoutSec -le 0 -or $DailyGraphCooldownSeconds -lt 0 -or
         @($DailyReindexTargets).Count -eq 0 -or
@@ -1213,6 +1335,7 @@ if (-not $DisableDailyReindex -and -not $ProbeOnly) {
 }
 
 $restartAttempts = 0
+$script:consecutiveBuildFailures = 0
 
 # Terminal logging guarantee: every abnormal end must leave a last line in
 # watchdog.jsonl (2026-07-03/04 incidents ended with no terminal record).
@@ -1227,6 +1350,26 @@ trap {
 Write-Watchdog ("watchdog_start watchdog_pid={0} poll_interval_sec={1} max_restart_attempts={2} probe_only={3} once={4} project_root={5}" -f `
         $PID, $PollIntervalSec, $MaxRestartAttempts, [bool]$ProbeOnly, [bool]$Once, $(if ($ProjectRoot) { $ProjectRoot } else { '-' }))
 
+if ($ProbeBuildLocksOnly) {
+    $hostRoot = Resolve-HostRoot
+    if (-not $hostRoot) {
+        Write-Watchdog 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
+        exit 3
+    }
+    $lockProbe = Get-BuildBlockingLocks -Root $hostRoot
+    if ($lockProbe.Locked.Count -gt 0) {
+        $holderPids = Get-BuildLockHolderPids -Root $hostRoot
+        Write-Watchdog ("RESULT=BUILD_LOCKS_PRESENT locked_count={0} readonly_count={1} holder_pids_best_effort={2} locked_files={3}" -f `
+                $lockProbe.Locked.Count, $lockProbe.ReadOnly.Count, `
+                $(if ($holderPids.Count -gt 0) { $holderPids -join ',' } else { '-' }), `
+                (Format-WatchdogValue (($lockProbe.Locked | Select-Object -First 8) -join ';')))
+        exit 2
+    }
+    Write-Watchdog ("RESULT=BUILD_LOCKS_CLEAR candidate_count={0} readonly_count={1}" -f `
+            (Get-BuildLockCandidateFiles -Root $hostRoot).Count, $lockProbe.ReadOnly.Count)
+    exit 0
+}
+
 while ($true) {
     $health = Get-MonolithHealth
     if ($health) {
@@ -1238,6 +1381,7 @@ while ($true) {
             # watchdog into permanent RESTART_LIMIT.
             Write-Watchdog ("restart_attempts_reset previous={0}" -f $script:restartAttempts)
             $script:restartAttempts = 0
+            $script:consecutiveBuildFailures = 0
         }
         $dailyResult = Invoke-DailyReindexIfDue
         if ($dailyResult.Ran -and -not $dailyResult.Succeeded -and $Once) {
