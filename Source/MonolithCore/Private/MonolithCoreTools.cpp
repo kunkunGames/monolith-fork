@@ -1875,7 +1875,16 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	double LimitValue = 8.0;
 	bool bIncludeSchema = false;
 
-	if (!Params.IsValid() || !Params->TryGetStringField(TEXT("query"), Query) || Query.TrimStartAndEnd().IsEmpty())
+	if (!Params.IsValid() || !Params->HasField(TEXT("query")))
+	{
+		return FMonolithActionResult::Error(TEXT("Missing required param 'query'."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	if (!Params->TryGetStringField(TEXT("query"), Query))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'query' must be a string."), FMonolithJsonUtils::ErrInvalidParams);
+	}
+	Query.TrimStartAndEndInline();
+	if (Query.IsEmpty())
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required param 'query'."), FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -1932,38 +1941,51 @@ FMonolithActionResult FMonolithCoreTools::HandleFind(const TSharedPtr<FJsonObjec
 	}
 
 	TArray<FString> RequestedFields;
+	if (Params->HasField(TEXT("fields")))
 	{
-		const TArray<TSharedPtr<FJsonValue>>* FieldArr = nullptr;
-		if (Params->TryGetArrayField(TEXT("fields"), FieldArr) && FieldArr)
+		const TSharedPtr<FJsonValue> FieldsValue = Params->TryGetField(TEXT("fields"));
+		if (FieldsValue.IsValid() && FieldsValue->Type != EJson::Null)
 		{
-			for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
+			const TArray<TSharedPtr<FJsonValue>>* FieldArr = nullptr;
+			FString FieldsCsv;
+			if (FieldsValue->TryGetArray(FieldArr) && FieldArr)
 			{
-				FString S;
-				if (Value.IsValid() && Value->TryGetString(S))
+				for (const TSharedPtr<FJsonValue>& Value : *FieldArr)
 				{
-					S.TrimStartAndEndInline();
-					if (!S.IsEmpty())
+					FString S;
+					if (Value.IsValid() && Value->TryGetString(S))
 					{
-						RequestedFields.AddUnique(S);
+						S.TrimStartAndEndInline();
+						if (!S.IsEmpty())
+						{
+							RequestedFields.AddUnique(S);
+						}
+					}
+					else
+					{
+						return FMonolithActionResult::Error(TEXT("Parameter 'fields' array elements must be strings."), FMonolithJsonUtils::ErrInvalidParams);
 					}
 				}
 			}
-		}
-		else
-		{
-			FString FieldsCsv;
-			if (Params->TryGetStringField(TEXT("fields"), FieldsCsv) && !FieldsCsv.IsEmpty())
+			else if (FieldsValue->TryGetString(FieldsCsv))
 			{
-				TArray<FString> Parts;
-				FieldsCsv.ParseIntoArray(Parts, TEXT(","), true);
-				for (FString& Part : Parts)
+				if (!FieldsCsv.IsEmpty())
 				{
-					Part.TrimStartAndEndInline();
-					if (!Part.IsEmpty())
+					TArray<FString> Parts;
+					FieldsCsv.ParseIntoArray(Parts, TEXT(","), true);
+					for (FString& Part : Parts)
 					{
-						RequestedFields.AddUnique(Part);
+						Part.TrimStartAndEndInline();
+						if (!Part.IsEmpty())
+						{
+							RequestedFields.AddUnique(Part);
+						}
 					}
 				}
+			}
+			else
+			{
+				return FMonolithActionResult::Error(TEXT("Parameter 'fields' must be a comma-separated string or an array of strings."), FMonolithJsonUtils::ErrInvalidParams);
 			}
 		}
 	}

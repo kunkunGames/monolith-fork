@@ -1003,6 +1003,45 @@ bool FMonolithFindGoldenQueriesTest::RunTest(const FString& Parameters)
 	return bOk;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithFindParamGuardTest,
+	"Monolith.Core.FindParamGuard",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithFindParamGuardTest::RunTest(const FString& Parameters)
+{
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("query"), 123.0);
+		FMonolithActionResult Result = FMonolithCoreTools::HandleFind(Params);
+		TestFalse(TEXT("Numeric query fails"), Result.bSuccess);
+		TestEqual(TEXT("Numeric query error code"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Numeric query error message"), Result.ErrorMessage.Contains(TEXT("must be a string")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("test"));
+		Params->SetNumberField(TEXT("fields"), 123.0);
+		FMonolithActionResult Result = FMonolithCoreTools::HandleFind(Params);
+		TestFalse(TEXT("Numeric fields fails"), Result.bSuccess);
+		TestEqual(TEXT("Numeric fields error code"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Numeric fields error message"), Result.ErrorMessage.Contains(TEXT("comma-separated string or an array")));
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("query"), TEXT("test"));
+		TArray<TSharedPtr<FJsonValue>> BadArr;
+		BadArr.Add(MakeShared<FJsonValueNumber>(123.0));
+		Params->SetArrayField(TEXT("fields"), BadArr);
+		FMonolithActionResult Result = FMonolithCoreTools::HandleFind(Params);
+		TestFalse(TEXT("Array of numbers fields fails"), Result.bSuccess);
+		TestEqual(TEXT("Array of numbers error code"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("Array of numbers error message"), Result.ErrorMessage.Contains(TEXT("must be strings")));
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithCoreTypedParamsTest,
 	"Monolith.ParamValidation.MonolithCore.TypedParams",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
