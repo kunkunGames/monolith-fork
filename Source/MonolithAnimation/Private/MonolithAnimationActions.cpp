@@ -1525,9 +1525,14 @@ FMonolithActionResult FMonolithAnimationActions::HandleDeleteMontageSection(cons
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetSectionNext(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	FString SectionName = Params->GetStringField(TEXT("section_name"));
-	FString NextSectionName = Params->GetStringField(TEXT("next_section_name"));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath)) return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a string"));
+
+	FString SectionName;
+	if (!Params->TryGetStringField(TEXT("section_name"), SectionName)) return FMonolithActionResult::Error(TEXT("Parameter 'section_name' must be a string"));
+
+	FString NextSectionName;
+	if (!Params->TryGetStringField(TEXT("next_section_name"), NextSectionName)) return FMonolithActionResult::Error(TEXT("Parameter 'next_section_name' must be a string"));
 
 	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
 	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
