@@ -8,7 +8,7 @@ Survives editor restarts — proxy process never dies.
 Background health poll auto-detects when the editor comes online.
 
 Usage (in .mcp.json):
-  {"mcpServers": {"monolith": {"command": "python", "args": ["Plugins/Monolith/Scripts/monolith_proxy.py"]}}}
+  {"mcpServers": {"monolith": {"command": "<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh"}}} (or .bat on Windows)
 
 Requirements: Python 3.8+ (stdlib only, no pip install needed)
 """
@@ -1161,7 +1161,7 @@ Runtime support notes:
   MONOLITH_CALL_LOG and MONOLITH_PROJECT_ROOT control the native C++ proxy call log.
 
 MCP config example:
-  {"mcpServers":{"monolith":{"command":"python","args":["<project-root>/Plugins/Monolith/Scripts/monolith_proxy.py"]}}}
+  {"mcpServers":{"monolith":{"command":"<project-root>/Plugins/Monolith/Scripts/monolith_proxy.sh"}}} (or .bat on Windows)
 
 Offline fallback:
   Use Binaries/monolith_query (or .exe on Windows) for read-only source/project/bridge/console queries when the editor or MCP server is unavailable.
