@@ -19,12 +19,12 @@ monolith_discover({ namespace: "settings", action: "validate_player_mappable_inp
 
 | Action | Params | Use |
 | --- | --- | --- |
-| `get_status` | none | Check `GameSettings` plugin/module availability, known reflected classes, and static data-source limitations. |
-| `describe_registry_tree` | `screen_class?`, `registry_class?`, `setting_class?` | Describe reflected settings screen, registry, setting, and collection contracts without instantiating a runtime registry. |
-| `validate_setting_class_contract` | `setting_class*`, `require_concrete?=false`, `require_value_setting?=false`, `require_collection?=false` | Validate a `UGameSetting` class path and optional concrete/value/collection role expectations. |
-| `validate_data_source_bindings` | `getter_path?`, `setter_path?`, `dynamic_paths?`, `require_getter?=true`, `require_setter?=false` | Validate dotted dynamic getter/setter path shapes; runtime `ULocalPlayer` resolution is reported as out-of-scope for this read-only slice. |
-| `validate_visual_data` | `asset_path*`, `require_entry_widgets?=false`, `require_detail_extensions?=false` | Inspect a `UGameSettingVisualData` object/asset and report entry-widget/detail-extension map counts. |
-| `validate_player_mappable_input_settings` | `config_path?`, `config_paths?`, `context_path?`, `context_paths?`, semantic requirement toggles | Validate `UPlayerMappableInputConfig` and/or `UInputMappingContext` player-mappable rows for non-empty config names, contexts, mappable keys, valid actions/keys, display names, and duplicate mapping names. |
+| `settings.get_status` | none | Check `GameSettings` plugin/module availability, known reflected classes, and static data-source limitations. |
+| `settings.describe_registry_tree` | `screen_class?`, `registry_class?`, `setting_class?` | Describe reflected settings screen, registry, setting, and collection contracts without instantiating a runtime registry. |
+| `settings.validate_setting_class_contract` | `setting_class*`, `require_concrete?=false`, `require_value_setting?=false`, `require_collection?=false` | Validate a `UGameSetting` class path and optional concrete/value/collection role expectations. |
+| `settings.validate_data_source_bindings` | `getter_path?`, `setter_path?`, `dynamic_paths?`, `require_getter?=true`, `require_setter?=false` | Validate dotted dynamic getter/setter path shapes; runtime `ULocalPlayer` resolution is reported as out-of-scope for this read-only slice. |
+| `settings.validate_visual_data` | `asset_path*`, `require_entry_widgets?=false`, `require_detail_extensions?=false` | Inspect a `UGameSettingVisualData` object/asset and report entry-widget/detail-extension map counts. |
+| `settings.validate_player_mappable_input_settings` | `config_path?`, `config_paths?`, `context_path?`, `context_paths?`, semantic requirement toggles | Validate `UPlayerMappableInputConfig` and/or `UInputMappingContext` player-mappable rows for non-empty config names, contexts, mappable keys, valid actions/keys, display names, and duplicate mapping names. |
 
 ## Typical Flow
 
