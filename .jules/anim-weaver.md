@@ -37,8 +37,8 @@ AnimWeaver PRs improve animation and PoseSearch action safety while preserving t
 **Learning:** Checking `HasField` is insufficient to guarantee type safety for JSON parameters.
 **Prevention:** Replaced these specific `HasField` and blind getter patterns with `TryGetNumberField` that returns a structured error for invalid types.
 **Avoid:** Trusting `HasField` for optional parameters within complex action arrays.
-## 2026-06-11 - Forbid numeric branch evasion
-**Coordination issue:** AnimWeaver generated branches with large numeric suffixes (e.g., `-17448107936242337015`) despite rules forbidding this.
-**Learning:** General instructions in `AGENTS.md` to avoid random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions.
-**Prevention:** Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
-**Avoid:** Generating branches with `-<number>` suffixes.
+## 2026-06-11 - Forbid template-echo PR titles and numeric branch evasion
+**Coordination issue:** AnimWeaver generated branches with large numeric suffixes (e.g., `-17448107936242337015`) and used generic "concise animation-domain improvement." PR titles (e.g. ce05a1f) despite rules forbidding this.
+**Learning:** General instructions in `AGENTS.md` to avoid generic placeholder names and random suffixes are often missed by agents unless directly included in their specific `.jules/<agent>.md` instructions. When an agent creates a PR title of "concise animation-domain improvement.", it is echoing the prompt's instructions rather than describing the actual change.
+**Prevention:** Always replace the PR title placeholder with a concrete description of the change. Never append numeric task IDs or UUIDs to branch names to evade collision checks. If your chosen branch name is taken, stop without PR instead of renaming it.
+**Avoid:** Using `AnimWeaver: concise animation-domain improvement.` as a PR title or generating branches with `-<number>` suffixes.
