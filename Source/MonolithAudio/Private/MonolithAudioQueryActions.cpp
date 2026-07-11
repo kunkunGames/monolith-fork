@@ -532,6 +532,7 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSoundClassHierarchy(const T
 
 	// Load all classes, then find roots (those not referenced as children by others)
 	TArray<USoundClass*> AllClasses;
+	AllClasses.Reserve(AllClassAssets.Num());
 	TSet<USoundClass*> NonRoots;
 	for (const FAssetData& AssetData : AllClassAssets)
 	{
@@ -644,6 +645,7 @@ FMonolithActionResult FMonolithAudioQueryActions::GetSubmixHierarchy(const TShar
 	AR.GetAssetsByClass(USoundSubmixBase::StaticClass()->GetClassPathName(), AllSubmixAssets, true);
 
 	TArray<USoundSubmixBase*> AllSubmixes;
+	AllSubmixes.Reserve(AllSubmixAssets.Num());
 	TSet<USoundSubmixBase*> NonRoots;
 	for (const FAssetData& AssetData : AllSubmixAssets)
 	{
