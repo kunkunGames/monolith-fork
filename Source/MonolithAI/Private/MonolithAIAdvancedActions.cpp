@@ -782,7 +782,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 {
 	if (!Params->HasField(TEXT("lane_handle")))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'lane_handle'"));
+		return FMonolithActionResult::Error(TEXT("Missing required param 'lane_handle'"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
 	double LaneHandleDouble = 0.0;
@@ -814,7 +814,7 @@ FMonolithActionResult FMonolithAIAdvancedActions::HandleGetZoneLaneInfo(const TS
 		double DataHandleValue = 0.0;
 		if (!Params->TryGetNumberField(TEXT("data_handle"), DataHandleValue))
 		{
-			return FMonolithActionResult::Error(TEXT("Invalid param: 'data_handle' must be a number"));
+			return FMonolithActionResult::Error(TEXT("Invalid param: 'data_handle' must be a number"), FMonolithJsonUtils::ErrInvalidParams);
 		}
 		RequestedDataHandle = static_cast<int32>(DataHandleValue);
 	}
