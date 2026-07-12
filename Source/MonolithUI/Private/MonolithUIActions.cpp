@@ -1383,6 +1383,11 @@ FMonolithActionResult FMonolithUIActions::HandleCreateWidgetBlueprint(const TSha
         return FMonolithActionResult::Error(TEXT("Invalid save_path — must contain at least one / separator"));
     }
 
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(SavePath); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError);
+    }
+
     UPackage* Package = CreatePackage(*SavePath);
     if (!Package)
     {
