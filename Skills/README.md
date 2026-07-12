@@ -70,7 +70,7 @@ See **monolith-mcp** for the discovery/admin surface and the offline `monolith_q
 | `unreal-leveldesign` | `leveldesign` | 43 | Horror/accessibility/audio level analysis, encounter design |
 | `unreal-level-instance` | `level_instance` | 16 | Level Instances & packed level actors |
 | `unreal-hlod` | `hlod` | 12 | Hierarchical LOD / World Partition HLOD |
-| `unreal-pcg` | `pcg` | 4 | Procedural Content Generation graphs |
+| `unreal-pcg` | `pcg` | 14 | Typed Procedural Content Generation graph discovery and authoring |
 | `unreal-water` | `water` | 2 | Water bodies & zones |
 
 ### Content
