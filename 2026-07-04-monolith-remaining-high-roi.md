@@ -1,4 +1,4 @@
-# Monolith 잔여 고 ROI 백로그 + 코드 재검토 업데이트
+﻿# Monolith 잔여 고 ROI 백로그 + 코드 재검토 업데이트
 
 | Field | Value |
 |---|---|
@@ -11,6 +11,48 @@
 | Evidence scope | `Source/MonolithCore`, `Analyzer`, `Docs/TODO.md`, `CHANGELOG.md`, `Config/DefaultMonolith.ini`, `Source/MonolithCore/Private/MonolithWorkflowActions.cpp`, 주요 GitHub search 결과 |
 | Live-data caveat | GitHub 저장소 코드·문서만 재조회했다. 로컬 `Saved\Monolith\LogAnalysis` / `SessionAnalysis` 원본과 실시간 editor/MCP endpoint는 이 환경에서 재실행하지 못했다. 따라서 업로드 문서의 로그 수치 자체는 그대로 계승하고, 현재 소스가 그 수치를 해결할 구조를 갖췄는지 정적으로 판정했다. |
 | Local recheck (2026-07-04) | 로컬 체크아웃(HEAD `003c0472` 동일)에서 코드 주장 전수 재검증 + `analyze_invocation_logs.py`(recent-days 2, rank-by-recency)·`analyze_session_transcripts.py`(since 20260703) fresh 재실행 완료. 결과는 §0.1. 코드 주장은 전부 정확했고, 우선순위는 라이브 증거로 2곳 조정했다(P0-0 신설, maintenance loop 재승격). |
+| Final reconciliation | 2026-07-12 |
+| Current authority | P4 제출 상태(CL1106 Query/Source, CL1107 watchdog/recovery, CL1108 native Proxy/evidence, CL1109 onboarding/release, CL1113 compatibility Proxy/skill follow-up)와 `Docs/testing/2026-07-11-native-proxy-offline-fallback.md`의 최종 게이트가 현재 권위다. Git `003c0472`는 아래 7월 4일 분석의 역사적 baseline이다. |
+
+---
+
+## 0.0 2026-07-12 최종 재조정
+
+아래 §0–9는 2026-07-04 당시의 백로그 스냅샷이다. 현재 구현이나 검증
+결과와 충돌할 경우 이 절과
+`Docs/testing/2026-07-11-native-proxy-offline-fallback.md`의 최종 게이트를
+우선한다.
+
+아래 §0–9는 역사 보존용이며 **현재 실행 백로그가 아니다.** 특히 §4의
+우선순위, §5의 권장 PR 순서, §9의 최종 추천은 superseded 상태다. 현재
+제출 게이트는 위 최종 증빙 문서만 따르고, 그 이후의 장기 백로그는
+`Docs/TODO.md`를 기준으로 선택한다.
+
+1. **별도 installed-engine Editor target은 채택하지 않았다.** 이름이 다른
+   modular Editor target도 동일한 `UnrealEditor-*.dll` 출력과 잠금을 공유했고,
+   installed build는 `BuildEnvironment.Unique` 및 monolithic Editor
+   `.precompiled` 요구를 충족하지 못했다. 최종 설계는 UE DLL을 로드하지 않는
+   `/MT` native Proxy와 manifest-selected immutable read-only Query다.
+2. **중첩 `Source` 중복은 corpus를 보존하는 근본 수정으로 닫았다.** 최초
+   descriptor-only 후보는 51개 고유 경로(실제 `EditableMesh` 헤더 3개 포함)를
+   누락해 기각했다. 채택된 탐색은 standalone descriptor-free root를 유지하고
+   오직 다른 `Source` 아래의 non-descriptor root만 억제한다. fresh full reindex는
+   1,390 modules(Engine 1,372 + Project 18), 89,619 files, 1,325,574 symbols,
+   error 0이며 기존 DB 대비 `old_only_paths=0`, `new_only_paths=0`, exact duplicate
+   symbol group/extra row `0/0`이다.
+3. **가용성/control-plane 및 Source coverage 범위는 제출됐지만 경계를 넓혀
+   주장하지 않는다.** offline mutation은 제공하지 않고, indexed read와 복구
+   안내가 editor downtime을 견디는 범위만 보장한다. tool-call 성공을
+   end-to-end 사용자 작업 완료로 환산하지 않는다. 제출된 CL 설명의 과거
+   artifact/static 수치 대신 위 최종 증빙 문서의 재실행 결과를 사용한다.
+4. **최종 게이트에서 실제 CRG 종료 내구성 gap을 분리했다.** project-source
+   worker의 `Indexer complete` 뒤 game-thread 전체 CRG 복구가 계속되는 동안
+   종료 요청이 들어가 파생 metrics/override 행의 중간 상태가 재기동 후
+   관측됐다. native source 행은 보존됐고 health-gated repair, SQLite 물리
+   재구성, deep health, strict offline parity까지 통과했으므로 현재 Source
+   discovery 수용을 막지는 않는다. 다만 `Indexer complete`를 종료 게이트로
+   쓰지 않으며, commit 결과 판정·중단/reopen 회귀·비동기 terminal 상태·typed
+   physical-DB repair는 `Docs/TODO.md`의 명시적 후속 항목으로 남긴다.
 
 ---
 
