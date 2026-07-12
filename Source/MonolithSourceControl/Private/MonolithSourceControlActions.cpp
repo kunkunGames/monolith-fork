@@ -552,18 +552,18 @@ void FMonolithSourceControlActions::RegisterActions()
 			.EnableValidation()
 			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Decimal Perforce changelist number or 'default'. Omit for all opened files."))
 			.Optional(TEXT("resolve_packages"), TEXT("bool|string"), TEXT("Resolve opened files through bounded p4 where batches and emit local_path/package_path. Default true. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("true"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened records to return. Default 200, max 2000."), TEXT("200"))
-			.Range(TEXT("limit"), 1.0, 2000.0)
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened records to return. Default 200, max 5000."), TEXT("200"))
+			.Range(TEXT("limit"), 1.0, 5000.0)
 			.Build(),
 		FString(),
 		ExplicitReadOnly);
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("map_depot_paths"),
-		TEXT("Map at most 2000 Perforce depot/client/local paths to local filesystem and Unreal long package paths. Depot paths are resolved with at most 16 bounded `p4 -ztag where` commands; local paths are converted with FPackageName mount points."),
+		TEXT("Map at most 5000 Perforce depot/client/local paths to local filesystem and Unreal long package paths. Depot paths are resolved with at most 40 bounded `p4 -ztag where` commands; local paths are converted with FPackageName mount points."),
 		FMonolithActionHandler::CreateStatic(&HandleMapDepotPaths),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array|string"), TEXT("At most 2000 depot, client, local filesystem, or /Game package/object paths to map. Control characters are rejected. Alias: files."), { TEXT("files") })
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("At most 5000 depot, client, local filesystem, or /Game package/object paths to map. Control characters are rejected. Alias: files."), { TEXT("files") })
 			.Build(),
 		FString(),
 		ExplicitReadOnly);

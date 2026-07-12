@@ -191,10 +191,10 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				TEXT("list_opened"),
 				[](TSharedRef<FJsonObject> Params)
 				{
-					Params->SetNumberField(TEXT("limit"), 2001.0);
+					Params->SetNumberField(TEXT("limit"), 5001.0);
 				},
 				TEXT("limit"),
-				TEXT("source_control.list_opened rejects limit above 2000")
+				TEXT("source_control.list_opened rejects limit above 5000")
 			},
 			{
 				TEXT("list_opened"),
@@ -259,8 +259,8 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 						MonolithSourceControlP4::MaxInputPathCount + 1,
 						TEXT("//speed/duplicate.uasset"));
 				},
-				TEXT("at most 2000"),
-				TEXT("source_control.map_depot_paths rejects 2001 raw duplicate paths before p4")
+				TEXT("at most 5000"),
+				TEXT("source_control.map_depot_paths rejects 5001 raw duplicate paths before p4")
 			},
 			{
 				TEXT("map_depot_paths"),

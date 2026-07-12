@@ -189,10 +189,13 @@ bool FMonolithSourceControlP4OpenedBoundsTest::RunTest(const FString& Parameters
 	bOk &= TestTrue(TEXT("integral opened limit is accepted"),
 		MonolithSourceControlP4::TryValidateOpenedLimit(200.0, ValidatedLimit, Error));
 	bOk &= TestEqual(TEXT("validated opened limit is preserved"), ValidatedLimit, 200);
+	bOk &= TestTrue(TEXT("inclusive maximum opened limit is accepted"),
+		MonolithSourceControlP4::TryValidateOpenedLimit(5000.0, ValidatedLimit, Error));
+	bOk &= TestEqual(TEXT("inclusive maximum opened limit is preserved"), ValidatedLimit, 5000);
 	bOk &= TestFalse(TEXT("zero opened limit is rejected by the handler helper"),
 		MonolithSourceControlP4::TryValidateOpenedLimit(0.0, ValidatedLimit, Error));
-	bOk &= TestFalse(TEXT("opened limit above 2000 is rejected by the handler helper"),
-		MonolithSourceControlP4::TryValidateOpenedLimit(2001.0, ValidatedLimit, Error));
+	bOk &= TestFalse(TEXT("opened limit above 5000 is rejected by the handler helper"),
+		MonolithSourceControlP4::TryValidateOpenedLimit(5001.0, ValidatedLimit, Error));
 	bOk &= TestFalse(TEXT("fractional opened limit is rejected by the handler helper"),
 		MonolithSourceControlP4::TryValidateOpenedLimit(1.5, ValidatedLimit, Error));
 	int32 BackendLimit = 0;
@@ -201,11 +204,11 @@ bool FMonolithSourceControlP4OpenedBoundsTest::RunTest(const FString& Parameters
 	bOk &= TestEqual(TEXT("limit one requests one sentinel"), BackendLimit, 2);
 	bOk &= TestEqual(TEXT("limit one command is exact"), Args, TEXT("-ztag opened -m 2"));
 	bOk &= TestTrue(TEXT("maximum limit builds a bounded changelist command"),
-		MonolithSourceControlP4::TryBuildOpenedCommandArgs(TEXT("1093"), 2000, Args, BackendLimit, Error));
-	bOk &= TestEqual(TEXT("maximum backend record limit is 2001"), BackendLimit, 2001);
+		MonolithSourceControlP4::TryBuildOpenedCommandArgs(TEXT("1093"), 5000, Args, BackendLimit, Error));
+	bOk &= TestEqual(TEXT("maximum backend record limit is 5001"), BackendLimit, 5001);
 	bOk &= TestEqual(TEXT("bounded changelist command is exact"),
 		Args,
-		TEXT("-ztag opened -m 2001 -c \"1093\""));
+		TEXT("-ztag opened -m 5001 -c \"1093\""));
 	bOk &= TestTrue(TEXT("default changelist is accepted"),
 		MonolithSourceControlP4::TryBuildOpenedCommandArgs(TEXT("default"), 1, Args, BackendLimit, Error));
 	bOk &= TestEqual(TEXT("default changelist remains one quoted argv"),
@@ -219,7 +222,7 @@ bool FMonolithSourceControlP4OpenedBoundsTest::RunTest(const FString& Parameters
 	bOk &= TestTrue(TEXT("changelist control rejection reports the unsafe character"),
 		Error.Contains(TEXT("control character")));
 	bOk &= TestFalse(TEXT("out-of-range limit is rejected"),
-		MonolithSourceControlP4::TryBuildOpenedCommandArgs(TEXT("default"), 2001, Args, BackendLimit, Error));
+		MonolithSourceControlP4::TryBuildOpenedCommandArgs(TEXT("default"), 5001, Args, BackendLimit, Error));
 	bOk &= TestFalse(TEXT("oversized decimal changelist is rejected before p4"),
 		MonolithSourceControlP4::TryBuildOpenedCommandArgs(
 			FString::ChrN(MonolithSourceControlP4::MaxCommandChars, TEXT('1')),
@@ -242,6 +245,12 @@ bool FMonolithSourceControlP4OpenedBoundsTest::RunTest(const FString& Parameters
 	bOk &= TestEqual(TEXT("bounded observation keeps one sentinel"), Truncated.SentinelRecordCount, 1);
 	bOk &= TestTrue(TEXT("sentinel proves more rows"), Truncated.bHasMore);
 	bOk &= TestTrue(TEXT("sentinel makes count a lower bound"), Truncated.bCountIsLowerBound);
+	const MonolithSourceControlP4::FOpenedRecordWindow MaximumTruncated =
+		MonolithSourceControlP4::MakeOpenedRecordWindow(5001, 5000);
+	bOk &= TestEqual(TEXT("maximum observation returns all 5000 requested rows"), MaximumTruncated.ReturnedRecordCount, 5000);
+	bOk &= TestEqual(TEXT("maximum observation keeps exactly one sentinel"), MaximumTruncated.SentinelRecordCount, 1);
+	bOk &= TestEqual(TEXT("maximum observation backend bound is 5001"), MaximumTruncated.BackendRecordLimit, 5001);
+	bOk &= TestTrue(TEXT("maximum sentinel proves more rows"), MaximumTruncated.bHasMore);
 	return bOk;
 }
 
@@ -283,6 +292,7 @@ bool FMonolithSourceControlP4BatchScaleTest::RunTest(const FString& Parameters)
 	bool bOk = VerifyScale(100, 1);
 	bOk &= VerifyScale(1000, 8);
 	bOk &= VerifyScale(2000, 16);
+	bOk &= VerifyScale(5000, 40);
 
 	const TArray<FString> AssociationPaths = {
 		TEXT("//speed/Content/Bench/alpha.uasset"),
@@ -351,22 +361,22 @@ bool FMonolithSourceControlP4BatchScaleTest::RunTest(const FString& Parameters)
 			OutReturnCode = 0;
 			return true;
 		};
-	TArray<FString> TooManyUnique = MakeDepotPaths(2001);
+	TArray<FString> TooManyUnique = MakeDepotPaths(5001);
 	const MonolithSourceControlP4::FDepotPathBatchResult UniqueRejected =
 		MonolithSourceControlP4::ResolveDepotPathsBatched(TooManyUnique, LimitRunner);
-	bOk &= TestTrue(TEXT("2001 unique paths are rejected"), UniqueRejected.bRejected);
+	bOk &= TestTrue(TEXT("5001 unique paths are rejected"), UniqueRejected.bRejected);
 	bOk &= TestEqual(TEXT("unique overflow rejects before process"), LimitRunnerCalls, 0);
 	TArray<FString> TooManyDuplicates;
-	TooManyDuplicates.Init(TEXT("//speed/duplicate.uasset"), 2001);
+	TooManyDuplicates.Init(TEXT("//speed/duplicate.uasset"), 5001);
 	const MonolithSourceControlP4::FDepotPathBatchResult DuplicateRejected =
 		MonolithSourceControlP4::ResolveDepotPathsBatched(TooManyDuplicates, LimitRunner);
-	bOk &= TestTrue(TEXT("2001 raw duplicate paths are rejected"), DuplicateRejected.bRejected);
+	bOk &= TestTrue(TEXT("5001 raw duplicate paths are rejected"), DuplicateRejected.bRejected);
 	bOk &= TestEqual(TEXT("raw duplicate overflow rejects before process"), LimitRunnerCalls, 0);
 	const MonolithSourceControlP4::FDepotPathBatchResult CommandRejected =
 		MonolithSourceControlP4::ResolveDepotPathsBatched(
-			MakeDepotPaths(17), LimitRunner, 1, 24000, 16);
-	bOk &= TestTrue(TEXT("seventeen required commands exceed the hard command cap"), CommandRejected.bRejected);
-	bOk &= TestTrue(TEXT("command cap rejection reports the maximum"), CommandRejected.Error.Contains(TEXT("16")));
+			MakeDepotPaths(41), LimitRunner, 1, 24000, 40);
+	bOk &= TestTrue(TEXT("forty-one required commands exceed the hard command cap"), CommandRejected.bRejected);
+	bOk &= TestTrue(TEXT("command cap rejection reports the maximum"), CommandRejected.Error.Contains(TEXT("40")));
 	bOk &= TestEqual(TEXT("command overflow rejects before process"), LimitRunnerCalls, 0);
 	return bOk;
 }

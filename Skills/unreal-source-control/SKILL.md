@@ -41,8 +41,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] mark_for_delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert_unchanged` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
-| `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` (`1..2000`) | Read-only bounded `p4 -ztag opened -m (limit + 1)`, optionally scoped to empty/`default`/ASCII-decimal changelist, with depot-to-local/package mapping and explicit exact-vs-lower-bound count fields. |
-| `map_depot_paths` | `paths*` or `files*` (max 2,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 16 commands, 128 paths and 24,000 encoded characters per command; control characters are rejected before process launch. |
+| `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` (`1..5000`) | Read-only bounded `p4 -ztag opened -m (limit + 1)`, optionally scoped to empty/`default`/ASCII-decimal changelist, with depot-to-local/package mapping and explicit exact-vs-lower-bound count fields. |
+| `map_depot_paths` | `paths*` or `files*` (max 5,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 40 commands, 128 paths and 24,000 encoded characters per command; control characters are rejected before process launch. |
 
 ## Common workflows
 

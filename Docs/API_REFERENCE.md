@@ -2120,8 +2120,8 @@ Canonical file-list params are `paths` arrays. Source-control actions also accep
 | `mark_for_delete` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
 | `revert` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
 | `revert_unchanged` | `paths` array/string, alias `files`; `dry_run` (optional boolean/string), `confirm` (optional boolean/string) |
-| `list_opened` | `changelist` (optional string), `resolve_packages` (optional boolean/string), `limit` (optional integer) |
-| `map_depot_paths` | `paths` array/string, alias `files` |
+| `list_opened` | `changelist` (optional string), `resolve_packages` (optional boolean/string), `limit` (optional integer in `1..5000`) |
+| `map_depot_paths` | up to 5,000 `paths` as array/string, alias `files`; depot mappings use at most 40 bounded `p4 where` batches |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithSourceControl.md` for the deep dive.
 

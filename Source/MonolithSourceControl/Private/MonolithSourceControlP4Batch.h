@@ -4,12 +4,12 @@
 
 namespace MonolithSourceControlP4
 {
-	inline constexpr int32 MaxInputPathCount = 2000;
-	inline constexpr int32 MaxUniquePathCount = 2000;
+	inline constexpr int32 MaxInputPathCount = 5000;
+	inline constexpr int32 MaxUniquePathCount = 5000;
 	inline constexpr int32 MaxPathsPerCommand = 128;
 	inline constexpr int32 MaxCommandChars = 24000;
-	inline constexpr int32 MaxCommandCount = 16;
-	inline constexpr int32 MaxOpenedLimit = 2000;
+	inline constexpr int32 MaxCommandCount = 40;
+	inline constexpr int32 MaxOpenedLimit = 5000;
 	inline constexpr int32 MaxOpenedBackendRecordCount = MaxOpenedLimit + 1;
 
 	struct FDepotPathMapping
@@ -64,7 +64,7 @@ namespace MonolithSourceControlP4
 	/** Accepts an empty changelist filter, decimal changelist number, or `default`. */
 	bool ValidateChangelist(const FString& Changelist, FString& OutError);
 
-	/** Accepts only finite integral opened limits in the public [1, 2000] range. */
+	/** Accepts only finite integral opened limits in the public [1, 5000] range. */
 	bool TryValidateOpenedLimit(double LimitValue, int32& OutLimit, FString& OutError);
 
 	/** Builds a bounded `p4 -ztag opened -m (Limit + 1)` argument string. */
