@@ -1,6 +1,5 @@
 using UnrealBuildTool;
 using EpicGames.Core;
-using System.IO;
 
 public class MonolithDataflow : ModuleRules
 {
@@ -51,21 +50,6 @@ public class MonolithDataflow : ModuleRules
 		return false;
 	}
 
-	private static bool HasPluginDir(string BaseDir, string PluginName)
-	{
-		if (!Directory.Exists(BaseDir))
-		{
-			return false;
-		}
-
-		if (Directory.Exists(Path.Combine(BaseDir, PluginName)) && File.Exists(Path.Combine(BaseDir, PluginName, PluginName + ".uplugin")))
-		{
-			return true;
-		}
-
-		return false;
-	}
-
 	public MonolithDataflow(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
@@ -87,29 +71,7 @@ public class MonolithDataflow : ModuleRules
 		});
 
 		bool bReleaseBuild = System.Environment.GetEnvironmentVariable("MONOLITH_RELEASE_BUILD") == "1";
-		bool bHasDataflowRuntime = false;
-
-		if (!bReleaseBuild && IsPluginEnabled(Target, "Dataflow"))
-		{
-			if (Target.ProjectFile != null)
-			{
-				string ProjectPluginsDir = Path.Combine(Target.ProjectFile.Directory.FullName, "Plugins");
-				bHasDataflowRuntime = HasPluginDir(ProjectPluginsDir, "Dataflow");
-			}
-
-			if (!bHasDataflowRuntime)
-			{
-				string EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-				string EnginePluginsDir = Path.Combine(EngineDir, "Plugins");
-
-				bHasDataflowRuntime =
-					HasPluginDir(Path.Combine(EnginePluginsDir, "Experimental"), "Dataflow")
-					|| HasPluginDir(Path.Combine(EnginePluginsDir, "Runtime"), "Dataflow")
-					|| HasPluginDir(EnginePluginsDir, "Dataflow")
-					|| (Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Core"))
-						&& Directory.Exists(Path.Combine(EngineDir, "Source", "Runtime", "Experimental", "Dataflow", "Engine")));
-			}
-		}
+		bool bHasDataflowRuntime = !bReleaseBuild && IsPluginEnabled(Target, "Dataflow");
 
 		if (bHasDataflowRuntime)
 		{
