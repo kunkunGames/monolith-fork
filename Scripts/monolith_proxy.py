@@ -1062,8 +1062,12 @@ def handle_initialize(msg: dict) -> str:
             "SKILL LOADING: domain skills live in Skills/<namespace>/SKILL.md and document\n"
             "available actions and params for that namespace.\n"
             "\n"
-            "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n"
-            "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge/console reads."
+            "EDITOR OFFLINE: offline fallback is disabled for this proxy process, so editor transport failures remain unavailable errors.\n"
+            "Before calling a domain action, check its schema instead of guessing. "
+            "monolith_discover() lists namespaces and monolith_discover(namespace='<namespace>', "
+            "mode='actions') lists actions; monolith_discover(namespace='<namespace>', action='<action>', mode='schema') fetches the exact live schema. "
+            "Offline schema mode returns explicitly degraded catalog guidance rather than fabricating a live JSON schema. "
+            "If an editor-only tool returns a transport-unavailable error, run Scripts/recover_mcp.ps1, wait for the configured endpoint, and retry."
         ),
     })
 
