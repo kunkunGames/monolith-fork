@@ -3369,6 +3369,12 @@ Exists because after an RI indexer code change there's no other clean repopulati
 
 ---
 
+## workflow
+
+Cross-domain practitioner workflow composers. The first slice is intentionally read-only: it returns the shared workflow proof envelope and delegates actual asset mutation to explicit next actions.
+
+---
+
 <a id="sibling-plugins"></a>
 
 ## Sibling Plugins
