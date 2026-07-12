@@ -24,11 +24,16 @@ Preview every onboarding target adapter registered under `Templates\Onboarding`:
 powershell -ExecutionPolicy Bypass -File Scripts\onboard_monolith.ps1 -Targets All -Plan
 ```
 
-Use the proxy MCP template instead of the HTTP template:
+The native proxy is the default MCP transport because it keeps the client
+session alive across editor restarts and serves the fixed read-only fallback
+surface while the editor transport is unavailable. Preview it explicitly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File Scripts\onboard_monolith.ps1 -Targets Codex,Claude -McpMode Proxy -Plan
 ```
+
+Use `-McpMode Http` only for clients that manage HTTP server restarts
+themselves or cannot launch stdio MCP commands.
 
 Create a project-scoped `.mcp.json` only for clients that require one:
 
@@ -38,20 +43,87 @@ powershell -ExecutionPolicy Bypass -File Scripts\onboard_monolith.ps1 -Targets G
 
 The script performs the steps in this order:
 
-1. Validate repository skills.
-2. Link Monolith skills into selected global skill roots.
-3. Configure selected global MCP clients, such as Codex and Claude user-level MCP config.
-4. Create, update, or skip project instruction blocks.
+1. Check Proxy-mode prerequisites before any onboarding mutation.
+2. Validate repository skills.
+3. Link Monolith skills into selected global skill roots.
+4. Configure selected global MCP clients, such as Codex and Claude user-level MCP config.
+5. Create, update, or skip project instruction blocks.
 
 Target behavior is data-driven through `Templates\Onboarding\*.json`. Add a new Windows agent target there before changing script logic.
 
 ## 1. Configure Monolith MCP
 
-The recommended Codex and Claude setup is global user-level MCP config, not a project `.mcp.json` checked into or left beside the game project.
+The recommended Codex and Claude setup is the native proxy in global user-level MCP config, not a direct editor URL and not a project `.mcp.json` checked into or left beside the game project. The proxy remains UE-DLL-free and forwards healthy live calls to `http://localhost:9316/mcp`; only a fixed read-only query surface falls back to the immutable Query/catalog pair selected by `Binaries/monolith_query.current.json` when that transport is unavailable.
 
 The onboarding script verifies existing `monolith` entries and adds missing ones through each target CLI when `-Execute` is supplied. It does not overwrite a different existing entry unless `-ReplaceMcpConfig` is also supplied.
 
-### HTTP transport
+In the default `Proxy` mode, `Binaries\monolith_proxy.current.json` is
+authoritative. `-Plan` validates it and reports the selected absolute immutable
+`Binaries\monolith_proxy-<16-lowercase-source-hash>.exe` path without changing
+MCP config. `-Execute` performs the same validation before any onboarding
+mutation. Validation requires the exact schema-1 identity fields (`tool` =
+`monolith-proxy`, `runtime` = `native-cpp`), exact leaf naming, matching
+filename/manifest/`--version` source hashes, matching manifest and
+`--version` versions, matching SHA-256 bytes, and a regular non-reparse image
+directly inside a regular non-reparse `Binaries` directory. For a fresh source
+checkout, build and publish the native proxy first:
+
+```powershell
+cmd /c Tools\MonolithProxy\build.bat
+```
+
+Alternatively, install a packaged Monolith release containing both the
+manifest and its immutable image, then rerun onboarding with `-Execute`.
+The fixed `Binaries\monolith_proxy.exe` is compatibility-only; onboarding never
+falls back to it. An invalid or missing manifest makes Execute fail before all
+mutation, while Plan prints the concrete problem and skips MCP config planning.
+`-McpMode Http` has no native-proxy prerequisite. `-SkipMcpConfig` also skips
+the prerequisite because it performs no MCP registration; `-SkipSkills`
+continues to skip only repository skill validation and skill-link mutation.
+
+### Proxy command (recommended and default)
+
+Use this when the client can launch a stdio MCP process. The onboarding script
+uses the manifest-selected immutable absolute path for both global CLI config
+and `-ProjectMcpConfig -McpMode Proxy`. The proxy template supplies project
+config structure only; onboarding replaces its non-runnable
+`__MONOLITH_IMMUTABLE_PROXY_PATH__` placeholder before
+writing, so do not install the raw template as an authoritative command.
+
+```json
+{
+  "mcpServers": {
+    "monolith": {
+      "command": "D:\\project\\Plugins\\Monolith\\Binaries\\monolith_proxy-0123456789abcdef.exe",
+      "args": []
+    }
+  }
+}
+```
+
+Existing direct-HTTP entries are replaced only when `-ReplaceMcpConfig` is
+explicitly supplied. During one executed global update, the script snapshots
+the selected Codex and Claude user config files in memory before the first CLI
+mutation, verifies each resulting entry with the owning CLI, and restores all
+selected config files byte-for-byte when any remove, add, verification, or
+later-client conflict fails. Rollback first compare-and-swaps against the exact
+state produced by each CLI mutation and refuses to overwrite a later external
+edit. It never prints or leaves a backup copy of those potentially
+secret-bearing global config files. Existing proxy entries match only when the
+CLI reports exactly one `command:` field whose normalized absolute path equals
+the validated immutable image; a wrapper that merely mentions that path in its
+arguments is not accepted. `CODEX_HOME` is supported;
+when `CLAUDE_CONFIG_DIR` is set, use project config or temporarily remove that
+override because Claude's CLI does not expose an authoritative user-config path
+for safe rollback. As with any multi-process transaction, a hard process kill
+or power loss is outside this in-process rollback guarantee.
+
+Project `.mcp.json` and managed project-instruction writes use a temporary file
+in the destination directory followed by an atomic move/replace. Reparse-point
+targets are rejected. Project-file replacement creates a timestamped
+`.backup-*` copy as part of the same atomic replace.
+
+### Direct HTTP transport (explicit opt-in)
 
 Use this when the Monolith MCP server is already reachable at the editor/proxy endpoint.
 
@@ -75,21 +147,6 @@ Equivalent project-scoped `.mcp.json` clients can use `Templates/.mcp.json.examp
     "monolith": {
       "type": "http",
       "url": "http://localhost:9316/mcp"
-    }
-  }
-}
-```
-
-### Proxy command
-
-Use this when the client should launch the Monolith proxy process. The onboarding script uses an absolute path to `Binaries\monolith_proxy.exe` for global CLI config. Equivalent project-scoped `.mcp.json` clients can use `Templates/.mcp.json.proxy.example` manually or run with `-ProjectMcpConfig -McpMode Proxy`.
-
-```json
-{
-  "mcpServers": {
-    "monolith": {
-      "command": "Plugins/Monolith/Binaries/monolith_proxy.exe",
-      "args": []
     }
   }
 }
@@ -120,7 +177,7 @@ At minimum, the project instructions should cover:
 - Do not commit `Logs/*`; Monolith invocation logs are local diagnostics.
 - For missing editor capability, add a proper Monolith action with schema, tests, and docs instead of relying on one-off `run_python`.
 
-`Scripts\onboard_monolith.ps1` can create or update a managed instruction block for target adapters that declare `instructionFiles`. This repository's `AGENTS.md` and `CLAUDE.md` already include Monolith-specific coordination rules, so the script detects them and skips duplicate insertion.
+`Scripts\onboard_monolith.ps1` can create or update a managed instruction block for target adapters that declare `instructionFiles`. Creates, replacements, and appends are committed with atomic same-directory file replacement so an interrupted write cannot leave a partially written instruction file. This repository's `AGENTS.md` and `CLAUDE.md` already include Monolith-specific coordination rules, so the script detects them and skips duplicate insertion.
 
 Keep this onboarding file, `Templates\Onboarding\*.json`, and `Docs/specs/SPEC_MonolithSkillsSymlinkDistribution.md` in sync when changing skill distribution or MCP setup.
 

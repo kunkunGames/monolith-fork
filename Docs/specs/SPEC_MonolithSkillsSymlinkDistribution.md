@@ -4,7 +4,7 @@
 **Status:** Implemented, Windows onboarding automation and filesystem validation added
 **Scope:** `Skills/` audit, Agent Skills entrypoint normalization, Codex and Claude local skill distribution
 **Created:** 2026-06-05
-**Doc reconciled with checkout:** 2026-06-05
+**Doc reconciled with checkout:** 2026-07-11
 
 ---
 
@@ -156,7 +156,69 @@ This script reads data-only target adapters from:
 Templates/Onboarding/*.json
 ```
 
-It validates repository skills, delegates skill linking to `Scripts/install_monolith_skills.ps1`, configures target MCP clients, and manages project instruction blocks. Dry-run/plan mode is the default when `-Execute` is omitted. Codex and Claude use user/global MCP config through their CLIs by default; project-scoped `.mcp.json` generation is opt-in via `-ProjectMcpConfig` or an explicit `-McpConfigPath`.
+It validates repository skills, delegates skill linking to `Scripts/install_monolith_skills.ps1`, configures target MCP clients, and manages project instruction blocks. `-SkipSkills` skips both skill validation and skill-link mutation so an MCP-only migration is not blocked by an unrelated skill audit. Dry-run/plan mode is the default when `-Execute` is omitted. Codex and Claude use user/global MCP config through their CLIs by default; project-scoped `.mcp.json` generation is opt-in via `-ProjectMcpConfig` or an explicit `-McpConfigPath`.
+
+`McpMode=Proxy` is the default transport. `Tools\MonolithProxy\build.bat`
+publishes the authoritative `Binaries\monolith_proxy.current.json` manifest and
+an immutable `Binaries\monolith_proxy-<16-lowercase-source-hash>.exe` image.
+The configured command is that validated immutable image's absolute path for
+both global CLI clients and generated project `.mcp.json` files. The historical
+fixed `Binaries\monolith_proxy.exe` is compatibility-only and must never be
+selected when the manifest is missing or invalid. This keeps MCP client
+sessions independent of the Unreal Editor process, permits new builds while an
+older image is locked, and preserves the fixed read-only Query fallback during
+editor transport outages. `McpMode=Http` remains an explicit opt-in for clients
+that own HTTP reconnection. Replacing an existing global entry requires
+`-ReplaceMcpConfig`; switching back to HTTP uses the same flag. The raw
+`Templates\.mcp.json.proxy.example` file is structural input only: its
+`__MONOLITH_IMMUTABLE_PROXY_PATH__` placeholder is deliberately non-runnable
+and must be replaced by the validated resolver before a project config is
+written. An executed global Codex/Claude update is one script-level transaction:
+before the first CLI mutation the onboarding script snapshots the known user
+config files in memory, verifies every updated entry through its owning CLI,
+and restores every selected client config byte-for-byte if a remove, add,
+verification, or later-client conflict fails. Each mutating CLI call records
+the exact resulting file state; rollback compares that state while holding an
+exclusive writer/delete lock and refuses to overwrite a later external edit.
+Snapshot contents must never be printed or persisted as workflow artifacts.
+`CODEX_HOME` is honored; because
+Claude does not expose an authoritative user-config path through its CLI,
+`CLAUDE_CONFIG_DIR` is rejected for transactional global updates and those
+users must use project config or temporarily remove the override. This
+transaction protects ordinary command failures; process termination or power
+loss cannot be rolled back across independent third-party CLI processes.
+Existing Proxy entries match only when the owning CLI reports exactly one
+`command:` field whose normalized absolute path equals the validated immutable
+image. Mentioning that image in a wrapper command's arguments is not a match.
+
+Project-file replacement must retain the timestamped backup behavior. Project
+`.mcp.json` creation/replacement and managed `AGENTS.md`/`CLAUDE.md` writes use
+a temporary sibling followed by an atomic same-directory move/replace. Existing
+reparse-point targets are rejected rather than overwritten. A `.mcp.json`
+replacement creates its timestamped backup as part of the same atomic replace.
+
+Proxy-mode onboarding has a fail-closed immutable-image prerequisite. Before
+any onboarding mutation, it must require a regular, non-reparse manifest with
+integer `schema_version=1`; require `file` to be the exact leaf
+`monolith_proxy-[0-9a-f]{16}.exe`; require the filename hash, manifest
+`source_hash`, and executable `--version.source_hash` to match; require the
+manifest and executable versions to match; require manifest and executable
+identity fields `tool=monolith-proxy` and `runtime=native-cpp`; require a
+64-character lowercase manifest SHA-256 equal to the executable bytes; and
+require the regular, non-reparse target to remain directly inside the regular,
+non-reparse plugin `Binaries` directory. Manifest bytes and the executable hash
+are checked again after `--version` to detect replacement during validation.
+
+Plan mode prints the authoritative manifest and validated immutable absolute
+path. When validation fails, Plan remains non-mutating, prints the concrete
+failure and build/package remedy, and skips MCP config planning rather than
+falling back to the fixed executable. Execute mode treats the same failure as a
+terminating nonzero error before skill links, global CLI entries, project
+`.mcp.json`, or instruction blocks can be mutated. Source checkouts publish the
+manifest/image through `cmd /c Tools\MonolithProxy\build.bat`; packaged releases
+must include both. `McpMode=Http` and `-SkipMcpConfig` do not require the proxy
+manifest. `-SkipSkills` remains independent and does not weaken the Proxy
+prerequisite.
 
 The lower-level skill-link installer remains available for direct repair:
 
@@ -246,6 +308,7 @@ The implementation is complete when:
 - Missing-skill candidates have been explicitly accepted into new skills or rejected with a documented reason.
 - `Templates/Onboarding/Onboarding.md` documents MCP configuration, project instruction setup, and Codex/Claude global skill linking.
 - `Scripts/onboard_monolith.ps1` is the Windows-first orchestration entrypoint and target behavior is data-driven through `Templates/Onboarding/*.json`.
+- Default Proxy-mode global and project config contains only the absolute immutable image selected by a fully validated `Binaries\monolith_proxy.current.json`; invalid or missing manifests never fall back to the compatibility `monolith_proxy.exe`, Execute fails before mutation, and Plan reports the failure then skips MCP config planning.
 
 ## 9. Verification Notes
 

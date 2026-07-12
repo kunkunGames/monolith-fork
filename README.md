@@ -89,34 +89,26 @@ git clone https://github.com/tumourlove/monolith.git Monolith
 
 (Or grab the [latest release zip](https://github.com/tumourlove/monolith/releases) and extract to the same path. The release zip includes precompiled DLLs so Blueprint-only projects can open the editor immediately without rebuilding. Monolith builds on **UE 5.7 and 5.8** from a single source tree — but the precompiled DLLs are engine-locked, so Blueprint-only users grab the zip for their engine, `Monolith-vX.Y.Z-UE5.7.zip` or `-UE5.8.zip`. Building from source works on either.)
 
-**2. Create `.mcp.json`** in your project root (same directory as your `.uproject`):
+**2. Configure MCP.** On Windows, the recommended Codex/Claude setup is the
+validated native proxy in user-level MCP configuration:
 
-```json
-{
-  "mcpServers": {
-    "monolith": {
-      "command": "Plugins/Monolith/Binaries/monolith_proxy.exe",
-      "args": []
-    }
-  }
-}
+```powershell
+powershell -ExecutionPolicy Bypass -File Plugins\Monolith\Scripts\onboard_monolith.ps1 `
+  -Targets Codex,Claude -Execute -ReplaceMcpConfig
 ```
 
-The native C++ proxy keeps your AI session alive when the editor restarts. For **Cursor/Cline**, **macOS/Linux**, or the **Python fallback**, see the [Installation wiki page](https://github.com/tumourlove/monolith/wiki/Installation).
+The onboarding script validates `Binaries/monolith_proxy.current.json`, the
+source-addressed proxy leaf, its full SHA-256, and its `--version` identity
+before recording the exact absolute path. Do not type a source hash manually.
+Clients that explicitly require project scope can add `-ProjectMcpConfig`; keep
+machine-local absolute paths out of tracked project files. The native proxy has
+no Unreal Engine or game DLL dependency. Healthy calls go to the live editor,
+while a fixed read-only surface remains available through the immutable
+Query/catalog generation selected by `monolith_query.current.json` during
+editor transport outages. For **Cursor/Cline**, **macOS/Linux**, or the
+**Python fallback**, see the [Installation wiki page](https://github.com/tumourlove/monolith/wiki/Installation).
 
-**3. Open the editor.** Wait 30-60 seconds for the first-launch index. When you see `Monolith MCP server listening on port 9316` in the Output Log (filter `LogMonolith`), connect your AI client and ask *"what Monolith tools do you have?"* to verify.
-
-Windows:
-```json
-{
-  "mcpServers": {
-    "monolith": {
-      "command": "Plugins/Monolith/Binaries/monolith_proxy.exe",
-      "args": []
-    }
-  }
-}
-```
+**3. Connect, then open the editor for editor-backed work.** The proxy can initialize and expose its read-only fallback before UE starts. Open the editor for asset/world mutation and live runtime actions; wait 30-60 seconds for the first-launch index. When you see `Monolith MCP server listening on port 9316` in the Output Log (filter `LogMonolith`), `monolith_status()` should switch from the offline catalog status to the live editor status without restarting the AI client.
 
 macOS / Linux:
 ```json
@@ -162,8 +154,8 @@ When you see `Monolith MCP server listening on port 9316`, you're in business.
 
 ### Step 4: Connect your AI
 
-1. Open **Claude Code** (or your MCP client) from your project directory — the one with `.mcp.json`
-2. Claude Code auto-detects `.mcp.json` on startup and connects to Monolith
+1. Open **Claude Code** (or your MCP client) from your project directory.
+2. The client starts Monolith from its configured user-level MCP entry, or from an explicitly opted-in project `.mcp.json`.
 3. Sanity check: ask *"What Monolith tools do you have?"*
 
 You should get back a list of namespace tools (`blueprint_query`, `material_query`, etc.). If you do, everything's working.
@@ -240,8 +232,8 @@ Monolith.uplugin
   MonolithLevelSequence — Level Sequence introspection: full per-LS binding inventory (legacy Possessable/Spawnable + UE 5.7 UMovieSceneCustomBinding family), Director Blueprint functions/variables, event-track bindings, cross-sequence reverse lookup (8 actions)
 ```
 
-- **`monolith_proxy.exe`** — MCP stdio↔HTTP proxy. Keeps your AI session alive across editor restarts. Used by the `.mcp.json` config above.
-- **`monolith_query.exe`** — Offline query tool. Serves the engine source index, project asset index, and the full Reflection Intelligence surface (`decision` / `risk` / `cppreflect` / `network`) without launching UE — byte-identical to the live server, verified by a ship-blocking parity guard. Instant startup; useful for terminal-side lookups and CI when the editor is down.
+- **`monolith_proxy-<source-hash>.exe`** — source-addressed immutable MCP stdio↔HTTP proxy selected by `monolith_proxy.current.json`; the manifest verifies the full artifact SHA-256. Keeps AI sessions alive across editor restarts without colliding with a locked older proxy image.
+- **`monolith_query-<source-hash>.exe` + `monolith_catalog-<semantic-hash>.json`** — immutable offline Query generation selected together by `monolith_query.current.json`. Serves the engine source index, project asset index, and Reflection Intelligence surface (`decision` / `risk` / `cppreflect` / `network`) without launching UE. The fixed `monolith_query.exe` remains a direct-CLI compatibility copy; release and proxy routing use the manifest-selected pair.
 
 **~2,037 in-tree actions across 77 namespaces** (v0.20.3 public release; `monolith_discover()` / `monolith_status()` are the authoritative live catalog; the per-namespace breakdown is runtime-discovered, not hand-maintained here). 45 town-gen experimental actions are disabled by default (`bEnableProceduralTownGen=false`); enabling them raises the count. This figure EXCLUDES sibling-plugin actions — sibling/private plugins ship through their own repos or channels and are not in the public release zip. Live editors with sibling plugins loaded report higher counts.
 

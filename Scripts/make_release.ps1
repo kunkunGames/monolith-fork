@@ -166,6 +166,10 @@ $EngineMatrix = @(
     }
 )
 
+if ($dirty -and $AllowDirtyTree -and $EngineMatrix.Count -gt 1) {
+    throw "-AllowDirtyTree cannot produce a multi-engine release: secondary clones would build different source bytes. Commit the source first."
+}
+
 Write-Host "Building Monolith v$Version release zips (per engine: $(( $EngineMatrix | ForEach-Object { $_.Tag }) -join ', '))..." -ForegroundColor Cyan
 
 # --- Preflight: validate every engine in the matrix BEFORE doing any work --------------
@@ -197,6 +201,13 @@ foreach ($eng in $EngineMatrix) {
         Write-Host "    clone ($($eng.PluginDir)): $cloneHead" -ForegroundColor Red
         Write-Host "`n  Both zips ship the SAME tracked content from this repo but per-engine binaries" -ForegroundColor Red
         Write-Host "  from each clone. Check out $ThisHead in the $($eng.Tag) clone, then re-run." -ForegroundColor Red
+        exit 1
+    }
+    $cloneDirty = @(& git -C $eng.PluginDir status --porcelain)
+    if ($cloneDirty.Count -gt 0) {
+        Write-Host "`n  [FAIL] [$($eng.Tag)] clone working tree is dirty." -ForegroundColor Red
+        $cloneDirty | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+        Write-Host "  Per-engine binaries must be built from the exact clean source bytes shipped in the archive." -ForegroundColor Red
         exit 1
     }
     Write-Host "  [precheck] $($eng.Tag) clone at $cloneHead (matches this repo)" -ForegroundColor DarkGray
@@ -454,7 +465,7 @@ function Invoke-EnginePackage {
     # UnrealEditor.modules manifest, which is per-engine and tells UE where to load each
     # plugin module) but skip .pdb / .patch_* / .claude as everywhere else, and skip stripped
     # sibling DLLs. The engine-agnostic top-level offline tools (Binaries\monolith_query.exe,
-    # monolith_proxy.exe) are NOT under Win64 and were already staged into the shared content
+    # monolith_proxy.current.json and its immutable proxy image) are NOT under Win64 and were already staged into the shared content
     # from THIS repo's freshly-built, parity-verified exe -- so the UE5.8 clone's possibly-
     # stale offline exe never overwrites the verified one.
     $binWin64 = Join-Path $Engine.PluginDir "Binaries\Win64"
@@ -660,22 +671,69 @@ if (-not $SkipBuild) {
     Write-Host "    WARNING: Ensure each engine's binaries were built with MONOLITH_RELEASE_BUILD=1" -ForegroundColor Red
 }
 
-# --- Offline CLI build + parity gate (engine-agnostic; tracked source, runs ONCE) ---
-# The offline tool Binaries/monolith_query.exe is built from tracked source
-# Tools/MonolithQuery/monolith_query.cpp via a standalone cl.exe build (NOT UBT).
+# --- Native gateway build + parity/freshness gates (engine-agnostic; runs ONCE) ---
+# Binaries/monolith_query.exe and a source-addressed monolith_proxy-<hash>.exe
+# are built from tracked source via standalone cl.exe builds (NOT UBT).
 # Binaries/ is gitignored, so without this step the release would ship whatever
 # stale exe happened to sit on disk. Rebuild it here so the shipped exe matches
 # the shipped source, then hard-gate the exe-vs-py parity guard. A drifted exe
 # must never ship -- both the build failure and a parity FAIL abort the release.
 # This exe is identical for both engines (it is not an engine binary), so the freshly
 # built exe under THIS repo's Binaries/ is staged into the shared content copy below.
-Write-Host "`n  [offline] Building offline CLI fresh + parity gate..." -ForegroundColor Yellow
+Write-Host "`n  [native gateway] Building Query + Proxy fresh with parity/freshness gates..." -ForegroundColor Yellow
 
 $ToolDir = Join-Path $PluginDir "Tools\MonolithQuery"
 $ToolBuildBat = Join-Path $ToolDir "build.bat"
+$ProxyToolDir = Join-Path $PluginDir "Tools\MonolithProxy"
+$ProxyBuildBat = Join-Path $ProxyToolDir "build.bat"
 if (-not (Test-Path $ToolBuildBat)) {
     throw "Offline CLI build script not found at $ToolBuildBat"
 }
+if (-not (Test-Path $ProxyBuildBat)) {
+    throw "Native proxy build script not found at $ProxyBuildBat"
+}
+
+$CatalogGenerator = Join-Path $ToolDir 'generate_monolith_catalog_snapshot.py'
+if (-not (Test-Path $CatalogGenerator)) {
+    throw "Offline catalog generator not found at $CatalogGenerator"
+}
+$QueryBundleValidator = Join-Path $ToolDir 'publish_query_bundle.py'
+if (-not (Test-Path $QueryBundleValidator)) {
+    throw "Immutable Query bundle validator not found at $QueryBundleValidator"
+}
+$ProxyBundleVerifier = Join-Path $ProxyToolDir 'verify_proxy_bundle.py'
+if (-not (Test-Path $ProxyBundleVerifier)) {
+    throw "Native Proxy/Query bundle verifier not found at $ProxyBundleVerifier"
+}
+$SourceGenerationHasher = Join-Path $PSScriptRoot 'source_generation_hash.py'
+if (-not (Test-Path $SourceGenerationHasher)) {
+    throw "Native source generation hash helper not found at $SourceGenerationHasher"
+}
+
+function Get-NativeSourceGenerationHash {
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('query', 'proxy')]
+        [string]$Tool
+    )
+
+    $output = & python $SourceGenerationHasher --plugin-root $PluginDir --tool $Tool
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not compute the canonical $Tool source generation hash."
+    }
+    $sourceHash = (($output | Out-String).Trim())
+    if ($sourceHash -cnotmatch '^[0-9a-f]{16}$') {
+        throw "Canonical $Tool source generation hash is invalid: '$sourceHash'."
+    }
+    return $sourceHash
+}
+
+Write-Host "    Checking bundled offline catalog against extracted registry semantics..." -ForegroundColor DarkGray
+& python $CatalogGenerator --check
+if ($LASTEXITCODE -ne 0) {
+    throw "Offline catalog snapshot drifted from source registrations. Regenerate it before release."
+}
+Write-Host "    Offline catalog snapshot gate PASSED" -ForegroundColor Green
 
 # Locate vcvars64.bat via vswhere so cl.exe is on PATH for build.bat.
 $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -710,13 +768,13 @@ Write-Host "    Using VS at $VsInstallPath" -ForegroundColor DarkGray
 #      Continue, which masked this for every prior release. With EAP relaxed, the exit code
 #      is the sole arbiter; restore the prior preference immediately after.
 $VsInstallerDir = Split-Path $VsWhere -Parent
-$CliBuildLog = Join-Path $env:TEMP "Monolith_OfflineCLIBuild_$Version.log"
+$CliBuildLog = Join-Path $env:TEMP "Monolith_NativeGatewayBuild_$Version.log"
 $PrevEAP = $ErrorActionPreference
 Push-Location $ToolDir
 try {
     $env:PATH = "$VsInstallerDir;$env:PATH"
     $ErrorActionPreference = 'Continue'
-    & cmd.exe /c "call `"$VcVars`" && call `"$ToolBuildBat`"" 2>&1 |
+    & cmd.exe /c "call `"$VcVars`" && call `"$ToolBuildBat`" && call `"$ProxyBuildBat`"" 2>&1 |
         Tee-Object -FilePath $CliBuildLog | Out-Null
     $CliExit = $LASTEXITCODE
     $ErrorActionPreference = $PrevEAP
@@ -725,7 +783,7 @@ try {
             Write-Host "    --- offline CLI build log (tail) ---" -ForegroundColor Yellow
             Get-Content $CliBuildLog -Tail 20 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
         }
-        throw "Offline CLI build failed with exit code $CliExit. See $CliBuildLog."
+        throw "Native Query/Proxy build failed with exit code $CliExit. See $CliBuildLog."
     }
 }
 finally {
@@ -733,13 +791,272 @@ finally {
     Pop-Location
     Remove-Item $CliBuildLog -Force -ErrorAction SilentlyContinue
 }
-Write-Host "    Offline CLI built (fresh exe staged in Binaries/)" -ForegroundColor Green
+Write-Host "    Native Query + immutable Proxy built (fresh exes staged in Binaries/)" -ForegroundColor Green
+
+# build.bat publishes the Query executable and generated catalog under immutable
+# names before atomically advancing this manifest. Recompute the same canonical
+# text-source generation through the shared build/check/release helper. Validate
+# that authoritative bundle directly; the fixed name is compatibility-only.
+$ExpectedQuerySourceHash = Get-NativeSourceGenerationHash -Tool query
+
+& python $QueryBundleValidator validate --binaries-root (Join-Path $PluginDir 'Binaries') `
+    --expected-source-hash $ExpectedQuerySourceHash
+if ($LASTEXITCODE -ne 0) {
+    throw "Immutable Query/catalog bundle validation failed after the native build."
+}
+Write-Host "    Immutable Query/catalog bundle gate PASSED" -ForegroundColor Green
+
+# Hard-gate the proxy source stamp. This prevents a future release from packaging an
+# arbitrary stale Binaries/monolith_proxy.exe merely because top-level Binaries are copied.
+$ExpectedProxySourceHash = Get-NativeSourceGenerationHash -Tool proxy
+
+function Get-ByteArraySha256Lower {
+    param([byte[]]$Bytes)
+
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        return (($algorithm.ComputeHash($Bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Test-ReleaseByteArraysEqual {
+    param(
+        [byte[]]$Left,
+        [byte[]]$Right
+    )
+
+    if ($null -eq $Left -or $null -eq $Right -or $Left.Length -ne $Right.Length) {
+        return $false
+    }
+    for ($index = 0; $index -lt $Left.Length; $index++) {
+        if ($Left[$index] -ne $Right[$index]) { return $false }
+    }
+    return $true
+}
+
+function ConvertFrom-StrictUtf8JsonBytes {
+    param([byte[]]$Bytes)
+
+    $strictUtf8 = New-Object Text.UTF8Encoding($false, $true)
+    return ($strictUtf8.GetString($Bytes) | ConvertFrom-Json)
+}
+
+function Get-BoundedNativeProxyVersion {
+    param([string]$Path)
+
+    $startInfo = New-Object Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Path
+    $startInfo.Arguments = '--version'
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = New-Object Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { throw 'process did not start' }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) {
+            $process.Kill()
+            $process.WaitForExit()
+            throw 'process exceeded the 10 second validation timeout'
+        }
+        $stdout = $stdoutTask.Result
+        $null = $stderrTask.Result
+        if ($process.ExitCode -ne 0) { throw "process exited with code $($process.ExitCode)" }
+        if ([string]::IsNullOrWhiteSpace($stdout) -or $stdout.Length -gt 65536) {
+            throw 'process returned an empty or oversized version payload'
+        }
+        try { return ($stdout | ConvertFrom-Json) }
+        catch { throw 'process returned invalid JSON' }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+# Freeze the authoritative Query bundle into byte snapshots before staging. The
+# shared Python validator owns the exact schema and executable/catalog identity;
+# these local checks bind the frozen bytes and prevent path traversal or a
+# manifest swap between validation and release-copy selection.
+$QueryBinariesRoot = [IO.Path]::GetFullPath((Join-Path $PluginDir 'Binaries')).TrimEnd('\')
+$QueryManifestPath = Join-Path $QueryBinariesRoot 'monolith_query.current.json'
+if (-not (Test-Path -LiteralPath $QueryManifestPath -PathType Leaf)) {
+    throw "Immutable Query current manifest was not staged at $QueryManifestPath"
+}
+$QueryManifestItem = Get-Item -LiteralPath $QueryManifestPath -Force
+if (($QueryManifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Immutable Query current manifest must not be a reparse point: $QueryManifestPath"
+}
+$QueryManifestBytes = [IO.File]::ReadAllBytes($QueryManifestPath)
+$QueryManifest = ConvertFrom-StrictUtf8JsonBytes -Bytes $QueryManifestBytes
+$QueryRequiredProperties = @(
+    'schema_version', 'tool', 'runtime', 'file', 'plugin_version',
+    'parity_spec_rev', 'source_hash', 'sha256', 'catalog_file',
+    'catalog_source_hash', 'catalog_sha256'
+)
+$QueryActualProperties = @($QueryManifest.PSObject.Properties.Name)
+$QueryUnexpectedProperties = @($QueryActualProperties | Where-Object { $QueryRequiredProperties -cnotcontains $_ })
+$QueryMissingProperties = @($QueryRequiredProperties | Where-Object { $QueryActualProperties -cnotcontains $_ })
+if ($QueryUnexpectedProperties.Count -gt 0 -or $QueryMissingProperties.Count -gt 0) {
+    throw "Immutable Query manifest does not contain the exact bundle contract fields."
+}
+$QueryFileName = [string]$QueryManifest.file
+$QueryCatalogFileName = [string]$QueryManifest.catalog_file
+if ($QueryFileName -cnotmatch '^monolith_query-([0-9a-f]{16})\.exe$' -or
+    $QueryFileName -cne "monolith_query-$($QueryManifest.source_hash).exe" -or
+    [IO.Path]::GetFileName($QueryFileName) -cne $QueryFileName -or
+    $QueryCatalogFileName -cnotmatch '^monolith_catalog-([0-9a-f]{64})\.json$' -or
+    $QueryCatalogFileName -cne "monolith_catalog-$($QueryManifest.catalog_source_hash).json" -or
+    [IO.Path]::GetFileName($QueryCatalogFileName) -cne $QueryCatalogFileName) {
+    throw "Immutable Query manifest has an invalid executable/catalog leaf binding."
+}
+$QueryExePath = [IO.Path]::GetFullPath((Join-Path $QueryBinariesRoot $QueryFileName))
+$QueryCatalogPath = [IO.Path]::GetFullPath((Join-Path $QueryBinariesRoot $QueryCatalogFileName))
+foreach ($QueryArtifactPath in @($QueryExePath, $QueryCatalogPath)) {
+    if (-not [IO.Path]::GetFullPath((Split-Path -Parent $QueryArtifactPath)).TrimEnd('\').Equals(
+            $QueryBinariesRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Immutable Query bundle artifact escapes Binaries: $QueryArtifactPath"
+    }
+    if (-not (Test-Path -LiteralPath $QueryArtifactPath -PathType Leaf)) {
+        throw "Immutable Query bundle artifact is missing: $QueryArtifactPath"
+    }
+    $QueryArtifactItem = Get-Item -LiteralPath $QueryArtifactPath -Force
+    if ($QueryArtifactItem.PSIsContainer -or
+        ($QueryArtifactItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Immutable Query bundle artifacts must be regular non-reparse files: $QueryArtifactPath"
+    }
+}
+$QueryExeBytes = [IO.File]::ReadAllBytes($QueryExePath)
+$QueryCatalogBytes = [IO.File]::ReadAllBytes($QueryCatalogPath)
+if ($QueryManifest.sha256 -cne (Get-ByteArraySha256Lower -Bytes $QueryExeBytes) -or
+    $QueryManifest.catalog_sha256 -cne (Get-ByteArraySha256Lower -Bytes $QueryCatalogBytes)) {
+    throw "Immutable Query bundle byte snapshot does not match its manifest SHA-256 fields."
+}
+if ($QueryManifest.source_hash -cne $ExpectedQuerySourceHash) {
+    throw "Immutable Query manifest is stale: expected source_hash=$ExpectedQuerySourceHash, got $($QueryManifest.source_hash)."
+}
+& python $QueryBundleValidator validate --binaries-root $QueryBinariesRoot `
+    --expected-source-hash $ExpectedQuerySourceHash
+if ($LASTEXITCODE -ne 0) {
+    throw "Immutable Query bundle failed its frozen-snapshot validation."
+}
+if (-not (Test-ReleaseByteArraysEqual -Left $QueryManifestBytes -Right ([IO.File]::ReadAllBytes($QueryManifestPath)))) {
+    throw "Immutable Query current manifest changed while its release snapshot was being frozen."
+}
+Write-Host "    Immutable Query release snapshot frozen ($($QueryManifest.source_hash), catalog $($QueryManifest.catalog_source_hash))" -ForegroundColor Green
+
+$ProxyBinariesRoot = [IO.Path]::GetFullPath((Join-Path $PluginDir 'Binaries')).TrimEnd('\')
+if (-not (Test-Path -LiteralPath $ProxyBinariesRoot -PathType Container)) {
+    throw "Native proxy Binaries directory does not exist: $ProxyBinariesRoot"
+}
+$ProxyBinariesItem = Get-Item -LiteralPath $ProxyBinariesRoot -Force
+if (($ProxyBinariesItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Native proxy Binaries directory must not be a reparse point: $ProxyBinariesRoot"
+}
+$ProxyManifestPath = Join-Path $ProxyBinariesRoot 'monolith_proxy.current.json'
+if (-not (Test-Path -LiteralPath $ProxyManifestPath -PathType Leaf)) {
+    throw "Native proxy current manifest was not staged at $ProxyManifestPath"
+}
+$ProxyManifestItem = Get-Item -LiteralPath $ProxyManifestPath -Force
+if (($ProxyManifestItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Native proxy current manifest must not be a reparse point: $ProxyManifestPath"
+}
+$ProxyManifestBytes = [IO.File]::ReadAllBytes($ProxyManifestPath)
+try {
+    $ProxyManifest = ConvertFrom-StrictUtf8JsonBytes -Bytes $ProxyManifestBytes
+}
+catch {
+    throw "Native proxy current manifest is not strict UTF-8 JSON: $($_.Exception.Message)"
+}
+$ProxyRequiredProperties = @('schema_version', 'file', 'version', 'source_hash', 'sha256', 'tool', 'runtime')
+$ProxyActualProperties = @($ProxyManifest.PSObject.Properties.Name)
+$ProxyUnexpectedProperties = @($ProxyActualProperties | Where-Object { $ProxyRequiredProperties -cnotcontains $_ })
+$ProxyMissingProperties = @($ProxyRequiredProperties | Where-Object { $ProxyActualProperties -cnotcontains $_ })
+if ($ProxyUnexpectedProperties.Count -gt 0 -or $ProxyMissingProperties.Count -gt 0) {
+    throw "Native proxy current manifest must contain exactly schema_version, file, version, source_hash, sha256, tool, and runtime."
+}
+$ProxySchemaProperty = $ProxyManifest.PSObject.Properties['schema_version']
+$ProxyFileProperty = $ProxyManifest.PSObject.Properties['file']
+$ProxyVersionProperty = $ProxyManifest.PSObject.Properties['version']
+$ProxySourceHashProperty = $ProxyManifest.PSObject.Properties['source_hash']
+$ProxyShaProperty = $ProxyManifest.PSObject.Properties['sha256']
+$ProxyToolProperty = $ProxyManifest.PSObject.Properties['tool']
+$ProxyRuntimeProperty = $ProxyManifest.PSObject.Properties['runtime']
+$ProxySchemaIsInteger = $null -ne $ProxySchemaProperty -and
+    ($ProxySchemaProperty.Value -is [int] -or $ProxySchemaProperty.Value -is [long])
+$ProxyFileName = if ($null -ne $ProxyFileProperty -and $ProxyFileProperty.Value -is [string]) {
+    [string]$ProxyFileProperty.Value
+} else { '' }
+$ProxyFileMatch = [regex]::Match($ProxyFileName, '^monolith_proxy-([0-9a-f]{16})\.exe$')
+if (-not $ProxySchemaIsInteger -or $ProxySchemaProperty.Value -ne 1 -or
+    -not $ProxyFileMatch.Success -or
+    [IO.Path]::GetFileName($ProxyFileName) -cne $ProxyFileName -or
+    $null -eq $ProxyVersionProperty -or $ProxyVersionProperty.Value -isnot [string] -or
+    [string]::IsNullOrWhiteSpace([string]$ProxyVersionProperty.Value) -or
+    $null -eq $ProxySourceHashProperty -or $ProxySourceHashProperty.Value -isnot [string] -or
+    [string]$ProxySourceHashProperty.Value -cne $ProxyFileMatch.Groups[1].Value -or
+    $null -eq $ProxyShaProperty -or $ProxyShaProperty.Value -isnot [string] -or
+    [string]$ProxyShaProperty.Value -cnotmatch '^[0-9a-f]{64}$' -or
+    $null -eq $ProxyToolProperty -or $ProxyToolProperty.Value -isnot [string] -or
+    [string]$ProxyToolProperty.Value -cne 'monolith-proxy' -or
+    $null -eq $ProxyRuntimeProperty -or $ProxyRuntimeProperty.Value -isnot [string] -or
+    [string]$ProxyRuntimeProperty.Value -cne 'native-cpp') {
+    throw "Native proxy current manifest has an invalid strict schema, identity, leaf/hash binding, or SHA-256."
+}
+$ProxyExe = [IO.Path]::GetFullPath((Join-Path $ProxyBinariesRoot $ProxyFileName))
+$ProxyExeParent = [IO.Path]::GetFullPath((Split-Path -Parent $ProxyExe)).TrimEnd('\')
+if (-not $ProxyExeParent.Equals($ProxyBinariesRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Native proxy current executable escapes Binaries: $ProxyExe"
+}
+if (-not (Test-Path -LiteralPath $ProxyExe -PathType Leaf)) {
+    throw "Fresh immutable native proxy executable was not staged at $ProxyExe"
+}
+$ProxyExeItem = Get-Item -LiteralPath $ProxyExe -Force
+if ($ProxyExeItem.PSIsContainer -or
+    ($ProxyExeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Native proxy current executable must not be a reparse point: $ProxyExe"
+}
+$ProxyExeBytes = [IO.File]::ReadAllBytes($ProxyExe)
+$ActualProxySha256 = Get-ByteArraySha256Lower -Bytes $ProxyExeBytes
+if ($ProxyManifest.sha256 -cne $ActualProxySha256) {
+    throw "Native proxy manifest SHA-256 mismatch for $($ProxyManifest.file)."
+}
+
+# Run --version from the exact bytes that will be staged. This avoids validating
+# one path generation and later packaging another if a concurrent build publishes
+# a new immutable generation while release packaging is in progress.
+$ProxyVersionValidationPath = Join-Path $env:TEMP "monolith_proxy_release_validate_$([Guid]::NewGuid().ToString('N')).exe"
+try {
+    [IO.File]::WriteAllBytes($ProxyVersionValidationPath, $ProxyExeBytes)
+    $ProxyVersion = Get-BoundedNativeProxyVersion -Path $ProxyVersionValidationPath
+}
+finally {
+    Remove-Item -LiteralPath $ProxyVersionValidationPath -Force -ErrorAction SilentlyContinue
+}
+if ($ProxyVersion.tool -cne "monolith-proxy" -or
+    $ProxyVersion.runtime -ne "native-cpp" -or
+    $ProxyVersion.source_hash -ne $ExpectedProxySourceHash -or
+    $ProxyManifest.source_hash -ne $ExpectedProxySourceHash -or
+    $ProxyManifest.version -cne $ProxyVersion.version -or
+    $ProxyManifest.tool -cne $ProxyVersion.tool -or
+    $ProxyManifest.runtime -cne $ProxyVersion.runtime) {
+    throw "Native proxy freshness gate FAILED: expected source_hash=$ExpectedProxySourceHash, got $($ProxyVersion.source_hash)."
+}
+if (-not (Test-ReleaseByteArraysEqual -Left $ProxyManifestBytes -Right ([IO.File]::ReadAllBytes($ProxyManifestPath)))) {
+    throw "Native proxy current manifest changed while its release snapshot was being validated."
+}
+Write-Host "    Native proxy freshness gate PASSED ($ExpectedProxySourceHash)" -ForegroundColor Green
 
 # Hard-gate: the freshly built exe must deep-equal its Python sibling across all
 # RI actions. A non-zero exit means the two offline tools drifted -- abort.
 Write-Host "    Running offline parity guard (verify_offline_parity.py)..." -ForegroundColor DarkGray
 $ParityScript = Join-Path $PluginDir "Scripts\verify_offline_parity.py"
-& python $ParityScript
+& python $ParityScript --exe $QueryExePath
 if ($LASTEXITCODE -ne 0) {
     throw "Offline parity guard FAILED (exit $LASTEXITCODE). The exe drifted from its Python sibling. Refusing to ship a drifted offline CLI."
 }
@@ -807,27 +1124,110 @@ foreach ($file in $trackedFiles) {
 Pop-Location
 Write-Host "    $($trackedFiles.Count) files copied ($strippedSourceCount stripped by release filters)" -ForegroundColor Green
 
-# Stage the freshly built offline CLI exe + its sibling tools into the shared content's
-# Binaries dir. These are engine-agnostic and live at the TOP LEVEL of THIS repo's
-# Binaries/ (Binaries\monolith_query.exe, Binaries\monolith_proxy.exe). We copy ONLY the
-# top-level files here (NOT -Recurse) so we never touch Binaries\Win64 -- the per-engine
-# UnrealEditor-*.dll set AND the per-engine UnrealEditor.modules manifest are added under
-# Win64 in each package step (Invoke-EnginePackage), so they correctly differ per engine.
-# Skip .pdb / .patch_* / .claude as everywhere else.
-$sharedBinSrc = Join-Path $PluginDir "Binaries"
-if (Test-Path $sharedBinSrc) {
-    $sharedBinDest = Join-Path $TempDir "Binaries"
-    if (-not (Test-Path $sharedBinDest)) { New-Item -ItemType Directory -Path $sharedBinDest -Force | Out-Null }
-    Get-ChildItem $sharedBinSrc -File |
-        Where-Object {
-            $_.Extension -ne '.pdb' -and $_.Name -notmatch '\.patch_' -and
-            $_.FullName -notmatch '[\\/]\.claude[\\/]'
-        } |
-        ForEach-Object {
-            Copy-Item $_.FullName -Destination (Join-Path $sharedBinDest $_.Name) -Force
-        }
-    Write-Host "    Shared engine-agnostic Binaries (top-level offline tools) staged" -ForegroundColor DarkGray
+# Stage only the explicit engine-agnostic release allowlist. Build leftovers,
+# old immutable generations, the fixed compatibility proxy, PDBs, and any future
+# ad-hoc file under Binaries are intentionally excluded. Query's fixed executable
+# remains only because public docs still name it; its staged bytes come from the
+# authoritative immutable image. Both native manifests and their selected bytes
+# are written from the frozen snapshots above, never reread here.
+$sharedBinSrc = Join-Path $PluginDir 'Binaries'
+$sharedBinDest = Join-Path $TempDir 'Binaries'
+$binaryStageDir = Join-Path $TempDir ".Binaries.monolith-stage-$([Guid]::NewGuid().ToString('N'))"
+$ReleaseBinaryAllowlist = @(
+    'monolith_query.exe',
+    $QueryFileName,
+    $QueryCatalogFileName,
+    'monolith_query.current.json',
+    'monolith_watchdog.exe',
+    $ProxyFileName,
+    'monolith_proxy.current.json'
+)
+if (Test-Path -LiteralPath $sharedBinDest) {
+    throw "Tracked release content unexpectedly created Binaries before allowlisted native-tool staging: $sharedBinDest"
 }
+
+try {
+    New-Item -ItemType Directory -Path $binaryStageDir | Out-Null
+    foreach ($binaryName in @('monolith_watchdog.exe')) {
+        if ($ReleaseBinaryAllowlist -cnotcontains $binaryName) {
+            throw "Internal release allowlist error for $binaryName"
+        }
+        $sourcePath = Join-Path $sharedBinSrc $binaryName
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            Write-Host "    Optional release binary not present: $sourcePath" -ForegroundColor Yellow
+            continue
+        }
+        $sourceItem = Get-Item -LiteralPath $sourcePath -Force
+        if ($sourceItem.PSIsContainer -or
+            ($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Release binary allowlist entries must be regular non-reparse files: $sourcePath"
+        }
+        [IO.File]::WriteAllBytes(
+            (Join-Path $binaryStageDir $binaryName),
+            [IO.File]::ReadAllBytes($sourcePath))
+    }
+
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir $QueryFileName), $QueryExeBytes)
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir $QueryCatalogFileName), $QueryCatalogBytes)
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir 'monolith_query.current.json'), $QueryManifestBytes)
+    # Compatibility-only alias for public commands that still name the fixed path.
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir 'monolith_query.exe'), $QueryExeBytes)
+
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir $ProxyFileName), $ProxyExeBytes)
+    [IO.File]::WriteAllBytes((Join-Path $binaryStageDir 'monolith_proxy.current.json'), $ProxyManifestBytes)
+
+    & python $QueryBundleValidator validate --binaries-root $binaryStageDir `
+        --expected-source-hash $ExpectedQuerySourceHash
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Staged immutable Query/catalog bundle failed validation.'
+    }
+    if (-not (Test-ReleaseByteArraysEqual `
+            -Left ([IO.File]::ReadAllBytes((Join-Path $binaryStageDir 'monolith_query.exe'))) `
+            -Right ([IO.File]::ReadAllBytes((Join-Path $binaryStageDir $QueryFileName))))) {
+        throw 'Staged compatibility monolith_query.exe differs from the authoritative immutable Query image.'
+    }
+
+    $stagedManifestPath = Join-Path $binaryStageDir 'monolith_proxy.current.json'
+    $stagedProxyPath = Join-Path $binaryStageDir $ProxyFileName
+    $stagedManifestBytes = [IO.File]::ReadAllBytes($stagedManifestPath)
+    if (-not (Test-ReleaseByteArraysEqual -Left $ProxyManifestBytes -Right $stagedManifestBytes)) {
+        throw 'Staged immutable proxy manifest bytes differ from the validated snapshot.'
+    }
+    $stagedManifest = ConvertFrom-StrictUtf8JsonBytes -Bytes $stagedManifestBytes
+    if ($stagedManifest.file -cne $ProxyFileName -or
+        $stagedManifest.sha256 -cne (Get-ByteArraySha256Lower -Bytes ([IO.File]::ReadAllBytes($stagedProxyPath))) -or
+        $stagedManifest.source_hash -cne $ExpectedProxySourceHash -or
+        $stagedManifest.version -cne $ProxyManifest.version -or
+        $stagedManifest.tool -cne 'monolith-proxy' -or
+        $stagedManifest.runtime -cne 'native-cpp') {
+        throw 'Staged immutable proxy manifest/image pair failed identity or SHA-256 revalidation.'
+    }
+    $stagedVersion = Get-BoundedNativeProxyVersion -Path $stagedProxyPath
+    if ($stagedVersion.tool -cne $stagedManifest.tool -or
+        $stagedVersion.runtime -cne $stagedManifest.runtime -or
+        $stagedVersion.version -cne $stagedManifest.version -or
+        $stagedVersion.source_hash -cne $stagedManifest.source_hash) {
+        throw 'Staged immutable proxy --version identity does not match its manifest.'
+    }
+
+    # Independent manifests are necessary but not sufficient: exercise the
+    # staged proxy against the staged Query/catalog pair through real stdio MCP
+    # so a future consumer/schema drift cannot produce a green but unusable ZIP.
+    & python $ProxyBundleVerifier --binaries-root $binaryStageDir
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Staged native Proxy + Query/catalog MCP handshake failed.'
+    }
+
+    # Directory.Move is a same-volume atomic publication. The manifest and its
+    # selected image therefore become visible in shared release content together.
+    [IO.Directory]::Move($binaryStageDir, $sharedBinDest)
+}
+finally {
+    if (Test-Path -LiteralPath $binaryStageDir) {
+        Remove-Item -LiteralPath $binaryStageDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+Write-Host "    Shared Binaries staged atomically from explicit allowlist: $($ReleaseBinaryAllowlist -join ', ')" -ForegroundColor DarkGray
 
 # =====================================================================================
 # Sentinel list + drift assertion (engine-agnostic; the SAME optional-gated modules apply

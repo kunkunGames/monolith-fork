@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "monolith": {
-      "command": "Plugins/Monolith/Binaries/monolith_proxy.exe",
+      "command": "__MONOLITH_IMMUTABLE_PROXY_PATH__",
       "args": []
     }
   }
