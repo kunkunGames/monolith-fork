@@ -321,7 +321,7 @@ python Scripts/monolith_offline.py <namespace> <action> [args...]
 | Script | Role |
 |--------|------|
 | `Scripts/verify_offline_parity.py` | HARD-GATE parity guard — byte-diffs exe vs py across all 20 RI actions; exits non-zero on any diff. `make_release.ps1` runs it as a ship gate. |
-| `Tools/MonolithQuery/build.bat` | Injects `SOURCE_HASH` (certutil SHA256 of the source) into the exe via `/DSOURCE_HASH`. |
+| `Tools/MonolithQuery/build.bat` | Injects the generation id produced by `Scripts/source_generation_hash.py`: build-contract bytes plus the complete ordered text-input set with CRLF/lone-CR normalized to LF. Only generation identity is canonicalized; executable/catalog/manifest SHA-256 verification always covers exact raw bytes. |
 
 `make_release.ps1` now builds the exe fresh (vcvars + `build.bat`) before the Binaries copy, then runs the parity guard — a stale or drifted exe can never ship. The 20-action RI parity is the scope verified this sprint; the source/project namespaces share the same engine but were not re-audited for byte-parity in this pass.
 
@@ -401,7 +401,7 @@ Setting names below match the actual `UMonolithSettings` UPROPERTY identifiers i
 | File | Purpose |
 |------|---------|
 | `Templates/.mcp.json.example` | Minimal MCP config. Transport type varies by client: `"http"` for Claude Code, `"streamableHttp"` for Cursor/Cline. URL: `http://localhost:9316/mcp` |
-| `Templates/.mcp.json.proxy.example` | MCP config variant for clients that need the stdio↔HTTP proxy bridge (Cursor / Cline / Continue). Spawns `Scripts/monolith_proxy.py`. |
+| `Templates/.mcp.json.proxy.example` | MCP config template rendered by onboarding for clients that need the native stdio control plane. The placeholder is replaced only with the validated immutable proxy path selected by `monolith_proxy.current.json`. |
 
 **Note on AI project-instructions files:** As of v0.14.7 we no longer ship a `CLAUDE.md.example` template. Conventions across AI assistants (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `.github/copilot-instructions.md`, etc.) drift faster than a static template can track — installers are pointed at their own assistant for the right shape. See README §Step 5.
 
@@ -475,8 +475,13 @@ YourProject/Plugins/Monolith/
     MonolithProxy/                   (MCP stdio-to-HTTP proxy source + build.bat)
     MonolithQuery/                   (Offline query tool source + build.bat)
   Binaries/
-    monolith_proxy.exe               (Compiled MCP proxy — replaces Python proxy)
-    monolith_query.exe               (Compiled offline query tool — replaces MonolithQueryCommandlet)
+    monolith_proxy.current.json       (Atomic authority for the selected native proxy image)
+    monolith_proxy-<source-hash>.exe  (Source-addressed immutable MCP proxy; full SHA-256 verified)
+    monolith_proxy.exe               (Compatibility-only fixed image; may remain locked/stale)
+    monolith_query.current.json       (Atomic authority for one immutable Query/catalog pair)
+    monolith_query-<source-hash>.exe  (Source-addressed immutable offline Query executable)
+    monolith_catalog-<semantic-hash>.json (Immutable source-scanned offline catalog)
+    monolith_query.exe               (Best-effort direct-CLI compatibility copy)
   Saved/
     .gitkeep
     monolith_offline.py              (Legacy offline CLI — superseded by monolith_query.exe)
@@ -564,9 +569,9 @@ The `editor::` namespace exposes a tight family of capture and inspect actions t
 
 The canonical pattern for the capture-style actions is `FAdvancedPreviewScene` + `USceneCaptureComponent2D` + `UTextureRenderTarget2D` + `FImageUtils::SaveImageAutoFormat` (mirrors the existing `HandleCaptureScenePreview` recipe — game-thread invoke, render-thread enqueue via `CaptureScene()`, readback via `GameThread_GetRenderTargetResource()->ReadPixels()`). The widget path additionally uses `FWidgetRenderer::DrawWidget` against the same RT (guard with `FApp::CanEverRender()` — headless commandlets and `-nullrhi` will return a clear error). The inspect-style actions skip the render path entirely: `inspect_material_pbr` walks `UMaterialEditingLibrary::GetTextureParameterNames` + `GetTextureParameterValue` then routes each through a small PBR classifier; `inspect_texture_channels` locks the source mip via `FTextureSource::LockMipReadOnly`, computes statistics in a single pass, and writes split PNGs only when `emit_splits=true`.
 
-Temporal capture follows the same evidence-first philosophy: a still PNG proves framing and a representative pose, while ordered frame PNGs plus an inspected GIF prove timing, easing, cadence, and motion readability. `editor::capture_system_gif` treats 60 fps as the default target, then degrades adaptively to 30 fps and 20 fps when machine memory, resolution, duration, or the 1000-frame action cap would make 60 fps impractical. `editor::encode_frame_sequence_gif` applies the same policy to already-captured PNG frame directories or explicit frame lists, preserving source duration while downsampling when needed. Frame PNGs remain the durable source evidence even when GIF encoding falls back from ffmpeg to python or reports an encoder blocker.
+Temporal capture follows the same evidence-first philosophy: a still PNG proves framing and a representative pose, while ordered frame PNGs plus an inspected GIF prove timing, easing, cadence, and motion readability. `editor::capture_system_gif` treats 60 fps as the default target, then degrades adaptively to 30 fps and 20 fps when machine memory, resolution, duration, or the 1000-frame action cap would make 60 fps impractical. `editor::encode_frame_sequence_gif` applies the same policy to already-captured PNG frame directories or explicit frame lists, preserving source duration while downsampling when needed. Frame PNGs remain the durable source evidence even when GIF encoding falls back from ffmpeg to python or reports an encoder blocker. Encoded GIFs are opaque RGB visual-review artifacts: both encoders normalize UE/Slate zero or undefined alpha at the encoding boundary without changing the source PNGs. GIF stores delays in 10 ms units, so the python path rounds cumulative frame boundaries into a per-frame schedule (`20 fps -> [50,...]`, `30 fps -> [30,40,30,...]`, `60 fps -> [20,10,20,20,10,20,...]`) instead of truncating each frame independently; the cumulative cadence remains aligned with the selected fps without long-run drift.
 
-Source-of-truth files: `Source/MonolithEditor/Private/MonolithEditorActions.cpp` (the `asset_type` enum extension lives inside `HandleCaptureScenePreview`), `Source/MonolithEditor/Private/MonolithEditorPreviewActions.cpp` (`capture_material_grid` + `capture_with_overlay`), `Source/MonolithEditor/Private/MonolithEditorInspectActions.cpp` (`inspect_material_pbr` + `inspect_texture_channels`). Header surface lives in `Source/MonolithEditor/Public/MonolithEditorActions.h` (four new static handler declarations alongside the existing capture handler).
+Source-of-truth files: `Source/MonolithEditor/Private/MonolithEditorActions.cpp` (the `asset_type` enum extension lives inside `HandleCaptureScenePreview`), `Source/MonolithEditor/Private/MonolithEditorGifTiming.h` (shared cumulative nearest-centisecond GIF schedule), `Source/MonolithEditor/Private/MonolithEditorPreviewActions.cpp` (`capture_material_grid` + `capture_with_overlay`), `Source/MonolithEditor/Private/MonolithEditorInspectActions.cpp` (`inspect_material_pbr` + `inspect_texture_channels`). Header surface lives in `Source/MonolithEditor/Public/MonolithEditorActions.h` (four new static handler declarations alongside the existing capture handler).
 
 **`editor::delete_assets` non-interactive deletion (v0.18.0).** `delete_assets` now takes an optional `force` bool (default `false`) and never raises a blocking modal. Before deleting each target it clears the package dirty flag and closes any open asset editor, then performs the delete inside an unattended-script guard so the engine cannot pop a Slate "asset in use" / "save changes" dialog (which would freeze an unattended MCP session). `force=false` soft-deletes after closing editors; `force=true` calls `ForceDeleteObjects`, nulling referencers. Per-asset failures are surfaced in a `failed_to_delete[]` response array instead of aborting the whole call. Native C++ — no Python. **Known limitation:** a `UNiagaraScript` created and compiled within the same session can't be deleted until its compile state clears (a transient compilation/traversal graph retains a reference — the engine's own Content Browser hits the same wall); it becomes deletable after the state clears, e.g. on editor restart. Per-action detail: [`SPEC_MonolithEditor.md`](specs/SPEC_MonolithEditor.md).
 
@@ -914,9 +919,9 @@ Unknown action / unknown namespace dispatch errors now carry a `data.suggestions
 
 **`project_query("search")` cursor pagination (WISHLIST).** Architecturally blocked by `FMonolithIndexDatabase::FullTextSearch` at `MonolithIndexDatabase.cpp:1017-1079`, which performs a UNION-and-resort across multiple FTS tables without a deterministic ordering. A CTE / `UNION ALL` refactor with stable ordering is the prerequisite; deferred to a future Phase 5+ workstream.
 
-### 14.6 Proxy Call Log (Phase 4, 2026-05-27)
+### 14.6 Native Proxy Legacy Call Log (Phase 4, 2026-05-27)
 
-Both proxies now emit a one-line-per-call JSONL log to `Saved/Logs/MonolithCalls.jsonl` (project-root-relative). Local-only, no phone-home.
+The native C++ proxy emits a one-line-per-call legacy JSONL log to `Saved/Logs/MonolithCalls.jsonl` (project-root-relative). Local-only, no phone-home. The native, Python, and Node proxies separately share the daily v3 `Logs/yyyyMMdd/proxy.jsonl` contract documented in [`SPEC_MonolithToolInvocationLogs.md`](specs/SPEC_MonolithToolInvocationLogs.md); script proxies do not emit this legacy file.
 
 **Schema.** Eight fields per line:
 
@@ -933,9 +938,9 @@ Both proxies now emit a one-line-per-call JSONL log to `Saved/Logs/MonolithCalls
 
 **Canonicalisation.** Params are JSON-canonicalised (recursively sorted object keys, no whitespace) before hashing — `FCrc::StrCrc32` is NOT used; SHA-1 over the canonical bytes is the contract. Identical params shapes hash identically regardless of input key order.
 
-**Parity.** Native proxy (`Tools/MonolithProxy/monolith_proxy.cpp`) and Python fallback (`Scripts/monolith_proxy.py`) implement the same schema. Native requires `build_proxy.bat` rebuild + Claude Code MCP reconnect to engage; Python picks up on next Claude Code start.
+**Scope.** Only the native proxy (`Tools/MonolithProxy/monolith_proxy.cpp`) implements this legacy schema. Python and Node use the daily v3 log and its `MONOLITH_TOOL_LOG_*` controls instead.
 
-**Opt-out.** Set `MONOLITH_CALL_LOG=0` in the environment. Default is on.
+**Opt-out.** Set `MONOLITH_CALL_LOG=0` in the native proxy environment. Default is on; this variable does not control the daily v3 log.
 
 **Rotation.** User-managed — delete `Saved/Logs/MonolithCalls.jsonl` to reset. The proxy appends; it does not truncate, rotate, or cap file size.
 

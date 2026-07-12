@@ -1,4 +1,5 @@
 #include "MonolithEditorActions.h"
+#include "MonolithEditorGifTiming.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithParamSchema.h"
@@ -5116,6 +5117,20 @@ namespace
 		return Value;
 	}
 
+	FString MakePythonIntegerList(const TArray<int32>& Values)
+	{
+		FString Result;
+		for (const int32 Value : Values)
+		{
+			if (!Result.IsEmpty())
+			{
+				Result += TEXT(",");
+			}
+			Result += FString::FromInt(Value);
+		}
+		return Result;
+	}
+
 	struct FMonolithGifEncodeResult
 	{
 		bool bEncoded = false;
@@ -5156,9 +5171,10 @@ namespace
 			return false;
 		}
 
+		// Temporal proof GIFs are opaque review artifacts, so preserve captured RGB while discarding Slate back-buffer alpha.
 		const FString Filter = ScaleWidth > 0
-			? FString::Printf(TEXT("fps=%d,scale=%d:-1:flags=lanczos"), FPS, ScaleWidth)
-			: FString::Printf(TEXT("fps=%d"), FPS);
+			? FString::Printf(TEXT("fps=%d,scale=%d:-1:flags=lanczos,format=rgb24"), FPS, ScaleWidth)
+			: FString::Printf(TEXT("fps=%d,format=rgb24"), FPS);
 		const FString FFmpegArgs = FString::Printf(
 			TEXT("-y -f concat -safe 0 -i \"%s\" -vf \"%s\" -loop 0 \"%s\""),
 			*FrameListPath, *Filter, *GifPath);
@@ -5200,12 +5216,25 @@ namespace
 			FrameListStr += FString::Printf(TEXT("'%s'"), *EscapePythonSingleQuotedString(Path));
 		}
 
+		const TArray<int32> FrameDelaysMilliseconds = MonolithEditorGifTiming::BuildFrameDelaysMilliseconds(
+			FramePaths.Num(),
+			FPS);
+		if (FrameDelaysMilliseconds.Num() != FramePaths.Num())
+		{
+			OutError = TEXT("failed to build the GIF frame-delay schedule.");
+			return false;
+		}
+
 		const FString NormalizedGifPath = EscapePythonSingleQuotedString(GifPath);
+		const FString FrameDelaysStr = MakePythonIntegerList(FrameDelaysMilliseconds);
+		// Pillow consumes millisecond delays but GIF stores centiseconds. The per-frame
+		// cumulative-rounding schedule preserves the selected cadence without drift.
+		// RGB input keeps the Python path aligned with ffmpeg's opaque contract.
 		const FString PyScript = FString::Printf(
-			TEXT("import imageio.v2 as imageio; frames=[imageio.imread(p) for p in [%s]]; imageio.mimsave('%s',frames,duration=%f,loop=0)"),
+			TEXT("import imageio.v3 as iio; frames=[iio.imread(p,mode='RGB') for p in [%s]]; iio.imwrite('%s',frames,extension='.gif',plugin='pillow',duration=[%s],loop=0)"),
 			*FrameListStr,
 			*NormalizedGifPath,
-			1.0 / static_cast<double>(FPS));
+			*FrameDelaysStr);
 
 		const FString PythonArgs = FString::Printf(TEXT("-c \"%s\""), *PyScript);
 
@@ -5218,7 +5247,7 @@ namespace
 			return true;
 		}
 
-		OutError = FString::Printf(TEXT("python imageio failed (code %d). Ensure python + imageio are installed. stderr: %s"),
+		OutError = FString::Printf(TEXT("python imageio failed (code %d). Ensure python + imageio + Pillow are installed. stderr: %s"),
 			ReturnCode, *StdErr.Left(500));
 		return false;
 	}
@@ -5772,6 +5801,29 @@ FMonolithActionResult FMonolithEditorActions::HandleCaptureSystemGif(
 		if (EncodeResult.bEncoded)
 		{
 			Result->SetStringField(TEXT("gif_path"), GifPath);
+			const double NominalGifDurationSeconds =
+				static_cast<double>(FramePaths.Num()) / static_cast<double>(FPS);
+			Result->SetNumberField(TEXT("gif_duration_seconds"), NominalGifDurationSeconds);
+			Result->SetNumberField(TEXT("nominal_gif_duration_seconds"), NominalGifDurationSeconds);
+			Result->SetStringField(TEXT("gif_duration_kind"), TEXT("nominal_frame_count_over_fps"));
+			if (EncodeResult.EncoderUsed == TEXT("python"))
+			{
+				const TArray<int32> FrameDelaysMilliseconds = MonolithEditorGifTiming::BuildFrameDelaysMilliseconds(
+					FramePaths.Num(),
+					FPS);
+				const double EncodedGifDurationSeconds =
+					static_cast<double>(MonolithEditorGifTiming::SumFrameDelaysMilliseconds(FrameDelaysMilliseconds)) / 1000.0;
+				Result->SetStringField(TEXT("gif_timing_mode"), TEXT("cumulative_centisecond_rounding"));
+				Result->SetNumberField(TEXT("gif_delay_unit_ms"), 10);
+				Result->SetNumberField(TEXT("encoded_gif_duration_seconds"), EncodedGifDurationSeconds);
+				Result->SetNumberField(
+					TEXT("gif_duration_quantization_error_seconds"),
+					EncodedGifDurationSeconds - NominalGifDurationSeconds);
+			}
+			else if (EncodeResult.EncoderUsed == TEXT("ffmpeg"))
+			{
+				Result->SetStringField(TEXT("gif_timing_mode"), TEXT("ffmpeg_fps_filter"));
+			}
 		}
 		else if (!EncodeResult.Error.IsEmpty())
 		{
@@ -5929,7 +5981,29 @@ FMonolithActionResult FMonolithEditorActions::HandleEncodeFrameSequenceGif(
 	Result->SetNumberField(TEXT("min_quality_fps"), GifMinFPS);
 	Result->SetNumberField(TEXT("max_preferred_fps"), GifMaxPreferredFPS);
 	Result->SetNumberField(TEXT("source_duration_seconds"), SourceDurationSeconds);
-	Result->SetNumberField(TEXT("gif_duration_seconds"), static_cast<double>(EncodedFramePaths.Num()) / static_cast<double>(FPS));
+	const double NominalGifDurationSeconds =
+		static_cast<double>(EncodedFramePaths.Num()) / static_cast<double>(FPS);
+	Result->SetNumberField(TEXT("gif_duration_seconds"), NominalGifDurationSeconds);
+	Result->SetNumberField(TEXT("nominal_gif_duration_seconds"), NominalGifDurationSeconds);
+	Result->SetStringField(TEXT("gif_duration_kind"), TEXT("nominal_frame_count_over_fps"));
+	if (EncodeResult.bEncoded && EncodeResult.EncoderUsed == TEXT("python"))
+	{
+		const TArray<int32> FrameDelaysMilliseconds = MonolithEditorGifTiming::BuildFrameDelaysMilliseconds(
+			EncodedFramePaths.Num(),
+			FPS);
+		const double EncodedGifDurationSeconds =
+			static_cast<double>(MonolithEditorGifTiming::SumFrameDelaysMilliseconds(FrameDelaysMilliseconds)) / 1000.0;
+		Result->SetStringField(TEXT("gif_timing_mode"), TEXT("cumulative_centisecond_rounding"));
+		Result->SetNumberField(TEXT("gif_delay_unit_ms"), 10);
+		Result->SetNumberField(TEXT("encoded_gif_duration_seconds"), EncodedGifDurationSeconds);
+		Result->SetNumberField(
+			TEXT("gif_duration_quantization_error_seconds"),
+			EncodedGifDurationSeconds - NominalGifDurationSeconds);
+	}
+	else if (EncodeResult.bEncoded && EncodeResult.EncoderUsed == TEXT("ffmpeg"))
+	{
+		Result->SetStringField(TEXT("gif_timing_mode"), TEXT("ffmpeg_fps_filter"));
+	}
 	Result->SetNumberField(TEXT("frame_budget"), FrameBudget);
 	Result->SetBoolField(TEXT("fps_adjusted"), !FpsAdjustment.IsEmpty());
 	Result->SetBoolField(TEXT("fps_below_quality_minimum"), bBelowMinimumDueToHardCap);

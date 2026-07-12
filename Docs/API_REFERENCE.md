@@ -41,7 +41,7 @@ The per-namespace numbers in the Table of Contents and body sections below are k
 | [gas](#gas) | 142 | Gameplay Ability System: abilities, attributes, effects, ASC, tags, cues, targeting, input, DataAsset profile inspection/writes, runtime probes, scaffold |
 | [input](#input) | 10 | Enhanced Input asset authoring for UInputAction and UInputMappingContext assets |
 | [chaos_fracture](#chaos_fracture) | 3 | Optional Geometry Collection and Fracture module visibility and asset/component listing |
-| [pcg](#pcg) | 4 | Optional PCG discovery and graph-like asset/component listing |
+| [pcg](#pcg) | 14 | Typed PCG graph discovery, authoring, validation, and guarded reference migration |
 | [dataflow](#dataflow) | 8 | Optional read-only Dataflow/Chaos graph discovery, bounded graph/node-schema reads, and validation (graph readers under `WITH_MONOLITH_DATAFLOW`) |
 | [source_control](#source_control) | 11 | Unreal SourceControl-provider status, file prepare/delete/revert operations, and Perforce opened/path mapping |
 | [water](#water) | 2 | Optional Water/Landscape discovery and actor/component listing |
@@ -745,21 +745,7 @@ Stitch frame PNGs into a flipbook atlas. Used by the VFX training harness.
 
 > **Experimental flag.** Designed for the VFX training harness. Treat as best-effort.
 
-### `asset.delete_assets`
-
-Delete UE assets by path. **Experimental.** Use the `allowed_prefixes` safety guard.
-
-Runs non-interactively: each target's package dirty flag is cleared and any open asset editor is closed before deletion, and the delete itself runs inside an unattended-script guard so the engine never raises a blocking "asset in use" / "save changes" modal (which would freeze an unattended MCP session).
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `asset_paths` | array | **required** | UE asset paths to delete |
-| `allowed_prefixes` | array | optional | Restrict to paths starting with one of these (e.g. `["/Game/AgentTraining/"]`) |
-| `force` | bool | optional | `false` (default): soft-delete after closing editors. `true`: `ForceDeleteObjects`, nulling referencers |
-
-**Result:** any assets that could not be deleted are returned in a `failed_to_delete` array rather than aborting the call.
-
-> **Known limitation.** A NiagaraScript created and compiled in the same session can't be deleted until its compile state clears — a transient compilation graph holds a reference (the engine's own Content Browser hits the same wall). It becomes deletable after the state clears, e.g. on editor restart.
+> `asset.delete_assets` is owned by `MonolithAsset`, not the `editor` namespace. See the canonical [`asset.delete_assets`](#assetdelete_assets) section for its package-segment prefix guard, force-mode disk-residual handling, and per-target postconditions.
 
 ### `editor.get_viewport_info`
 
@@ -767,7 +753,7 @@ Current editor viewport camera position, rotation, FOV, resolution. *No paramete
 
 ### `editor.capture_system_gif`
 
-Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by trying ffmpeg first and python imageio second. The action records the actual fps, any adaptive degradation, all frame paths, and GIF/encoder status.
+Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by trying ffmpeg first and python imageio second. The action records the actual fps, any adaptive degradation, all frame paths, and GIF/encoder status. The encoded GIF is an opaque RGB visual-review artifact: UE/Slate frames with zero or undefined alpha are normalized at the encoder boundary without modifying the original PNG evidence. The ffmpeg and python paths apply the same opacity contract. Because GIF stores time in 10 ms units, the python path rounds cumulative frame boundaries and emits a per-frame millisecond schedule instead of truncating `1000 / fps`; examples are `20 fps -> [50,...]`, `30 fps -> [30,40,30,...]`, and `60 fps -> [20,10,20,20,10,20,...]`. The response keeps `gif_duration_seconds` as the backward-compatible nominal `frame_count / fps` value and labels it with `gif_duration_kind`; Python output additionally reports `encoded_gif_duration_seconds`, `gif_duration_quantization_error_seconds`, `gif_delay_unit_ms=10`, and `gif_timing_mode="cumulative_centisecond_rounding"`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -780,7 +766,7 @@ Capture a Niagara system as ordered PNG frames and, by default, encode a GIF by 
 
 ### `editor.encode_frame_sequence_gif`
 
-Encode already-captured ordered PNG frames into a GIF without recapturing editor content. Use this for PIE screenshot/frame automation after the PNG frames already exist. The default target is 60 fps; the action preserves source duration while downsampling frames and degrades under resource pressure to 30 fps, 20 fps, or a lower reported rate only when the hard frame budget requires it.
+Encode already-captured ordered PNG frames into a GIF without recapturing editor content. Use this for PIE screenshot/frame automation after the PNG frames already exist. The default target is 60 fps; the action preserves source duration while downsampling frames and degrades under resource pressure to 30 fps, 20 fps, or a lower reported rate only when the hard frame budget requires it. The output GIF is always an opaque RGB visual-review artifact: both ffmpeg and python normalize UE/Slate zero or undefined alpha during encoding, leave every source PNG unchanged, and use the selected fps as the timing contract. The python encoder converts that timing to a per-frame 10 ms schedule by rounding cumulative frame boundaries, which prevents the drift caused by independently truncating every `1000 / fps` delay. `gif_duration_seconds` and `nominal_gif_duration_seconds` report the nominal frame-count duration for compatibility; `gif_duration_kind` makes that semantic explicit, while Python output reports the exact scheduled `encoded_gif_duration_seconds` and its quantization error separately.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -891,7 +877,7 @@ Scan a build/archive output directory and return a JSON manifest object. Optiona
 | `archive_dir` | string | **required** | Existing build/archive directory to scan |
 | `manifest_path` | string | optional | Manifest output path. Defaults to `<archive_dir>/manifest.json` |
 | `recursive` | bool | optional | Scan recursively. Default: `true` |
-| `limit` | number | optional | Maximum files to include. Default: `5000` |
+| `limit` | number | optional | Maximum files to include, clamped to 1..50000. Default: `5000` |
 | `write_manifest` | bool | optional | Write the manifest when confirmed. Default: `false` |
 | `dry_run` | bool | optional | Preview without writing. Default: `true` |
 | `confirm` | bool | optional | Required for manifest write |
@@ -905,7 +891,7 @@ Plan or copy screenshot/evidence files to a destination directory. Accepts expli
 | `files` | array | optional | Explicit file paths |
 | `source_dir` | string | optional | Directory scanned when `files` is omitted |
 | `dest_dir` | string | **required** | Destination directory |
-| `limit` | number | optional | Maximum files to mirror. Default: `200` |
+| `limit` | number | optional | Maximum files to mirror, clamped to 1..10000. Default: `200` |
 | `dry_run` | bool | optional | Preview copy rows. Default: `true` |
 | `confirm` | bool | optional | Required for copying |
 
@@ -1155,7 +1141,7 @@ Get effective value of a config key across the full INI hierarchy.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `file` | string | **required** | Config category (e.g. `Engine`, `Game`, `Input`) |
+| `file` | string | optional | Config category (e.g. `Engine`, `Game`, `Input`). When omitted, the section/key is searched across `Engine`, `Game`, `Input`, `Editor`, `Scalability`, `GameUserSettings`; the response reports the matched `category` and the `searched_categories` list |
 | `section` | string | **required** | Config section (e.g. `/Script/Engine.RendererSettings`) |
 | `key` | string | **required** | Config key name |
 
@@ -2052,14 +2038,24 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithChaosFracture.md` for the deep div
 
 ## pcg
 
-Optional PCG discovery and graph-like asset/component listing. Read-only probes; does not load PCG graph assets or execute PCG. **4 actions.**
+Typed PCG graph discovery, asset creation, transactional node/edge/settings editing, bounded structural read-back and validation, plus guarded copied-graph soft-reference migration. Typed authoring rejects cycles, half-attached edges, ambiguous authored titles, implicit single-input replacement, and implicit filter/conversion insertion; settings writes honor property-chain editability and editor callbacks. Graph mutations validate before persistence so an error is never introduced by a non-atomic validator after the package file changes. `get_pcg_graph_info` applies `pin_limit` per input/output direction and a shared `response_item_limit` across nodes, pins, edges, and nested settings; callers must inspect truncation flags and returned counts. Component assignment/generation execution remains unavailable. **14 actions.**
 
 | Action | Params |
 |--------|--------|
 | `get_status` | none |
 | `list_graph_assets` | `package_path` (optional string), `limit` (optional integer) |
 | `get_graph_asset` | `asset_path`, `include_tags` (optional boolean), `tag_limit` (optional integer) |
+| `remap_graph_references` | `asset_path`, `root_remaps`, `dry_run` (optional boolean), `confirm` (optional boolean), `require_targets` (optional boolean), `save` (optional boolean), `strict` (optional boolean), `max_objects` (optional integer), `max_references` (optional integer) |
 | `list_components` | `limit` (optional integer) |
+| `list_pcg_node_types` | `query` (optional string), `include_properties` (optional boolean), `property_limit` (optional integer), `limit` (optional integer) |
+| `create_pcg_graph` | `asset_path`, `existing_policy` (optional string), `save` (optional boolean) |
+| `get_pcg_graph_info` | `asset_path`, `include_settings` (optional boolean), `settings_fields` (optional array), `property_limit` (optional integer), `array_limit` (optional integer), `node_limit` (optional integer), `edge_limit` (optional integer), `pin_limit` (optional integer), `response_item_limit` (optional integer) |
+| `add_pcg_node` | `asset_path`, `node_type`, `node_title` (optional string), `existing_policy` (optional string), `position` (optional array), `properties` (optional object), `save` (optional boolean) |
+| `remove_pcg_node` | `asset_path`, `node_id`, `save` (optional boolean) |
+| `connect_pcg_nodes` | `asset_path`, `source_node`, `source_pin`, `target_node`, `target_pin`, `save` (optional boolean) |
+| `disconnect_pcg_nodes` | `asset_path`, `source_node`, `source_pin`, `target_node`, `target_pin`, `save` (optional boolean) |
+| `set_pcg_node_params` | `asset_path`, `node_id`, `properties`, `dry_run` (optional boolean), `save` (optional boolean) |
+| `validate_pcg_graph` | `asset_path`, `require_output_connection` (optional boolean), `require_no_isolated_nodes` (optional boolean), `issue_limit` (optional integer) |
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithPCG.md` for the deep dive.
 
@@ -2291,7 +2287,7 @@ See `Plugins/Monolith/Docs/specs/SPEC_MonolithAI.md` for the deep dive — it's 
 
 ## lyra
 
-Reflection-based Lyra semantic inspection, validation, and guarded authoring. **20 actions.** The module resolves `/Script/LyraGame.*` classes reflectively and has no compile-time dependency on LyraGame, CommonGame, EOS, or Speed runtime modules.
+Reflection-based Lyra semantic inspection, validation, and guarded authoring. **21 actions.** The module resolves `/Script/LyraGame.*` classes reflectively and has no compile-time dependency on LyraGame, CommonGame, EOS, or Speed runtime modules.
 
 | Action | Params |
 |--------|--------|
@@ -2313,6 +2309,7 @@ Reflection-based Lyra semantic inspection, validation, and guarded authoring. **
 | `describe_character_part_graph` | optional `part_classes` |
 | `validate_character_part_assets` | optional `part_classes`, `require_non_empty` |
 | `set_experience_defaults` | `experience_path`, optional `default_pawn_data`, `action_sets`, `game_features_to_enable`, `dry_run`, `confirm`, `save`, `strict` |
+| `add_experience_component_entry` | exactly one of `experience_path` or `action_set_path`; required `actor_class`, `component_class`; optional `action_name`, `client_component`, `server_component`, `addition_flags`, `dry_run`, `confirm`, `save` |
 | `remove_experience_component_entry` | optional `experience_path`, `action_set_path`, `action_index`, `action_name`, `actor_class`, `component_class`, `component_index`, plus `dry_run`, `confirm`, `save` |
 | `set_user_facing_experience` | `user_facing_experience_path`, optional `map_id`, `experience_id`, `extra_args`, tile fields, loading widget, session flags, `dry_run`, `confirm`, `save`, `strict` |
 
@@ -2342,7 +2339,9 @@ Validate reflected `ULyraGamePhaseAbility` classes and their `GamePhaseTag` valu
 
 ### Guarded write actions
 
-`set_experience_defaults`, `remove_experience_component_entry`, and `set_user_facing_experience` require `dry_run=true` or `confirm=true`; `save=true` persists packages only after a confirmed clean mutation. Missing assets/properties are returned as explicit errors or check rows, never hidden behind fallback assets.
+`set_experience_defaults`, `add_experience_component_entry`, `remove_experience_component_entry`, and `set_user_facing_experience` require `dry_run=true` or `confirm=true`; `save=true` persists packages only after a confirmed clean mutation.
+
+`add_experience_component_entry` targets exactly one Lyra Experience or explicit ExperienceActionSet. It validates the supplied actor/component subclasses, creates or reuses a reflected `GameFeatureAction_AddComponents`, adds a missing actor/component pair, and updates only `bClientComponent`, `bServerComponent`, and `AdditionFlags` when the pair already exists. A supplied `action_name` is created or reused as that exact instanced-object `FName` and never receives an automatic numeric suffix; a same-name direct child with an incompatible class, or a compatible orphan not referenced by the owner's `Actions` array, fails explicitly in both dry-run and commit. `MakeUniqueObjectName` is used only when `action_name` is omitted. With multiple AddComponents actions and no `action_name`, an action already owning the pair is preferred; duplicate matching pairs are reported as explicit errors. No-op calls do not dirty or save the package. Missing assets/properties are returned as explicit errors or check rows, never hidden behind fallback assets.
 
 See `Plugins/Monolith/Docs/specs/SPEC_MonolithLyra.md`.
 
@@ -2596,8 +2595,11 @@ Decode base64 image bytes and import them as a UTexture2D asset.
 | `format_hint` | string | **required** | Image format: png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds. |
 | `texture_role` | string | optional | Texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive. |
 | `settings` | object | optional | Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize. |
+| `conflict_policy` | string | optional | Existing destination handling: `fail`, `replace`, or `unique`. Default: `fail` |
 | `save` | bool | optional | Save the imported texture asset. Default: `true` |
 | `return_processed_png` | bool | optional | Return postprocessed imported pixels re-encoded as PNG. Default: `false` |
+
+`fail` guarantees the exact requested package path and errors on any existing package instead of silently suffixing it. Only `unique` may call Unreal unique-name resolution and return a different `asset_path`. `replace` updates the exact existing top-level `UTexture2D` in the same UObject and package identity; another class, missing top-level asset, or redirected identity is rejected. Before mutation, replacement moves the complete original `FTextureSource` object, caller-facing settings, PostEdit/save side-effect values, CPU-copy helper identity, and package dirty state into an armed RAII snapshot. Complete running/cooked platform ownership is moved with it, preserving mip bulk and derived-data handles, VT/CPU copies, encoder metadata, hashes, and DDC/fetch keys rather than rebuilding from pixel bytes. A failure restores and verifies that state and re-notifies dependent materials; failed new creation removes the object/package header and sidecars. `LODGroup`, `CompressionSettings`, `SRGB`, `MipGenSettings`, `AddressX`, and `AddressY` changes emit property-specific editor callbacks. Whole-object source transfer supports long-lat, compressed, blocked/layered, and missing-running-platform-data textures; a null original platform pointer is restored to null. Replacement rejects active running/cooked platform builds, non-null `ResourceMem`, and aliased/duplicate cooked platform ownership before mutation. The response distinguishes intent and outcome through `requested_asset_path`, `asset_path`, `created`, `replaced`, and `conflict_policy`.
 
 ### `asset.import_font_family`
 
@@ -2614,22 +2616,27 @@ Import a font family from one or more TTF files as a composite UFont plus UFontF
 
 ### `asset.save_asset`
 
-Save a loaded asset package to disk.
+Save a loaded asset package to disk and enforce persistence postconditions.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Asset path to save |
+| `verify_reload` | boolean | optional | Reload the clean package non-interactively and resolve the same asset/class again. Default: `false` |
+
+Every successful save requires the package to be clean, its package file to exist, and the file size to be greater than zero. The response reports canonical path/class/package data plus `saved`, `was_dirty`, `dirty_after_save`, `exists_on_disk`, `filename`, and `file_size`. With `verify_reload=true`, `reloaded` and `reloaded_class` prove reload persistence; verification is rejected for `UWorld`, every package with `ContainsMap()`, and assets with an open editor.
 
 ### `asset.delete_assets`
 
-Delete UE assets by path. Optional safety: restrict to allowed path prefixes.
+Delete UE assets by path with package-segment guards and per-target postconditions.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `asset_paths` | string[] | **required** | Array of UE asset paths to delete |
-| `allowed_prefixes` | string[] | optional | Only paths starting with these prefixes may be deleted |
-| `dry_run` | boolean | optional | Validate and report targets without deleting. Default: `false` |
-| `force` | boolean | optional | Force-delete referenced assets after closing open editors. Default: `false` |
+| `asset_paths` | string[] | **required** | Non-empty array of non-empty UE asset-path strings. Any malformed member rejects the request. |
+| `allowed_prefixes` | string[] | optional | When supplied, this must be a non-empty array of non-empty strings. Each package must equal an allowed prefix or be a slash-delimited descendant. A prefix such as `/Game/Foo` does not permit `/Game/FooSibling`. |
+| `dry_run` | boolean | optional | Validate and report without changing dirty/editor/string-table/package/source-control/file/registry state. Default: `false` |
+| `force` | boolean | optional | Also evict package state and remove source-control-aware disk-only package residuals, including targets with no loaded object or AssetRegistry row. Default: `false` |
+
+The response includes one `targets[]` row per normalized package. Commit statuses are `deleted`, `residual_removed`, `already_absent`, or `failed`; dry-run statuses are `would_delete`, `would_remove_residual`, force-mode `already_absent`, or `not_found`. Committed deletion uses Unreal's editor garbage-collection keep flags, so evicting the requested package does not collect unrelated `RF_Standalone` assets or discard their unsaved edits. In force mode a target succeeds only when no loaded package, AssetRegistry entry, `.uasset`/`.umap`/`.utxt`/`.utxtmap` header, or `.uexp`/`.ubulk`/`.uptnl`/`.m.ubulk`/`.upayload` sidecar remains and no source-control failure occurred. When source control is enabled, provider/state unavailability or a failed/unsupported revert/delete blocks direct deletion and fails the target. Each committed row reports `postcondition_met`, remaining package/registry state, `residual_files`, `source_control_failure`, and an optional `failure_reason`; top-level `success` is true only when every target succeeds.
 
 ### `asset.find_assets`
 
