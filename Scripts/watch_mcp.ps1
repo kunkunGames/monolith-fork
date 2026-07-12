@@ -4,10 +4,14 @@ Keep the Monolith editor-backed MCP endpoint online for agent work.
 
 .DESCRIPTION
 Long-running watchdog for project checkouts that use Monolith through the
-editor-hosted HTTP MCP endpoint. The script probes /health repeatedly. When the
-endpoint is down and no editor-server candidate process remains, it runs the
-host project's primary editor UBT build, then delegates the launch/wait/reconnect
-sequence to Scripts/recover_mcp.ps1.
+editor-hosted HTTP MCP endpoint. The script probes /health repeatedly and accepts
+it only when the complete JSON contract and reported Unreal Editor PID identify
+this checkout's .uproject and exclusively own the relevant listener PID set.
+When health is not trusted, any occupied or unreadable MCP listener blocks
+before build, launch, or process-stop mutations. When the endpoint is down, the
+port is provably clear, and no current-project editor-server candidate remains,
+the watchdog runs the host project's primary editor UBT build, then delegates
+the launch/wait/reconnect sequence to Scripts/recover_mcp.ps1.
 
 When the endpoint is healthy, the same long-running process can perform one
 daily Monolith index maintenance pass. By default this runs at 05:00 Korea
@@ -41,9 +45,9 @@ launches the editor.
 .PARAMETER ProbeBuildLocksOnly
 Probe the UBT link outputs (project and plugin UnrealEditor-*.dll files) for
 processes that hold them open and exit. Exit 0 when all outputs are free,
-exit 2 when at least one is locked. Never builds, recovers, or launches the
-editor. Use to verify the DLL-lock preflight against a live editor or game
-client.
+exit 2 when at least one is locked, and exit 11 when an unexpected write-probe
+error prevents a complete verdict. Never builds, recovers, or launches the
+editor. Use to verify the DLL-lock preflight against a live editor or game client.
 
 .PARAMETER MaxRestartAttempts
 Maximum build+restart cycles before backing off. 0 means unlimited. Past the
@@ -106,6 +110,8 @@ daily schedule. Combine with -Once for a smoke test.
 .PARAMETER SkipRestartReindex
 Skip the restart recovery indexing pass. Normal restart recovery runs source and
 graph maintenance before launch and asset maintenance after MCP health returns.
+Pre-launch maintenance failure does not prevent endpoint recovery; requested
+targets are retried after health returns.
 
 .PARAMETER RestartReindexMode
 Indexing mode for restart-triggered maintenance: incremental (default) or full.
@@ -133,6 +139,8 @@ Notable events:
                         build was skipped instead of failing with LNK1104
   BuildLocksPresent     -ProbeBuildLocksOnly found locked link outputs
   BuildLocksClear       -ProbeBuildLocksOnly found all link outputs free
+  BuildLockProbeFailed  an unexpected write-probe error made the scan
+                        incomplete; UBT was not started
   RestartLimit          MaxRestartAttempts exceeded; probe sleep backs off
   RestartAttemptsReset  healthy probe cleared the restart budget
   RecoverTimeout        recover child exceeded its invoke timeout and was killed
@@ -141,19 +149,22 @@ Notable events:
   DailyReindexFailed    scheduled/manual index maintenance failed
   RestartReindexOk      restart-triggered index maintenance succeeded
   RestartReindexFailed  restart-triggered index maintenance failed
-  Blocked               required project/wrapper/build files are missing
+  Blocked               required project/wrapper/build files are missing, or an
+                        occupied endpoint fails trusted project/process identity
 
 Exit codes:
   0  endpoint is up, or recover cycle succeeded in -Once mode, or
      -ProbeBuildLocksOnly found all link outputs free
   2  endpoint down and -ProbeOnly was requested, or -ProbeBuildLocksOnly
      found locked link outputs
-  3  blocked: host root, .uproject, resolver, UBT, or recover script missing
+  3  blocked: host root, .uproject, resolver, UBT, recover script, or trusted
+     endpoint/listener identity missing
   4  build failed before restart
   7  restart limit reached
   8  index maintenance failed in -Once mode
-  10 build skipped: UBT link outputs are locked by another process
   9  unhandled terminating error (RESULT=FATAL logged as the last line)
+  10 build skipped: UBT link outputs are locked by another process
+  11 build skipped: an unexpected DLL write-probe error prevented a complete scan
   otherwise recover_mcp.ps1 exit code when -Once is used and recovery fails
   (a recover child killed on timeout surfaces as recover exit code 124)
 #>
@@ -473,13 +484,50 @@ function Write-Watchdog {
 }
 
 function Get-MonolithHealth {
+    $script:lastHealthErrorClass = $null
+    $script:lastHealthErrorCode = $null
+    $script:lastHealthStatusCode = $null
     try {
-        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing
+        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+        $script:lastHealthStatusCode = [int]$resp.StatusCode
         if ($resp.StatusCode -eq 200) {
-            try { return $resp.Content | ConvertFrom-Json } catch { return [PSCustomObject]@{ status = 'ok' } }
+            try {
+                $health = $resp.Content | ConvertFrom-Json -ErrorAction Stop
+            }
+            catch {
+                $script:lastHealthErrorClass = 'invalid_json'
+                $script:lastHealthErrorCode = 'http_200_body_not_json'
+                return $null
+            }
+
+            $contract = Test-MonolithHealthContract -Health $health -ExpectedPort (Get-McpHealthPort)
+            if (-not $contract.Valid) {
+                $script:lastHealthErrorClass = 'health_contract'
+                $script:lastHealthErrorCode = $contract.ErrorCode
+                return $null
+            }
+
+            $identity = Test-MonolithHealthProcessIdentity -Health $health -Root $script:hostRoot
+            if (-not $identity.Valid) {
+                $script:lastHealthErrorClass = 'health_identity'
+                $script:lastHealthErrorCode = $identity.ErrorCode
+                return $null
+            }
+            $listenerIdentity = Test-MonolithHealthListenerIdentity -Health $health -Port (Get-McpHealthPort)
+            if (-not $listenerIdentity.Valid) {
+                $script:lastHealthErrorClass = 'health_identity'
+                $script:lastHealthErrorCode = $listenerIdentity.ErrorCode
+                return $null
+            }
+            return $health
         }
+        $script:lastHealthErrorClass = 'http_status'
+        $script:lastHealthErrorCode = ("status_{0}" -f $resp.StatusCode)
     }
-    catch { }
+    catch {
+        $script:lastHealthErrorClass = 'request_failed'
+        $script:lastHealthErrorCode = $_.Exception.Message
+    }
     return $null
 }
 
@@ -825,9 +873,204 @@ function Resolve-HostRoot {
     return $null
 }
 
+function Get-McpHealthPort {
+    try {
+        $uri = [System.Uri]$healthUrl
+        if ($uri.Port -gt 0) { return [int]$uri.Port }
+    }
+    catch { }
+    return 9316
+}
+
+function Test-MonolithJsonNumber {
+    param($Value, [switch]$AllowZero, [switch]$AllowFraction)
+
+    if ($null -eq $Value -or $Value -is [bool] -or -not ($Value -is [ValueType])) {
+        return $false
+    }
+    try {
+        $number = [double]$Value
+        if ([double]::IsNaN($number) -or [double]::IsInfinity($number) -or
+            (-not $AllowFraction -and [Math]::Floor($number) -ne $number)) {
+            return $false
+        }
+        return $(if ($AllowZero) { $number -ge 0 } else { $number -gt 0 })
+    }
+    catch {
+        return $false
+    }
+}
+
+function Test-MonolithHealthContract {
+    param($Health, [int]$ExpectedPort)
+
+    if ($null -eq $Health -or $Health -is [System.Array]) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_not_object' }
+    }
+    if ([string]$Health.status -cne 'ok') {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'status_not_ok' }
+    }
+    if (-not (Test-MonolithJsonNumber -Value $Health.pid)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'pid_not_positive_integer' }
+    }
+    if (-not (Test-MonolithJsonNumber -Value $Health.port) -or [int]$Health.port -ne $ExpectedPort) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'port_mismatch' }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$Health.version)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'version_missing' }
+    }
+    if (-not (Test-MonolithJsonNumber -Value $Health.uptime_seconds -AllowZero -AllowFraction)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'uptime_invalid' }
+    }
+    if (-not (Test-MonolithJsonNumber -Value $Health.tools_registered)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'tools_registered_invalid' }
+    }
+    if ($null -eq $Health.mcp_transport -or [string]$Health.mcp_transport.primary_route -cne '/mcp') {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'primary_route_invalid' }
+    }
+    return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+}
+
+function Test-MonolithEditorCommandLineForProject {
+    param([string]$CommandLine, [string]$ProjectFile)
+
+    if ([string]::IsNullOrWhiteSpace($CommandLine) -or [string]::IsNullOrWhiteSpace($ProjectFile)) {
+        return $false
+    }
+    if ($CommandLine -match '(?i)(^|\s)-(game|server)(\s|$)' -or
+        $CommandLine -match '(?i)(^|\s)-run(?:=|\s)' -or
+        $CommandLine -match '(?i)bMcpServerEnabled\s*[:=]\s*False') {
+        return $false
+    }
+
+    $normalizedCommandLine = $CommandLine.Replace('/', '\')
+    $normalizedProjectFile = ([System.IO.Path]::GetFullPath($ProjectFile)).Replace('/', '\')
+    return $normalizedCommandLine.IndexOf($normalizedProjectFile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
+function Test-MonolithHealthProcessIdentity {
+    param($Health, [string]$Root, $ProcessRecord)
+
+    $projectFile = Get-ProjectFile -Root $Root
+    if (-not $projectFile) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'project_file_missing' }
+    }
+
+    $pidValue = [int]$Health.pid
+    $process = $ProcessRecord
+    if (-not $PSBoundParameters.ContainsKey('ProcessRecord')) {
+        $process = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $pidValue) -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $process) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_not_found' }
+    }
+
+    $processName = [System.IO.Path]::GetFileName([string]$process.Name)
+    if ($processName -notin @('UnrealEditor.exe', 'UnrealEditor-Cmd.exe')) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_not_unreal_editor' }
+    }
+    if (-not (Test-MonolithEditorCommandLineForProject -CommandLine ([string]$process.CommandLine) -ProjectFile $projectFile.FullName)) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_wrong_project_or_mode' }
+    }
+    return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+}
+
+function Get-MonolithListenerSummary {
+    param([int]$Port)
+
+    try {
+        $listeners = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction Stop)
+        return [PSCustomObject]@{
+            Count = $listeners.Count
+            Pids = @($listeners | ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
+            Error = $null
+        }
+    }
+    catch {
+        $netstatError = $_.Exception.Message
+        try {
+            $netstat = Get-Command 'netstat.exe' -ErrorAction Stop
+            $netstatOutput = @(& $netstat.Source -ano -p tcp 2>$null)
+            if ($LASTEXITCODE -ne 0) {
+                throw ("netstat exited {0}" -f $LASTEXITCODE)
+            }
+            $rows = @($netstatOutput | Where-Object {
+                    $_ -match (":{0}\s" -f [regex]::Escape([string]$Port)) -and $_ -match '\sLISTENING\s+(\d+)\s*$'
+                })
+            return [PSCustomObject]@{
+                Count = $rows.Count
+                Pids = @($rows | ForEach-Object {
+                        if ($_ -match '\sLISTENING\s+(\d+)\s*$') { [int]$Matches[1] }
+                    } | Sort-Object -Unique)
+                Error = $null
+            }
+        }
+        catch {
+            $netstatError = ("{0}; netstat fallback: {1}" -f $netstatError, $_.Exception.Message)
+            return [PSCustomObject]@{ Count = -1; Pids = @(); Error = $netstatError }
+        }
+    }
+}
+
+function Test-MonolithHealthListenerIdentity {
+    param($Health, [int]$Port, $ListenerSummary)
+
+    $summary = $ListenerSummary
+    if (-not $PSBoundParameters.ContainsKey('ListenerSummary')) {
+        $summary = Get-MonolithListenerSummary -Port $Port
+    }
+    if ($null -eq $summary -or $summary.Count -lt 0) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'listener_ownership_unavailable' }
+    }
+    $listenerPids = @($summary.Pids | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    if ($listenerPids.Count -ne 1) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_not_exclusive_listener_owner' }
+    }
+    $healthPid = [int]$Health.pid
+    if ($healthPid -ne $listenerPids[0]) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'health_pid_not_listener_owner' }
+    }
+    return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+}
+
+function Test-MonolithRecoveryPortClear {
+    param($ListenerSummary)
+
+    if ($null -eq $ListenerSummary -or $ListenerSummary.Count -lt 0) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'listener_ownership_unavailable' }
+    }
+
+    $listenerPids = @($ListenerSummary.Pids | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    if ([int]$ListenerSummary.Count -eq 0 -and $listenerPids.Count -eq 0) {
+        return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+    }
+    if ([int]$ListenerSummary.Count -le 0 -or $listenerPids.Count -eq 0) {
+        return [PSCustomObject]@{ Valid = $false; ErrorCode = 'listener_summary_inconsistent' }
+    }
+    return [PSCustomObject]@{ Valid = $false; ErrorCode = 'listener_present_without_trusted_health' }
+}
+
+function Get-MonolithRecoveryPortGate {
+    param([int]$Port)
+
+    $summary = Get-MonolithListenerSummary -Port $Port
+    $validation = Test-MonolithRecoveryPortClear -ListenerSummary $summary
+    return [PSCustomObject]@{
+        Valid = $validation.Valid
+        ErrorCode = $validation.ErrorCode
+        Count = $summary.Count
+        Pids = @($summary.Pids)
+        Error = $summary.Error
+    }
+}
+
 function Get-EditorServerCandidates {
+    param([string]$Root = $script:hostRoot)
+
     $procs = @(Get-Process -Name 'UnrealEditor', 'UnrealEditor-Cmd' -ErrorAction SilentlyContinue)
     if ($procs.Count -eq 0) { return @() }
+    $projectFile = Get-ProjectFile -Root $Root
+    if (-not $projectFile) { return @() }
 
     $cims = @{}
     Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" -ErrorAction SilentlyContinue |
@@ -835,15 +1078,14 @@ function Get-EditorServerCandidates {
 
     return @($procs | Where-Object {
             $cmd = $cims[$_.Id]
-            (-not $cmd) -or (
-                (-not ($cmd -match '(?i)(^|\s)-(game|server)(\s|$)')) -and
-                (-not ($cmd -match '(?i)bMcpServerEnabled\s*[:=]\s*False'))
-            )
+            (-not $cmd) -or (Test-MonolithEditorCommandLineForProject -CommandLine $cmd -ProjectFile $projectFile.FullName)
         })
 }
 
 function Get-HeadlessEditorCandidates {
-    $procs = @(Get-Process -Name 'UnrealEditor', 'UnrealEditor-Cmd' -ErrorAction SilentlyContinue)
+    param([string]$Root = $script:hostRoot)
+
+    $procs = @(Get-EditorServerCandidates -Root $Root)
     if ($procs.Count -eq 0) { return @() }
 
     $cims = @{}
@@ -932,6 +1174,7 @@ function Get-BuildBlockingLocks {
     # builds succeeded with read-only files present.
     $locked = @()
     $readOnly = @()
+    $probeErrors = @()
     $shareAll = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
     foreach ($file in (Get-BuildLockCandidateFiles -Root $Root)) {
         if ($file.IsReadOnly) {
@@ -952,12 +1195,31 @@ function Get-BuildBlockingLocks {
         catch [System.UnauthorizedAccessException] {
             $readOnly += $file.FullName
         }
-        catch {}
+        catch {
+            # Never erase an unknown probe failure. A partial scan cannot prove
+            # that UBT may safely replace every output, so callers fail closed
+            # and surface a bounded diagnostic instead of starting the build.
+            $probeErrors += [PSCustomObject]@{
+                Path = $file.FullName
+                ExceptionType = $_.Exception.GetType().FullName
+                Message = $_.Exception.Message
+            }
+        }
     }
     return [PSCustomObject]@{
-        Locked   = @($locked)
+        Locked = @($locked)
         ReadOnly = @($readOnly)
+        ProbeErrors = @($probeErrors)
     }
+}
+
+function Format-BuildProbeErrors {
+    param($ProbeErrors)
+
+    $items = @($ProbeErrors | Select-Object -First 8 | ForEach-Object {
+            ("{0}|{1}|{2}" -f $_.Path, $_.ExceptionType, $_.Message)
+        })
+    return (Format-WatchdogValue ($items -join ';'))
 }
 
 function Get-BuildLockHolderPids {
@@ -1125,22 +1387,62 @@ function Invoke-PreRestartReindex {
     return $ok
 }
 
-function Invoke-PostRecoverAssetReindex {
-    param([string]$Root)
+function Invoke-PostRecoverReindex {
+    param(
+        [string]$Root,
+        [switch]$RetryPreRestartTargets
+    )
 
-    if ($SkipRestartReindex -or -not (Test-IndexTarget -Targets $RestartReindexTargets -Target 'assets')) {
+    if ($SkipRestartReindex) {
         return $true
     }
 
-    $ok = Invoke-DailyReindex -Root $Root -Reason 'restart_post_mcp_health' `
-        -Mode $RestartReindexMode -Targets @('assets') -GraphCooldownSeconds $DailyGraphCooldownSeconds -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
+    $targets = @()
+    $phase = 'post_recover_assets'
+    if ($RetryPreRestartTargets) {
+        $targets = @($RestartReindexTargets)
+        $phase = 'post_recover_retry'
+    }
+    elseif (Test-IndexTarget -Targets $RestartReindexTargets -Target 'assets') {
+        $targets = @('assets')
+    }
+    if ($targets.Count -eq 0) { return $true }
+
+    $ok = Invoke-DailyReindex -Root $Root -Reason $phase `
+        -Mode $RestartReindexMode -Targets $targets -GraphCooldownSeconds $DailyGraphCooldownSeconds -Prefix 'restart_reindex' -ResultToken 'RESTART_REINDEX'
+    $targetsText = $targets -join ','
     if ($ok) {
-        Write-Watchdog ("RESULT=RESTART_REINDEX_OK phase=post_recover_assets mode={0} targets=assets" -f $RestartReindexMode)
+        Write-Watchdog ("RESULT=RESTART_REINDEX_OK phase={0} mode={1} targets={2}" -f $phase, $RestartReindexMode, $targetsText)
     }
     else {
-        Write-Watchdog ("RESULT=RESTART_REINDEX_FAILED phase=post_recover_assets mode={0} targets=assets" -f $RestartReindexMode)
+        Write-Watchdog ("RESULT=RESTART_REINDEX_FAILED phase={0} mode={1} targets={2} endpoint_recovered=true" -f `
+                $phase, $RestartReindexMode, $targetsText)
     }
     return $ok
+}
+
+function Start-WatchdogChildProcess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(Mandatory = $true)]
+        [string]$ArgumentList,
+        [Parameter(Mandatory = $true)]
+        [string]$StandardOutputPath,
+        [Parameter(Mandatory = $true)]
+        [string]$StandardErrorPath
+    )
+
+    $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -NoNewWindow -PassThru `
+        -RedirectStandardOutput $StandardOutputPath -RedirectStandardError $StandardErrorPath
+
+    # Windows PowerShell 5.1 lazily initializes the native process handle for a
+    # Start-Process -PassThru object. If the child exits before the handle is read,
+    # ExitCode remains $null even after WaitForExit()/Refresh(). Pin the handle while
+    # the process is live so a successful recover is reported as 0 instead of being
+    # mistaken for a failure and killing the editor that just recovered.
+    [void]$process.Handle
+    return $process
 }
 
 function Invoke-Recover {
@@ -1194,8 +1496,8 @@ function Invoke-Recover {
 
     $timedOut = $false
     try {
-        $proc = Start-Process -FilePath $psExe -ArgumentList $argLine -NoNewWindow -PassThru `
-            -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+        $proc = Start-WatchdogChildProcess -FilePath $psExe -ArgumentList $argLine `
+            -StandardOutputPath $stdoutFile -StandardErrorPath $stderrFile
         if (-not $proc.WaitForExit($invokeTimeoutSec * 1000)) {
             $timedOut = $true
             try { $proc.Kill() } catch {}
@@ -1257,6 +1559,18 @@ function Invoke-RestartSequence {
         [string]$Reason
     )
 
+    # This is the common mutation boundary for build, offline maintenance, and
+    # relaunch. Any listener without a fully accepted health response owns the
+    # port until an operator resolves it; never race that owner with UBT or a
+    # second editor process.
+    $port = Get-McpHealthPort
+    $portGate = Get-MonolithRecoveryPortGate -Port $port
+    if (-not $portGate.Valid) {
+        Write-Watchdog ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint phase=before_restart_mutation listener_port={0} listener_count={1} listener_pids={2} listener_gate={3}" -f `
+                $port, $portGate.Count, (($portGate.Pids) -join ','), $portGate.ErrorCode)
+        return [PSCustomObject]@{ ExitCode = 3; Result = 'RESULT=BLOCKED' }
+    }
+
     $script:restartAttempts++
     if ($MaxRestartAttempts -gt 0 -and $script:restartAttempts -gt $MaxRestartAttempts) {
         # Past the limit: escalate the probe sleep instead of spinning a
@@ -1274,6 +1588,14 @@ function Invoke-RestartSequence {
         # holds (2026-07-06..10 incident: 444 BuildFailed in a retry loop
         # while -game clients kept CommonGame/SpeedCoreRuntime DLLs mapped).
         $lockProbe = Get-BuildBlockingLocks -Root $Root
+        if ($lockProbe.ProbeErrors.Count -gt 0) {
+            $script:consecutiveBuildFailures++
+            $backoffSec = Get-BuildFailureBackoffSeconds
+            Write-Watchdog ("RESULT=BUILD_LOCK_PROBE_FAILED probe_error_count={0} locked_count={1} readonly_count={2} consecutive_build_failures={3} backoff_seconds={4} probe_errors={5}" -f `
+                    $lockProbe.ProbeErrors.Count, $lockProbe.Locked.Count, $lockProbe.ReadOnly.Count, `
+                    $script:consecutiveBuildFailures, $backoffSec, (Format-BuildProbeErrors $lockProbe.ProbeErrors))
+            return [PSCustomObject]@{ ExitCode = 11; Result = 'RESULT=BUILD_LOCK_PROBE_FAILED'; BackoffSeconds = $backoffSec }
+        }
         if ($lockProbe.Locked.Count -gt 0) {
             $script:consecutiveBuildFailures++
             $backoffSec = Get-BuildFailureBackoffSeconds
@@ -1283,6 +1605,15 @@ function Invoke-RestartSequence {
                     $(if ($holderPids.Count -gt 0) { $holderPids -join ',' } else { '-' }), `
                     (Format-WatchdogValue (($lockProbe.Locked | Select-Object -First 8) -join ';')))
             return [PSCustomObject]@{ ExitCode = 10; Result = 'RESULT=BLOCKED_DLL_LOCKED'; BackoffSeconds = $backoffSec }
+        }
+
+        # The bounded write probe can take long enough for another process to
+        # bind the MCP port. Recheck immediately before handing control to UBT.
+        $preBuildPortGate = Get-MonolithRecoveryPortGate -Port $port
+        if (-not $preBuildPortGate.Valid) {
+            Write-Watchdog ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint phase=before_build listener_port={0} listener_count={1} listener_pids={2} listener_gate={3}" -f `
+                    $port, $preBuildPortGate.Count, (($preBuildPortGate.Pids) -join ','), $preBuildPortGate.ErrorCode)
+            return [PSCustomObject]@{ ExitCode = 3; Result = 'RESULT=BLOCKED' }
         }
 
         if (-not (Invoke-EditorBuild -Root $Root)) {
@@ -1296,13 +1627,23 @@ function Invoke-RestartSequence {
         Write-Watchdog 'build_skipped reason=NoBuildBeforeRestart'
     }
 
-    if (-not (Invoke-PreRestartReindex -Root $Root)) {
-        return [PSCustomObject]@{ ExitCode = 8; Result = 'RESULT=RESTART_REINDEX_FAILED' }
+    $preRestartReindexOk = Invoke-PreRestartReindex -Root $Root
+    if (-not $preRestartReindexOk) {
+        # Index freshness is important, but an offline commandlet/disk failure
+        # must not strand the control plane. Recover MCP first, then retry the
+        # requested maintenance through the live endpoint.
+        Write-Watchdog 'restart_reindex_deferred phase=pre_restart availability_recovery_continues=true'
     }
 
     $recoverResult = Invoke-Recover -Root $Root -ForceLaunch
-    if ($recoverResult.ExitCode -eq 0 -and -not (Invoke-PostRecoverAssetReindex -Root $Root)) {
-        return [PSCustomObject]@{ ExitCode = 8; Result = 'RESULT=RESTART_REINDEX_FAILED' }
+    if ($recoverResult.ExitCode -eq 0) {
+        $postRecoverReindexOk = Invoke-PostRecoverReindex -Root $Root -RetryPreRestartTargets:(-not $preRestartReindexOk)
+        if (-not $postRecoverReindexOk) {
+            # Keep the successful availability result. The explicit maintenance
+            # failure event remains actionable and the healthy loop can retry
+            # scheduled maintenance without killing the recovered editor.
+            $recoverResult | Add-Member -NotePropertyName MaintenanceSucceeded -NotePropertyValue $false -Force
+        }
     }
 
     return $recoverResult
@@ -1350,13 +1691,21 @@ trap {
 Write-Watchdog ("watchdog_start watchdog_pid={0} poll_interval_sec={1} max_restart_attempts={2} probe_only={3} once={4} project_root={5}" -f `
         $PID, $PollIntervalSec, $MaxRestartAttempts, [bool]$ProbeOnly, [bool]$Once, $(if ($ProjectRoot) { $ProjectRoot } else { '-' }))
 
+$script:hostRoot = Resolve-HostRoot
+if (-not $script:hostRoot) {
+    Write-Watchdog 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
+    exit 3
+}
+
 if ($ProbeBuildLocksOnly) {
-    $hostRoot = Resolve-HostRoot
-    if (-not $hostRoot) {
-        Write-Watchdog 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
-        exit 3
-    }
+    $hostRoot = $script:hostRoot
     $lockProbe = Get-BuildBlockingLocks -Root $hostRoot
+    if ($lockProbe.ProbeErrors.Count -gt 0) {
+        Write-Watchdog ("RESULT=BUILD_LOCK_PROBE_FAILED probe_error_count={0} locked_count={1} readonly_count={2} probe_errors={3}" -f `
+                $lockProbe.ProbeErrors.Count, $lockProbe.Locked.Count, $lockProbe.ReadOnly.Count, `
+                (Format-BuildProbeErrors $lockProbe.ProbeErrors))
+        exit 11
+    }
     if ($lockProbe.Locked.Count -gt 0) {
         $holderPids = Get-BuildLockHolderPids -Root $hostRoot
         Write-Watchdog ("RESULT=BUILD_LOCKS_PRESENT locked_count={0} readonly_count={1} holder_pids_best_effort={2} locked_files={3}" -f `
@@ -1392,13 +1741,19 @@ while ($true) {
         continue
     }
 
-    $hostRoot = Resolve-HostRoot
-    if (-not $hostRoot) {
-        Write-Watchdog 'RESULT=BLOCKED reason=host_root_not_found detail=no *.uproject found upward from the script and no -ProjectRoot given'
+    $hostRoot = $script:hostRoot
+
+    $editorProcs = Get-EditorServerCandidates -Root $hostRoot
+    $port = Get-McpHealthPort
+    $portGate = Get-MonolithRecoveryPortGate -Port $port
+    $invalidHttpIdentity = $script:lastHealthStatusCode -eq 200 -and
+        $script:lastHealthErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
+    if ($invalidHttpIdentity -or -not $portGate.Valid) {
+        Write-Watchdog ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint health_error={0} detail={1} url={2} listener_port={3} listener_count={4} listener_pids={5} listener_gate={6}" -f `
+                $script:lastHealthErrorClass, (Format-WatchdogValue $script:lastHealthErrorCode), $healthUrl, `
+                $port, $portGate.Count, (($portGate.Pids) -join ','), $portGate.ErrorCode)
         exit 3
     }
-
-    $editorProcs = Get-EditorServerCandidates
     if ($ProbeOnly) {
         Write-Watchdog ("RESULT=MCP_DOWN probe_only=true url={0} editor_candidate_count={1} editor_candidate_pids={2}" -f `
                 $healthUrl, $editorProcs.Count, (($editorProcs.Id) -join ','))
@@ -1413,12 +1768,31 @@ while ($true) {
         Write-Watchdog ("mcp_down editor_processes_detected pids={0} action=recover_without_build" -f (($editorProcs.Id) -join ','))
         $recoverResult = Invoke-Recover -Root $hostRoot
         if ($recoverResult.ExitCode -ne 0) {
-            $headlessProcs = Get-HeadlessEditorCandidates
+            $headlessProcs = Get-HeadlessEditorCandidates -Root $hostRoot
             if ($headlessProcs.Count -gt 0) {
-                Write-Watchdog ("recover_failed_unhealthy_headless restart=true recover_exit_code={0} headless_pids={1}" -f `
-                        $recoverResult.ExitCode, (($headlessProcs.Id) -join ','))
-                Stop-HeadlessEditors -Processes $headlessProcs
-                $recoverResult = Invoke-RestartSequence -Root $hostRoot -Reason 'unhealthy_headless_editor'
+                # A listener may have appeared while the bounded recovery child
+                # was running. Re-probe health and then require a clear port
+                # immediately before the only destructive process-stop branch.
+                $lateHealth = Get-MonolithHealth
+                if ($lateHealth) {
+                    Write-Watchdog ("RESULT=MCP_UP version={0} tools_registered={1} pid={2} uptime_seconds={3} phase=before_headless_stop" -f `
+                            $lateHealth.version, $lateHealth.tools_registered, $lateHealth.pid, [int]$lateHealth.uptime_seconds)
+                    $recoverResult = [PSCustomObject]@{ ExitCode = 0; Result = 'RESULT=MCP_UP' }
+                }
+                else {
+                    $preStopPortGate = Get-MonolithRecoveryPortGate -Port $port
+                    if (-not $preStopPortGate.Valid) {
+                        Write-Watchdog ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint phase=before_headless_stop listener_port={0} listener_count={1} listener_pids={2} listener_gate={3}" -f `
+                                $port, $preStopPortGate.Count, (($preStopPortGate.Pids) -join ','), $preStopPortGate.ErrorCode)
+                        $recoverResult = [PSCustomObject]@{ ExitCode = 3; Result = 'RESULT=BLOCKED' }
+                    }
+                    else {
+                        Write-Watchdog ("recover_failed_unhealthy_headless restart=true recover_exit_code={0} headless_pids={1}" -f `
+                                $recoverResult.ExitCode, (($headlessProcs.Id) -join ','))
+                        Stop-HeadlessEditors -Processes $headlessProcs
+                        $recoverResult = Invoke-RestartSequence -Root $hostRoot -Reason 'unhealthy_headless_editor'
+                    }
+                }
             }
             else {
                 Write-Watchdog ("recover_failed_no_headless_restart recover_exit_code={0} editor_pids={1}" -f `
