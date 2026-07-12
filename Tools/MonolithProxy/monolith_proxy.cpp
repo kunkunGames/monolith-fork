@@ -7,8 +7,8 @@
  * Background health poll auto-detects when the editor comes online.
  *
  * Build: see build.bat or CMakeLists.txt
- * Usage (in .mcp.json):
- *   {"mcpServers":{"monolith":{"command":"path/to/monolith_proxy.exe"}}}
+ * Usage: run Scripts/onboard_monolith.ps1 so the client config receives the
+ * immutable image selected by Binaries/monolith_proxy.current.json.
  */
 
 // ============================================================================
@@ -16,12 +16,17 @@
 // ============================================================================
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <winsock2.h>
 #include <windows.h>
+#include <iphlpapi.h>
 #include <winhttp.h>
 #include <bcrypt.h>
+#include <intrin.h>
 #include <io.h>
 #include <fcntl.h>
 #pragma comment(lib, "bcrypt.lib")
+#pragma comment(lib, "iphlpapi.lib")
 
 #include <iostream>
 #include <string>
@@ -42,25 +47,39 @@
 #include <filesystem>
 #include <iomanip>
 #include <stdexcept>
+#include <atomic>
+#include <cmath>
 
 #include <nlohmann/json.hpp>
+
+#include "monolith_proxy_offline.h"
 
 #pragma comment(lib, "bcrypt.lib")
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+#ifndef SOURCE_HASH
+#define SOURCE_HASH "dev"
+#endif
+
 // ============================================================================
 // Constants
 // ============================================================================
 
 static const char* PROXY_NAME    = "monolith-proxy";
-static const char* PROXY_VERSION = "1.1.1";
+static const char* PROXY_VERSION = "1.1.4";
 
 static constexpr double TIMEOUT                  = 30.0;
+static constexpr double TOOLS_LIST_TIMEOUT       = 0.75;
+static constexpr double READ_FALLBACK_LIVE_TIMEOUT = 3.0;
+static constexpr DWORD REQUEST_HEALTH_TIMEOUT_MS = 250;
 static constexpr double POLL_INTERVAL            = 5.0;
 static constexpr double POLL_START_DELAY         = 3.0;
 static constexpr double REPEAT_TOOL_CALL_WINDOW  = 3.0;
+static constexpr double RISKY_REPEAT_TOOL_CALL_WINDOW = 60.0;
+static constexpr size_t MAX_RECENT_TOOL_CALLS    = 1024;
+static constexpr size_t MAX_LIVE_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 static const std::set<std::string> SUPPORTED_VERSIONS = {
     "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"
@@ -93,15 +112,33 @@ static std::string g_monolith_host;       // e.g. "localhost"
 static int         g_monolith_port = 0;   // e.g. 9316
 static std::string g_monolith_path_mcp;   // e.g. "/mcp"
 static std::string g_monolith_path_health;// e.g. "/health"
+static bool        g_monolith_secure = false;
+static bool        g_monolith_loopback = true;
+static std::string g_expected_project_root;
 
 static bool g_split_editor_query = false;
+static bool g_offline_fallback_enabled = true;
 static std::set<std::string> g_editor_action_allowlist;
 static std::set<std::string> g_editor_action_denylist;
 
 // State tracking
 static std::optional<bool> g_monolith_was_up; // nullopt = unknown
+static std::mutex g_monolith_state_lock;
+static std::mutex g_identity_state_lock;
+static int64_t g_identity_pid = -1;
+static bool g_identity_matches = false;
+static unsigned g_transport_failure_count = 0;
+static std::chrono::steady_clock::time_point g_transport_retry_after{};
+static std::atomic<bool> g_stop_health_poll{false};
 static std::mutex g_stdout_lock;
-static std::unordered_map<std::string, double> g_recent_tool_calls;
+struct RecentToolCall
+{
+    bool in_flight = true;
+    double completed_at = 0.0;
+    double repeat_window_seconds = REPEAT_TOOL_CALL_WINDOW;
+};
+static std::unordered_map<std::string, RecentToolCall> g_recent_tool_calls;
+static std::mutex g_recent_tool_calls_lock;
 
 // Call-log state (Phase 4 / survivor F)
 //
@@ -113,48 +150,6 @@ static std::unordered_map<std::string, double> g_recent_tool_calls;
 static bool      g_call_log_enabled = false;     // resolved once at startup
 static HANDLE    g_call_log_handle  = INVALID_HANDLE_VALUE;
 static std::mutex g_call_log_lock;
-
-static const std::vector<std::string> CORE_QUERY_TOOLS = {
-    "ai_query",
-    "animation_query",
-    "asset_query",
-    "audio_query",
-    "blueprint_query",
-    "chaos_fracture_query",
-    "chooser_query",
-    "cloth_query",
-    "collection_query",
-    "combograph_query",
-    "config_query",
-    "context_query",
-    "dataflow_query",
-    "editor_query",
-    "gamefeatures_query",
-    "gas_query",
-    "hlod_query",
-    "input_query",
-    "interchange_query",
-    "level_instance_query",
-    "level_query",
-    "level_sequence_query",
-    "localization_query",
-    "logicdriver_query",
-    "material_query",
-    "mesh_query",
-    "metahuman_query",
-    "movie_render_query",
-    "ndisplay_query",
-    "niagara_query",
-    "paper2d_query",
-    "pcg_query",
-    "project_query",
-    "slate_query",
-    "source_control_query",
-    "source_query",
-    "ui_query",
-    "water_query",
-    "world_conditions_query",
-};
 
 // ============================================================================
 // Logging
@@ -210,29 +205,75 @@ static void parse_monolith_url(const std::string& url)
 {
     g_monolith_url = url;
 
-    // Strip "http://"
+    // Parse the only supported transport schemes explicitly. Treating an
+    // https URL as plain WinHTTP previously downgraded it to cleartext.
     std::string rest = url;
     if (rest.rfind("http://", 0) == 0)
+    {
+        g_monolith_secure = false;
         rest = rest.substr(7);
+    }
     else if (rest.rfind("https://", 0) == 0)
+    {
+        g_monolith_secure = true;
         rest = rest.substr(8);
+    }
+    else
+    {
+        throw std::invalid_argument("MONOLITH_URL must use http:// or https://");
+    }
 
     // Split host:port/path
     auto slash_pos = rest.find('/');
     std::string host_port = (slash_pos != std::string::npos) ? rest.substr(0, slash_pos) : rest;
     g_monolith_path_mcp = (slash_pos != std::string::npos) ? rest.substr(slash_pos) : "/mcp";
+    if (host_port.empty() || host_port.find('@') != std::string::npos)
+        throw std::invalid_argument("MONOLITH_URL must contain a host and cannot contain userinfo");
 
-    auto colon_pos = host_port.find(':');
-    if (colon_pos != std::string::npos)
+    std::string port_text;
+    if (host_port.front() == '[')
     {
-        g_monolith_host = host_port.substr(0, colon_pos);
-        g_monolith_port = std::stoi(host_port.substr(colon_pos + 1));
+        const size_t close = host_port.find(']');
+        if (close == std::string::npos)
+            throw std::invalid_argument("MONOLITH_URL has an invalid IPv6 host");
+        g_monolith_host = host_port.substr(1, close - 1);
+        if (close + 1 < host_port.size())
+        {
+            if (host_port[close + 1] != ':')
+                throw std::invalid_argument("MONOLITH_URL has invalid text after the IPv6 host");
+            port_text = host_port.substr(close + 2);
+        }
     }
     else
     {
-        g_monolith_host = host_port;
-        g_monolith_port = 80;
+        const size_t colon_pos = host_port.rfind(':');
+        if (colon_pos != std::string::npos)
+        {
+            g_monolith_host = host_port.substr(0, colon_pos);
+            port_text = host_port.substr(colon_pos + 1);
+        }
+        else
+        {
+            g_monolith_host = host_port;
+        }
     }
+    g_monolith_port = g_monolith_secure ? 443 : 80;
+    if (!port_text.empty())
+    {
+        size_t consumed = 0;
+        const long parsed = std::stol(port_text, &consumed);
+        if (consumed != port_text.size() || parsed < 1 || parsed > 65535)
+            throw std::invalid_argument("MONOLITH_URL port must be within 1..65535");
+        g_monolith_port = static_cast<int>(parsed);
+    }
+
+    std::string lower_host = g_monolith_host;
+    std::transform(lower_host.begin(), lower_host.end(), lower_host.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    g_monolith_loopback = lower_host == "localhost" || lower_host == "::1"
+        || lower_host.rfind("127.", 0) == 0;
+    if (!g_monolith_secure && !g_monolith_loopback)
+        throw std::invalid_argument("Plain HTTP MONOLITH_URL is restricted to loopback hosts; use HTTPS for remote endpoints");
 
     // Derive health path: replace trailing /mcp with /health
     g_monolith_path_health = g_monolith_path_mcp;
@@ -590,9 +631,39 @@ static std::wstring to_wide(const std::string& s)
     return ws;
 }
 
+static std::wstring winhttp_server_name()
+{
+    // WinHttpConnect requires brackets around a literal IPv6 server name even
+    // though the URL parser stores the canonical address without brackets.
+    if (g_monolith_host.find(':') != std::string::npos)
+        return to_wide("[" + g_monolith_host + "]");
+    return to_wide(g_monolith_host);
+}
+
+static bool set_http_deadline(
+    HINTERNET request,
+    const std::chrono::steady_clock::time_point& deadline)
+{
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now()).count();
+    if (remaining <= 0) return false;
+    const DWORD timeout_ms = static_cast<DWORD>(
+        std::min<long long>(MAXDWORD, std::max<long long>(1, remaining)));
+    return WinHttpSetTimeouts(
+        request, timeout_ms, timeout_ms, timeout_ms, timeout_ms) == TRUE;
+}
+
 // POST JSON to Monolith. Returns response body or empty string on failure.
+// Both body size and total wall-clock work are bounded; WinHTTP's native
+// timeout is phase/receive based and is not a total deadline on its own.
 static std::string post_monolith(const std::string& body, double timeout_sec = TIMEOUT)
 {
+    if (body.size() > MAX_LIVE_RESPONSE_BYTES || timeout_sec <= 0.0)
+        return {};
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(
+            static_cast<long long>(timeout_sec * 1000.0));
+
     HINTERNET hSession = WinHttpOpen(
         L"MonolithProxy/1.0",
         WINHTTP_ACCESS_TYPE_NO_PROXY,
@@ -601,7 +672,7 @@ static std::string post_monolith(const std::string& body, double timeout_sec = T
         0);
     if (!hSession) return {};
 
-    std::wstring whost = to_wide(g_monolith_host);
+    std::wstring whost = winhttp_server_name();
     HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), (INTERNET_PORT)g_monolith_port, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return {}; }
 
@@ -609,12 +680,17 @@ static std::string post_monolith(const std::string& body, double timeout_sec = T
     HINTERNET hRequest = WinHttpOpenRequest(
         hConnect, L"POST", wpath.c_str(),
         nullptr, WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+        WINHTTP_DEFAULT_ACCEPT_TYPES,
+        g_monolith_secure ? WINHTTP_FLAG_SECURE : 0);
     if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return {}; }
 
-    // Set timeouts (milliseconds)
-    DWORD timeout_ms = (DWORD)(timeout_sec * 1000);
-    WinHttpSetTimeouts(hRequest, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+    if (!set_http_deadline(hRequest, deadline))
+    {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return {};
+    }
 
     // Send
     const wchar_t* hdrs = L"Content-Type: application/json";
@@ -623,7 +699,42 @@ static std::string post_monolith(const std::string& body, double timeout_sec = T
         (LPVOID)body.c_str(), (DWORD)body.size(),
         (DWORD)body.size(), 0);
 
-    if (!ok || !WinHttpReceiveResponse(hRequest, nullptr))
+    if (!ok || !set_http_deadline(hRequest, deadline)
+        || !WinHttpReceiveResponse(hRequest, nullptr))
+    {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return {};
+    }
+
+    DWORD status_code = 0;
+    DWORD status_size = sizeof(status_code);
+    if (!WinHttpQueryHeaders(
+            hRequest,
+            WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX,
+            &status_code,
+            &status_size,
+            WINHTTP_NO_HEADER_INDEX)
+        || status_code < 200 || status_code >= 300)
+    {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return {};
+    }
+
+    DWORD content_length = 0;
+    DWORD content_length_size = sizeof(content_length);
+    const bool has_content_length = WinHttpQueryHeaders(
+            hRequest,
+            WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX,
+            &content_length,
+            &content_length_size,
+            WINHTTP_NO_HEADER_INDEX) == TRUE;
+    if (has_content_length && content_length > MAX_LIVE_RESPONSE_BYTES)
     {
         WinHttpCloseHandle(hRequest);
         WinHttpCloseHandle(hConnect);
@@ -633,25 +744,266 @@ static std::string post_monolith(const std::string& body, double timeout_sec = T
 
     // Read response
     std::string response;
-    DWORD bytesAvailable = 0;
-    while (WinHttpQueryDataAvailable(hRequest, &bytesAvailable) && bytesAvailable > 0)
+    bool read_failed = false;
+    while (true)
     {
+        DWORD bytesAvailable = 0;
+        if (!set_http_deadline(hRequest, deadline)
+            || !WinHttpQueryDataAvailable(hRequest, &bytesAvailable))
+        {
+            read_failed = true;
+            break;
+        }
+        if (bytesAvailable == 0) break;
+        if (bytesAvailable > MAX_LIVE_RESPONSE_BYTES - response.size())
+        {
+            read_failed = true;
+            break;
+        }
         std::string chunk(bytesAvailable, '\0');
         DWORD bytesRead = 0;
-        WinHttpReadData(hRequest, &chunk[0], bytesAvailable, &bytesRead);
-        response.append(chunk.c_str(), bytesRead);
+        if (!set_http_deadline(hRequest, deadline)
+            || !WinHttpReadData(hRequest, &chunk[0], bytesAvailable, &bytesRead)
+            || bytesRead == 0)
+        {
+            read_failed = true;
+            break;
+        }
+        response.append(chunk.data(), bytesRead);
     }
 
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
 
+    if (read_failed
+        || (has_content_length && response.size() != content_length))
+    {
+        return {};
+    }
     return response;
 }
 
-// GET health endpoint. Returns true if 200 OK.
-static bool check_monolith_up()
+static bool canonical_path_key(const fs::path& path, std::string& out)
 {
+    std::error_code error;
+    fs::path canonical = fs::weakly_canonical(path, error);
+    if (error || canonical.empty()) return false;
+    out = canonical.lexically_normal().u8string();
+    std::replace(out.begin(), out.end(), '\\', '/');
+#ifdef _WIN32
+    std::transform(out.begin(), out.end(), out.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+#endif
+    while (out.size() > 1 && out.back() == '/') out.pop_back();
+    return true;
+}
+
+static std::string resolve_expected_project_root()
+{
+    const std::string configured = get_env("MONOLITH_EXPECTED_PROJECT_ROOT");
+    fs::path candidate;
+    if (!configured.empty())
+    {
+        candidate = fs::u8path(configured);
+    }
+    else
+    {
+        const fs::path plugin_root = executable_dir().parent_path();
+        candidate = plugin_root.parent_path().parent_path();
+    }
+    std::string canonical;
+    if (!canonical_path_key(candidate, canonical))
+        throw std::runtime_error("Could not resolve expected Monolith host project root: " + candidate.u8string());
+    return canonical;
+}
+
+static bool check_monolith_identity(int64_t health_pid, DWORD timeout_ms)
+{
+    json request = {
+        {"jsonrpc", "2.0"},
+        {"id", "proxy-project-identity"},
+        {"method", "tools/call"},
+        {"params", {
+            {"name", "monolith_status"},
+            {"arguments", json::object()},
+        }},
+    };
+    const double timeout_seconds = std::max(0.25, timeout_ms / 1000.0);
+    const std::string response_text = post_monolith(request.dump(), timeout_seconds);
+    bool matches = false;
+    try
+    {
+        const json response = json::parse(response_text);
+        const json& result = response.at("result");
+        if (!result.value("isError", true)
+            && result.contains("structuredContent")
+            && result["structuredContent"].is_object())
+        {
+            const json& status = result["structuredContent"];
+            std::string reported_root;
+            if (status.contains("recovery_plan")
+                && status["recovery_plan"].is_object()
+                && status["recovery_plan"].contains("editor_candidate_status")
+                && status["recovery_plan"]["editor_candidate_status"].is_object())
+            {
+                const json& candidate = status["recovery_plan"]
+                    ["editor_candidate_status"];
+                reported_root = candidate.value("host_project_root", "");
+                const auto pid_it = candidate.find("pid");
+                const bool reported_pid_matches = pid_it != candidate.end()
+                    && pid_it->is_number()
+                    && std::isfinite(pid_it->get<double>())
+                    && std::floor(pid_it->get<double>()) == pid_it->get<double>()
+                    && pid_it->get<double>() == static_cast<double>(health_pid);
+                const bool reports_editor_process =
+                    candidate.value("status", "") == "current_editor_process";
+                const bool reports_non_commandlet = candidate.contains("commandlet")
+                    && candidate["commandlet"].is_boolean()
+                    && !candidate["commandlet"].get<bool>();
+                if (!reported_pid_matches || !reports_editor_process
+                    || !reports_non_commandlet)
+                {
+                    reported_root.clear();
+                }
+            }
+            std::string canonical_reported;
+            matches = !reported_root.empty()
+                && canonical_path_key(fs::u8path(reported_root), canonical_reported)
+                && canonical_reported == g_expected_project_root;
+        }
+    }
+    catch (...)
+    {
+        matches = false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_identity_state_lock);
+        g_identity_pid = health_pid;
+        g_identity_matches = matches;
+    }
+    if (!matches)
+        log_msg("Rejected live endpoint: monolith_status editor/project identity did not match " + g_expected_project_root);
+    return matches;
+}
+
+static unsigned short host_port_from_tcp_row(DWORD network_port)
+{
+    return _byteswap_ushort(static_cast<unsigned short>(network_port));
+}
+
+struct ListenerOwnerCheck
+{
+    bool saw_expected = false;
+    bool saw_other = false;
+};
+
+static bool collect_tcp_listener_owners(
+    ULONG address_family,
+    DWORD expected_pid,
+    ListenerOwnerCheck& check)
+{
+    ULONG bytes = 0;
+    const DWORD sizing_result = GetExtendedTcpTable(
+        nullptr,
+        &bytes,
+        FALSE,
+        address_family,
+        TCP_TABLE_OWNER_PID_LISTENER,
+        0);
+    if (sizing_result != ERROR_INSUFFICIENT_BUFFER || bytes == 0)
+        return false;
+
+    std::vector<unsigned char> storage(bytes);
+    const DWORD table_result = GetExtendedTcpTable(
+        storage.data(),
+        &bytes,
+        FALSE,
+        address_family,
+        TCP_TABLE_OWNER_PID_LISTENER,
+        0);
+    if (table_result != NO_ERROR)
+        return false;
+
+    if (address_family == AF_INET)
+    {
+        const auto* table = reinterpret_cast<const MIB_TCPTABLE_OWNER_PID*>(storage.data());
+        for (DWORD index = 0; index < table->dwNumEntries; ++index)
+        {
+            const auto& row = table->table[index];
+            if (host_port_from_tcp_row(row.dwLocalPort)
+                != static_cast<unsigned short>(g_monolith_port))
+                continue;
+            if (row.dwOwningPid == expected_pid)
+                check.saw_expected = true;
+            else
+                check.saw_other = true;
+        }
+        return true;
+    }
+
+    if (address_family == AF_INET6)
+    {
+        // Some supported Windows SDK target baselines omit the public IPv6
+        // OWNER_PID typedef even though GetExtendedTcpTable supports the
+        // documented layout. Keep the compatible layout local and bounded.
+        struct Tcp6RowOwnerPidLayout
+        {
+            UCHAR local_addr[16];
+            DWORD local_scope_id;
+            DWORD local_port;
+            UCHAR remote_addr[16];
+            DWORD remote_scope_id;
+            DWORD remote_port;
+            DWORD state;
+            DWORD owning_pid;
+        };
+        struct Tcp6TableOwnerPidLayout
+        {
+            DWORD entry_count;
+            Tcp6RowOwnerPidLayout rows[1];
+        };
+        const auto* table = reinterpret_cast<const Tcp6TableOwnerPidLayout*>(storage.data());
+        for (DWORD index = 0; index < table->entry_count; ++index)
+        {
+            const auto& row = table->rows[index];
+            if (host_port_from_tcp_row(row.local_port)
+                != static_cast<unsigned short>(g_monolith_port))
+                continue;
+            if (row.owning_pid == expected_pid)
+                check.saw_expected = true;
+            else
+                check.saw_other = true;
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool listener_owned_by_health_pid(int64_t health_pid)
+{
+    // Remote endpoints are permitted only over HTTPS. Their listener process
+    // is not present in the local TCP owner table, so TLS plus the project
+    // identity response is the applicable boundary there.
+    if (!g_monolith_loopback)
+        return true;
+    if (health_pid <= 0
+        || static_cast<uint64_t>(health_pid) > static_cast<uint64_t>(MAXDWORD))
+        return false;
+    const DWORD expected_pid = static_cast<DWORD>(health_pid);
+    ListenerOwnerCheck check;
+    const bool ipv4_ok = collect_tcp_listener_owners(AF_INET, expected_pid, check);
+    const bool ipv6_ok = collect_tcp_listener_owners(AF_INET6, expected_pid, check);
+    return ipv4_ok && ipv6_ok && check.saw_expected && !check.saw_other;
+}
+
+// GET health endpoint. A 200 alone is insufficient: validate the Monolith
+// health schema, then bind the listener PID to this proxy's host project.
+static bool check_monolith_up(DWORD timeout_ms = 3000)
+{
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(timeout_ms);
     HINTERNET hSession = WinHttpOpen(
         L"MonolithProxy/1.0",
         WINHTTP_ACCESS_TYPE_NO_PROXY,
@@ -660,7 +1012,7 @@ static bool check_monolith_up()
         0);
     if (!hSession) return false;
 
-    std::wstring whost = to_wide(g_monolith_host);
+    std::wstring whost = winhttp_server_name();
     HINTERNET hConnect = WinHttpConnect(hSession, whost.c_str(), (INTERNET_PORT)g_monolith_port, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
 
@@ -668,16 +1020,22 @@ static bool check_monolith_up()
     HINTERNET hRequest = WinHttpOpenRequest(
         hConnect, L"GET", wpath.c_str(),
         nullptr, WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+        WINHTTP_DEFAULT_ACCEPT_TYPES,
+        g_monolith_secure ? WINHTTP_FLAG_SECURE : 0);
     if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
 
-    // 3-second timeout for health check
-    DWORD timeout_ms = 3000;
-    WinHttpSetTimeouts(hRequest, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+    if (!set_http_deadline(hRequest, deadline))
+    {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
 
     BOOL ok = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
-    if (!ok || !WinHttpReceiveResponse(hRequest, nullptr))
+    if (!ok || !set_http_deadline(hRequest, deadline)
+        || !WinHttpReceiveResponse(hRequest, nullptr))
     {
         WinHttpCloseHandle(hRequest);
         WinHttpCloseHandle(hConnect);
@@ -691,11 +1049,111 @@ static bool check_monolith_up()
         WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
         WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &statusSize, WINHTTP_NO_HEADER_INDEX);
 
+    DWORD content_length = 0;
+    DWORD content_length_size = sizeof(content_length);
+    const bool has_content_length = WinHttpQueryHeaders(
+            hRequest,
+            WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX,
+            &content_length,
+            &content_length_size,
+            WINHTTP_NO_HEADER_INDEX) == TRUE;
+    if (has_content_length && content_length >= 64 * 1024)
+    {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return false;
+    }
+
+    std::string response;
+    bool read_failed = false;
+    while (true)
+    {
+        DWORD bytes_available = 0;
+        if (!set_http_deadline(hRequest, deadline)
+            || !WinHttpQueryDataAvailable(hRequest, &bytes_available))
+        {
+            read_failed = true;
+            break;
+        }
+        if (bytes_available == 0) break;
+        const size_t remaining = 64 * 1024 - response.size();
+        if (remaining == 0 || bytes_available >= remaining)
+        {
+            read_failed = true;
+            break;
+        }
+        std::string chunk(std::min<size_t>(bytes_available, remaining), '\0');
+        DWORD bytes_read = 0;
+        if (!set_http_deadline(hRequest, deadline)
+            || !WinHttpReadData(
+                hRequest, chunk.data(), static_cast<DWORD>(chunk.size()),
+                &bytes_read))
+        {
+            read_failed = true;
+            break;
+        }
+        if (bytes_read == 0)
+        {
+            read_failed = true;
+            break;
+        }
+        response.append(chunk.data(), bytes_read);
+    }
+
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
 
-    return statusCode == 200;
+    if (read_failed || statusCode != 200 || response.empty()
+        || (has_content_length && response.size() != content_length)
+        || response.size() >= 64 * 1024)
+        return false;
+    try
+    {
+        const json health = json::parse(response);
+        if (!health.is_object() || health.value("status", "") != "ok")
+            return false;
+        if (!health.contains("pid")
+            || (!health["pid"].is_number_integer()
+                && !health["pid"].is_number_unsigned()))
+            return false;
+        const int64_t pid = health["pid"].get<int64_t>();
+        if (pid <= 0 || !listener_owned_by_health_pid(pid))
+            return false;
+        if (!health.contains("port")
+            || (!health["port"].is_number_integer()
+                && !health["port"].is_number_unsigned())
+            || health["port"].get<int64_t>() != g_monolith_port)
+            return false;
+        if (!health.contains("version")
+            || !health["version"].is_string()
+            || health["version"].get<std::string>().empty())
+            return false;
+        if (!health.contains("uptime_seconds")
+            || !health["uptime_seconds"].is_number()
+            || health["uptime_seconds"].get<double>() < 0.0)
+            return false;
+        if (!health.contains("tools_registered")
+            || (!health["tools_registered"].is_number_integer()
+                && !health["tools_registered"].is_number_unsigned())
+            || health["tools_registered"].get<int64_t>() <= 0)
+            return false;
+        if (!health.contains("mcp_transport")
+            || !health["mcp_transport"].is_object()
+            || health["mcp_transport"].value("primary_route", "") != "/mcp")
+            return false;
+        if (!check_monolith_identity(pid, timeout_ms))
+            return false;
+        // Bind both HTTP exchanges to the same listener owner. A process that
+        // releases the port between health and status is not a valid endpoint.
+        return listener_owned_by_health_pid(pid);
+    }
+    catch (...)
+    {
+        return false;
+    }
 }
 
 // ============================================================================
@@ -732,6 +1190,58 @@ static std::string make_jsonrpc_error(const json& id, int code, const std::strin
     return resp.dump();
 }
 
+static bool is_valid_jsonrpc_response(
+    const std::string& response,
+    const json& expected_id,
+    std::string& error)
+{
+    if (response.empty())
+    {
+        error = "empty response";
+        return false;
+    }
+    try
+    {
+        const json payload = json::parse(response);
+        if (!payload.is_object())
+        {
+            error = "response is not a JSON object";
+            return false;
+        }
+        auto version_it = payload.find("jsonrpc");
+        if (version_it == payload.end() || !version_it->is_string()
+            || version_it->get_ref<const std::string&>() != "2.0")
+        {
+            error = "response is missing jsonrpc=2.0";
+            return false;
+        }
+        auto id_it = payload.find("id");
+        if (id_it == payload.end() || *id_it != expected_id)
+        {
+            error = "response id does not match the request";
+            return false;
+        }
+        const bool has_result = payload.contains("result");
+        const bool has_error = payload.contains("error");
+        if (has_result == has_error)
+        {
+            error = "response must contain exactly one of result or error";
+            return false;
+        }
+        if (has_error && !payload["error"].is_object())
+        {
+            error = "response error member is not an object";
+            return false;
+        }
+        return true;
+    }
+    catch (const std::exception& parse_error)
+    {
+        error = std::string("response is not valid JSON: ") + parse_error.what();
+        return false;
+    }
+}
+
 // ============================================================================
 // Stable tools/list fallback
 // ============================================================================
@@ -765,67 +1275,33 @@ static std::string tools_cache_path()
         std::to_string(g_monolith_port) + ".json";
 }
 
-static json make_query_tool_schema()
-{
-    return {
-        {"type", "object"},
-        {"properties", {
-            {"action", {
-                {"type", "string"},
-                {"description", "The action to execute. Use monolith_discover first when the editor is available."}
-            }},
-            {"params", {
-                {"type", "object"},
-                {"description", "Parameters for the selected action."}
-            }},
-            {"_fields", {
-                {"type", "array"},
-                {"items", {{"type", "string"}}},
-                {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
-            }},
-            {"_omit", {
-                {"type", "array"},
-                {"items", {{"type", "string"}}},
-                {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
-            }},
-            {"_compact_json", {
-                {"type", "boolean"},
-                {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
-            }}
-        }},
-        {"required", json::array({"action"})}
-    };
-}
-
-static json make_empty_object_schema()
-{
-    return {
-        {"type", "object"},
-        {"properties", {
-            {"_fields", {
-                {"type", "array"},
-                {"items", {{"type", "string"}}},
-                {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
-            }},
-            {"_omit", {
-                {"type", "array"},
-                {"items", {{"type", "string"}}},
-                {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
-            }},
-            {"_compact_json", {
-                {"type", "boolean"},
-                {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
-            }}
-        }}
-    };
-}
-
 static json make_tool(const std::string& name, const std::string& description, const json& schema)
 {
+    json complete_schema = schema;
+    if (!complete_schema.is_object())
+        complete_schema = json::object();
+    complete_schema["type"] = "object";
+    json& properties = complete_schema["properties"];
+    if (!properties.is_object())
+        properties = json::object();
+    properties["_fields"] = {
+        {"type", "array"},
+        {"items", {{"type", "string"}}},
+        {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."},
+    };
+    properties["_omit"] = {
+        {"type", "array"},
+        {"items", {{"type", "string"}}},
+        {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."},
+    };
+    properties["_compact_json"] = {
+        {"type", "boolean"},
+        {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."},
+    };
     return {
         {"name", name},
         {"description", description},
-        {"inputSchema", schema}
+        {"inputSchema", std::move(complete_schema)}
     };
 }
 
@@ -833,25 +1309,38 @@ static json make_seed_tools()
 {
     json tools = json::array();
 
-    for (const std::string& name : CORE_QUERY_TOOLS)
-    {
-        std::string domain = name;
-        const std::string suffix = "_query";
-        if (domain.size() > suffix.size() &&
-            domain.compare(domain.size() - suffix.size(), suffix.size(), suffix) == 0)
-        {
-            domain.resize(domain.size() - suffix.size());
-        }
+    const std::string catalog_availability = g_offline_fallback_enabled
+        ? " Uses the bundled offline catalog when the editor transport is unavailable."
+        : " Requires the live editor transport because offline fallback is disabled.";
 
-        tools.push_back(make_tool(
-            name,
-            "Query the " + domain + " domain. The editor may be offline at session start; retry after Monolith is healthy.",
-            make_query_tool_schema()));
-    }
+    tools.push_back(make_tool(
+        "monolith_query",
+        g_offline_fallback_enabled
+            ? "Execute one namespaced Monolith action. Fixed read-only namespaces route to the bundled offline Query process when the editor transport is unavailable; all other actions require the live editor."
+            : "Execute one namespaced Monolith action through the live editor transport.",
+        {
+            {"type", "object"},
+            {"properties", {
+                {"namespace", {
+                    {"type", "string"},
+                    {"description", "Target namespace, for example source or project."}
+                }},
+                {"action", {
+                    {"type", "string"},
+                    {"description", "Action name within the target namespace."}
+                }},
+                {"params", {
+                    {"type", "object"},
+                    {"description", "Parameters for the selected action."}
+                }}
+            }},
+            {"required", json::array({"namespace", "action"})}
+        }));
 
     tools.push_back(make_tool(
         "monolith_discover",
-        "List available tool namespaces and their actions. Pass namespace and optional category to filter.",
+        "List available tool namespaces/actions or inspect one action contract."
+            + catalog_availability,
         {
             {"type", "object"},
             {"properties", {
@@ -859,66 +1348,116 @@ static json make_seed_tools()
                     {"type", "string"},
                     {"description", "Optional: filter to a specific namespace"}
                 }},
+                {"action", {
+                    {"type", "string"},
+                    {"description", "Optional: filter to one exact action within the namespace"}
+                }},
                 {"category", {
                     {"type", "string"},
                     {"description", "Optional: filter actions within the namespace by category"}
                 }},
-                {"_fields", {
-                    {"type", "array"},
-                    {"items", {{"type", "string"}}},
-                    {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
+                {"mode", {
+                    {"type", "string"},
+                    {"enum", json::array({"summary", "actions", "schema"})}
                 }},
-                {"_omit", {
-                    {"type", "array"},
-                    {"items", {{"type", "string"}}},
-                    {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
+                {"limit", {{"type", "integer"}, {"minimum", 0}, {"maximum", 1000}}},
+                {"offset", {{"type", "integer"}, {"minimum", 0}}},
+                {"filter", {{"type", "string"}}},
+                {"detail", {{"type", "boolean"}}},
+                {"verbose", {{"type", "boolean"}}},
+                {"planning_detail", {
+                    {"type", "string"},
+                    {"enum", json::array({"compact", "full"})}
                 }},
-                {"_compact_json", {
-                    {"type", "boolean"},
-                    {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
-                }}
+                {"schema_detail", {
+                    {"type", "string"},
+                    {"enum", json::array({"compact", "full"})}
+                }},
+                {"if_version", {{"type", "string"}}},
             }}
         }));
 
     tools.push_back(make_tool(
         "monolith_status",
-        "Get Monolith server health: version, uptime, port, registered action count, and module status.",
-        make_empty_object_schema()));
-
-    tools.push_back(make_tool(
-        "monolith_update",
-        "Check for or install Monolith updates from GitHub Releases.",
+        g_offline_fallback_enabled
+            ? "Get live Monolith server health when the editor is available, or offline catalog snapshot status and recovery guidance when it is not."
+            : "Get live Monolith server health. Offline fallback is disabled for this process.",
         {
             {"type", "object"},
             {"properties", {
-                {"action", {
-                    {"type", "string"},
-                    {"description", "'check' to compare versions, 'install' to download and stage update"},
-                    {"default", "check"}
-                }},
-                {"_fields", {
-                    {"type", "array"},
-                    {"items", {{"type", "string"}}},
-                    {"description", "Optional top-level whitelist — return only these top-level fields of the response. Mutually exclusive with _omit."}
-                }},
-                {"_omit", {
-                    {"type", "array"},
-                    {"items", {{"type", "string"}}},
-                    {"description", "Optional top-level blacklist — remove these top-level fields from the response. Mutually exclusive with _fields."}
-                }},
-                {"_compact_json", {
-                    {"type", "boolean"},
-                    {"description", "Optional — when true, drop top-level fields whose value is null, empty string, empty array, or empty object."}
-                }}
+                {"mcp_url", {{"type", "string"}}}
             }}
         }));
 
     tools.push_back(make_tool(
-        "monolith_reindex",
-        "Re-index the Monolith project database. Requires the editor-side Monolith server.",
-        make_empty_object_schema()));
+        "monolith_find",
+        "Find candidate Monolith actions for a task." + catalog_availability,
+        {
+            {"type", "object"},
+            {"properties", {
+                {"query", {{"type", "string"}}},
+                {"namespace", {{"type", "string"}}},
+                {"limit", {{"type", "integer"}, {"minimum", 1}, {"maximum", 50}}},
+                {"include_schema", {{"type", "boolean"}}},
+                {"planning_detail", {
+                    {"type", "string"},
+                    {"enum", json::array({"compact", "full"})}
+                }},
+                {"offset", {{"type", "integer"}, {"minimum", 0}}},
+                {"cursor", {{"type", "string"}}},
+                {"fields", {
+                    {"oneOf", json::array({
+                        json{{"type", "string"}},
+                        json{{"type", "array"}, {"items", {{"type", "string"}}}}
+                    })}
+                }}
+            }},
+            {"required", json::array({"query"})}
+        }));
 
     return tools;
+}
+
+static bool is_valid_tools_list_response(
+    const std::string& response,
+    std::string& error)
+{
+    try
+    {
+        const json payload = json::parse(response);
+        if (!payload.contains("result") || !payload["result"].is_object()
+            || !payload["result"].contains("tools")
+            || !payload["result"]["tools"].is_array())
+        {
+            error = "tools/list result must contain a tools array";
+            return false;
+        }
+        std::set<std::string> names;
+        for (const json& tool : payload["result"]["tools"])
+        {
+            if (!tool.is_object() || !tool.contains("name")
+                || !tool["name"].is_string()
+                || tool["name"].get_ref<const std::string&>().empty()
+                || !tool.contains("inputSchema")
+                || !tool["inputSchema"].is_object())
+            {
+                error = "tools/list contains an invalid tool descriptor";
+                return false;
+            }
+            if (!names.insert(tool["name"].get<std::string>()).second)
+            {
+                error = "tools/list contains duplicate tool names";
+                return false;
+            }
+        }
+        return true;
+    }
+    catch (const std::exception& parse_error)
+    {
+        error = std::string("tools/list response is not valid JSON: ")
+            + parse_error.what();
+        return false;
+    }
 }
 
 static void write_tools_cache(const std::string& response)
@@ -968,13 +1507,12 @@ static std::optional<json> read_tools_cache()
 
 static std::string make_fallback_tools_list_response(const json& msg)
 {
-    if (auto cached = read_tools_cache())
-    {
-        log_msg("Monolith down during tools/list -- returning cached tools");
-        return make_result(msg.value("id", json()), {{"tools", cached.value()}});
-    }
-
-    log_msg("Monolith down during tools/list -- returning seed tools");
+    // Do not advertise a stale live/profile cache while the editor is down.
+    // Older caches exposed dozens of tools that could not execute and expanded
+    // cold-start prompt metadata by roughly an order of magnitude. The stable
+    // control plane is deliberately four tools; live tools return after a
+    // validated endpoint transition and tools/list_changed notification.
+    log_msg("Monolith down during tools/list -- returning four stable control-plane tools");
     return make_result(msg.value("id", json()), {{"tools", make_seed_tools()}});
 }
 
@@ -1014,23 +1552,93 @@ static std::string tool_signature(const json& msg)
     return sig.dump(-1);
 }
 
-static bool is_repeated_tool_call(const json& msg)
+static void prune_recent_tool_calls(double now)
 {
-    std::string sig = tool_signature(msg);
-    if (sig.empty()) return false;
+    for (auto it = g_recent_tool_calls.begin(); it != g_recent_tool_calls.end();)
+    {
+        const RecentToolCall& call = it->second;
+        if (!call.in_flight
+            && now - call.completed_at >= call.repeat_window_seconds)
+        {
+            it = g_recent_tool_calls.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 
-    auto it = g_recent_tool_calls.find(sig);
-    if (it == g_recent_tool_calls.end()) return false;
-
-    return (now_seconds() - it->second) < REPEAT_TOOL_CALL_WINDOW;
+    while (g_recent_tool_calls.size() >= MAX_RECENT_TOOL_CALLS)
+    {
+        auto oldest = g_recent_tool_calls.end();
+        for (auto it = g_recent_tool_calls.begin(); it != g_recent_tool_calls.end(); ++it)
+        {
+            if (it->second.in_flight) continue;
+            if (oldest == g_recent_tool_calls.end()
+                || it->second.completed_at < oldest->second.completed_at)
+            {
+                oldest = it;
+            }
+        }
+        if (oldest == g_recent_tool_calls.end()) break;
+        g_recent_tool_calls.erase(oldest);
+    }
 }
 
-static void record_tool_call(const json& msg)
+static bool begin_tool_call(
+    const json& msg,
+    double repeat_window_seconds,
+    std::string& signature)
 {
-    std::string sig = tool_signature(msg);
-    if (!sig.empty())
-        g_recent_tool_calls[sig] = now_seconds();
+    signature = tool_signature(msg);
+    if (signature.empty()) return true;
+
+    const double now = now_seconds();
+    std::lock_guard<std::mutex> lock(g_recent_tool_calls_lock);
+    prune_recent_tool_calls(now);
+    auto existing = g_recent_tool_calls.find(signature);
+    if (existing != g_recent_tool_calls.end())
+    {
+        const RecentToolCall& call = existing->second;
+        if (call.in_flight
+            || now - call.completed_at < call.repeat_window_seconds)
+        {
+            return false;
+        }
+        g_recent_tool_calls.erase(existing);
+    }
+
+    if (g_recent_tool_calls.size() >= MAX_RECENT_TOOL_CALLS)
+        return false;
+    g_recent_tool_calls.emplace(signature, RecentToolCall{
+        true, 0.0, repeat_window_seconds});
+    return true;
 }
+
+static void complete_tool_call(const std::string& signature)
+{
+    if (signature.empty()) return;
+    std::lock_guard<std::mutex> lock(g_recent_tool_calls_lock);
+    auto existing = g_recent_tool_calls.find(signature);
+    if (existing == g_recent_tool_calls.end()) return;
+    existing->second.in_flight = false;
+    existing->second.completed_at = now_seconds();
+}
+
+struct ToolCallCompletionGuard
+{
+    bool& active;
+    const std::string& signature;
+
+    ~ToolCallCompletionGuard()
+    {
+        if (active)
+        {
+            complete_tool_call(signature);
+            active = false;
+        }
+    }
+};
 
 // ============================================================================
 // State check + health poll
@@ -1052,28 +1660,107 @@ static bool send_list_changed()
     }
 }
 
+static bool transport_circuit_open();
+
 static void check_monolith_state_change()
 {
-    bool is_up = check_monolith_up();
+    // A valid health/status pair is not proof that a previously wedged action
+    // route is ready. Honor the transport-failure cooldown; only an actual
+    // successful MCP request resets its exponential backoff.
+    if (transport_circuit_open())
+        return;
+    const bool is_up = check_monolith_up();
+    bool should_notify = false;
+    {
+        std::lock_guard<std::mutex> lock(g_monolith_state_lock);
+        const bool had_state = g_monolith_was_up.has_value();
+        should_notify = (had_state && is_up != g_monolith_was_up.value())
+            || (!had_state && is_up);
+        g_monolith_was_up = is_up;
+    }
 
-    if (g_monolith_was_up.has_value() && is_up != g_monolith_was_up.value())
+    // Notification/logging may acquire independent locks and perform I/O; keep
+    // it outside the state mutex so the poller cannot block request dispatch.
+    if (should_notify)
     {
         const char* direction = is_up ? "online" : "offline";
         log_msg(std::string("Monolith went ") + direction + " -- sending tools/list_changed");
         send_list_changed();
     }
+}
 
-    g_monolith_was_up = is_up;
+static bool monolith_known_up()
+{
+    std::lock_guard<std::mutex> lock(g_monolith_state_lock);
+    return g_monolith_was_up.value_or(false);
+}
+
+static bool transport_circuit_open()
+{
+    std::lock_guard<std::mutex> lock(g_monolith_state_lock);
+    return g_transport_retry_after != std::chrono::steady_clock::time_point{}
+        && std::chrono::steady_clock::now() < g_transport_retry_after;
+}
+
+static void mark_monolith_down_after_transport_failure()
+{
+    bool should_notify = false;
+    {
+        std::lock_guard<std::mutex> lock(g_monolith_state_lock);
+        should_notify = g_monolith_was_up.value_or(false);
+        g_monolith_was_up = false;
+        ++g_transport_failure_count;
+        const unsigned exponent = std::min<unsigned>(g_transport_failure_count - 1, 3);
+        const unsigned cooldown_seconds = std::min<unsigned>(60, 10u << exponent);
+        g_transport_retry_after = std::chrono::steady_clock::now()
+            + std::chrono::seconds(cooldown_seconds);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_identity_state_lock);
+        g_identity_pid = -1;
+        g_identity_matches = false;
+    }
+    if (should_notify)
+    {
+        log_msg("Live transport failed after a known-up probe; opening the offline circuit immediately");
+        send_list_changed();
+    }
+}
+
+static void mark_monolith_transport_success()
+{
+    bool should_notify = false;
+    {
+        std::lock_guard<std::mutex> lock(g_monolith_state_lock);
+        should_notify = !g_monolith_was_up.value_or(false);
+        g_monolith_was_up = true;
+        g_transport_failure_count = 0;
+        g_transport_retry_after = {};
+    }
+    if (should_notify)
+    {
+        log_msg("Validated live MCP request succeeded; closing the offline circuit");
+        send_list_changed();
+    }
+}
+
+static bool sleep_until_poll_or_stop(double seconds)
+{
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(static_cast<int>(seconds * 1000));
+    while (!g_stop_health_poll.load() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    return !g_stop_health_poll.load();
 }
 
 static void health_poll_thread()
 {
     // Initial delay
-    std::this_thread::sleep_for(
-        std::chrono::milliseconds((int)(POLL_START_DELAY * 1000)));
+    if (!sleep_until_poll_or_stop(POLL_START_DELAY))
+        return;
     log_msg("Health poll started (interval=" + std::to_string((int)POLL_INTERVAL) + "s)");
 
-    while (true)
+    while (!g_stop_health_poll.load())
     {
         try
         {
@@ -1084,8 +1771,8 @@ static void health_poll_thread()
             log_msg("Health poll error");
         }
 
-        std::this_thread::sleep_for(
-            std::chrono::milliseconds((int)(POLL_INTERVAL * 1000)));
+        if (!sleep_until_poll_or_stop(POLL_INTERVAL))
+            break;
     }
 }
 
@@ -1124,8 +1811,16 @@ static std::string handle_initialize(const json& msg)
         "SKILL LOADING: domain skills live in Skills/<namespace>/SKILL.md and document\n"
         "available actions and params for that namespace.\n"
         "\n"
-        "EDITOR OFFLINE: run Scripts/recover_mcp.ps1, wait for localhost:9316.\n"
-        "Offline: Binaries/monolith_query (or .exe on Windows) covers source/project/bridge/console reads.";
+        + std::string(g_offline_fallback_enabled
+            ? "EDITOR OFFLINE: when editor transport is down, the advertised surface contracts to monolith_query, monolith_discover, monolith_status, and monolith_find.\n"
+              "Fixed read-only query actions run through the co-located offline monolith_query binary.\n"
+            : "EDITOR OFFLINE: offline fallback is disabled for this proxy process, so editor transport failures remain unavailable errors.\n")
+        +
+        "Before calling a domain action, check its schema instead of guessing. "
+        "monolith_discover() lists namespaces and monolith_discover(namespace='<namespace>', "
+        "mode='actions') lists actions; monolith_discover(namespace='<namespace>', action='<action>', mode='schema') fetches the exact live schema. "
+        "Offline schema mode returns explicitly degraded catalog guidance rather than fabricating a live JSON schema. "
+        "If an editor-only tool returns a transport-unavailable error, run Scripts/recover_mcp.ps1, wait for the configured endpoint, and retry.";
 
     return make_result(msg.value("id", json()), result);
 }
@@ -1138,12 +1833,43 @@ static std::string handle_ping(const json& msg)
 static std::string handle_tools_list(const json& msg)
 {
     double t0 = now_seconds();
-    std::string resp = post_monolith(msg.dump());
+    // Cold client startup must never wait on a half-started editor. The first
+    // list is cache+seed; a successful background/initialized health probe
+    // announces list_changed, after which a tightly bounded live refresh is
+    // allowed.
+    std::string resp;
+    bool live_attempted = false;
+    if (monolith_known_up() && !transport_circuit_open()
+        && check_monolith_up(REQUEST_HEALTH_TIMEOUT_MS))
+    {
+        live_attempted = true;
+        resp = post_monolith(msg.dump(), TOOLS_LIST_TIMEOUT);
+    }
     double duration_ms = (now_seconds() - t0) * 1000.0;
     write_call_log_line(msg, resp, duration_ms);
 
+    std::string response_validation_error;
+    if (!resp.empty()
+        && !is_valid_jsonrpc_response(
+            resp, msg.value("id", json()), response_validation_error))
+    {
+        log_msg("Discarding invalid live tools/list response: "
+            + response_validation_error);
+        resp.clear();
+    }
+    if (!resp.empty()
+        && !is_valid_tools_list_response(resp, response_validation_error))
+    {
+        log_msg("Discarding live tools/list response with an invalid method contract: "
+            + response_validation_error);
+        resp.clear();
+    }
+    if (live_attempted && resp.empty())
+        log_msg("Live tools/list missed its bounded metadata budget; using the stable cold surface without opening the action circuit");
+
     if (!resp.empty())
     {
+        mark_monolith_transport_success();
         if (g_split_editor_query)
         {
             try
@@ -1207,10 +1933,21 @@ static std::string handle_tools_call(const json& msg)
 
     // Extract params (copy so we can modify)
     json params = msg.value("params", json::object());
-    std::string tool_name = params.value("name", "unknown");
+    if (!params.is_object())
+        return make_jsonrpc_error(id, -32602,
+            "tools/call params must be an object.");
+    auto name_it = params.find("name");
+    if (name_it == params.end() || !name_it->is_string()
+        || name_it->get_ref<const std::string&>().empty())
+        return make_jsonrpc_error(id, -32602,
+            "tools/call params.name must be a non-empty string.");
+    std::string tool_name = name_it->get<std::string>();
     std::string forwarded_name = tool_name;
     json args = params.value("arguments", json::object());
     if (args.is_null()) args = json::object();
+    if (!args.is_object())
+        return make_jsonrpc_error(id, -32602,
+            "tools/call params.arguments must be an object or null.");
     const double parse_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - parse_start_clock).count();
     const auto dedup_start_clock = std::chrono::steady_clock::now();
     const std::string retry_signature = retry_signature_for(tool_name, args);
@@ -1222,8 +1959,16 @@ static std::string handle_tools_call(const json& msg)
         {"dedup_ms", dedup_ms}
     };
     bool repeated_for_log = false;
+    bool dedup_started = false;
+    std::string dedup_signature;
+    ToolCallCompletionGuard completion_guard{dedup_started, dedup_signature};
     auto finish = [&](const std::string& response) -> std::string
     {
+        if (dedup_started)
+        {
+            complete_tool_call(dedup_signature);
+            dedup_started = false;
+        }
         log_proxy_tools_call(
             msg,
             tool_name,
@@ -1326,13 +2071,19 @@ static std::string handle_tools_call(const json& msg)
     };
     phase_timing["rewrite_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rewrite_start_clock).count();
 
-    if (is_repeated_tool_call(forwarded_msg))
+    const double repeat_window =
+        MonolithInvocationRequiresStrongRepeatProtection(
+            forwarded_name, args.dump(-1))
+        ? RISKY_REPEAT_TOOL_CALL_WINDOW
+        : REPEAT_TOOL_CALL_WINDOW;
+    if (!begin_tool_call(forwarded_msg, repeat_window, dedup_signature))
     {
         repeated_for_log = true;
         return finish(make_tool_error(id,
             "Tool '" + tool_name + "' with the same arguments was just called. "
             "Reuse the previous result and answer the user instead of repeating the same call."));
     }
+    dedup_started = true;
 
     // --- Allowlist/denylist check ---
     if (forwarded_name == "editor_query")
@@ -1363,19 +2114,71 @@ static std::string handle_tools_call(const json& msg)
         }
     }
 
-    // --- Record and forward ---
-    record_tool_call(forwarded_msg);
-
     const auto http_start_clock = std::chrono::steady_clock::now();
-    std::string resp = post_monolith(forwarded_msg.dump());
+    // A process may still own port/editor state while its MCP endpoint is
+    // booting or wedged. Cold/offline-capable reads do not wait for an unknown
+    // backend; after health is known-up they get a short live attempt before
+    // the fixed read-only fallback. Live-only tools retain the normal timeout.
+    std::string resp;
+    const bool offline_fast_path = g_offline_fallback_enabled
+        && MonolithInvocationCanUseOfflineFastPath(tool_name, args.dump(-1));
+    bool live_attempted = false;
+    if (!transport_circuit_open() && offline_fast_path)
+    {
+        if (monolith_known_up()
+            && check_monolith_up(REQUEST_HEALTH_TIMEOUT_MS))
+        {
+            live_attempted = true;
+            resp = post_monolith(
+                forwarded_msg.dump(), READ_FALLBACK_LIVE_TIMEOUT);
+        }
+    }
+    else if (!transport_circuit_open()
+        && check_monolith_up(REQUEST_HEALTH_TIMEOUT_MS))
+    {
+        live_attempted = true;
+        resp = post_monolith(forwarded_msg.dump());
+    }
     phase_timing["http_roundtrip_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - http_start_clock).count();
+    std::string response_validation_error;
+    if (!resp.empty()
+        && !is_valid_jsonrpc_response(resp, id, response_validation_error))
+    {
+        log_msg("Discarding invalid live tools/call response and considering "
+            "the read-only fallback: " + response_validation_error);
+        resp.clear();
+    }
+    if (live_attempted && resp.empty())
+        mark_monolith_down_after_transport_failure();
     if (!resp.empty())
+    {
+        mark_monolith_transport_success();
         return finish(resp);
+    }
 
     const auto fallback_start_clock = std::chrono::steady_clock::now();
+    MonolithOfflineFallbackResult offline = TryMonolithOfflineFallback(
+        g_offline_fallback_enabled,
+        tool_name,
+        args.dump(-1),
+        id.dump(-1),
+        trace_id,
+        span_id);
+    if (offline.handled)
+    {
+        phase_timing["offline_fallback_ms"] = offline.duration_ms;
+        phase_timing["fallback_ms"] =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - fallback_start_clock).count();
+        log_msg("Editor backend unavailable; routed '" + tool_name
+            + "' to " + offline.backend + " " + offline.query_namespace
+            + "." + offline.action);
+        return finish(offline.response);
+    }
+
     std::string unavailable = make_tool_error(id,
-        "Monolith MCP is not available (Unreal Editor not running). "
-        "Tool '" + tool_name + "' cannot execute. Start the editor and try again.");
+        "Live Monolith editor transport is unavailable; the editor may be stopped, restarting, or endpoint-unhealthy. "
+        "Tool '" + tool_name + "' cannot execute on the current route. Restore the configured MCP endpoint and retry.");
     phase_timing["fallback_ms"] = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - fallback_start_clock).count();
     return finish(unavailable);
 }
@@ -1412,19 +2215,45 @@ int main(int argc, char* argv[])
 
     // Parse configuration from environment
     std::string url = get_env("MONOLITH_URL", "http://localhost:9316/mcp");
-    parse_monolith_url(url);
+    try
+    {
+        parse_monolith_url(url);
+        g_expected_project_root = resolve_expected_project_root();
+    }
+    catch (const std::exception& config_error)
+    {
+        log_msg(std::string("Invalid startup configuration: ") + config_error.what());
+        return 2;
+    }
 
     g_split_editor_query   = get_env("MONOLITH_SPLIT_EDITOR_QUERY", "0") == "1";
+    g_offline_fallback_enabled = get_env("MONOLITH_OFFLINE_FALLBACK", "1") != "0";
     g_editor_action_allowlist = parse_csv_env("MONOLITH_EDITOR_ACTION_ALLOWLIST");
     g_editor_action_denylist  = parse_csv_env("MONOLITH_EDITOR_ACTION_DENYLIST");
 
+    if (g_offline_fallback_enabled)
+    {
+        std::string bundle_error;
+        if (!InitializeMonolithOfflineBundle(bundle_error))
+        {
+            // Treat bundle validity as part of effective offline readiness.
+            // Keeping the request flag true here would let the offline fast
+            // path intercept a healthy live endpoint with an unusable bundle.
+            g_offline_fallback_enabled = false;
+            log_msg("Offline Query/catalog bundle is unavailable; live routing remains enabled: "
+                + bundle_error);
+        }
+    }
+
     log_msg(std::string("Started. Forwarding to ") + g_monolith_url);
+    log_msg(std::string("Offline fallback ")
+        + (g_offline_fallback_enabled ? "enabled" : "disabled"));
 
     init_call_log();
 
-    // Start background health poll thread (detached = daemon)
+    // Keep ownership of the poller so it cannot race process teardown after
+    // stdin closes.
     std::thread poller(health_poll_thread);
-    poller.detach();
 
     // Main stdin read loop
     std::string line;
@@ -1436,7 +2265,8 @@ int main(int argc, char* argv[])
         if (line.empty())
             continue;
 
-        // Parse JSON
+        // Parse JSON. Malformed input is a request-level error, not a reason to
+        // terminate the long-lived control plane or silently drop the caller.
         json msg;
         try
         {
@@ -1445,54 +2275,81 @@ int main(int argc, char* argv[])
         catch (const json::parse_error& e)
         {
             log_msg(std::string("Bad JSON: ") + e.what());
+            write_stdout(make_jsonrpc_error(json(), -32700, "Parse error."));
             continue;
         }
 
-        std::string method = msg.value("method", "");
+        if (!msg.is_object())
+        {
+            write_stdout(make_jsonrpc_error(json(), -32600,
+                "Invalid Request: JSON-RPC message must be an object."));
+            continue;
+        }
+
         bool has_id = msg.contains("id");
+        json request_id = has_id ? msg["id"] : json();
+        auto method_it = msg.find("method");
+        if (method_it == msg.end() || !method_it->is_string()
+            || method_it->get_ref<const std::string&>().empty())
+        {
+            write_stdout(make_jsonrpc_error(request_id, -32600,
+                "Invalid Request: method must be a non-empty string."));
+            continue;
+        }
+        std::string method = method_it->get<std::string>();
         std::string response;
 
-        if (method == "initialize")
+        try
         {
-            response = handle_initialize(msg);
-            log_msg("Initialized");
-        }
-        else if (method == "notifications/initialized" || method == "initialized")
-        {
-            // Notification -- no response. Check if Monolith is up.
-            check_monolith_state_change();
-        }
-        else if (method == "ping")
-        {
-            response = handle_ping(msg);
-        }
-        else if (method == "tools/list")
-        {
-            check_monolith_state_change();
-            response = handle_tools_list(msg);
-        }
-        else if (method == "tools/call")
-        {
-            response = handle_tools_call(msg);
-        }
-        else
-        {
-            // Forward unknown methods to Monolith
-            double t0 = now_seconds();
-            std::string resp = post_monolith(msg.dump());
-            double duration_ms = (now_seconds() - t0) * 1000.0;
-            write_call_log_line(msg, resp, duration_ms);
-
-            if (!resp.empty())
+            if (method == "initialize")
             {
-                response = resp;
+                response = handle_initialize(msg);
+                log_msg("Initialized");
             }
-            else if (has_id)
+            else if (method == "notifications/initialized" || method == "initialized")
             {
-                response = make_jsonrpc_error(msg["id"], -32601,
-                    "Method not found: " + method);
+                // Notification -- no response. The background poll owns live
+                // state transitions so client initialization never blocks on
+                // a half-started editor endpoint.
             }
-            // else: notification with no id, silently drop
+            else if (method == "ping")
+            {
+                response = handle_ping(msg);
+            }
+            else if (method == "tools/list")
+            {
+                response = handle_tools_list(msg);
+            }
+            else if (method == "tools/call")
+            {
+                response = handle_tools_call(msg);
+            }
+            else
+            {
+                // The proxy advertises only tools. Answer the standard empty
+                // optional surfaces locally and reject everything else without
+                // a network roundtrip. Forwarding unknown methods caused 4-30s
+                // shutdown/startup stalls against half-started editors and
+                // violated the capabilities returned by initialize.
+                if (!has_id)
+                    continue;
+                if (method == "resources/list")
+                    response = make_result(request_id, {{"resources", json::array()}});
+                else if (method == "resources/templates/list")
+                    response = make_result(request_id, {{"resourceTemplates", json::array()}});
+                else if (method == "prompts/list")
+                    response = make_result(request_id, {{"prompts", json::array()}});
+                else
+                    response = make_jsonrpc_error(request_id, -32601,
+                        "Method not found: " + method);
+            }
+        }
+        catch (const std::exception& error)
+        {
+            log_msg("Request handler exception for '" + method + "': " + error.what());
+            if (has_id)
+                response = make_jsonrpc_error(request_id, -32603,
+                    "Internal error while handling request; the proxy remains available.");
         }
 
         if (!response.empty())
@@ -1500,6 +2357,9 @@ int main(int argc, char* argv[])
     }
 
     // EOF on stdin -- clean exit
+    g_stop_health_poll.store(true);
+    if (poller.joinable())
+        poller.join();
     log_msg("stdin closed, exiting");
     return 0;
 }

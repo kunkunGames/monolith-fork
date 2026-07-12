@@ -331,11 +331,6 @@ static json summarize_response(const json& response_json, size_t result_bytes, b
             if (err.is_object())
             {
                 if (err.contains("code")) summary["jsonrpc_error_code"] = err["code"];
-                summary["jsonrpc_error_message"] = err.value("message", "").substr(0, 240);
-            }
-            else
-            {
-                summary["jsonrpc_error_message"] = err.dump().substr(0, 240);
             }
         }
 
@@ -481,13 +476,17 @@ static void log_proxy_tools_call(
     try { response_json = json::parse(response); } catch (...) {}
 
     bool args_truncated = false;
-    bool response_truncated = false;
+    // Tool results can contain arbitrary project/source data. Daily logs are
+    // diagnostics, not a second copy of tool output, so retain only shape and
+    // byte-count metadata. In particular, never preserve a response preview or
+    // a hash of its contents: both made sensitive output recoverable/correlatable
+    // outside the MCP response channel.
+    const size_t result_bytes = response.size();
+    const bool response_omitted = true;
+    const bool response_large = result_bytes > max_log_field_bytes();
     size_t arg_bytes = 0;
-    size_t result_bytes = 0;
     std::string arg_hash;
-    std::string result_hash;
     json bounded_args = bounded_json(redact_json(args), args_truncated, arg_bytes, arg_hash);
-    json bounded_response = bounded_json(redact_json(response_json), response_truncated, result_bytes, result_hash);
 
     std::string outcome = "success";
     std::string error_class;
@@ -524,7 +523,9 @@ static void log_proxy_tools_call(
         std::string lower = response_json["result"].dump();
         std::transform(lower.begin(), lower.end(), lower.begin(),
                        [](unsigned char c){ return (char)std::tolower(c); });
-        if (lower.find("not available") != std::string::npos || lower.find("not running") != std::string::npos)
+        if (lower.find("not available") != std::string::npos
+            || lower.find("not running") != std::string::npos
+            || lower.find("transport is unavailable") != std::string::npos)
         {
             outcome = "editor_unavailable";
             error_class = "editor_unavailable";
@@ -543,16 +544,17 @@ static void log_proxy_tools_call(
 
     if (repeated) tags.push_back("repeated_call");
     if (duration_ms > 5000.0) tags.push_back("slow_action");
-    if (args_truncated || response_truncated) tags.push_back("large_result");
-    json return_summary = summarize_response(response_json, result_bytes, args_truncated || response_truncated);
+    if (args_truncated || response_large) tags.push_back("large_result");
+    json return_summary = summarize_response(response_json, result_bytes, response_large);
 
     json redaction = {
         {"argument_bytes", arg_bytes},
         {"result_bytes", result_bytes}
     };
-    if (args_truncated || response_truncated) redaction["truncated"] = true;
+    if (args_truncated) redaction["arguments_truncated"] = true;
+    if (response_large) redaction["result_large"] = true;
+    redaction["result_omitted"] = response_omitted;
     if (!arg_hash.empty()) redaction["argument_sha256"] = arg_hash;
-    if (!result_hash.empty()) redaction["result_sha256"] = result_hash;
 
     json agent_signal = {
         {"outcome", outcome},
@@ -563,23 +565,23 @@ static void log_proxy_tools_call(
     if (repeated) agent_signal["repeat_within_window"] = true;
     if (!tags.empty()) agent_signal["improvement_tags"] = tags;
 
+    const bool used_offline_fallback = phase_timing_input.is_object()
+        && phase_timing_input.contains("offline_fallback_ms");
     auto [context_namespace, context_action] = tool_namespace_action(forwarded_name, args);
     auto [intent, confidence] = infer_intent_for_tool(context_namespace, context_action, outcome);
     json routing_context = {
-        {"decision_source", repeated ? "fallback" : "direct"},
-        {"namespace_source", namespace_source_for_tool(tool_name, forwarded_name)},
+        {"decision_source", used_offline_fallback
+            ? "offline_fallback"
+            : (repeated ? "fallback" : "direct")},
+        {"namespace_source", used_offline_fallback
+            ? "child_query"
+            : namespace_source_for_tool(tool_name, forwarded_name)},
         {"inferred_intent", intent},
         {"intent_confidence", confidence}
     };
     json workflow = {
         {"step", workflow_step_for_intent(intent, outcome)}
     };
-
-    json return_record = {
-        {"response", bounded_response}
-    };
-    json response_id = response_json.is_object() ? response_json.value("id", json(nullptr)) : json(nullptr);
-    if (response_id != msg.value("id", json(nullptr))) return_record["jsonrpc_id"] = response_id;
 
     uint64_t sequence = 0;
     std::string record_id;
@@ -633,7 +635,6 @@ static void log_proxy_tools_call(
             {"arguments", bounded_args},
             {"retry_signature", retry_signature}
         }},
-        {"return", return_record},
         {"return_summary", return_summary},
         {"redaction", redaction},
         {"agent_signal", agent_signal}
