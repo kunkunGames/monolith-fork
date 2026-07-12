@@ -392,14 +392,17 @@ namespace
                 return false;
             }
             const FString Path = Value->AsString().TrimStartAndEnd();
-            UObject* Asset = Path.IsEmpty()
-                ? nullptr
-                : StaticLoadObject(ObjProp->PropertyClass, nullptr, *Path);
-            if (!Path.IsEmpty() && !Asset)
+            if (Path.IsEmpty())
+            {
+                ObjProp->SetObjectPropertyValue(PropAddr, nullptr);
+                return true;
+            }
+            UObject* Asset = nullptr;
+            FString ResolvedPath, LoadError;
+            if (!FMonolithAssetUtils::TryLoadAssetByPath(ObjProp->PropertyClass, Path, Asset, ResolvedPath, LoadError))
             {
                 OutFailureReason = TEXT("ParseFailed");
-                OutDetail = FString::Printf(TEXT("could not load %s as %s"),
-                    *Path, *ObjProp->PropertyClass->GetName());
+                OutDetail = LoadError;
                 return false;
             }
             ObjProp->SetObjectPropertyValue(PropAddr, Asset);
