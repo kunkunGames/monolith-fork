@@ -51,3 +51,9 @@ Prevention: Operations that allocate uncompressed rendering buffers or composite
 **Learning:** General instructions in `AGENTS.md` to avoid random suffixes are missed unless directly included in the agent's specific instructions.
 **Prevention:** Never append numeric task IDs, UUIDs, or timestamp suffixes to branch names. If your chosen branch name is taken or overlapping work exists, stop without PR instead of renaming the branch to bypass collision checks.
 **Avoid:** Generating branches with `-<number>` suffixes.
+
+## 2026-07-12 - Explicit duplicate / collision check required
+**Coordination issue:** LimitGuard merged identical fixes multiple times (e.g., `da40349` and `39c15f3` for WorldGen prop scatter counts) because it did not check for overlapping PRs or branches from itself or domain keepers.
+**Learning:** Checking for collisions only within an agent's own track or relying strictly on explicit file checks is insufficient if the agent doesn't check open branches or closed PRs first.
+**Prevention:** Run the cross-agent branch check first; if the keeper (or any agent) has an open branch or recently merged PR touching the intended files or same-area, stop without PR.
+**Avoid:** Submitting duplicate PRs for limits that are already clamped by another branch.
