@@ -1,9 +1,90 @@
 # AssetEditing Benchmark Results
 
+## v5.5 (2026-07-12) — measurement repair: structured tool results + transport-failure gate
+
+The 578-task suite was run live against Speed and scored `asset_authoring_rate=0.19` /
+`edit_execute_rate=0.62`. **Every sampled failure was a measurement defect, not a Monolith
+capability gap.** Two independent defects were found and fixed; both are now covered by
+regression tests that fail on the pre-fix code.
+
+### Defect 1 — the scorer read the transport stub instead of the payload
+
+Monolith ships `bEnableStructuredToolResults=True`, so a successful `tools/call` returns the
+payload in `result.structuredContent` and leaves `content[0].text` as the constant stub
+`"OK; see structuredContent."`. Every token assertion in the runner scanned that stub:
+
+| Evidence | Value |
+|---|---|
+| Sampled failing tasks re-run with evidence capture | 12/12 had `is_error=false`, `contains_ok=false`, `snippet="OK; see structuredContent."` |
+| Proof the payload was present | the runner's JSONPath `capture` (which *is* structured-aware) read `$.bones[0].name` → `Bone01` from the same response |
+| Direction of the error | `contains` silently scored **0**; `not_contains` silently **passed** |
+
+Fixed by routing every content assertion through `response_scan_text()` (human text **plus**
+the serialized `structuredContent`). `result_text()` is retained for evidence/snippet fields
+and for error-message assertions, where the human text is still canonical. A second defect
+surfaced in the same pass: `_compile_is_clean()` had an "if we cannot tell, pass" fallback
+(`"0 error" in text or "error" not in text`) that evaluated **true** against the stub, so an
+unprovable compile scored as clean. It now fails with `reason=no_structured_compile_signal`.
+
+The same audit cleared `ai_capability`, `action_guidance`, `project_index`,
+`schema_completeness`, `offline_parity`, and `benchmark_common` (already structured-aware),
+and found the **inverse** defect in `source_index_benchmark.py`: truthfully-empty responses
+were counted as `symbol_hit_rate` hits, silently **inflating** that score toward 1.0.
+
+### Defect 2 — an editor outage was published as a capability regression
+
+`asset_editing_benchmark.py` was the only live suite without the shared transport-failure
+gate. A 578-task run with **157 transport errors (27%)** — the headless editor died mid-run —
+still wrote a scored `summary.json` and exited 0, reporting `error_path`, `workflow_execute`,
+and `negative_compile` as 0.0 when the editor simply was not answering.
+
+The runner now shares `benchmark_common.TransportFailureTracker` with the other suites:
+3 consecutive transport errors abort; a >5% transport-failed fraction rejects the run (checked
+mid-run after 20 attempts and again at `finalize()`, which catches the flapping-editor case
+that never trips the consecutive gate). A rejected run writes `run_failure.json` +
+`partial_summary.json` with `run_valid=false`, writes **no** `summary.json` (a stale one is
+removed), and exits 1. See `METRICS.md` → Run Integrity.
+
+### What the repaired benchmark then found: a real editor crash
+
+With the measurement fixed, the very next run scored the reachable prefix at
+`edit_execute_rate=1.0`, `workflow_execute_rate=1.0`, `asset_authoring_rate=0.78` — and then the
+new gate aborted it at task 429/578 with `reason=consecutive_transport_failures`. The editor had
+**crashed**, and the gate turned that into `run_valid=false` + `exit 1` instead of a scored
+baseline.
+
+The crash was Monolith's, not the benchmark's:
+
+| Field | Value |
+|---|---|
+| Task | `BEB-428` (`level_instance_blueprint_prefab_roundtrip`) |
+| Action | `level_instance.create_blueprint_prefab` — the call returned `WinError 10054` (socket closed by the peer) while every later task got `10061` (refused) |
+| Fault | `EXCEPTION_ACCESS_VIOLATION reading address 0x1c0` in `MonolithLevelDesign.dll` → `UnrealEd.dll` → `Engine.dll`, dispatched from `FMonolithToolRegistry::ExecuteAction` |
+| Root cause | UE 5.8 `FKismetEditorUtilities::HarvestBlueprintFromActors` dereferences `AActor::GetRootComponent()` with **no null check** once it identifies more than one root actor (`Kismet2.cpp`). `BEB-428` spawned two bare `Actor`s — which have no root component — so the engine null-derefed and took the editor down. |
+
+Fixed in `MonolithLevelDesignPlacementActions.cpp::CreateBlueprintPrefab`: validate every
+resolved actor for a root component *before* calling the engine, and reject with an error that
+names the offending actors. Verified live — the same call that killed the editor now returns
+`Cannot harvest a Blueprint prefab from actor(s) with no root component: AE_CrashGuardA,
+AE_CrashGuardB. …` and `monolith_status` still answers.
+
+Suite changes that came with it (578 → **579** tasks):
+
+- `BEB-428` / the prefab-placement task now spawn `/Engine/BasicShapes/Cube` actors, so they
+  exercise the real harvest path instead of the crash path.
+- **New `BEB-429`** (`level_instance_rootless_prefab_rejected`) pins the guard: bare actors in,
+  named rejection out, and a `verify` that the prefab asset was **not** written.
+- **New chain verb `expect_error`** — `allow_error` only *tolerates* an error, so a negative case
+  could not be expressed at all and a guard regressing to "crash" or "silent success" would still
+  score green. `expect_error` *requires* the rejection and still enforces `contains`, so the
+  error has to name the offending input. See `METRICS.md` → Chain Step Verbs.
+- Automation test `Monolith.ParamGuard.LevelDesign.CreateBlueprintPrefabRootlessActors`, which
+  crashes the process without the guard.
+
 ## v5.4 (2026-06-26) — AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion
 
-The current generated static suite has **577 tasks across 11 categories**. The new work expands
-`asset_authoring` to **267** asset creation/edit/save/read-back chains for high-ROI UE asset types beyond
+The current generated static suite has **578 tasks across 11 categories**. The new work expands
+`asset_authoring` to **268** asset creation/edit/save/read-back chains for high-ROI UE asset types beyond
 Blueprint graph edits: Texture file import metadata and conflict-policy validation, editor delete
 guard read-back, ImageGen Texture2D/MSDF provenance assets,
 Interchange texture/audio and StaticMesh import/reimport/export, Interchange batch import, ModelGen
@@ -12,7 +93,7 @@ screen-size metadata, StaticMesh FBX export, StaticMesh material-slot/compare re
 PBR material creation from disk textures, Material
 Function, Material Function Instance overrides, Material Instance duplicate/reparent/clear flows,
 animation core assets, BlendSpace sample bake, AimOffset axis editing, IK Rig/Retargeter metadata, retarget pose/root settings, explicit chain mapping/settings, PoseSearch Schema channel configuration,
-audio routing/template/spec assets, explicit MetaSound node connect/disconnect workflows, Niagara sidecars, EQS, Chooser Tables, GAS
+audio routing/template/spec assets, explicit MetaSound node connect/disconnect workflows, Niagara sidecars, idempotent PCGGraph Add Tags authoring/validation, EQS, Chooser Tables, GAS
 Ability/Cue/TargetActor assets, Material graph build/export, CommonUI text-block authoring,
 AnimMontage sections/slots, AnimSequence curve/sync metadata, Material texture preview/contact-sheet/tiling diagnostics, Niagara HLSL module stack insertion,
 BehaviorTree spec-build, BehaviorTree Task/Decorator/Service Blueprint assets, GAS Enhanced Input
@@ -122,13 +203,13 @@ until their live action, portable benchmark fixture, and cleanup contracts are p
 
 | Field | Value |
 |-------|-------|
-| Generated tasks | 577 |
-| Generated `asset_authoring` tasks | 267 |
+| Generated tasks | 578 |
+| Generated `asset_authoring` tasks | 268 |
 | Static generation | `python Plugins\Monolith\Scripts\asset_editing_benchmark.py generate` |
-| Generated AssetType slices | 23 directories under `Benchmarks\AssetEditing\[AssetType]`, plus `asset_types.json`, each with type README, scoped `tasks.jsonl`, `index.json`, and `testcases\*.json` files |
-| Generated test-set modules | 1809 modules split across 38 shard files in `Benchmarks\AssetEditing\testsets\module_shards`, including 92 `asset_operation_domain` modules and 1066 `asset_operation_edit_domain` leaves |
-| Latest static addendum | Added `BEB-283` Texture2D PNG post-processing/processed-PNG read-back, `BEB-284` batch rename dry-run/apply validation, `BEB-285` Texture2D file-conflict overwrite policy, `BEB-286` editor delete guard read-back, `BEB-320` IKRig retarget-chain lifecycle editing, `BEB-321` IK Retargeter explicit chain mapping, `BEB-322` IK Retargeter chain settings read-back, `BEB-374` PoseSearch Schema channel configuration, `BEB-516` project generated-asset cleanup dry-run/apply validation, `BEB-525` DataTable strict rejection, bulk CDO schema dry-run/apply validation, AnimSequence pose-frame and pose-copy editing, AnimMontage section flow/time/delete editing, BlendSpace sample deletion, AnimSequence bone-track lifecycle editing, notify batch/track/clone editing, StringTable registry-list read-back, Content Browser collection name validation/unique-name generation, AnimSequence modifier stack persistence/read-back, Texture2D typed validation/enricher registry read-back, Niagara emitter disable/reorder/remove lifecycle read-back, Material Texture2D preview/contact-sheet/tiling diagnostics, MetaSound explicit node connect/disconnect read-back, StaticMesh material-slot/compare read-back, and `BEB-545` editor Texture2D import plus flipbook-atlas stitching. The regenerated current asset-authoring range is `BEB-279..BEB-545`; use `tasks.jsonl`, `asset_types.json`, `testsets/index.json`, and `testsets/module_shards/` as the canonical ID map. Repeated domain prefixes are compacted in route module ids, for example `asset_authoring.asset.batch_delete`, `asset_authoring.data.asset_bulk_cdo_schema`, and `asset_operation.edit.asset.batch_delete`; legacy duplicate selector inputs are normalized before lookup and generated docs expose only compact canonical routes. |
-| Live status | The latest full live scored run is still the 375-task pre-rename historical baseline below; previously appended focused rows passed the listed historical `Saved\Monolith\Benchmarks\AssetEditing\...` smoke runs. The current `BEB-279..BEB-545` AssetEditing authoring range plus the generated workflow/asset-operation/lifecycle/operation-semantics routing tree are statically generated and pending focused live smoke/full live rerun evidence. |
+| Generated AssetType slices | 24 directories under `Benchmarks\AssetEditing\[AssetType]`, plus `asset_types.json`, each with type README, scoped `tasks.jsonl`, `index.json`, and `testcases\*.json` files |
+| Generated test-set modules | 1820 modules split across 39 shard files in `Benchmarks\AssetEditing\testsets\module_shards`, including 96 `asset_operation_domain` modules and 1070 `asset_operation_edit_domain` leaves |
+| Latest static addendum | Added `BEB-283` Texture2D PNG post-processing/processed-PNG read-back, `BEB-284` batch rename dry-run/apply validation, `BEB-285` Texture2D file-conflict overwrite policy, `BEB-286` editor delete guard read-back, `BEB-320` IKRig retarget-chain lifecycle editing, `BEB-321` IK Retargeter explicit chain mapping, `BEB-322` IK Retargeter chain settings read-back, `BEB-374` PoseSearch Schema channel configuration, `BEB-516` project generated-asset cleanup dry-run/apply validation, `BEB-525` DataTable strict rejection, bulk CDO schema dry-run/apply validation, AnimSequence pose-frame and pose-copy editing, AnimMontage section flow/time/delete editing, BlendSpace sample deletion, AnimSequence bone-track lifecycle editing, notify batch/track/clone editing, StringTable registry-list read-back, Content Browser collection name validation/unique-name generation, AnimSequence modifier stack persistence/read-back, Texture2D typed validation/enricher registry read-back, Niagara emitter disable/reorder/remove lifecycle read-back, Material Texture2D preview/contact-sheet/tiling diagnostics, MetaSound explicit node connect/disconnect read-back, StaticMesh material-slot/compare read-back, `BEB-545` editor Texture2D import plus flipbook-atlas stitching, and `BEB-546` idempotent PCGGraph Add Tags authoring/validation. The regenerated current asset-authoring range is `BEB-279..BEB-546`; use `tasks.jsonl`, `asset_types.json`, `testsets/index.json`, and `testsets/module_shards/` as the canonical ID map. Repeated domain prefixes are compacted in route module ids, for example `asset_authoring.asset.batch_delete`, `asset_authoring.data.asset_bulk_cdo_schema`, and `asset_operation.edit.asset.batch_delete`; legacy duplicate selector inputs are normalized before lookup and generated docs expose only compact canonical routes. |
+| Live status | The latest full live scored run is still the 375-task pre-rename historical baseline below; previously appended focused rows passed the listed historical `Saved\Monolith\Benchmarks\AssetEditing\...` smoke runs. The current `BEB-279..BEB-546` AssetEditing authoring range plus the generated workflow/asset-operation/lifecycle/operation-semantics routing tree are statically generated and pending focused live smoke/full live rerun evidence. |
 
 ### Historical pre-rename v5.4 live scored run
 
@@ -191,7 +272,7 @@ Monolith MCP 0.20.3:
 
 The v5.1 live 1.000 remains useful historical evidence for the Blueprint graph hardening. The
 v5.3 run above is the previous full scored 362-task UE 5.8 baseline; v5.4's latest full scored
-baseline is 375 tasks, while the generated suite is now 577 tasks pending a full live rerun for the
+baseline is 375 tasks, while the generated suite is now 578 tasks pending a full live rerun for the
 post-baseline asset-authoring addendum.
 
 ## v5.1 (2026-06-18) — adversarial hardening + practical expansion
@@ -320,6 +401,6 @@ python Scripts\asset_editing_benchmark.py run `
   --jobs 4
 ```
 
-Expected on a healthy live editor: 577 tasks loaded and all eleven rates at or near 1.0. A near-1.0
+Expected on a healthy live editor: 578 tasks loaded and all eleven rates at or near 1.0. A near-1.0
 here now *means* the server actually performs, wires, compiles-clean, creates/edits/saves common UE
 asset types, rejects bad input, and guards duplicates — not merely that it replied without error.

@@ -24,11 +24,11 @@
     "create_save": 1
   },
   "task_ids": [
-    "BEB-498"
+    "BEB-499"
   ],
   "task_refs": [
     {
-      "id": "BEB-498",
+      "id": "BEB-499",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -62,7 +62,7 @@
   ],
   "tasks": [
     {
-      "id": "BEB-498",
+      "id": "BEB-499",
       "category": "asset_authoring",
       "namespace": "mixed",
       "action": "op_chain",
@@ -117,7 +117,7 @@
           "tool": "scene_query",
           "args": {
             "action": "spawn_actor",
-            "class_or_mesh": "Actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
             "location": [
               0,
               0,
@@ -127,15 +127,14 @@
             "folder": "MonolithBenchmarks/AssetEditing"
           },
           "contains": [
-            "AE_BenchPrefabPlaceSourceA",
-            "Actor"
+            "AE_BenchPrefabPlaceSourceA"
           ]
         },
         {
           "tool": "scene_query",
           "args": {
             "action": "spawn_actor",
-            "class_or_mesh": "Actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
             "location": [
               140,
               0,
@@ -145,8 +144,7 @@
             "folder": "MonolithBenchmarks/AssetEditing"
           },
           "contains": [
-            "AE_BenchPrefabPlaceSourceB",
-            "Actor"
+            "AE_BenchPrefabPlaceSourceB"
           ]
         },
         {

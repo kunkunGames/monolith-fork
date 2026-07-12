@@ -22,7 +22,7 @@ Weights sum to exactly 1.0 and live in the single `WEIGHTS` dict in
 formula string, the comparison report, and the module docstring (an `assert` enforces the sum).
 
 > **v5.4 AssetEditing rename + UE 5.8 high-ROI Monolith asset-action expansion (2026-06-26):** the current generated
-> task set is 577 tasks across 11 categories. `asset_authoring` now has 267 asset creation/edit/save/read-back
+> task set is 578 tasks across 11 categories. `asset_authoring` now has 268 asset creation/edit/save/read-back
 > chains covering Texture/Font/DataTable/StringTable/Input/Material/MIC/MaterialFunction/CurveTable/
 > DataAsset/StaticMesh/UMG/Animation/Audio/Niagara/AI/GAS/Chooser assets plus ImageGen,
 > Interchange, ModelGen provenance/import-pipeline assets, StaticMesh LOD quality metadata,
@@ -217,13 +217,13 @@ formula string, the comparison report, and the module docstring (an `assert` enf
 | `edit_schema` | 47 | read_only_discovery |
 | `workflow_execute` | 11 | mutating_fixture |
 | `edit_execute` | 113 | mutating_fixture |
-| `asset_authoring` | 267 | mutating_asset_authoring |
+| `asset_authoring` | 268 | mutating_asset_authoring |
 | `error_path` | 20 | read_only_invalid |
 | `duplicate_reject` | 11 | mutating_idempotency |
 | `negative_compile` | 1 | mutating_fixture |
-| **Total** | **577** | |
+| **Total** | **578** | |
 
-`asset_authoring` = 267 cross-domain asset creation/edit/save/read-back chains under
+`asset_authoring` = 268 cross-domain asset creation/edit/save/read-back chains under
 `/Game/Benchmarks/AssetAuthoring`. Most rows are `create_save`; lifecycle-specific modules preserve
 the stable `create` rows separately for dynamic Content Browser collection creation and blank UWorld
 map creation, whose handler saves inline. `workflow_execute` is now 11 executed chains and replaces the
@@ -231,7 +231,7 @@ old `workflow_completeness` (5).
 "already exists" responses count as success only when the read-back still confirms the entity
 is present (idempotent across repeated benchmark runs, but a silent no-op cannot pass).
 
-`testsets/index.json` currently advertises 1809 generated modules split across 38 shard files under
+`testsets/index.json` currently advertises 1820 generated modules split across 39 shard files under
 `testsets/module_shards/`. `testsets/modules.json` keeps the split-shard manifest, and each shard
 keeps module task IDs/refs plus parent/child links, so `select` and `run` load the same subset
 definition without parsing one monolithic module payload. Lifecycle routing is available both as generated modules such as
@@ -239,7 +239,7 @@ definition without parsing one monolithic module payload. Lifecycle routing is a
 modules, asset-operation routing is available through `asset_operation.*` roots plus
 `asset_operation.<role>.<domain>[.<edit_domain>]` leaves, operation-semantics routing is available through `operation_semantics.*`, and repeated
 modules can be composed with `--module-mode union` or `--module-mode intersection`.
-`asset_types.json` advertises 23 AssetType directories under `Benchmarks\AssetEditing\`, each with
+`asset_types.json` advertises 24 AssetType directories under `Benchmarks\AssetEditing\`, each with
 type-scoped `README.md`, `index.json`, `tasks.jsonl`, and per-edit-domain `testcases\*.json`
 lookup files.
 
@@ -299,6 +299,60 @@ Note: `undo`/`redo` do not exist in the blueprint catalog; replaced with `auto_l
 - **`read_schema_rate` is lenient:** checks `planning_signals` + `skill`. `isError` not checked.
 - **`type_discovery_rate`** requires ≥1 result. Required-result queries target the benchmark's own fixture names and exact `/Game/Benchmarks/...` paths, so a capable server scores 1.0 in any project, not only in GO.
 - **`duplicate_reject_rate` is inverted, first-call-gated, and two-call:** for each guarded `add_*` action the runner issues an optional `setup_arguments` (asserted to succeed) then the create call **twice**. Pass = the first call creates the entity (success or "already exists") AND the second identical call returns a **duplicate-specific** `isError` (text mentions `already`/`exist`/`duplicate`). A silent suffix, a silent no-op success, an always-error server, or a transport crash all score 0. Covered actions: `add_variable`, `add_function`, `add_component`, `add_event_node`, `add_event_dispatcher`, `add_local_variable`.
+
+## Response Contract: Structured Tool Results
+
+Monolith ships `bEnableStructuredToolResults=True` (`Config/DefaultMonolith.ini`), so a
+**successful** `tools/call` puts the payload in `result.structuredContent` and leaves
+`content[0].text` as the constant stub `"OK; see structuredContent."`
+(`Docs/specs/SPEC_MonolithStructuredToolResults.md`). **Errors** still carry a real
+human-readable message in `content[0].text`.
+
+Every content assertion — `contains`, `not_contains`, `expected_any`, read-back tokens, the
+compile signal, and the fixture-contract preflight — therefore scans `response_scan_text()`
+(human text **plus** the serialized `structuredContent`), never `result_text()` alone.
+`result_text()` remains the source for evidence/snippet fields and for error-message
+assertions, which are the one place the human text is still canonical.
+
+Scanning only `content[0].text` compares against the stub: `contains` silently scores **0**
+and `not_contains` silently **passes**. That defect zeroed `asset_authoring` to 0.19 and
+`edit_execute` to 0.62 in the 2026-07-11 run while the server was in fact performing every
+edit correctly.
+
+## Chain Step Verbs (`asset_authoring`)
+
+| Verb | Meaning |
+|------|---------|
+| `contains` / `not_contains` | Tokens that must / must not appear in `response_scan_text()` (human text + `structuredContent`). |
+| `expect` | Exact JSONPath assertions against the structured payload. |
+| `capture` | Bind JSONPath values for later steps. |
+| `allow_error` | **Tolerates** an error (used for delete-first cleanup steps). |
+| `expect_error` | **Requires** an error. The step passes only when the server returns `isError`, and `contains` still has to match — so the rejection must name the offending input. On a `verify` step it asserts absence ("reading this back must fail"), which is how a rejected write proves it left nothing behind. |
+
+`allow_error` alone cannot express a negative case: a guard that regressed from "clean
+rejection" to "crash" or to "silent success" would still score as a pass. `expect_error` closes
+that hole — `BEB-429` uses it to pin the `create_blueprint_prefab` rootless-actor guard.
+
+## Run Integrity: Transport-Failure Gate
+
+A dead or restarting editor answers every call with a transport error, and those empty
+responses score exactly like capability failures. The runner therefore shares
+`benchmark_common.TransportFailureTracker` with the other live suites:
+
+| Gate | Default | Behavior |
+|------|---------|----------|
+| Consecutive transport failures | 3 | Abort immediately; do not keep hammering a dead endpoint. |
+| Transport-failed fraction | 0.05 (after 20 attempts, and again at `finalize()`) | Reject the run — this is the flapping-editor case that never trips the consecutive gate. |
+
+A rejected run writes `run_failure.json` + `partial_summary.json` with `run_valid=false`,
+`completion_status`, and `metrics_scope="attempted_prefix_transport_failure"`, writes **no**
+`summary.json` (a stale one from an earlier run is removed), and exits **1**. Only a run with
+`run_valid=true` is a baseline. Tune with `--max-transport-failed-fraction`,
+`--max-consecutive-transport-failures`, and `--min-transport-fraction-sample`.
+
+Without this gate a 2026-07-11 578-task run with **157 transport errors (27%)** still wrote a
+scored `summary.json` and exited 0, publishing an editor outage as an AssetEditing capability
+regression.
 
 ## Anti-Gaming Properties
 
@@ -360,4 +414,4 @@ missing; `--skip-preflight` exists only as a compatibility escape hatch.
 | expanded-v3 | 1.000 | 1.000 | — | 185 | 70 edit_execute (10×7 types); fixtures created; all parameters verified |
 | current-v4 | 1.000 | 1.000 | 1.000 | 191 | Added `duplicate_reject` (6) + rebalanced weights. The v4 1.000 was reachable by a server that returned success without truly editing — the defect v5 fixes. |
 | **v5 initial static checkpoint** | — | — | — | 295 | Historical pre-AssetEditing expansion checkpoint: read-back-verified `edit_execute` (104), executed `workflow_execute` (11), expanded schema/read coverage, input-specific `error_path` (16), first-call-gated `duplicate_reject` (11), fixture-name/path `type_discovery` (21), and lifecycle preflight. v5 is NOT comparable to v4. |
-| **v5.4 static generator (current)** | — | — | — | 577 | Current static AssetEditing generator: 267 `asset_authoring` chains and 1809 generated test-set modules split across 38 shard files, including workflow/asset-operation/lifecycle/operation-semantics modules, role/domain/edit-domain hierarchy links, and selectors. See `RESULTS.md` for historical live evidence and rerun commands. |
+| **v5.4 static generator (current)** | — | — | — | 578 | Current static AssetEditing generator: 268 `asset_authoring` chains and 1820 generated test-set modules split across 39 shard files, including workflow/asset-operation/lifecycle/operation-semantics modules, role/domain/edit-domain hierarchy links, and selectors. See `RESULTS.md` for historical live evidence and rerun commands. |

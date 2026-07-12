@@ -21,7 +21,7 @@
     "BEB-288",
     "BEB-352",
     "BEB-385",
-    "BEB-464"
+    "BEB-465"
   ],
   "task_refs": [
     {
@@ -136,7 +136,7 @@
       "description": "Generate deterministic MSDF-ready SVG source, capture its written file path, validate it, import it through the SVG provenance boundary, and validate the imported source"
     },
     {
-      "id": "BEB-464",
+      "id": "BEB-465",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -231,7 +231,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-464"
+        "BEB-465"
       ],
       "case_file": "testcases\\generated_world_tile_texture.json"
     },

@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T14:12:33.847039+00:00",
+  "generated_at": "2026-07-12T02:14:12.681671+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
+  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.hlod",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/hlod.json",
-  "task_count": 577,
+  "task_count": 579,
   "module_count": 3,
   "routing_axes": [
     "category",
@@ -127,7 +127,7 @@
       "task_count": 2,
       "task_ids": [
         "BEB-348",
-        "BEB-494"
+        "BEB-495"
       ],
       "task_refs": [
         {
@@ -160,7 +160,7 @@
           "description": "Create a World Partition HLODLayer asset, reconfigure cell/loading settings, save, and inspect the reflected HLOD layer"
         },
         {
-          "id": "BEB-494",
+          "id": "BEB-495",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -194,37 +194,37 @@
             "BEB-348"
           ],
           "mesh_setup_layer": [
-            "BEB-494"
+            "BEB-495"
           ]
         },
         "by_operation_semantics": {
           "create_save": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ],
           "edit": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ],
           "readback_verify": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ],
           "save": [
             "BEB-348",
-            "BEB-494"
+            "BEB-495"
           ]
         }
       },
@@ -354,11 +354,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-494"
+        "BEB-495"
       ],
       "task_refs": [
         {
-          "id": "BEB-494",
+          "id": "BEB-495",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -389,26 +389,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-494"
+            "BEB-495"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-494"
+            "BEB-495"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-494"
+            "BEB-495"
           ],
           "edit": [
-            "BEB-494"
+            "BEB-495"
           ],
           "readback_verify": [
-            "BEB-494"
+            "BEB-495"
           ],
           "save": [
-            "BEB-494"
+            "BEB-495"
           ]
         }
       },

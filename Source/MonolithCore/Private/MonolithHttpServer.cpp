@@ -1,4 +1,4 @@
-﻿#include "MonolithHttpServer.h"
+#include "MonolithHttpServer.h"
 #include "MonolithActionExecutionGuard.h"
 #include "MonolithCancellationRegistry.h"
 #include "MonolithCoreModule.h"

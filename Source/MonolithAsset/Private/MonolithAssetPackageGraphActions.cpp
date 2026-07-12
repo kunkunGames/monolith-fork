@@ -1,4 +1,5 @@
 #include "MonolithAssetPackageGraphActions.h"
+#include "MonolithAssetMoveActions.h"
 
 #include "MonolithParamSchema.h"
 
@@ -14,6 +15,8 @@
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "IAssetTools.h"
+#include "ISourceControlModule.h"
+#include "ISourceControlProvider.h"
 #include "Interfaces/IPluginManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -724,6 +727,45 @@ namespace
 		}
 		DestinationPackages.Sort();
 		return DestinationPackages;
+	}
+
+	static bool PackageExists(IAssetRegistry& AssetRegistry, const FString& PackagePath);
+
+	static int32 CountPlannedPackageMutations(
+		IAssetRegistry& AssetRegistry,
+		const TSharedPtr<FJsonObject>& Plan,
+		const FString& CollisionPolicy)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* PackageMap = nullptr;
+		if (!Plan.IsValid() || !Plan->TryGetArrayField(TEXT("package_map"), PackageMap) || !PackageMap)
+		{
+			return 0;
+		}
+
+		int32 MissingDestinationCount = 0;
+		bool bHasBlockingCollision = false;
+		for (const TSharedPtr<FJsonValue>& Value : *PackageMap)
+		{
+			const TSharedPtr<FJsonObject> Row = Value.IsValid() ? Value->AsObject() : nullptr;
+			FString DestinationPackage;
+			if (!Row.IsValid()
+				|| !Row->TryGetStringField(TEXT("destination_package"), DestinationPackage))
+			{
+				continue;
+			}
+			const bool bDestinationExists = PackageExists(
+				AssetRegistry,
+				NormalizePackagePath(DestinationPackage));
+			if (bDestinationExists)
+			{
+				bHasBlockingCollision |= CollisionPolicy.Equals(TEXT("fail_if_exists"), ESearchCase::IgnoreCase);
+			}
+			else
+			{
+				++MissingDestinationCount;
+			}
+		}
+		return bHasBlockingCollision ? 0 : MissingDestinationCount;
 	}
 
 	static TArray<FString> DestinationPackagesFromCopyReport(const TSharedPtr<FJsonObject>& CopyReport)
@@ -1790,20 +1832,7 @@ namespace
 		const FMutationOptions& Mutation)
 	{
 		IAssetRegistry& AssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
-
 		TArray<FAssetData> RedirectorAssets;
-		if (DestinationRoots.Num() > 0)
-		{
-			FARFilter Filter;
-			Filter.bRecursivePaths = true;
-			Filter.ClassPaths.Add(UObjectRedirector::StaticClass()->GetClassPathName());
-			for (const FString& DestinationRoot : DestinationRoots)
-			{
-				Filter.PackagePaths.Add(FName(*DestinationRoot));
-			}
-			AssetRegistry.GetAssets(Filter, RedirectorAssets);
-		}
-
 		for (const FString& PackagePath : PackagePaths)
 		{
 			TArray<FAssetData> Assets;
@@ -1816,26 +1845,10 @@ namespace
 				}
 			}
 		}
-
-		TArray<TSharedPtr<FJsonValue>> Rows;
-		TArray<UObjectRedirector*> Redirectors;
-		for (const FAssetData& RedirectorAsset : RedirectorAssets)
+		RedirectorAssets.Sort([](const FAssetData& Left, const FAssetData& Right)
 		{
-			TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
-			Row->SetStringField(TEXT("package_path"), RedirectorAsset.PackageName.ToString());
-			Row->SetStringField(TEXT("object_path"), RedirectorAsset.GetSoftObjectPath().ToString());
-			Row->SetStringField(TEXT("status"), Mutation.bDryRun ? TEXT("dry_run") : TEXT("pending"));
-			Rows.Add(MakeShared<FJsonValueObject>(Row));
-
-			if (!Mutation.bDryRun)
-			{
-				if (UObjectRedirector* Redirector = Cast<UObjectRedirector>(RedirectorAsset.GetAsset()))
-				{
-					Redirectors.Add(Redirector);
-				}
-			}
-		}
-
+			return Left.GetObjectPathString() < Right.GetObjectPathString();
+		});
 		TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 		Result->SetStringField(TEXT("namespace"), TEXT("asset"));
 		Result->SetStringField(TEXT("action"), TEXT("cleanup_copied_redirectors"));
@@ -1843,22 +1856,97 @@ namespace
 		Result->SetBoolField(TEXT("confirmed"), Mutation.bConfirm);
 		Result->SetArrayField(TEXT("destination_roots"), StringsToJson(DestinationRoots));
 		Result->SetArrayField(TEXT("package_paths"), StringsToJson(PackagePaths));
-		Result->SetArrayField(TEXT("redirectors"), Rows);
 		Result->SetNumberField(TEXT("redirector_count"), RedirectorAssets.Num());
-
-		if (!Mutation.bDryRun && Redirectors.Num() > 0)
+		if (RedirectorAssets.IsEmpty())
 		{
-			IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
-			if (AssetTools.IsFixupReferencersInProgress())
+			Result->SetBoolField(TEXT("ok"), true);
+			Result->SetStringField(TEXT("status"), Mutation.bDryRun ? TEXT("dry_run") : TEXT("success"));
+			return FMonolithActionResult::Success(Result);
+		}
+
+		TArray<TSharedPtr<FJsonValue>> MoveRows;
+		TArray<FString> AllowedSourceRoots = DestinationRoots;
+		TArray<FString> AllowedDestinationRoots;
+		TArray<TSharedPtr<FJsonValue>> MappingRows;
+		for (const FAssetData& RedirectorAsset : RedirectorAssets)
+		{
+			FString DestinationExportPath;
+			if (!RedirectorAsset.GetTagValue(FName(TEXT("DestinationObject")), DestinationExportPath))
 			{
 				Result->SetStringField(TEXT("status"), TEXT("blocked"));
 				Result->SetBoolField(TEXT("ok"), false);
-				return FMonolithActionResult::Error(TEXT("AssetTools redirector fixup is already in progress")).WithErrorData(Result);
+				return FMonolithActionResult::Error(
+					FString::Printf(
+						TEXT("affected copied redirector is missing DestinationObject tag: %s"),
+						*RedirectorAsset.GetObjectPathString()))
+					.WithErrorData(Result);
+			}
+			const FString DestinationObjectPath = FPackageName::ExportTextPathToObjectPath(DestinationExportPath);
+			const FString DestinationPackage = FPackageName::ObjectPathToPackageName(DestinationObjectPath);
+			if (!FPackageName::IsValidObjectPath(DestinationObjectPath)
+				|| !FPackageName::IsValidLongPackageName(DestinationPackage, /*bIncludeReadOnlyRoots=*/true))
+			{
+				Result->SetStringField(TEXT("status"), TEXT("blocked"));
+				Result->SetBoolField(TEXT("ok"), false);
+				return FMonolithActionResult::Error(
+					FString::Printf(
+						TEXT("affected copied redirector has an invalid destination: %s"),
+						*RedirectorAsset.GetObjectPathString()))
+					.WithErrorData(Result);
 			}
 
-			AssetTools.FixupReferencers(Redirectors, /*bCheckoutDialogPrompt=*/false, ERedirectFixupMode::DeleteFixedUpRedirectors);
+			const FString SourcePackage = RedirectorAsset.PackageName.ToString();
+			AllowedSourceRoots.AddUnique(FPackageName::GetLongPackagePath(SourcePackage));
+			AllowedDestinationRoots.AddUnique(FPackageName::GetLongPackagePath(DestinationPackage));
+			TSharedPtr<FJsonObject> MoveRow = MakeShared<FJsonObject>();
+			MoveRow->SetStringField(TEXT("source"), SourcePackage);
+			MoveRow->SetStringField(TEXT("destination"), DestinationPackage);
+			MoveRow->SetStringField(TEXT("source_object_path"), RedirectorAsset.GetObjectPathString());
+			MoveRow->SetStringField(TEXT("destination_object_path"), DestinationObjectPath);
+			MoveRows.Add(MakeShared<FJsonValueObject>(MoveRow));
+
+			TSharedPtr<FJsonObject> MappingRow = MakeShared<FJsonObject>();
+			MappingRow->SetStringField(TEXT("source"), SourcePackage);
+			MappingRow->SetStringField(TEXT("destination"), DestinationPackage);
+			MappingRow->SetStringField(TEXT("destination_object_path"), DestinationObjectPath);
+			MappingRows.Add(MakeShared<FJsonValueObject>(MappingRow));
 		}
 
+		Result->SetArrayField(TEXT("redirector_mappings"), MappingRows);
+		TSharedPtr<FJsonObject> CleanupParams = MakeShared<FJsonObject>();
+		CleanupParams->SetArrayField(TEXT("moves"), MoveRows);
+		CleanupParams->SetArrayField(TEXT("allowed_source_roots"), StringsToJson(AllowedSourceRoots));
+		CleanupParams->SetArrayField(TEXT("allowed_destination_roots"), StringsToJson(AllowedDestinationRoots));
+		CleanupParams->SetBoolField(TEXT("dry_run"), Mutation.bDryRun);
+		CleanupParams->SetBoolField(TEXT("confirm"), Mutation.bConfirm);
+		const FMonolithActionResult CleanupResult =
+			FMonolithAssetMoveActions::CleanupMovedRedirectors(CleanupParams);
+		TArray<TSharedPtr<FJsonValue>> CleanupReports;
+		if (CleanupResult.Result.IsValid())
+		{
+			CleanupReports.Add(MakeShared<FJsonValueObject>(CleanupResult.Result));
+		}
+		else if (CleanupResult.ErrorData.IsValid())
+		{
+			CleanupReports.Add(MakeShared<FJsonValueObject>(CleanupResult.ErrorData));
+		}
+		Result->SetArrayField(TEXT("cleanup_reports"), CleanupReports);
+		if (!CleanupResult.bSuccess)
+		{
+			Result->SetBoolField(TEXT("ok"), false);
+			FString CleanupStatus = TEXT("failed");
+			if (CleanupResult.ErrorData.IsValid())
+			{
+				CleanupResult.ErrorData->TryGetStringField(TEXT("status"), CleanupStatus);
+			}
+			Result->SetStringField(TEXT("status"), CleanupStatus);
+			return FMonolithActionResult::Error(
+				FString::Printf(
+					TEXT("copied redirector cleanup failed: %s"),
+					*CleanupResult.ErrorMessage),
+				CleanupResult.ErrorCode)
+				.WithErrorData(Result);
+		}
 		Result->SetBoolField(TEXT("ok"), true);
 		Result->SetStringField(TEXT("status"), Mutation.bDryRun ? TEXT("dry_run") : TEXT("success"));
 		return FMonolithActionResult::Success(Result);
@@ -2364,7 +2452,7 @@ void FMonolithAssetPackageGraphActions::RegisterActions(FMonolithToolRegistry& R
 				.Optional(TEXT("manual_copy_roots"), TEXT("array"), TEXT("Source roots that are known to require manual single-object duplication"))
 				.Optional(TEXT("manual_copy_packages"), TEXT("array"), TEXT("Source packages that are known to require manual single-object duplication"))
 				.Optional(TEXT("allow_raw_package_copy"), TEXT("bool"), TEXT("Opt-in flag required before raw package file copy rows can execute"), TEXT("false"))
-				.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Run AssetTools redirector fixup over copied destination roots after fixup, before dependency closure"), TEXT("false"))
+				.Optional(TEXT("cleanup_redirectors"), TEXT("bool"), TEXT("Delete only exact affected copied redirectors with intact destinations and zero hard/soft referencers through asset.cleanup_moved_redirectors; never opens a modal fixup report"), TEXT("false"))
 				.Optional(TEXT("allowed_external_roots"), TEXT("array"), TEXT("External roots allowed during dependency-closure validation"))
 			.Optional(TEXT("legacy_source_roots"), TEXT("array"), TEXT("Source roots that should not remain referenced; defaults to root_remaps source roots when omitted"))
 			.Optional(TEXT("require_targets"), TEXT("bool"), TEXT("Fail fixup when a remapped reference target package is missing"), TEXT("true"))
@@ -2951,9 +3039,11 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 	FString Error;
 	FString Workflow = TEXT("copy_fixup_validate");
 	FString CopyStrategy = TEXT("auto");
+	FString CollisionPolicy = TEXT("fail_if_exists");
 	if (!ReadStrategyAlias(Params, Workflow, CopyStrategy, Error)
 		|| !ReadStringParam(Params, TEXT("workflow"), Workflow, Error)
-		|| !ReadStringParam(Params, TEXT("copy_strategy"), CopyStrategy, Error))
+		|| !ReadStringParam(Params, TEXT("copy_strategy"), CopyStrategy, Error)
+		|| !ReadStringParam(Params, TEXT("collision_policy"), CollisionPolicy, Error))
 	{
 		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("strategy"), Error));
 	}
@@ -2975,6 +3065,15 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 			TEXT("Unsupported copy_strategy '%s'; expected auto, duplicate_asset, advanced_copy, raw_package_file_copy, or header_patched_advanced_copy"),
 			*CopyStrategy);
 		return FMonolithActionResult::Error(Error, ErrInvalidParams).WithErrorData(ErrorData(TEXT("copy_strategy"), Error));
+	}
+	if (!CollisionPolicy.Equals(TEXT("fail_if_exists"), ESearchCase::IgnoreCase)
+		&& !CollisionPolicy.Equals(TEXT("skip_existing"), ESearchCase::IgnoreCase))
+	{
+		Error = FString::Printf(
+			TEXT("Unsupported collision_policy '%s'; expected fail_if_exists or skip_existing"),
+			*CollisionPolicy);
+		return FMonolithActionResult::Error(Error, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("collision_policy"), Error));
 	}
 
 	TArray<FRootRemap> Remaps;
@@ -3123,6 +3222,51 @@ FMonolithActionResult FMonolithAssetPackageGraphActions::CopyPackageGraphWithStr
 		return FMonolithActionResult::Error(
 			TEXT("copy_package_graph_with_strategy selected copy strategies that are not executable by this action"),
 			ErrInvalidParams).WithErrorData(Result);
+	}
+
+	IAssetRegistry& CleanupPreflightRegistry =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	const int32 PlannedPackageMutationCount = CountPlannedPackageMutations(
+		CleanupPreflightRegistry,
+		PlanResult.Result,
+		CollisionPolicy);
+	Result->SetNumberField(TEXT("planned_package_mutation_count"), PlannedPackageMutationCount);
+	if (bCleanupRedirectors && !Mutation.bDryRun && PlannedPackageMutationCount > 0)
+	{
+		IAssetRegistry& AssetRegistry = CleanupPreflightRegistry;
+		const bool bCleanupContextReady = GIsEditor
+			&& !IsRunningCommandlet()
+			&& IsInGameThread()
+			&& !AssetRegistry.IsLoadingAssets()
+			&& ISourceControlModule::Get().IsEnabled()
+			&& ISourceControlModule::Get().GetProvider().IsAvailable();
+		if (!bCleanupContextReady)
+		{
+			Phases.Add(MakeShared<FJsonValueObject>(MakePhaseRow(
+				TEXT("redirector_cleanup_precondition"),
+				TEXT("blocked"),
+				false,
+				TEXT("asset.cleanup_copied_redirectors"),
+				TEXT("cleanup was rejected before copy mutation"))));
+			Result->SetArrayField(TEXT("phases"), Phases);
+			Result->SetBoolField(TEXT("ok"), false);
+			Result->SetStringField(TEXT("status"), TEXT("redirector_cleanup_precondition_failed"));
+			Result->SetBoolField(TEXT("is_editor"), GIsEditor);
+			Result->SetBoolField(TEXT("is_commandlet"), IsRunningCommandlet());
+			Result->SetBoolField(TEXT("is_in_game_thread"), IsInGameThread());
+			Result->SetBoolField(TEXT("asset_registry_loading"), AssetRegistry.IsLoadingAssets());
+			Result->SetBoolField(
+				TEXT("source_control_enabled"),
+				ISourceControlModule::Get().IsEnabled());
+			Result->SetBoolField(
+				TEXT("source_control_available"),
+				ISourceControlModule::Get().IsEnabled()
+					&& ISourceControlModule::Get().GetProvider().IsAvailable());
+			return FMonolithActionResult::Error(
+				TEXT("cleanup_redirectors=true requires an editor game-thread call, a completed AssetRegistry scan, and available source control before copy mutation"),
+				ErrInvalidParams)
+				.WithErrorData(Result);
+		}
 	}
 
 	FMonolithActionResult CopyResult = CopyPackageGraphWithSelectedStrategies(PlanResult.Result, StrategyRows, Params, Mutation);

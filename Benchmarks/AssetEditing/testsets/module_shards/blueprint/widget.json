@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T14:12:33.847039+00:00",
+  "generated_at": "2026-07-12T02:14:12.681671+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
+  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
   "module_storage": "module_shard",
   "shard_id": "blueprint.widget",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/blueprint/widget.json",
-  "task_count": 577,
+  "task_count": 579,
   "module_count": 9,
   "routing_axes": [
     "category",
@@ -294,7 +294,7 @@
         "BEB-248",
         "BEB-249",
         "BEB-250",
-        "BEB-573"
+        "BEB-575"
       ],
       "task_refs": [
         {
@@ -946,7 +946,7 @@
           "description": "Add BenchWidgetOpenSettings function graph to Widget"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-575",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -971,7 +971,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-573"
+            "BEB-575"
           ],
           "edit_execute": [
             "BEB-186",
@@ -1060,7 +1060,7 @@
             "BEB-190",
             "BEB-246",
             "BEB-247",
-            "BEB-573"
+            "BEB-575"
           ]
         },
         "by_operation_semantics": {
@@ -1080,7 +1080,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-573"
+            "BEB-575"
           ],
           "read_only": [
             "BEB-003",
@@ -1117,7 +1117,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-573"
+            "BEB-575"
           ],
           "readback_verify": [
             "BEB-003",
@@ -1150,7 +1150,7 @@
             "BEB-248",
             "BEB-249",
             "BEB-250",
-            "BEB-573"
+            "BEB-575"
           ]
         }
       },
@@ -2205,7 +2205,7 @@
         "BEB-190",
         "BEB-246",
         "BEB-247",
-        "BEB-573"
+        "BEB-575"
       ],
       "task_refs": [
         {
@@ -2301,7 +2301,7 @@
           "description": "Set bIsVisible fixture variable default to true for Widget read-back"
         },
         {
-          "id": "BEB-573",
+          "id": "BEB-575",
           "category": "duplicate_reject",
           "namespace": "blueprint",
           "tool": "blueprint_query",
@@ -2326,7 +2326,7 @@
       "groups": {
         "by_category": {
           "duplicate_reject": [
-            "BEB-573"
+            "BEB-575"
           ],
           "edit_execute": [
             "BEB-189",
@@ -2341,7 +2341,7 @@
             "BEB-190",
             "BEB-246",
             "BEB-247",
-            "BEB-573"
+            "BEB-575"
           ]
         },
         "by_asset_operation": {
@@ -2350,14 +2350,14 @@
             "BEB-190",
             "BEB-246",
             "BEB-247",
-            "BEB-573"
+            "BEB-575"
           ],
           "readback_verify": [
             "BEB-189",
             "BEB-190",
             "BEB-246",
             "BEB-247",
-            "BEB-573"
+            "BEB-575"
           ]
         }
       },

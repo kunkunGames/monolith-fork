@@ -21,7 +21,7 @@ Eleven task categories:
   negative_compile - deliberately break a graph and require a REPORTED compile error
 
 v5.4 (2026-06-26): AssetEditing rename + UE 5.8 high-ROI asset-authoring follow-up.
-  - asset_authoring now covers 237 asset creation/edit/save/read-back chains, adding PBR material creation
+  - asset_authoring now covers 268 asset creation/edit/save/read-back chains, adding PBR material creation
     from disk textures, Material Instance duplicate/reparent/clear flows, MaterialFunctionInstance
     overrides, StaticMesh FBX export, BlendSpace sample bake, AimOffset axis editing, Interchange
     batch import, Blueprint spec build, DataTable bulk import/export, Blackboard inheritance/direct
@@ -67,7 +67,8 @@ v5.4 (2026-06-26): AssetEditing rename + UE 5.8 high-ROI asset-authoring follow-
     MetaSound Patch I/O, PostProcess emissive Material graph authoring, MetaSound spec-node
     add/layout/remove editing, AnimSequence curve/sync-marker cleanup, Niagara System EffectType
     assignment read-back, GeometryScript mesh quality repair, DataTable schema-only read-back, and
-    project index search/details/text export verification.
+    project index search/details/text export verification, and idempotent PCGGraph Add Tags
+    authoring/read-back/validation.
     Blueprint AttributeSet asset
     authoring, LogicDriver, and ComboGraph remain out of the portable generated suite until
     their plugin gates or fixture/read-back contracts are available in the benchmark workspace.
@@ -135,7 +136,18 @@ import urllib.request
 import wave
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from benchmark_common import attach_benchmark_inputs, build_benchmark_inputs, display_path, resolve_plugin_path
+from benchmark_common import (
+    benchmark_routing_context,
+    DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+    TransportAbortDecision,
+    TransportFailureTracker,
+    attach_benchmark_inputs,
+    build_benchmark_inputs,
+    display_path,
+    resolve_plugin_path,
+)
 
 
 DEFAULT_MCP_URL = "http://localhost:9316/mcp"
@@ -10510,20 +10522,26 @@ ASSET_AUTHORING_TASKS: List[Dict[str, Any]] = [
              "args": {"action": "delete_assets",
                       "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchPrefabSet"],
                       "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            # Prefab sources must have a scene root: a bare `Actor` has no root component, and
+            # UE 5.8's HarvestBlueprintFromActors dereferences it without a null check once it
+            # sees more than one root actor (Kismet2.cpp), which killed the headless editor
+            # here on 2026-07-11. create_blueprint_prefab now rejects rootless actors — the
+            # `level_instance_rootless_prefab_rejected` task below covers that guard, while
+            # this task must exercise the real harvest path.
             {"tool": "scene_query",
              "args": {"action": "spawn_actor",
-                      "class_or_mesh": "Actor",
+                      "class_or_mesh": "/Engine/BasicShapes/Cube",
                       "location": [0, 0, 80],
                       "name": "AE_BenchPrefabActorA",
                       "folder": "MonolithBenchmarks/AssetEditing"},
-             "contains": ["AE_BenchPrefabActorA", "Actor"]},
+             "contains": ["AE_BenchPrefabActorA"]},
             {"tool": "scene_query",
              "args": {"action": "spawn_actor",
-                      "class_or_mesh": "Actor",
+                      "class_or_mesh": "/Engine/BasicShapes/Cube",
                       "location": [120, 0, 80],
                       "name": "AE_BenchPrefabActorB",
                       "folder": "MonolithBenchmarks/AssetEditing"},
-             "contains": ["AE_BenchPrefabActorB", "Actor"]},
+             "contains": ["AE_BenchPrefabActorB"]},
             {"tool": "level_instance_query",
              "args": {"action": "create_blueprint_prefab",
                       "actor_names": ["AE_BenchPrefabActorA", "AE_BenchPrefabActorB"],
@@ -10548,6 +10566,61 @@ ASSET_AUTHORING_TASKS: List[Dict[str, Any]] = [
              "args": {"action": "inspect_asset",
                       "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchPrefabSet"},
              "contains": ["BP_BenchPrefabSet", "Blueprint"]},
+        ],
+    },
+    {
+        "name": "level_instance_rootless_prefab_rejected",
+        "domain": "level_instance",
+        "edit_domain": "blueprint_prefab_guard",
+        "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written",
+        # Regression guard for a live editor crash (2026-07-11): UE 5.8's
+        # FKismetEditorUtilities::HarvestBlueprintFromActors dereferences
+        # AActor::GetRootComponent() with no null check once it identifies more than one root
+        # actor, so harvesting two bare Actors killed the headless MCP editor with an access
+        # violation mid-run. The action must fail the call, not the process. If this task
+        # takes the editor down again, every following task reports a transport error and the
+        # transport gate rejects the run — so the crash can never be scored as a capability gap.
+        "chain": [
+            {"tool": "asset_query", "allow_error": True,
+             "args": {"action": "delete_assets",
+                      "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchRootlessPrefab"],
+                      "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            {"tool": "scene_query", "allow_error": True,
+             "args": {"action": "delete_actors",
+                      "actor_names": ["AE_BenchRootlessA", "AE_BenchRootlessB"]}},
+            {"tool": "scene_query",
+             "args": {"action": "spawn_actor",
+                      "class_or_mesh": "Actor",
+                      "location": [0, 0, 80],
+                      "name": "AE_BenchRootlessA",
+                      "folder": "MonolithBenchmarks/AssetEditing"},
+             "contains": ["AE_BenchRootlessA"]},
+            {"tool": "scene_query",
+             "args": {"action": "spawn_actor",
+                      "class_or_mesh": "Actor",
+                      "location": [120, 0, 80],
+                      "name": "AE_BenchRootlessB",
+                      "folder": "MonolithBenchmarks/AssetEditing"},
+             "contains": ["AE_BenchRootlessB"]},
+            # expect_error: a clean, named rejection — NOT a crash and NOT a silent success.
+            {"tool": "level_instance_query", "expect_error": True,
+             "args": {"action": "create_blueprint_prefab",
+                      "actor_names": ["AE_BenchRootlessA", "AE_BenchRootlessB"],
+                      "save_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchRootlessPrefab",
+                      "center_pivot": True,
+                      "keep_source_actors": True},
+             "contains": ["AE_BenchRootlessA", "AE_BenchRootlessB", "root component"]},
+            {"tool": "scene_query",
+             "args": {"action": "delete_actors",
+                      "actor_names": ["AE_BenchRootlessA", "AE_BenchRootlessB"]},
+             "contains": ["deleted"]},
+        ],
+        "verify": [
+            # The rejected prefab must not exist: a guard that still half-wrote the asset
+            # would be a silent partial success.
+            {"tool": "asset_query", "expect_error": True,
+             "args": {"action": "inspect_asset",
+                      "asset_path": f"{ASSET_AUTHORING_ROOT}/BP_BenchRootlessPrefab"}},
         ],
     },
     {
@@ -15107,20 +15180,21 @@ ASSET_AUTHORING_TASKS: List[Dict[str, Any]] = [
              "args": {"action": "delete_assets",
                       "asset_paths": [f"{ASSET_AUTHORING_ROOT}/BP_BenchPrefabPlacement"],
                       "allowed_prefixes": ASSET_AUTHORING_DELETE_PREFIXES, "force": True}},
+            # Scene roots required — see the note on level_instance_blueprint_prefab_roundtrip.
             {"tool": "scene_query",
              "args": {"action": "spawn_actor",
-                      "class_or_mesh": "Actor",
+                      "class_or_mesh": "/Engine/BasicShapes/Cube",
                       "location": [0, 0, 80],
                       "name": "AE_BenchPrefabPlaceSourceA",
                       "folder": "MonolithBenchmarks/AssetEditing"},
-             "contains": ["AE_BenchPrefabPlaceSourceA", "Actor"]},
+             "contains": ["AE_BenchPrefabPlaceSourceA"]},
             {"tool": "scene_query",
              "args": {"action": "spawn_actor",
-                      "class_or_mesh": "Actor",
+                      "class_or_mesh": "/Engine/BasicShapes/Cube",
                       "location": [140, 0, 80],
                       "name": "AE_BenchPrefabPlaceSourceB",
                       "folder": "MonolithBenchmarks/AssetEditing"},
-             "contains": ["AE_BenchPrefabPlaceSourceB", "Actor"]},
+             "contains": ["AE_BenchPrefabPlaceSourceB"]},
             {"tool": "level_instance_query",
              "args": {"action": "create_blueprint_prefab",
                       "actor_names": ["AE_BenchPrefabPlaceSourceA",
@@ -18679,6 +18753,153 @@ ASSET_AUTHORING_TASKS.extend([
 ])
 
 
+ASSET_AUTHORING_PCG_GRAPH = f"{ASSET_AUTHORING_ROOT}/PCG/PCG_BenchGraph"
+
+ASSET_AUTHORING_TASKS.extend([
+    {
+        "name": "pcg_graph_idempotent_authoring_roundtrip",
+        "domain": "pcg",
+        "edit_domain": "graph_authoring",
+        "description": (
+            "Create or reuse a saved PCGGraph, idempotently author one Add Tags node and two "
+            "edges, update native settings, then read back and validate the graph without delete/reset"
+        ),
+        "reference_context": [
+            "source: Engine/Plugins/PCG/Source/PCG/Public/Elements/PCGAddTag.h",
+            "source: Engine/Plugins/PCG/Source/PCG/Private/Elements/PCGAddTag.cpp",
+            "source: Engine/Plugins/PCG/Source/PCG/Private/PCGCommon.cpp",
+            "source: Plugins/Monolith/Source/MonolithPCG/Private/MonolithPCGGraphAuthoringActions.cpp",
+            "skill_ref: Plugins/Monolith/Skills/unreal-pcg/SKILL.md",
+        ],
+        "chain": [
+            {"tool": "pcg_query",
+             "args": {"action": "create_pcg_graph",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "existing_policy": "return_existing",
+                      "save": True},
+             "expect": {"$.class": "PCGGraph",
+                        "$.existing_policy": "return_existing"}},
+            {"tool": "pcg_query",
+             "args": {"action": "create_pcg_graph",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "existing_policy": "return_existing",
+                      "save": True},
+             "expect": {"$.status": "existing",
+                        "$.saved": False,
+                        "$.class": "PCGGraph"}},
+            {"tool": "pcg_query",
+             "args": {"action": "add_pcg_node",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "node_type": "PCGAddTagSettings",
+                      "node_title": "Bench_AddTag",
+                      "position": [320, 0],
+                      "existing_policy": "return_existing",
+                      "save": True},
+             "expect": {"$.node_title": "Bench_AddTag",
+                        "$.settings_class": "PCGAddTagSettings",
+                        "$.existing_policy": "return_existing"}},
+            {"tool": "pcg_query",
+             "args": {"action": "add_pcg_node",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "node_type": "PCGAddTagSettings",
+                      "node_title": "Bench_AddTag",
+                      "position": [320, 0],
+                      "existing_policy": "return_existing",
+                      "save": True},
+             "expect": {"$.status": "existing",
+                        "$.saved": False,
+                        "$.node_title": "Bench_AddTag",
+                        "$.settings_class": "PCGAddTagSettings"}},
+            {"tool": "pcg_query",
+             "args": {"action": "set_pcg_node_params",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "node_id": "Bench_AddTag",
+                      "properties": {"TagsToAdd": "Monolith.Benchmark"},
+                      "dry_run": False,
+                      "save": True},
+             "expect": {"$.status": "updated",
+                        "$.saved": True,
+                        "$.dry_run": False,
+                        "$.settings_class": "PCGAddTagSettings"}},
+            {"tool": "pcg_query",
+             "args": {"action": "connect_pcg_nodes",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "source_node": "__input__",
+                      "source_pin": "In",
+                      "target_node": "Bench_AddTag",
+                      "target_pin": "In",
+                      "save": True},
+             "expect": {"$.source_pin": "In",
+                        "$.target_pin": "In"}},
+            {"tool": "pcg_query",
+             "args": {"action": "connect_pcg_nodes",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "source_node": "__input__",
+                      "source_pin": "In",
+                      "target_node": "Bench_AddTag",
+                      "target_pin": "In",
+                      "save": True},
+             "expect": {"$.status": "already_connected",
+                        "$.saved": False,
+                        "$.created": False}},
+            {"tool": "pcg_query",
+             "args": {"action": "connect_pcg_nodes",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "source_node": "Bench_AddTag",
+                      "source_pin": "Out",
+                      "target_node": "__output__",
+                      "target_pin": "Out",
+                      "save": True},
+             "expect": {"$.source_pin": "Out",
+                        "$.target_pin": "Out"}},
+            {"tool": "pcg_query",
+             "args": {"action": "connect_pcg_nodes",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "source_node": "Bench_AddTag",
+                      "source_pin": "Out",
+                      "target_node": "__output__",
+                      "target_pin": "Out",
+                      "save": True},
+             "expect": {"$.status": "already_connected",
+                        "$.saved": False,
+                        "$.created": False}},
+            {"tool": "asset_query",
+             "args": {"action": "save_asset",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "verify_reload": True},
+             "expect": {"$.success": True,
+                        "$.saved": True,
+                        "$.dirty_after_save": False,
+                        "$.exists_on_disk": True,
+                        "$.verify_reload": True,
+                        "$.reloaded": True}},
+        ],
+        "verify": [
+            {"tool": "pcg_query",
+             "args": {"action": "get_pcg_graph_info",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "include_settings": True,
+                      "settings_fields": ["TagsToAdd"]},
+             "expect": {"$.class": "PCGGraph",
+                        "$.dirty": False,
+                        "$.element_node_count": 1,
+                        "$.edge_count": 2,
+                        "$.nodes[2].settings.TagsToAdd": "Monolith.Benchmark"}},
+            {"tool": "pcg_query",
+             "args": {"action": "validate_pcg_graph",
+                      "asset_path": ASSET_AUTHORING_PCG_GRAPH,
+                      "require_output_connection": True,
+                      "require_no_isolated_nodes": True},
+             "expect": {"$.valid": True,
+                        "$.output_connected": True,
+                        "$.element_node_count": 1,
+                        "$.edge_count": 2,
+                        "$.error_count": 0}},
+        ],
+    },
+])
+
+
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
@@ -18714,6 +18935,22 @@ def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
+
+
+def write_run_failure(output_dir: pathlib.Path, payload: Dict[str, Any]) -> None:
+    """Record an invalid run and make sure no scored ``summary.json`` survives beside it.
+
+    A transport outage mid-run yields per-task rows that look like capability failures
+    (empty responses score as "the server could not do it"). Emitting a scored
+    ``summary.json`` for such a run publishes an editor outage as a capability
+    regression, so an invalid run must leave ``run_failure.json`` + ``partial_summary.json``
+    and NO ``summary.json`` — including a stale one from an earlier run in the same
+    output directory.
+    """
+    write_json(output_dir / "run_failure.json", payload)
+    stale_summary = output_dir / "summary.json"
+    if stale_summary.exists():
+        stale_summary.unlink()
 
 
 def sha256_path(path: pathlib.Path) -> str:
@@ -20320,12 +20557,18 @@ def extract_sse_data(raw: str) -> str:
     return "\n".join(data_lines) if data_lines else raw
 
 
+# Declares this traffic as synthetic benchmark fixtures so the invocation-log
+# analyzer does not report deliberate negative probes as real, unmet demand.
+_BENCHMARK_ROUTING_CONTEXT = benchmark_routing_context("AssetEditing")
+
+
 def mcp_call(url: str, tool: str, arguments: Dict[str, Any], timeout_s: float = 45.0) -> Dict[str, Any]:
     body = {
         "jsonrpc": "2.0",
         "id": int(time.time() * 1000) % 1000000000,
         "method": "tools/call",
         "params": {"name": tool, "arguments": arguments},
+        "_monolith_routing_context": _BENCHMARK_ROUTING_CONTEXT,
     }
     data = json.dumps(body, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -20401,6 +20644,32 @@ def result_data(response: Dict[str, Any]) -> Dict[str, Any]:
     payload = result_payload(response)
     structured = structured_content(payload)
     return structured if structured else payload
+
+
+def response_scan_text(response: Dict[str, Any]) -> str:
+    """Return the scannable text of a response: human-readable content text PLUS the canonical
+    structured payload.
+
+    Monolith ships ``bEnableStructuredToolResults=True`` (``Config/DefaultMonolith.ini``), so a
+    SUCCESSFUL ``tools/call`` puts the real payload only in ``result.structuredContent`` and leaves
+    ``content[0].text`` as a constant stub ("OK; see structuredContent."). The canonical payload in
+    that mode IS ``structuredContent``, so every token/content assertion must scan it — scanning
+    only ``result_text()`` compares against the stub and silently scores 0 (or, for ``not_contains``,
+    silently passes).
+
+    Legacy text-JSON mode (structured results disabled) keeps working unchanged: there the payload
+    is in ``content[0].text``, ``structuredContent`` is absent, and this returns exactly
+    ``result_text()``. When both are present the token may match either side.
+
+    ``result_text()`` itself is deliberately left alone for human-readable snippets, error-message
+    assertions and evidence fields.
+    """
+    text = result_text(response)
+    structured = structured_content(result_payload(response))
+    if not structured:
+        return text
+    serialized = json.dumps(structured, ensure_ascii=False)
+    return f"{text}\n{serialized}" if text else serialized
 
 
 def project_root() -> pathlib.Path:
@@ -20608,21 +20877,65 @@ def ensure_asset_authoring_local_fixtures() -> Dict[str, pathlib.Path]:
 _ENGINE_ROBOTO_CACHE: Optional[pathlib.Path] = None
 
 
+def discover_unreal_project_file(root: pathlib.Path) -> pathlib.Path:
+    """Find the project descriptor owned by ``root`` without assuming a project name."""
+    candidates = sorted(root.glob("*.uproject"), key=lambda path: path.name.casefold())
+    if not candidates:
+        raise RuntimeError(f"No .uproject file found in Unreal project root: {root}")
+    if len(candidates) == 1:
+        return candidates[0]
+
+    root_name_matches = [
+        candidate for candidate in candidates
+        if candidate.stem.casefold() == root.name.casefold()
+    ]
+    if len(root_name_matches) == 1:
+        return root_name_matches[0]
+
+    names = ", ".join(candidate.name for candidate in candidates)
+    raise RuntimeError(
+        f"Ambiguous Unreal project descriptors under {root}; "
+        f"expected one file or one matching the project directory name, found: {names}"
+    )
+
+
+def discover_unreal_engine_resolver(root: pathlib.Path) -> pathlib.Path:
+    """Find the project-owned ResolveUnrealEngine helper in supported build layouts."""
+    preferred = (
+        root / "Build" / "BatchFiles" / "Script" / "ResolveUnrealEngine.ps1",
+        root / "BatchFiles" / "Script" / "ResolveUnrealEngine.ps1",
+    )
+    for candidate in preferred:
+        if candidate.is_file():
+            return candidate
+
+    build_root = root / "Build"
+    discovered = (
+        sorted(build_root.rglob("ResolveUnrealEngine.ps1"), key=lambda path: path.as_posix().casefold())
+        if build_root.is_dir()
+        else []
+    )
+    if len(discovered) == 1:
+        return discovered[0]
+    if len(discovered) > 1:
+        paths = ", ".join(str(path) for path in discovered)
+        raise RuntimeError(f"Ambiguous Unreal engine resolvers under {build_root}: {paths}")
+
+    searched = ", ".join(str(path) for path in preferred)
+    raise RuntimeError(f"Unreal engine resolver not found; searched: {searched}")
+
+
 def resolve_engine_roboto_regular_ttf() -> pathlib.Path:
-    """Resolve the UE root from GO.uproject EngineAssociation and return Roboto-Regular.ttf."""
+    """Resolve the owning project's UE root and return the engine Roboto-Regular.ttf."""
     global _ENGINE_ROBOTO_CACHE
     if _ENGINE_ROBOTO_CACHE is not None:
         return _ENGINE_ROBOTO_CACHE
 
     root = project_root()
-    resolver = root / "BatchFiles" / "Script" / "ResolveUnrealEngine.ps1"
-    uproject = root / "GO.uproject"
-    if not resolver.is_file():
-        raise RuntimeError(f"Unreal engine resolver not found: {resolver}")
-    if not uproject.is_file():
-        raise RuntimeError(f"GO.uproject not found: {uproject}")
+    resolver = discover_unreal_engine_resolver(root)
+    uproject = discover_unreal_project_file(root)
 
-    engine_root_text = subprocess.check_output(
+    resolver_output = subprocess.check_output(
         [
             "powershell",
             "-NoProfile",
@@ -20639,8 +20952,11 @@ def resolve_engine_roboto_regular_ttf() -> pathlib.Path:
         stderr=subprocess.STDOUT,
         text=True,
         timeout=60,
-    ).strip()
-    engine_root = pathlib.Path(engine_root_text)
+    )
+    output_lines = [line.strip() for line in resolver_output.splitlines() if line.strip()]
+    if not output_lines:
+        raise RuntimeError(f"Unreal engine resolver returned no root for project: {uproject}")
+    engine_root = pathlib.Path(output_lines[-1].strip('"'))
     candidate = engine_root / "Engine" / "Content" / "Slate" / "Fonts" / "Roboto-Regular.ttf"
     if not candidate.is_file():
         raise RuntimeError(f"Roboto-Regular.ttf not found under resolved engine root: {candidate}")
@@ -20742,15 +21058,14 @@ def classify_mcp_failure(response: Dict[str, Any]) -> str:
     return ""
 
 
-def _response_text_contains_any(response: Dict[str, Any], tokens: List[str]) -> bool:
-    """True if any non-empty token from tokens appears in the response text."""
-    text = result_text(response)
-    return any(tok and tok in text for tok in tokens)
+def _response_contains_any(response: Dict[str, Any], tokens: List[str]) -> bool:
+    """True if any non-empty token appears in the response's CANONICAL payload.
 
-
-def _response_text_contains_all(response: Dict[str, Any], tokens: List[str]) -> bool:
-    text = result_text(response)
-    return all(tok and tok in text for tok in tokens)
+    Scans ``response_scan_text`` (structured payload + human text), not the transport text: under
+    structured tool results ``content[0].text`` is a constant stub and carries no project tokens.
+    """
+    scan = response_scan_text(response)
+    return any(tok and tok in scan for tok in tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -20779,13 +21094,14 @@ def _compile_is_clean(response: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
     # {unused_variables, disconnected_nodes, node_errors, unimplemented_interface_functions,
     #  duplicate_custom_events, total_graphs, total_nodes}. unused_variables and disconnected_nodes
     # are warnings (a blueprint with them still compiles), so clean = the three HARD-error lists
-    # are all empty. This must be checked BEFORE the text fallback, which would otherwise see the
-    # substring "error" in "node_errors" and wrongly fail every clean validate.
+    # are all empty. This must be checked BEFORE error_count/errors/status, because a validate
+    # report carries none of those keys and would otherwise fall through to "no signal".
     validate_keys = ("node_errors", "unimplemented_interface_functions", "duplicate_custom_events")
     if error_count is None and any(k in data for k in validate_keys):
         hard = {k: data.get(k) for k in validate_keys}
         clean = all(not (isinstance(v, list) and len(v) > 0) for v in hard.values())
-        return clean, {"validate_report": {k: (len(v) if isinstance(v, list) else v)
+        return clean, {"signal_present": True,
+                       "validate_report": {k: (len(v) if isinstance(v, list) else v)
                                             for k, v in hard.items()},
                        "status": status}
     if isinstance(error_count, int):
@@ -20795,10 +21111,15 @@ def _compile_is_clean(response: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]:
     elif status:
         clean = status in ("uptodate", "success", "ok", "compiled")
     else:
-        # No structured compile signal — documented text-scan fallback only.
-        text = result_text(response).lower()
-        clean = "0 error" in text or "error" not in text
-    return clean, {"error_count": error_count, "status": status,
+        # No structured compile signal at all: no error_count, no errors list, no status, no
+        # validate report. A compile that cannot be observed is NOT a clean compile — passing it
+        # would hand a free credit to any handler that returns an empty payload. There is
+        # deliberately no text-scan fallback: under structured tool results content[0].text is the
+        # constant stub, and the serialized payload carries the substring "error" inside key names
+        # such as "error_count", so neither surface can decide this. Unprovable => FAIL.
+        return False, {"signal_present": False, "reason": "no_structured_compile_signal",
+                       "status": status}
+    return clean, {"signal_present": True, "error_count": error_count, "status": status,
                    "errors_len": len(errors) if isinstance(errors, list) else None}
 
 
@@ -20811,6 +21132,11 @@ def _compile_has_errors(response: Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]
     if response.get("transport_error") or response.get("parse_error") or _is_error(response):
         return False, {"reason": "transport_parse_or_iserror_not_a_compile_signal"}
     clean, detail = _compile_is_clean(response)
+    if not detail.get("signal_present"):
+        # _compile_is_clean fails an unobservable compile (no structured signal). That failure must
+        # NOT invert into a free negative_compile pass: an absent signal is not evidence of a
+        # compile error, it is evidence of nothing.
+        return False, {"reason": "no_structured_compile_signal"}
     return (not clean), detail
 
 
@@ -20877,17 +21203,89 @@ def _json_path_tokens(path: str) -> List[Any]:
 
 def _extract_json_path(payload: Any, path: str) -> Optional[Any]:
     """Extract a value using the benchmark's intentionally tiny JSONPath subset."""
+    found, value = _extract_json_path_with_presence(payload, path)
+    return value if found else None
+
+
+def _extract_json_path_with_presence(payload: Any, path: str) -> Tuple[bool, Any]:
+    """Extract a JSONPath value while distinguishing a missing field from JSON null."""
+    tokens = _json_path_tokens(path)
+    if not tokens:
+        return False, None
     current = payload
-    for token in _json_path_tokens(path):
+    for token in tokens:
         if isinstance(token, int):
             if not isinstance(current, list) or token < 0 or token >= len(current):
-                return None
+                return False, None
             current = current[token]
         else:
             if not isinstance(current, dict) or token not in current:
-                return None
+                return False, None
             current = current[token]
-    return current
+    return True, current
+
+
+def _json_values_equal_exact(actual: Any, expected: Any) -> bool:
+    """Recursively compare JSON values, keeping booleans distinct from numbers."""
+    if isinstance(actual, bool) or isinstance(expected, bool):
+        return isinstance(actual, bool) and isinstance(expected, bool) and actual == expected
+    if actual is None or expected is None:
+        return actual is None and expected is None
+    if isinstance(actual, dict) or isinstance(expected, dict):
+        if not isinstance(actual, dict) or not isinstance(expected, dict):
+            return False
+        if actual.keys() != expected.keys():
+            return False
+        return all(_json_values_equal_exact(actual[key], expected[key]) for key in actual)
+    if isinstance(actual, list) or isinstance(expected, list):
+        if not isinstance(actual, list) or not isinstance(expected, list):
+            return False
+        return len(actual) == len(expected) and all(
+            _json_values_equal_exact(actual_item, expected_item)
+            for actual_item, expected_item in zip(actual, expected)
+        )
+    if isinstance(actual, (int, float)) or isinstance(expected, (int, float)):
+        return (
+            isinstance(actual, (int, float))
+            and isinstance(expected, (int, float))
+            and actual == expected
+        )
+    return type(actual) is type(expected) and actual == expected
+
+
+def _evaluate_structured_expect(response: Dict[str, Any], expect_spec: Any) -> Tuple[bool, List[Dict[str, Any]]]:
+    """Evaluate exact JSONPath assertions declared as ``{"$.path": expected}``."""
+    if expect_spec is None:
+        return True, []
+    if not isinstance(expect_spec, dict) or not expect_spec:
+        return False, [{"ok": False, "reason": "expect must be a non-empty object"}]
+
+    data = result_data(response)
+    evidence: List[Dict[str, Any]] = []
+    for raw_path, expected in expect_spec.items():
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            evidence.append({
+                "path": str(raw_path),
+                "expected": expected,
+                "actual": None,
+                "found": False,
+                "ok": False,
+                "reason": "expect path must be a non-empty string",
+            })
+            continue
+        path = raw_path.strip()
+        if not path.startswith("$."):
+            path = f"$.{path}"
+        found, actual = _extract_json_path_with_presence(data, path)
+        assertion_ok = found and _json_values_equal_exact(actual, expected)
+        evidence.append({
+            "path": path,
+            "expected": expected,
+            "actual": actual,
+            "found": found,
+            "ok": assertion_ok,
+        })
+    return all(row.get("ok") is True for row in evidence), evidence
 
 
 def _capture_response_values(response: Dict[str, Any], capture_spec: Any) -> Tuple[Dict[str, Any], List[str]]:
@@ -20966,8 +21364,10 @@ def _verify_readback(url: str, asset_path: str, verify: Dict[str, Any], timeout_
 
     verify verbs (all optional; all that are present must hold):
       read_action     : the read action to call (get_variables / get_components / get_functions / ...)
-      contains        : tokens that must ALL appear in the read response text (presence)
-      not_contains    : tokens that must NOT appear (text-level absence; delete/disconnect proof)
+      contains        : tokens that must ALL appear in the read response's canonical payload
+                        (response_scan_text: structuredContent + human text) — presence proof
+      not_contains    : tokens that must NOT appear anywhere in that canonical payload
+                        (delete/disconnect proof)
       absent          : entity names that must NOT exist as an exact ``name`` (parsed; survives
                         prefix collisions where old_name is a substring of new_name)
       var_default     : {name, value} — a variable must exist with that default_value (parsed)
@@ -20988,17 +21388,17 @@ def _verify_readback(url: str, asset_path: str, verify: Dict[str, Any], timeout_
                        "snippet": result_text(resp)[:200]}
     ok = True
     detail: Dict[str, Any] = {"read_action": read_action}
-    text = result_text(resp)
+    scan = response_scan_text(resp)
     data = result_data(resp)
 
     tokens = verify.get("contains")
     if tokens:
-        ok = all(str(tok) in text for tok in tokens)
+        ok = all(str(tok) in scan for tok in tokens)
         detail["contains"] = {"tokens": tokens, "ok": ok}
 
     not_tokens = verify.get("not_contains")
     if ok and not_tokens:
-        ok = all(str(tok) not in text for tok in not_tokens)
+        ok = all(str(tok) not in scan for tok in not_tokens)
         detail["not_contains"] = {"tokens": not_tokens, "ok": ok}
 
     absent = verify.get("absent")
@@ -21220,8 +21620,10 @@ def _score_negative_compile(url: str, task: Dict[str, Any], timeout_s: float) ->
     compile_resp = mcp_call(url, tool, compile_args, timeout_s=timeout_s)
     has_err, cdet = _compile_has_errors(compile_resp)
     error_tokens = task.get("expected", {}).get("error_tokens", [])
-    text_l = result_text(compile_resp).lower()
-    token_ok = (not error_tokens) or any(str(t).lower() in text_l for t in error_tokens)
+    # The compiler diagnostic lives in the canonical payload (structuredContent.errors[]); a
+    # non-isError compile envelope's content[0].text is the constant stub under structured results.
+    scan_l = response_scan_text(compile_resp).lower()
+    token_ok = (not error_tokens) or any(str(t).lower() in scan_l for t in error_tokens)
     direct_success = has_err and token_ok
 
     # Cleanup: repair the deliberate break and save, so the scratch blueprint is NOT left in a
@@ -21275,25 +21677,39 @@ def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float
         "workflow": task.get("workflow", task.get("name", "")),
     }
     ok = True
+    transport_error = False
+    transport_error_raw = ""
 
     for step in task.get("chain", []):
         tool = str(step.get("tool", task.get("tool", "")))
         args = resolve_asset_authoring_placeholders(_subst_vars(dict(step.get("args", {})), captured))
         resp = mcp_call(url, tool, args, timeout_s=timeout_s)
-        text = result_text(resp)
+        if resp.get("transport_error"):
+            transport_error = True
+            if not transport_error_raw:
+                transport_error_raw = str(resp.get("raw", ""))[:300]
+        text = result_text(resp)          # human-readable snippet / evidence only
+        scan = response_scan_text(resp)   # canonical payload — what token assertions must scan
         is_err = _is_error(resp)
         transport_or_parse = bool(resp.get("transport_error") or resp.get("parse_error"))
         allow_error = bool(step.get("allow_error"))
+        # `allow_error` only TOLERATES an error; `expect_error` REQUIRES one. Without it a
+        # negative case cannot be expressed here, so a guard that regressed from "clean
+        # rejection" to "crash" or to "silent success" would still score as a pass.
+        expect_error = bool(step.get("expect_error"))
         contains = _subst_vars(step.get("contains") or [], captured)
         not_contains = _subst_vars(step.get("not_contains") or [], captured)
-        contains_ok = all(str(tok) in text for tok in contains)
-        not_contains_ok = all(str(tok) not in text for tok in not_contains)
+        expect = _subst_vars(step.get("expect"), captured) if "expect" in step else None
+        contains_ok = all(str(tok) in scan for tok in contains)
+        not_contains_ok = all(str(tok) not in scan for tok in not_contains)
+        expect_ok, expect_evidence = _evaluate_structured_expect(resp, expect)
+        error_ok = is_err if expect_error else (not is_err or allow_error)
         step_captured: Dict[str, Any] = {}
         capture_missing: List[str] = []
         if step.get("capture") and not transport_or_parse and not is_err:
             step_captured, capture_missing = _capture_response_values(resp, step.get("capture"))
-        step_ok = (not transport_or_parse and (not is_err or allow_error)
-                   and contains_ok and not_contains_ok and not capture_missing)
+        step_ok = (not transport_or_parse and error_ok
+                   and contains_ok and not_contains_ok and expect_ok and not capture_missing)
         evidence_row = {
             "tool": tool,
             "action": args.get("action", ""),
@@ -21301,10 +21717,13 @@ def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float
             "transport_error": bool(resp.get("transport_error")),
             "parse_error": bool(resp.get("parse_error")),
             "allow_error": allow_error,
+            "expect_error": expect_error,
+            "error_ok": error_ok,
             "contains": contains,
             "contains_ok": contains_ok,
             "not_contains": not_contains,
             "not_contains_ok": not_contains_ok,
+            "expect_ok": expect_ok,
             "ok": step_ok,
             "snippet": text[:180],
             "raw_error": str(resp.get("raw", ""))[:220] if resp.get("transport_error") else "",
@@ -21313,6 +21732,9 @@ def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float
             evidence_row["capture"] = step.get("capture")
             evidence_row["captured"] = step_captured
             evidence_row["missing_capture"] = capture_missing
+        if "expect" in step:
+            evidence_row["expect"] = expect
+            evidence_row["expect_evidence"] = expect_evidence
         steps_evidence.append(evidence_row)
         if step_ok and step_captured:
             captured.update(step_captured)
@@ -21327,27 +21749,46 @@ def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float
             tool = str(verify.get("tool", task.get("tool", "")))
             args = resolve_asset_authoring_placeholders(_subst_vars(dict(verify.get("args", {})), captured))
             resp = mcp_call(url, tool, args, timeout_s=timeout_s)
-            text = result_text(resp)
+            if resp.get("transport_error"):
+                transport_error = True
+                if not transport_error_raw:
+                    transport_error_raw = str(resp.get("raw", ""))[:300]
+            text = result_text(resp)          # human-readable snippet / evidence only
+            scan = response_scan_text(resp)   # canonical payload — what token assertions must scan
             contains = _subst_vars(verify.get("contains") or [], captured)
             not_contains = _subst_vars(verify.get("not_contains") or [], captured)
-            server_ok = not resp.get("transport_error") and not resp.get("parse_error") and not _is_error(resp)
-            contains_ok = all(str(tok) in text for tok in contains)
-            not_contains_ok = all(str(tok) not in text for tok in not_contains)
-            verify_ok = server_ok and contains_ok and not_contains_ok
-            verify_evidence.append({
+            expect = _subst_vars(verify.get("expect"), captured) if "expect" in verify else None
+            # A rejected write must leave NOTHING behind, so a read-back has to be able to
+            # assert "this asset does not exist" — an error IS the pass condition there.
+            expect_error = bool(verify.get("expect_error"))
+            transport_or_parse = bool(resp.get("transport_error") or resp.get("parse_error"))
+            is_err = _is_error(resp)
+            server_ok = (not transport_or_parse) and (is_err if expect_error else not is_err)
+            contains_ok = all(str(tok) in scan for tok in contains)
+            not_contains_ok = all(str(tok) not in scan for tok in not_contains)
+            expect_ok, expect_evidence = _evaluate_structured_expect(resp, expect)
+            verify_ok = server_ok and contains_ok and not_contains_ok and expect_ok
+            verify_row = {
                 "tool": tool,
                 "action": args.get("action", ""),
                 "server_ok": server_ok,
+                "expect_error": expect_error,
+                "is_error": is_err,
                 "transport_error": bool(resp.get("transport_error")),
                 "parse_error": bool(resp.get("parse_error")),
                 "contains": contains,
                 "contains_ok": contains_ok,
                 "not_contains": not_contains,
                 "not_contains_ok": not_contains_ok,
+                "expect_ok": expect_ok,
                 "ok": verify_ok,
                 "snippet": text[:220],
                 "raw_error": str(resp.get("raw", ""))[:220] if resp.get("transport_error") else "",
-            })
+            }
+            if "expect" in verify:
+                verify_row["expect"] = expect
+                verify_row["expect_evidence"] = expect_evidence
+            verify_evidence.append(verify_row)
             ok = ok and verify_ok
             if not verify_ok:
                 break
@@ -21364,8 +21805,8 @@ def _score_asset_authoring_task(url: str, task: Dict[str, Any], timeout_s: float
         "direct_success": ok,
         "planning_signals": False,
         "evidence": {"steps": steps_evidence, "captured": captured, "verify": verify_evidence},
-        "transport_error": False,
-        "transport_error_raw": "",
+        "transport_error": transport_error,
+        "transport_error_raw": transport_error_raw,
         "response_is_error": not ok,
         "response_text": json.dumps(verify_evidence)[:500],
     }
@@ -21499,8 +21940,9 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
     elif category in ("graph_read", "variable_read"):
         # Strict: server must handle the request AND not return isError.
         server_ok = server_handled and not server_is_error
-        # Content shape check: verify the response has meaningful content.
-        # For get_variables: check that at least one fixture variable name appears in response text.
+        # Content shape check: verify the response has meaningful content. All token checks scan the
+        # canonical payload (response_scan_text), not the transport stub.
+        # For get_variables: check that at least one fixture variable name appears in the payload.
         # For list_graphs: check that the expected graph name appears.
         # Skipped when no fixture contract is specified (Interface no-graph_name, empty fixture_vars).
         content_ok = True
@@ -21511,18 +21953,19 @@ def score_task(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, An
             expected_graph = task.get("expected", {}).get("expected_graph", "")
             expected_functions = task.get("expected", {}).get("expected_functions", [])
             if action == "get_variables" and fixture_vars:
-                content_ok = _response_text_contains_any(response, fixture_vars)
+                content_ok = _response_contains_any(response, fixture_vars)
                 content_check_applied = True
             elif action == "list_graphs" and expected_graph:
-                content_ok = _response_text_contains_any(response, [expected_graph])
+                content_ok = _response_contains_any(response, [expected_graph])
                 content_check_applied = True
             elif action == "get_functions" and expected_functions:
                 # Interface fixture: at least one declared interface stub must appear.
-                content_ok = _response_text_contains_any(response, expected_functions)
+                content_ok = _response_contains_any(response, expected_functions)
                 content_check_applied = True
             expected_contains = task.get("expected", {}).get("contains", [])
             if content_ok and expected_contains:
-                content_ok = all(str(tok) in result_text(response) for tok in expected_contains)
+                scan = response_scan_text(response)
+                content_ok = all(str(tok) in scan for tok in expected_contains)
                 content_check_applied = True
         direct_success = server_ok and content_ok
         evidence = {
@@ -22166,7 +22609,10 @@ def build_additional_variable_read_tasks() -> List[Dict[str, Any]]:
 # re-introducing a content-free no-op read-back). Enforced by validate_task_integrity (P0-4).
 _VERIFY_ASSERT_VERBS = ("contains", "not_contains", "absent", "var_default", "prop_value",
                         "var_replicated", "var_type", "component_parent", "pos_equals")
-_ASSET_VERIFY_STEP_ASSERT_VERBS = ("contains", "not_contains", "capture")
+# `expect_error` is an assertion verb in its own right: "reading this back MUST fail" is how a
+# rejected write proves it left nothing behind. It carries no tokens, so without it here the
+# integrity check would reject the only shape that can assert absence.
+_ASSET_VERIFY_STEP_ASSERT_VERBS = ("contains", "not_contains", "capture", "expect", "expect_error")
 
 
 def _verify_is_meaningful(verify: Any) -> bool:
@@ -22200,7 +22646,7 @@ def _asset_verify_step_is_meaningful(step: Dict[str, Any]) -> Tuple[bool, str]:
             return True, ""
         return False, "server_ok_only verify step is missing server_ok_reason"
 
-    return False, "verify step has no contains/not_contains/capture or explicit server_ok_only rationale"
+    return False, "verify step has no contains/not_contains/capture/expect or explicit server_ok_only rationale"
 
 
 def validate_task_integrity(tasks: List[Dict[str, Any]]) -> None:
@@ -22753,7 +23199,7 @@ def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bo
                 "action": "get_variables", "asset_path": asset_path,
             }, timeout_s=timeout_s)
             var_failure = classify_mcp_failure(vars_resp)
-            vars_ok = (not var_failure) and _response_text_contains_any(vars_resp, bp["fixture_vars"])
+            vars_ok = (not var_failure) and _response_contains_any(vars_resp, bp["fixture_vars"])
             checks.append({
                 "name": "get_variables",
                 "ok": vars_ok,
@@ -22770,7 +23216,7 @@ def fixture_readiness_preflight(url: str, timeout_s: float, require_fixtures: bo
                     "action": "get_functions", "asset_path": asset_path,
                 }, timeout_s=timeout_s)
                 func_failure = classify_mcp_failure(funcs_resp)
-                funcs_ok = (not func_failure) and _response_text_contains_any(funcs_resp, funcs)
+                funcs_ok = (not func_failure) and _response_contains_any(funcs_resp, funcs)
                 checks.append({
                     "name": "get_functions",
                     "ok": funcs_ok,
@@ -23083,6 +23529,49 @@ def _score_task_with_locks(
             lock.release()
 
 
+def build_transport_failure(
+    label: str,
+    status: Dict[str, Any],
+    tasks: List[Dict[str, Any]],
+    rows: List[Dict[str, Any]],
+    tracker: TransportFailureTracker,
+    decision: TransportAbortDecision,
+    task_selection: Dict[str, Any],
+    benchmark_inputs: Dict[str, Any],
+    execution: Dict[str, Any],
+    completion_status: str,
+) -> Dict[str, Any]:
+    """Summary payload for a run rejected by the transport-failure budget.
+
+    The scored rates are retained under ``metrics`` for diagnosis only; ``run_valid``
+    is False and ``metrics_scope`` says the numbers cover an outage-contaminated
+    prefix, so no caller can mistake them for a baseline.
+    """
+    failure = aggregate(label, status, tasks, rows, warn_missing_categories=False)
+    failure["run_valid"] = False
+    failure["completion_status"] = completion_status
+    failure["failure_stage"] = "task_scoring"
+    failure["failure_kind"] = "transport_error"
+    failure["metrics_scope"] = "attempted_prefix_transport_failure"
+    failure["completed_task_count"] = len(rows)
+    failure["total_task_count"] = len(tasks)
+    failure["execution"] = execution
+    failure["task_selection"] = task_selection
+    failure["transport"] = tracker.snapshot()
+    failure["transport_abort"] = {
+        "reason": decision.reason,
+        "attempted_count": decision.attempted_count,
+        "failure_count": decision.failure_count,
+        "failed_fraction": round(decision.failed_fraction, 6),
+        "consecutive_failures": decision.consecutive_failures,
+        "task_id": decision.item_id,
+        "status": decision.status,
+        "raw": decision.raw,
+    }
+    attach_benchmark_inputs(failure, benchmark_inputs)
+    return failure
+
+
 def run_benchmark(
     url: str,
     tasks_path: pathlib.Path,
@@ -23091,6 +23580,9 @@ def run_benchmark(
     timeout_s: float,
     jobs: int = 1,
     *,
+    max_transport_failed_fraction: float = DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+    max_consecutive_transport_failures: int = DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+    min_transport_fraction_sample: int = DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
     testsets_path: pathlib.Path = DEFAULT_TESTSETS,
     module_ids: Optional[List[str]] = None,
     categories: Optional[List[str]] = None,
@@ -23136,7 +23628,27 @@ def run_benchmark(
     if per_task_jsonl.exists():
         per_task_jsonl.unlink()
 
+    # A dead/restarting editor answers every call with a transport error, and those
+    # empty responses score exactly like capability failures. Gate on them so an
+    # outage is reported as an outage instead of being published as a scored baseline
+    # (the other live suites already do this; AssetEditing did not, and a 27%-outage
+    # run wrote a scored summary.json with exit 0 on 2026-07-11).
+    transport_tracker = TransportFailureTracker(
+        max_failed_fraction=max_transport_failed_fraction,
+        max_consecutive_failures=max_consecutive_transport_failures,
+        min_fraction_samples=min_transport_fraction_sample,
+    )
+
     jobs = max(1, int(jobs))
+    execution: Dict[str, Any] = {"mode": "parallel" if jobs > 1 else "sequential", "jobs": jobs}
+
+    def observe_row(row: Dict[str, Any]) -> Optional[TransportAbortDecision]:
+        return transport_tracker.observe(
+            transport_error=bool(row.get("transport_error")),
+            item_id=str(row.get("task_id", "")),
+            raw=str(row.get("transport_error_raw", ""))[:300],
+        )
+
     if jobs == 1:
         for index, task in enumerate(tasks, 1):
             row = score_task(url, task, timeout_s)
@@ -23146,12 +23658,28 @@ def run_benchmark(
                 handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
                 handle.write("\n")
             print(f"[{index}/{len(tasks)}] {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
+            transport_decision = observe_row(row)
+            if transport_decision:
+                failure = build_transport_failure(
+                    label, status, tasks[:index], rows, transport_tracker, transport_decision,
+                    task_selection, benchmark_inputs, execution, "aborted_transport_failure_budget",
+                )
+                write_run_failure(output_dir, failure)
+                write_json(output_dir / "partial_summary.json", failure)
+                write_json(output_dir / "per_task.json", rows)
+                print(
+                    f"ABORT transport budget exceeded: reason={transport_decision.reason} "
+                    f"failed={transport_decision.failure_count}/{transport_decision.attempted_count}",
+                    flush=True,
+                )
+                return failure
             if index == 1 or index == len(tasks) or index % 10 == 0:
                 partial = aggregate(label, status, tasks[:index], rows, warn_missing_categories=False)
                 partial["completed_task_count"] = index
                 partial["total_task_count"] = len(tasks)
-                partial["execution"] = {"mode": "sequential", "jobs": 1}
+                partial["execution"] = dict(execution)
                 partial["task_selection"] = task_selection
+                partial["transport"] = transport_tracker.snapshot()
                 attach_benchmark_inputs(partial, benchmark_inputs)
                 write_json(output_dir / "partial_summary.json", partial)
     else:
@@ -23162,6 +23690,7 @@ def run_benchmark(
         }
         rows_by_index: List[Optional[Dict[str, Any]]] = [None] * len(tasks)
         completed = 0
+        transport_decision: Optional[TransportAbortDecision] = None
         print(f"Running {len(tasks)} tasks with jobs={jobs} and package-level resource locks", flush=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
             future_to_index = {
@@ -23207,6 +23736,12 @@ def run_benchmark(
                     handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
                     handle.write("\n")
                 print(f"[{completed}/{len(tasks)}] #{index} {row['task_id']} category={row['category']} success={row['direct_success']}", flush=True)
+                transport_decision = observe_row(row)
+                if transport_decision:
+                    # Stop feeding a dead endpoint: cancel everything not yet started.
+                    for pending in future_to_index:
+                        pending.cancel()
+                    break
                 if completed == 1 or completed == len(tasks) or completed % 10 == 0:
                     partial_rows = [r for r in rows_by_index if r is not None]
                     partial_tasks = [tasks[i] for i, r in enumerate(rows_by_index) if r is not None]
@@ -23219,9 +23754,46 @@ def run_benchmark(
                         "resource_lock_count": len(locks_by_key),
                     }
                     partial["task_selection"] = task_selection
+                    partial["transport"] = transport_tracker.snapshot()
                     attach_benchmark_inputs(partial, benchmark_inputs)
                     write_json(output_dir / "partial_summary.json", partial)
         rows = [r for r in rows_by_index if r is not None]
+        execution["resource_lock_count"] = len(locks_by_key)
+
+        if transport_decision:
+            scored_tasks = [tasks[i] for i, r in enumerate(rows_by_index) if r is not None]
+            failure = build_transport_failure(
+                label, status, scored_tasks, rows, transport_tracker, transport_decision,
+                task_selection, benchmark_inputs, execution, "aborted_transport_failure_budget",
+            )
+            write_run_failure(output_dir, failure)
+            write_json(output_dir / "partial_summary.json", failure)
+            write_json(output_dir / "per_task.json", rows)
+            print(
+                f"ABORT transport budget exceeded: reason={transport_decision.reason} "
+                f"failed={transport_decision.failure_count}/{transport_decision.attempted_count}",
+                flush=True,
+            )
+            return failure
+
+    # A run can stay under the consecutive gate and still be shot through with transport
+    # errors (a flapping editor). finalize() rejects the completed run in that case.
+    final_decision = transport_tracker.finalize()
+    if final_decision:
+        failure = build_transport_failure(
+            label, status, tasks, rows, transport_tracker, final_decision,
+            task_selection, benchmark_inputs, execution,
+            "completed_transport_failure_budget_exceeded",
+        )
+        write_run_failure(output_dir, failure)
+        write_json(output_dir / "partial_summary.json", failure)
+        write_json(output_dir / "per_task.json", rows)
+        print(
+            f"REJECT transport budget exceeded over the completed run: "
+            f"failed={final_decision.failure_count}/{final_decision.attempted_count}",
+            flush=True,
+        )
+        return failure
 
     summary = aggregate(
         label,
@@ -23230,11 +23802,11 @@ def run_benchmark(
         rows,
         warn_missing_categories=not task_selection["is_subset"],
     )
-    summary["execution"] = {
-        "mode": "parallel" if jobs > 1 else "sequential",
-        "jobs": jobs,
-    }
+    summary["run_valid"] = True
+    summary["completion_status"] = "completed"
+    summary["execution"] = execution
     summary["task_selection"] = task_selection
+    summary["transport"] = transport_tracker.snapshot()
     attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
     write_json(output_dir / "per_task.json", rows)
@@ -23363,6 +23935,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                          help="Number of parallel task workers; package-level locks serialize tasks that touch the same /Game asset")
     run_cmd.add_argument("--skip-preflight", action="store_true",
                          help="Compatibility escape hatch: run without fixture readiness preflight")
+    run_cmd.add_argument("--max-transport-failed-fraction", type=float,
+                         default=DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+                         help="Reject the run when this fraction of tasks hit transport errors (dead/restarting editor)")
+    run_cmd.add_argument("--max-consecutive-transport-failures", type=int,
+                         default=DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+                         help="Abort the run after this many consecutive transport errors")
+    run_cmd.add_argument("--min-transport-fraction-sample", type=int,
+                         default=DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+                         help="Tasks that must be attempted before the failed-fraction gate applies mid-run")
     add_task_selection_args(run_cmd)
 
     select_cmd = sub.add_parser("select", help="Load an AssetEditing task subset without contacting MCP")
@@ -23461,9 +24042,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             operation_semantics=args.operation_semantics,
             task_ids=args.task_ids,
             module_mode=args.module_mode,
+            max_transport_failed_fraction=args.max_transport_failed_fraction,
+            max_consecutive_transport_failures=args.max_consecutive_transport_failures,
+            min_transport_fraction_sample=args.min_transport_fraction_sample,
         )
         sys.stdout.buffer.write((json.dumps(summary, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-        return 0
+        return 0 if summary.get("run_valid") else 1
 
     if args.cmd == "select":
         selected_tasks, task_selection = select_tasks(

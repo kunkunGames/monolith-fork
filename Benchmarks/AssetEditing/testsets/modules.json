@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T14:12:33.847039+00:00",
+  "generated_at": "2026-07-12T02:14:12.681671+00:00",
   "description": "Split-shard manifest for generated AssetEditing test-set modules. Use index.json for routing and module_shards/*.json for module payloads; tasks.jsonl remains the canonical task payload stream.",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
+  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
   "module_storage": "split_shards",
   "module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
-  "task_count": 577,
+  "task_count": 579,
   "task_id_order": [
     "BEB-001",
     "BEB-002",
@@ -586,9 +586,11 @@
     "BEB-574",
     "BEB-575",
     "BEB-576",
-    "BEB-577"
+    "BEB-577",
+    "BEB-578",
+    "BEB-579"
   ],
-  "module_count": 1809,
+  "module_count": 1826,
   "routing_axes": [
     "category",
     "domain",
@@ -843,6 +845,7 @@
           "module": "asset_authoring.level_instance",
           "edit_domains": {
             "blueprint_prefab": "asset_authoring.level_instance.blueprint_prefab",
+            "blueprint_prefab_guard": "asset_authoring.level_instance.blueprint_prefab_guard",
             "prefab_placement": "asset_authoring.level_instance.prefab_placement"
           }
         },
@@ -954,6 +957,12 @@
             "system_effect_type_assignment": "asset_authoring.niagara.system_effect_type_assignment",
             "system_timing": "asset_authoring.niagara.system_timing",
             "user_parameter_remove": "asset_authoring.niagara.user_parameter_remove"
+          }
+        },
+        "pcg": {
+          "module": "asset_authoring.pcg",
+          "edit_domains": {
+            "graph_authoring": "asset_authoring.pcg.graph_authoring"
           }
         },
         "project": {
@@ -1339,6 +1348,7 @@
             "module": "asset_operation.creation_or_import.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.creation_or_import.level_instance.blueprint_prefab",
+              "blueprint_prefab_guard": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.creation_or_import.level_instance.prefab_placement"
             }
           },
@@ -1450,6 +1460,12 @@
               "system_effect_type_assignment": "asset_operation.creation_or_import.niagara.system_effect_type_assignment",
               "system_timing": "asset_operation.creation_or_import.niagara.system_timing",
               "user_parameter_remove": "asset_operation.creation_or_import.niagara.user_parameter_remove"
+            }
+          },
+          "pcg": {
+            "module": "asset_operation.creation_or_import.pcg",
+            "edit_domains": {
+              "graph_authoring": "asset_operation.creation_or_import.pcg.graph_authoring"
             }
           },
           "project": {
@@ -1723,6 +1739,7 @@
             "module": "asset_operation.edit.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.edit.level_instance.blueprint_prefab",
+              "blueprint_prefab_guard": "asset_operation.edit.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.edit.level_instance.prefab_placement"
             }
           },
@@ -1834,6 +1851,12 @@
               "system_effect_type_assignment": "asset_operation.edit.niagara.system_effect_type_assignment",
               "system_timing": "asset_operation.edit.niagara.system_timing",
               "user_parameter_remove": "asset_operation.edit.niagara.user_parameter_remove"
+            }
+          },
+          "pcg": {
+            "module": "asset_operation.edit.pcg",
+            "edit_domains": {
+              "graph_authoring": "asset_operation.edit.pcg.graph_authoring"
             }
           },
           "project": {
@@ -2107,6 +2130,7 @@
             "module": "asset_operation.readback_verify.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.readback_verify.level_instance.blueprint_prefab",
+              "blueprint_prefab_guard": "asset_operation.readback_verify.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.readback_verify.level_instance.prefab_placement"
             }
           },
@@ -2218,6 +2242,12 @@
               "system_effect_type_assignment": "asset_operation.readback_verify.niagara.system_effect_type_assignment",
               "system_timing": "asset_operation.readback_verify.niagara.system_timing",
               "user_parameter_remove": "asset_operation.readback_verify.niagara.user_parameter_remove"
+            }
+          },
+          "pcg": {
+            "module": "asset_operation.readback_verify.pcg",
+            "edit_domains": {
+              "graph_authoring": "asset_operation.readback_verify.pcg.graph_authoring"
             }
           },
           "project": {
@@ -2489,6 +2519,7 @@
             "module": "asset_operation.save.level_instance",
             "edit_domains": {
               "blueprint_prefab": "asset_operation.save.level_instance.blueprint_prefab",
+              "blueprint_prefab_guard": "asset_operation.save.level_instance.blueprint_prefab_guard",
               "prefab_placement": "asset_operation.save.level_instance.prefab_placement"
             }
           },
@@ -2600,6 +2631,12 @@
               "system_effect_type_assignment": "asset_operation.save.niagara.system_effect_type_assignment",
               "system_timing": "asset_operation.save.niagara.system_timing",
               "user_parameter_remove": "asset_operation.save.niagara.user_parameter_remove"
+            }
+          },
+          "pcg": {
+            "module": "asset_operation.save.pcg",
+            "edit_domains": {
+              "graph_authoring": "asset_operation.save.pcg.graph_authoring"
             }
           },
           "project": {
@@ -2819,6 +2856,7 @@
         "interface_signature_contract": "workflow.interface_signature_contract",
         "level_instance_blueprint_prefab_placement_roundtrip": "workflow.level_instance_blueprint_prefab_placement_roundtrip",
         "level_instance_blueprint_prefab_roundtrip": "workflow.level_instance_blueprint_prefab_roundtrip",
+        "level_instance_rootless_prefab_rejected": "workflow.level_instance_rootless_prefab_rejected",
         "localization_blueprint_stringtable_bulk_roundtrip": "workflow.localization_blueprint_stringtable_bulk_roundtrip",
         "localization_stringtable_export_remove_roundtrip": "workflow.localization_stringtable_export_remove_roundtrip",
         "localization_stringtable_metadata_remove_roundtrip": "workflow.localization_stringtable_metadata_remove_roundtrip",
@@ -2894,6 +2932,7 @@
         "niagara_user_parameter_remove_roundtrip": "workflow.niagara_user_parameter_remove_roundtrip",
         "niagara_user_parameter_roundtrip": "workflow.niagara_user_parameter_roundtrip",
         "pbr_material_from_disk_roundtrip": "workflow.pbr_material_from_disk_roundtrip",
+        "pcg_graph_idempotent_authoring_roundtrip": "workflow.pcg_graph_idempotent_authoring_roundtrip",
         "project_generated_cleanup_roundtrip": "workflow.project_generated_cleanup_roundtrip",
         "project_index_details_text_roundtrip": "workflow.project_index_details_text_roundtrip",
         "project_saved_asset_state_roundtrip": "workflow.project_saved_asset_state_roundtrip",
@@ -7598,7 +7637,7 @@
       ],
       "track": "asset_authoring",
       "title": "Asset authoring: level_instance",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -7612,6 +7651,7 @@
       "parent_module_id": "category.asset_authoring",
       "child_module_ids": [
         "asset_authoring.level_instance.blueprint_prefab",
+        "asset_authoring.level_instance.blueprint_prefab_guard",
         "asset_authoring.level_instance.prefab_placement"
       ]
     },
@@ -7635,6 +7675,33 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
+        ]
+      },
+      "module_shard_id": "asset_authoring.level_instance",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/level_instance.json",
+      "parent_module_id": "asset_authoring.level_instance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_authoring.level_instance.blueprint_prefab_guard",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "level_instance",
+        "blueprint_prefab_guard"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: level_instance/blueprint_prefab_guard",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "level_instance"
+        ],
+        "edit_domain": [
+          "blueprint_prefab_guard"
         ]
       },
       "module_shard_id": "asset_authoring.level_instance",
@@ -10054,6 +10121,58 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_authoring.pcg",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg"
+      ],
+      "track": "asset_authoring",
+      "title": "Asset authoring: pcg",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": [
+        "asset_authoring.pcg.graph_authoring"
+      ]
+    },
+    {
+      "module_id": "asset_authoring.pcg.graph_authoring",
+      "route": [
+        "AssetEditing",
+        "asset_authoring",
+        "pcg",
+        "graph_authoring"
+      ],
+      "track": "asset_edit_workflow",
+      "title": "Asset edit workflow: pcg/graph_authoring",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_authoring"
+        ]
+      },
+      "module_shard_id": "asset_authoring.pcg",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "parent_module_id": "asset_authoring.pcg",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_authoring.project",
       "route": [
         "AssetEditing",
@@ -11002,7 +11121,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Creation/import",
-      "task_count": 267,
+      "task_count": 269,
       "filters": {
         "asset_operation": [
           "creation_or_import"
@@ -11032,6 +11151,7 @@
         "asset_operation.creation_or_import.mesh",
         "asset_operation.creation_or_import.modelgen",
         "asset_operation.creation_or_import.niagara",
+        "asset_operation.creation_or_import.pcg",
         "asset_operation.creation_or_import.project",
         "asset_operation.creation_or_import.ui",
         "asset_operation.creation_or_import.worldgen"
@@ -16339,7 +16459,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Creation/import/level_instance",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -16356,6 +16476,7 @@
       "parent_module_id": "asset_operation.creation_or_import",
       "child_module_ids": [
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
+        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement"
       ]
     },
@@ -16380,6 +16501,37 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.level_instance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "level_instance",
+        "blueprint_prefab_guard"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/level_instance/blueprint_prefab_guard",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "level_instance"
+        ],
+        "edit_domain": [
+          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "creation_or_import"
@@ -19150,6 +19302,66 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.creation_or_import.pcg",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg"
+      ],
+      "track": "asset_operation_domain",
+      "title": "Asset operation: Creation/import/pcg",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import",
+      "child_module_ids": [
+        "asset_operation.creation_or_import.pcg.graph_authoring"
+      ]
+    },
+    {
+      "module_id": "asset_operation.creation_or_import.pcg.graph_authoring",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "creation_or_import",
+        "pcg",
+        "graph_authoring"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Creation/import/pcg/graph_authoring",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_authoring"
+        ],
+        "asset_operation": [
+          "creation_or_import"
+        ]
+      },
+      "module_shard_id": "asset_operation.creation_or_import",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
+      "parent_module_id": "asset_operation.creation_or_import.pcg",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.creation_or_import.project",
       "route": [
         "AssetEditing",
@@ -20234,7 +20446,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Asset edit",
-      "task_count": 267,
+      "task_count": 269,
       "filters": {
         "asset_operation": [
           "edit"
@@ -20264,6 +20476,7 @@
         "asset_operation.edit.mesh",
         "asset_operation.edit.modelgen",
         "asset_operation.edit.niagara",
+        "asset_operation.edit.pcg",
         "asset_operation.edit.project",
         "asset_operation.edit.ui",
         "asset_operation.edit.worldgen"
@@ -25571,7 +25784,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Asset edit/level_instance",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -25588,6 +25801,7 @@
       "parent_module_id": "asset_operation.edit",
       "child_module_ids": [
         "asset_operation.edit.level_instance.blueprint_prefab",
+        "asset_operation.edit.level_instance.blueprint_prefab_guard",
         "asset_operation.edit.level_instance.prefab_placement"
       ]
     },
@@ -25612,6 +25826,37 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.level_instance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.edit.level_instance.blueprint_prefab_guard",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "level_instance",
+        "blueprint_prefab_guard"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/level_instance/blueprint_prefab_guard",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "level_instance"
+        ],
+        "edit_domain": [
+          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "edit"
@@ -28382,6 +28627,66 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.edit.pcg",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg"
+      ],
+      "track": "asset_operation_domain",
+      "title": "Asset operation: Asset edit/pcg",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit",
+      "child_module_ids": [
+        "asset_operation.edit.pcg.graph_authoring"
+      ]
+    },
+    {
+      "module_id": "asset_operation.edit.pcg.graph_authoring",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "edit",
+        "pcg",
+        "graph_authoring"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Asset edit/pcg/graph_authoring",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_authoring"
+        ],
+        "asset_operation": [
+          "edit"
+        ]
+      },
+      "module_shard_id": "asset_operation.edit",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
+      "parent_module_id": "asset_operation.edit.pcg",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.edit.project",
       "route": [
         "AssetEditing",
@@ -29466,7 +29771,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Read-back verify",
-      "task_count": 267,
+      "task_count": 269,
       "filters": {
         "asset_operation": [
           "readback_verify"
@@ -29496,6 +29801,7 @@
         "asset_operation.readback_verify.mesh",
         "asset_operation.readback_verify.modelgen",
         "asset_operation.readback_verify.niagara",
+        "asset_operation.readback_verify.pcg",
         "asset_operation.readback_verify.project",
         "asset_operation.readback_verify.ui",
         "asset_operation.readback_verify.worldgen"
@@ -34803,7 +35109,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Read-back verify/level_instance",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -34820,6 +35126,7 @@
       "parent_module_id": "asset_operation.readback_verify",
       "child_module_ids": [
         "asset_operation.readback_verify.level_instance.blueprint_prefab",
+        "asset_operation.readback_verify.level_instance.blueprint_prefab_guard",
         "asset_operation.readback_verify.level_instance.prefab_placement"
       ]
     },
@@ -34844,6 +35151,37 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.level_instance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.readback_verify.level_instance.blueprint_prefab_guard",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "level_instance",
+        "blueprint_prefab_guard"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/level_instance/blueprint_prefab_guard",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "level_instance"
+        ],
+        "edit_domain": [
+          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "readback_verify"
@@ -37614,6 +37952,66 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.readback_verify.pcg",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg"
+      ],
+      "track": "asset_operation_domain",
+      "title": "Asset operation: Read-back verify/pcg",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify",
+      "child_module_ids": [
+        "asset_operation.readback_verify.pcg.graph_authoring"
+      ]
+    },
+    {
+      "module_id": "asset_operation.readback_verify.pcg.graph_authoring",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "readback_verify",
+        "pcg",
+        "graph_authoring"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Read-back verify/pcg/graph_authoring",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_authoring"
+        ],
+        "asset_operation": [
+          "readback_verify"
+        ]
+      },
+      "module_shard_id": "asset_operation.readback_verify",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
+      "parent_module_id": "asset_operation.readback_verify.pcg",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.readback_verify.project",
       "route": [
         "AssetEditing",
@@ -38698,7 +39096,7 @@
       ],
       "track": "asset_operation",
       "title": "Asset operation: Save",
-      "task_count": 265,
+      "task_count": 267,
       "filters": {
         "asset_operation": [
           "save"
@@ -38728,6 +39126,7 @@
         "asset_operation.save.mesh",
         "asset_operation.save.modelgen",
         "asset_operation.save.niagara",
+        "asset_operation.save.pcg",
         "asset_operation.save.project",
         "asset_operation.save.ui",
         "asset_operation.save.worldgen"
@@ -43971,7 +44370,7 @@
       ],
       "track": "asset_operation_domain",
       "title": "Asset operation: Save/level_instance",
-      "task_count": 2,
+      "task_count": 3,
       "filters": {
         "category": [
           "asset_authoring"
@@ -43988,6 +44387,7 @@
       "parent_module_id": "asset_operation.save",
       "child_module_ids": [
         "asset_operation.save.level_instance.blueprint_prefab",
+        "asset_operation.save.level_instance.blueprint_prefab_guard",
         "asset_operation.save.level_instance.prefab_placement"
       ]
     },
@@ -44012,6 +44412,37 @@
         ],
         "edit_domain": [
           "blueprint_prefab"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.level_instance",
+      "child_module_ids": []
+    },
+    {
+      "module_id": "asset_operation.save.level_instance.blueprint_prefab_guard",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "level_instance",
+        "blueprint_prefab_guard"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/level_instance/blueprint_prefab_guard",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "level_instance"
+        ],
+        "edit_domain": [
+          "blueprint_prefab_guard"
         ],
         "asset_operation": [
           "save"
@@ -46782,6 +47213,66 @@
       "child_module_ids": []
     },
     {
+      "module_id": "asset_operation.save.pcg",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg"
+      ],
+      "track": "asset_operation_domain",
+      "title": "Asset operation: Save/pcg",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save",
+      "child_module_ids": [
+        "asset_operation.save.pcg.graph_authoring"
+      ]
+    },
+    {
+      "module_id": "asset_operation.save.pcg.graph_authoring",
+      "route": [
+        "AssetEditing",
+        "asset_operation",
+        "save",
+        "pcg",
+        "graph_authoring"
+      ],
+      "track": "asset_operation_edit_domain",
+      "title": "Asset operation: Save/pcg/graph_authoring",
+      "task_count": 1,
+      "filters": {
+        "category": [
+          "asset_authoring"
+        ],
+        "domain": [
+          "pcg"
+        ],
+        "edit_domain": [
+          "graph_authoring"
+        ],
+        "asset_operation": [
+          "save"
+        ]
+      },
+      "module_shard_id": "asset_operation.save",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
+      "parent_module_id": "asset_operation.save.pcg",
+      "child_module_ids": []
+    },
+    {
       "module_id": "asset_operation.save.project",
       "route": [
         "AssetEditing",
@@ -49238,7 +49729,7 @@
       ],
       "track": "category",
       "title": "Category: asset_authoring",
-      "task_count": 267,
+      "task_count": 269,
       "filters": {
         "category": [
           "asset_authoring"
@@ -49268,6 +49759,7 @@
         "asset_authoring.mesh",
         "asset_authoring.modelgen",
         "asset_authoring.niagara",
+        "asset_authoring.pcg",
         "asset_authoring.project",
         "asset_authoring.ui",
         "asset_authoring.worldgen",
@@ -49430,6 +49922,7 @@
         "workflow.interchange_texture_import_roundtrip",
         "workflow.level_instance_blueprint_prefab_placement_roundtrip",
         "workflow.level_instance_blueprint_prefab_roundtrip",
+        "workflow.level_instance_rootless_prefab_rejected",
         "workflow.localization_blueprint_stringtable_bulk_roundtrip",
         "workflow.localization_stringtable_export_remove_roundtrip",
         "workflow.localization_stringtable_metadata_remove_roundtrip",
@@ -49505,6 +49998,7 @@
         "workflow.niagara_user_parameter_remove_roundtrip",
         "workflow.niagara_user_parameter_roundtrip",
         "workflow.pbr_material_from_disk_roundtrip",
+        "workflow.pcg_graph_idempotent_authoring_roundtrip",
         "workflow.project_generated_cleanup_roundtrip",
         "workflow.project_index_details_text_roundtrip",
         "workflow.project_saved_asset_state_roundtrip",
@@ -49793,7 +50287,7 @@
       ],
       "track": "lifecycle",
       "title": "Lifecycle phase: create_save",
-      "task_count": 265,
+      "task_count": 267,
       "filters": {
         "lifecycle_phase": [
           "create_save"
@@ -49853,7 +50347,7 @@
       ],
       "track": "operation_semantics",
       "title": "Operation semantics: create_save",
-      "task_count": 267,
+      "task_count": 269,
       "filters": {
         "operation_semantics": [
           "create_save"
@@ -53225,6 +53719,26 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.level_instance_rootless_prefab_rejected",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "level_instance_rootless_prefab_rejected"
+      ],
+      "track": "workflow",
+      "title": "Workflow: level_instance_rootless_prefab_rejected",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "level_instance_rootless_prefab_rejected"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.localization_blueprint_stringtable_bulk_roundtrip",
       "route": [
         "AssetEditing",
@@ -54725,6 +55239,26 @@
       "child_module_ids": []
     },
     {
+      "module_id": "workflow.pcg_graph_idempotent_authoring_roundtrip",
+      "route": [
+        "AssetEditing",
+        "workflow",
+        "pcg_graph_idempotent_authoring_roundtrip"
+      ],
+      "track": "workflow",
+      "title": "Workflow: pcg_graph_idempotent_authoring_roundtrip",
+      "task_count": 1,
+      "filters": {
+        "workflow": [
+          "pcg_graph_idempotent_authoring_roundtrip"
+        ]
+      },
+      "module_shard_id": "workflow",
+      "module_shard_file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
+      "parent_module_id": "category.asset_authoring",
+      "child_module_ids": []
+    },
+    {
       "module_id": "workflow.project_generated_cleanup_roundtrip",
       "route": [
         "AssetEditing",
@@ -55827,10 +56361,11 @@
     "asset_authoring.level_instance": {
       "shard_id": "asset_authoring.level_instance",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/level_instance.json",
-      "module_count": 3,
+      "module_count": 4,
       "module_ids": [
         "asset_authoring.level_instance",
         "asset_authoring.level_instance.blueprint_prefab",
+        "asset_authoring.level_instance.blueprint_prefab_guard",
         "asset_authoring.level_instance.prefab_placement"
       ]
     },
@@ -55962,6 +56497,15 @@
         "asset_authoring.niagara.user_parameters"
       ]
     },
+    "asset_authoring.pcg": {
+      "shard_id": "asset_authoring.pcg",
+      "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/pcg.json",
+      "module_count": 2,
+      "module_ids": [
+        "asset_authoring.pcg",
+        "asset_authoring.pcg.graph_authoring"
+      ]
+    },
     "asset_authoring.project": {
       "shard_id": "asset_authoring.project",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/project.json",
@@ -56020,7 +56564,7 @@
     "asset_operation.creation_or_import": {
       "shard_id": "asset_operation.creation_or_import",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/creation_or_import.json",
-      "module_count": 291,
+      "module_count": 294,
       "module_ids": [
         "asset_operation.creation_or_import",
         "asset_operation.creation_or_import.ai",
@@ -56192,6 +56736,7 @@
         "asset_operation.creation_or_import.interchange.texture_import",
         "asset_operation.creation_or_import.level_instance",
         "asset_operation.creation_or_import.level_instance.blueprint_prefab",
+        "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
         "asset_operation.creation_or_import.level_instance.prefab_placement",
         "asset_operation.creation_or_import.localization",
         "asset_operation.creation_or_import.localization.stringtable",
@@ -56279,6 +56824,8 @@
         "asset_operation.creation_or_import.niagara.system_timing",
         "asset_operation.creation_or_import.niagara.user_parameter_remove",
         "asset_operation.creation_or_import.niagara.user_parameters",
+        "asset_operation.creation_or_import.pcg",
+        "asset_operation.creation_or_import.pcg.graph_authoring",
         "asset_operation.creation_or_import.project",
         "asset_operation.creation_or_import.project.cleanup_generated_assets",
         "asset_operation.creation_or_import.project.index_details_text",
@@ -56318,7 +56865,7 @@
     "asset_operation.edit": {
       "shard_id": "asset_operation.edit",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/edit.json",
-      "module_count": 291,
+      "module_count": 294,
       "module_ids": [
         "asset_operation.edit",
         "asset_operation.edit.ai",
@@ -56490,6 +57037,7 @@
         "asset_operation.edit.interchange.texture_import",
         "asset_operation.edit.level_instance",
         "asset_operation.edit.level_instance.blueprint_prefab",
+        "asset_operation.edit.level_instance.blueprint_prefab_guard",
         "asset_operation.edit.level_instance.prefab_placement",
         "asset_operation.edit.localization",
         "asset_operation.edit.localization.stringtable",
@@ -56577,6 +57125,8 @@
         "asset_operation.edit.niagara.system_timing",
         "asset_operation.edit.niagara.user_parameter_remove",
         "asset_operation.edit.niagara.user_parameters",
+        "asset_operation.edit.pcg",
+        "asset_operation.edit.pcg.graph_authoring",
         "asset_operation.edit.project",
         "asset_operation.edit.project.cleanup_generated_assets",
         "asset_operation.edit.project.index_details_text",
@@ -56616,7 +57166,7 @@
     "asset_operation.readback_verify": {
       "shard_id": "asset_operation.readback_verify",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/readback_verify.json",
-      "module_count": 291,
+      "module_count": 294,
       "module_ids": [
         "asset_operation.readback_verify",
         "asset_operation.readback_verify.ai",
@@ -56788,6 +57338,7 @@
         "asset_operation.readback_verify.interchange.texture_import",
         "asset_operation.readback_verify.level_instance",
         "asset_operation.readback_verify.level_instance.blueprint_prefab",
+        "asset_operation.readback_verify.level_instance.blueprint_prefab_guard",
         "asset_operation.readback_verify.level_instance.prefab_placement",
         "asset_operation.readback_verify.localization",
         "asset_operation.readback_verify.localization.stringtable",
@@ -56875,6 +57426,8 @@
         "asset_operation.readback_verify.niagara.system_timing",
         "asset_operation.readback_verify.niagara.user_parameter_remove",
         "asset_operation.readback_verify.niagara.user_parameters",
+        "asset_operation.readback_verify.pcg",
+        "asset_operation.readback_verify.pcg.graph_authoring",
         "asset_operation.readback_verify.project",
         "asset_operation.readback_verify.project.cleanup_generated_assets",
         "asset_operation.readback_verify.project.index_details_text",
@@ -56914,7 +57467,7 @@
     "asset_operation.save": {
       "shard_id": "asset_operation.save",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/asset_operation/save.json",
-      "module_count": 289,
+      "module_count": 292,
       "module_ids": [
         "asset_operation.save",
         "asset_operation.save.ai",
@@ -57084,6 +57637,7 @@
         "asset_operation.save.interchange.texture_import",
         "asset_operation.save.level_instance",
         "asset_operation.save.level_instance.blueprint_prefab",
+        "asset_operation.save.level_instance.blueprint_prefab_guard",
         "asset_operation.save.level_instance.prefab_placement",
         "asset_operation.save.localization",
         "asset_operation.save.localization.stringtable",
@@ -57171,6 +57725,8 @@
         "asset_operation.save.niagara.system_timing",
         "asset_operation.save.niagara.user_parameter_remove",
         "asset_operation.save.niagara.user_parameters",
+        "asset_operation.save.pcg",
+        "asset_operation.save.pcg.graph_authoring",
         "asset_operation.save.project",
         "asset_operation.save.project.cleanup_generated_assets",
         "asset_operation.save.project.index_details_text",
@@ -57354,7 +57910,7 @@
     "workflow": {
       "shard_id": "workflow",
       "file": "Benchmarks/AssetEditing/testsets/module_shards/workflow.json",
-      "module_count": 283,
+      "module_count": 285,
       "module_ids": [
         "workflow.actor_component_property_assembly",
         "workflow.actorcomponent_toggle_contract",
@@ -57522,6 +58078,7 @@
         "workflow.interface_signature_contract",
         "workflow.level_instance_blueprint_prefab_placement_roundtrip",
         "workflow.level_instance_blueprint_prefab_roundtrip",
+        "workflow.level_instance_rootless_prefab_rejected",
         "workflow.localization_blueprint_stringtable_bulk_roundtrip",
         "workflow.localization_stringtable_export_remove_roundtrip",
         "workflow.localization_stringtable_metadata_remove_roundtrip",
@@ -57597,6 +58154,7 @@
         "workflow.niagara_user_parameter_remove_roundtrip",
         "workflow.niagara_user_parameter_roundtrip",
         "workflow.pbr_material_from_disk_roundtrip",
+        "workflow.pcg_graph_idempotent_authoring_roundtrip",
         "workflow.project_generated_cleanup_roundtrip",
         "workflow.project_index_details_text_roundtrip",
         "workflow.project_saved_asset_state_roundtrip",
@@ -57812,6 +58370,7 @@
     "asset_authoring.interchange.texture_import": "asset_authoring.interchange",
     "asset_authoring.level_instance": "asset_authoring.level_instance",
     "asset_authoring.level_instance.blueprint_prefab": "asset_authoring.level_instance",
+    "asset_authoring.level_instance.blueprint_prefab_guard": "asset_authoring.level_instance",
     "asset_authoring.level_instance.prefab_placement": "asset_authoring.level_instance",
     "asset_authoring.localization": "asset_authoring.localization",
     "asset_authoring.localization.stringtable": "asset_authoring.localization",
@@ -57899,6 +58458,8 @@
     "asset_authoring.niagara.system_timing": "asset_authoring.niagara",
     "asset_authoring.niagara.user_parameter_remove": "asset_authoring.niagara",
     "asset_authoring.niagara.user_parameters": "asset_authoring.niagara",
+    "asset_authoring.pcg": "asset_authoring.pcg",
+    "asset_authoring.pcg.graph_authoring": "asset_authoring.pcg",
     "asset_authoring.project": "asset_authoring.project",
     "asset_authoring.project.cleanup_generated_assets": "asset_authoring.project",
     "asset_authoring.project.index_details_text": "asset_authoring.project",
@@ -58103,6 +58664,7 @@
     "asset_operation.creation_or_import.interchange.texture_import": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance.blueprint_prefab": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.level_instance.prefab_placement": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.localization": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.localization.stringtable": "asset_operation.creation_or_import",
@@ -58190,6 +58752,8 @@
     "asset_operation.creation_or_import.niagara.system_timing": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.niagara.user_parameter_remove": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.niagara.user_parameters": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg": "asset_operation.creation_or_import",
+    "asset_operation.creation_or_import.pcg.graph_authoring": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project.cleanup_generated_assets": "asset_operation.creation_or_import",
     "asset_operation.creation_or_import.project.index_details_text": "asset_operation.creation_or_import",
@@ -58394,6 +58958,7 @@
     "asset_operation.edit.interchange.texture_import": "asset_operation.edit",
     "asset_operation.edit.level_instance": "asset_operation.edit",
     "asset_operation.edit.level_instance.blueprint_prefab": "asset_operation.edit",
+    "asset_operation.edit.level_instance.blueprint_prefab_guard": "asset_operation.edit",
     "asset_operation.edit.level_instance.prefab_placement": "asset_operation.edit",
     "asset_operation.edit.localization": "asset_operation.edit",
     "asset_operation.edit.localization.stringtable": "asset_operation.edit",
@@ -58481,6 +59046,8 @@
     "asset_operation.edit.niagara.system_timing": "asset_operation.edit",
     "asset_operation.edit.niagara.user_parameter_remove": "asset_operation.edit",
     "asset_operation.edit.niagara.user_parameters": "asset_operation.edit",
+    "asset_operation.edit.pcg": "asset_operation.edit",
+    "asset_operation.edit.pcg.graph_authoring": "asset_operation.edit",
     "asset_operation.edit.project": "asset_operation.edit",
     "asset_operation.edit.project.cleanup_generated_assets": "asset_operation.edit",
     "asset_operation.edit.project.index_details_text": "asset_operation.edit",
@@ -58685,6 +59252,7 @@
     "asset_operation.readback_verify.interchange.texture_import": "asset_operation.readback_verify",
     "asset_operation.readback_verify.level_instance": "asset_operation.readback_verify",
     "asset_operation.readback_verify.level_instance.blueprint_prefab": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.level_instance.blueprint_prefab_guard": "asset_operation.readback_verify",
     "asset_operation.readback_verify.level_instance.prefab_placement": "asset_operation.readback_verify",
     "asset_operation.readback_verify.localization": "asset_operation.readback_verify",
     "asset_operation.readback_verify.localization.stringtable": "asset_operation.readback_verify",
@@ -58772,6 +59340,8 @@
     "asset_operation.readback_verify.niagara.system_timing": "asset_operation.readback_verify",
     "asset_operation.readback_verify.niagara.user_parameter_remove": "asset_operation.readback_verify",
     "asset_operation.readback_verify.niagara.user_parameters": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg": "asset_operation.readback_verify",
+    "asset_operation.readback_verify.pcg.graph_authoring": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project.cleanup_generated_assets": "asset_operation.readback_verify",
     "asset_operation.readback_verify.project.index_details_text": "asset_operation.readback_verify",
@@ -58974,6 +59544,7 @@
     "asset_operation.save.interchange.texture_import": "asset_operation.save",
     "asset_operation.save.level_instance": "asset_operation.save",
     "asset_operation.save.level_instance.blueprint_prefab": "asset_operation.save",
+    "asset_operation.save.level_instance.blueprint_prefab_guard": "asset_operation.save",
     "asset_operation.save.level_instance.prefab_placement": "asset_operation.save",
     "asset_operation.save.localization": "asset_operation.save",
     "asset_operation.save.localization.stringtable": "asset_operation.save",
@@ -59061,6 +59632,8 @@
     "asset_operation.save.niagara.system_timing": "asset_operation.save",
     "asset_operation.save.niagara.user_parameter_remove": "asset_operation.save",
     "asset_operation.save.niagara.user_parameters": "asset_operation.save",
+    "asset_operation.save.pcg": "asset_operation.save",
+    "asset_operation.save.pcg.graph_authoring": "asset_operation.save",
     "asset_operation.save.project": "asset_operation.save",
     "asset_operation.save.project.cleanup_generated_assets": "asset_operation.save",
     "asset_operation.save.project.index_details_text": "asset_operation.save",
@@ -59335,6 +59908,7 @@
     "workflow.interface_signature_contract": "workflow",
     "workflow.level_instance_blueprint_prefab_placement_roundtrip": "workflow",
     "workflow.level_instance_blueprint_prefab_roundtrip": "workflow",
+    "workflow.level_instance_rootless_prefab_rejected": "workflow",
     "workflow.localization_blueprint_stringtable_bulk_roundtrip": "workflow",
     "workflow.localization_stringtable_export_remove_roundtrip": "workflow",
     "workflow.localization_stringtable_metadata_remove_roundtrip": "workflow",
@@ -59410,6 +59984,7 @@
     "workflow.niagara_user_parameter_remove_roundtrip": "workflow",
     "workflow.niagara_user_parameter_roundtrip": "workflow",
     "workflow.pbr_material_from_disk_roundtrip": "workflow",
+    "workflow.pcg_graph_idempotent_authoring_roundtrip": "workflow",
     "workflow.project_generated_cleanup_roundtrip": "workflow",
     "workflow.project_index_details_text_roundtrip": "workflow",
     "workflow.project_saved_asset_state_roundtrip": "workflow",

@@ -39,22 +39,22 @@
     "BEB-413",
     "BEB-421",
     "BEB-422",
-    "BEB-434",
-    "BEB-440",
+    "BEB-435",
     "BEB-441",
-    "BEB-453",
-    "BEB-460",
-    "BEB-502",
+    "BEB-442",
+    "BEB-454",
+    "BEB-461",
     "BEB-503",
     "BEB-504",
-    "BEB-511",
-    "BEB-531",
+    "BEB-505",
+    "BEB-512",
     "BEB-532",
     "BEB-533",
     "BEB-534",
     "BEB-535",
     "BEB-536",
-    "BEB-539"
+    "BEB-537",
+    "BEB-540"
   ],
   "task_refs": [
     {
@@ -766,7 +766,7 @@
       "description": "Create PoseSearch assets and an AnimBlueprint, wire Motion Matching plus Pose History into the AnimGraph output, save it, and verify the output pose is driven"
     },
     {
-      "id": "BEB-434",
+      "id": "BEB-435",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -795,7 +795,7 @@
       "description": "Create a source AnimSequence, build a montage from a section spec in one action, save it, and inspect section flow and blend settings"
     },
     {
-      "id": "BEB-440",
+      "id": "BEB-441",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -825,7 +825,7 @@
       "description": "Create an AnimSequence, add two point notifies, remove one by returned index, save, and read back the remaining notify"
     },
     {
-      "id": "BEB-441",
+      "id": "BEB-442",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -857,7 +857,7 @@
       "description": "Create an AnimSequence, add a state notify, edit its time, duration, and reflected state properties, save, and read back the state notify interval"
     },
     {
-      "id": "BEB-453",
+      "id": "BEB-454",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -888,7 +888,7 @@
       "description": "Create a BlendSpace with three samples, edit one sample's position and animation, save it, and verify the edited sample data"
     },
     {
-      "id": "BEB-460",
+      "id": "BEB-461",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -919,7 +919,7 @@
       "description": "Create an AnimSequence, capture a valid skeleton bone name, write transform keys to that bone track, save, and read the keyed transforms back"
     },
     {
-      "id": "BEB-502",
+      "id": "BEB-503",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -948,7 +948,7 @@
       "description": "Create a BlendSpace, edit its interpolation mode and triangulation preference, save it, and verify authored interpolation metadata"
     },
     {
-      "id": "BEB-503",
+      "id": "BEB-504",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -979,7 +979,7 @@
       "description": "Create an AnimMontage, add and rename a slot, edit blend timings, save it, and verify slot plus blend metadata"
     },
     {
-      "id": "BEB-504",
+      "id": "BEB-505",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1009,7 +1009,7 @@
       "description": "Create an IKRig asset, add and remove a solver stack entry, save it, and verify the solver stack read-back"
     },
     {
-      "id": "BEB-511",
+      "id": "BEB-512",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1044,7 +1044,7 @@
       "description": "Create an AnimSequence, add curve and sync-marker metadata, rename the marker, remove both authored items, save, and verify cleanup"
     },
     {
-      "id": "BEB-531",
+      "id": "BEB-532",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1075,7 +1075,7 @@
       "description": "Create an AnimSequence directly from per-frame bone pose data, save it, and read the generated frame rate and bone-track keys back"
     },
     {
-      "id": "BEB-532",
+      "id": "BEB-533",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1107,7 +1107,7 @@
       "description": "Create source and destination AnimSequences, copy evaluated bone pose keys into the destination sequence, save it, and read the copied keys back"
     },
     {
-      "id": "BEB-533",
+      "id": "BEB-534",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1139,7 +1139,7 @@
       "description": "Create an AnimMontage, add sections, edit section flow and timing, delete one section, save it, and read the section table back"
     },
     {
-      "id": "BEB-534",
+      "id": "BEB-535",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1170,7 +1170,7 @@
       "description": "Create a BlendSpace with three authored samples, delete one sample, save it, and read back the remaining sample layout"
     },
     {
-      "id": "BEB-535",
+      "id": "BEB-536",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1203,7 +1203,7 @@
       "description": "Create an AnimSequence, add a skeleton bone track, write transform keys, remove the authored track, save, and verify the track list cleanup"
     },
     {
-      "id": "BEB-536",
+      "id": "BEB-537",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1235,7 +1235,7 @@
       "description": "Create source and target AnimSequences, add notifies in bulk, move a source notify to another track, clone the source notify setup to the target, save both, and read the cloned track layout back"
     },
     {
-      "id": "BEB-539",
+      "id": "BEB-540",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1420,7 +1420,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-502"
+        "BEB-503"
       ],
       "case_file": "testcases\\blendspace_interpolation.json"
     },
@@ -1442,7 +1442,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-534"
+        "BEB-535"
       ],
       "case_file": "testcases\\blendspace_sample_delete.json"
     },
@@ -1464,7 +1464,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-453"
+        "BEB-454"
       ],
       "case_file": "testcases\\blendspace_sample_edit.json"
     },
@@ -1508,7 +1508,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-460"
+        "BEB-461"
       ],
       "case_file": "testcases\\bone_track_keys.json"
     },
@@ -1530,7 +1530,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-535"
+        "BEB-536"
       ],
       "case_file": "testcases\\bone_track_lifecycle.json"
     },
@@ -1706,7 +1706,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-504"
+        "BEB-505"
       ],
       "case_file": "testcases\\ikrig_solver_stack.json"
     },
@@ -1728,7 +1728,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-539"
+        "BEB-540"
       ],
       "case_file": "testcases\\modifier_stack.json"
     },
@@ -1772,7 +1772,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-503"
+        "BEB-504"
       ],
       "case_file": "testcases\\montage_blend_slot.json"
     },
@@ -1794,7 +1794,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-434"
+        "BEB-435"
       ],
       "case_file": "testcases\\montage_from_sections.json"
     },
@@ -1816,7 +1816,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-533"
+        "BEB-534"
       ],
       "case_file": "testcases\\montage_section_crud.json"
     },
@@ -1838,7 +1838,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-536"
+        "BEB-537"
       ],
       "case_file": "testcases\\notify_batch_track_clone.json"
     },
@@ -1860,7 +1860,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-440"
+        "BEB-441"
       ],
       "case_file": "testcases\\notify_point_crud.json"
     },
@@ -1882,7 +1882,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-441"
+        "BEB-442"
       ],
       "case_file": "testcases\\notify_state_timing.json"
     },
@@ -2036,7 +2036,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-511"
+        "BEB-512"
       ],
       "case_file": "testcases\\sequence_curve_marker_cleanup.json"
     },
@@ -2058,7 +2058,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-531"
+        "BEB-532"
       ],
       "case_file": "testcases\\sequence_from_poses.json"
     },
@@ -2080,7 +2080,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-532"
+        "BEB-533"
       ],
       "case_file": "testcases\\sequence_pose_copy.json"
     },

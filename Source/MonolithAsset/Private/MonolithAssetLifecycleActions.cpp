@@ -423,11 +423,36 @@ namespace
 
 	struct FDeleteAssetTarget
 	{
+		enum class ESourceControlPostcondition : uint8
+		{
+			MarkedForDelete,
+			PendingAddRemoved,
+			UntrackedAbsent,
+		};
+
+		struct FSourceControlExpectation
+		{
+			FString Filename;
+			ESourceControlPostcondition ExpectedPostcondition = ESourceControlPostcondition::UntrackedAbsent;
+			bool bSourceControlledBefore = false;
+			bool bAddedBefore = false;
+			bool bDeletedBefore = false;
+			bool bCheckedOutBefore = false;
+			bool bStateValidAfter = false;
+			bool bSourceControlledAfter = false;
+			bool bAddedAfter = false;
+			bool bDeletedAfter = false;
+			bool bUnknownAfter = false;
+			bool bPostconditionMet = false;
+			FString FailureReason;
+		};
+
 		FString RequestedPath;
 		FString PackageName;
 		TArray<FString> NotFoundRequestedPaths;
 		TArray<FString> InitialPackageFiles;
 		TArray<FString> FinalPackageFiles;
+		TArray<FSourceControlExpectation> SourceControlExpectations;
 		bool bHadRegisteredAsset = false;
 		bool bHadLoadedPackage = false;
 		bool bFoundObject = false;
@@ -439,6 +464,22 @@ namespace
 		FString Status;
 		FString FailureReason;
 	};
+
+	FString SourceControlPostconditionToString(
+		const FDeleteAssetTarget::ESourceControlPostcondition Postcondition)
+	{
+		switch (Postcondition)
+		{
+		case FDeleteAssetTarget::ESourceControlPostcondition::MarkedForDelete:
+			return TEXT("marked_for_delete");
+		case FDeleteAssetTarget::ESourceControlPostcondition::PendingAddRemoved:
+			return TEXT("pending_add_removed");
+		case FDeleteAssetTarget::ESourceControlPostcondition::UntrackedAbsent:
+			return TEXT("untracked_absent");
+		default:
+			return TEXT("unknown");
+		}
+	}
 
 	TArray<TSharedPtr<FJsonValue>> ToJsonStringArray(const TArray<FString>& Values)
 	{
@@ -758,6 +799,7 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Optional(TEXT("allowed_prefixes"), TEXT("array"), TEXT("Only packages equal to or under these package-path prefixes may be deleted"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report targets without deleting"), TEXT("false"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force-delete referenced assets after closing open editors. Default false"), TEXT("false"))
+			.Optional(TEXT("require_source_control"), TEXT("bool"), TEXT("Require an available provider plus per-file state preflight and verified delete/revert-add postconditions"), TEXT("false"))
 			.Build());
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("asset"), TEXT("import_texture_from_file"),
@@ -1110,10 +1152,23 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	}
 
 	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
-
 	bool bForce = false;
-	Params->TryGetBoolField(TEXT("force"), bForce);
+	bool bRequireSourceControl = false;
+	for (const TPair<const TCHAR*, bool*> BoolParam : {
+		TPair<const TCHAR*, bool*>(TEXT("dry_run"), &bDryRun),
+		TPair<const TCHAR*, bool*>(TEXT("force"), &bForce),
+		TPair<const TCHAR*, bool*>(TEXT("require_source_control"), &bRequireSourceControl),
+	})
+	{
+		if (Params->HasField(BoolParam.Key)
+			&& (!Params->HasTypedField<EJson::Boolean>(BoolParam.Key)
+				|| !Params->TryGetBoolField(BoolParam.Key, *BoolParam.Value)))
+		{
+			return FMonolithActionResult::Error(
+				FString::Printf(TEXT("Param '%s' must be a boolean"), BoolParam.Key),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+	}
 
 	TArray<FDeleteAssetTarget> Targets;
 	Targets.Reserve(AssetPaths.Num());
@@ -1210,6 +1265,110 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		Target.bHadRegisteredAsset = HasRegisteredAssetsForPackage(AssetRegistry, Target.PackageName);
 		Target.bHadLoadedPackage = FindPackage(nullptr, *Target.PackageName) != nullptr;
 		Target.InitialPackageFiles = FindExistingPackageFiles(Target.PackageName);
+	}
+
+	if (bRequireSourceControl)
+	{
+		ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
+		const bool bProviderReady = SourceControlModule.IsEnabled()
+			&& SourceControlModule.GetProvider().IsEnabled()
+			&& SourceControlModule.GetProvider().IsAvailable();
+		if (!bProviderReady)
+		{
+			TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
+			ErrorResult->SetBoolField(TEXT("success"), false);
+			ErrorResult->SetStringField(TEXT("status"), TEXT("source_control_preflight_failed"));
+			ErrorResult->SetBoolField(TEXT("require_source_control"), true);
+			ErrorResult->SetBoolField(TEXT("source_control_enabled"), SourceControlModule.IsEnabled());
+			ErrorResult->SetBoolField(
+				TEXT("source_control_available"),
+				SourceControlModule.IsEnabled() && SourceControlModule.GetProvider().IsAvailable());
+			return FMonolithActionResult::Error(
+				TEXT("delete_assets requires an enabled and available source-control provider"),
+				FMonolithJsonUtils::ErrInvalidParams)
+				.WithErrorData(ErrorResult);
+		}
+
+		ISourceControlProvider& Provider = SourceControlModule.GetProvider();
+		TArray<TSharedPtr<FJsonValue>> PreflightFailures;
+		for (FDeleteAssetTarget& Target : Targets)
+		{
+			for (const FString& Filename : Target.InitialPackageFiles)
+			{
+				FSourceControlStatePtr State = Provider.GetState(Filename, EStateCacheUsage::ForceUpdate);
+				FDeleteAssetTarget::FSourceControlExpectation Expectation;
+				Expectation.Filename = Filename;
+				if (!State.IsValid() || State->IsUnknown())
+				{
+					Expectation.FailureReason = State.IsValid()
+						? TEXT("source_control_state_unknown")
+						: TEXT("source_control_state_unavailable");
+				}
+				else
+				{
+					Expectation.bSourceControlledBefore = State->IsSourceControlled();
+					Expectation.bAddedBefore = State->IsAdded();
+					Expectation.bDeletedBefore = State->IsDeleted();
+					Expectation.bCheckedOutBefore = State->IsCheckedOut();
+
+					if (State->IsAdded())
+					{
+						Expectation.ExpectedPostcondition =
+							FDeleteAssetTarget::ESourceControlPostcondition::PendingAddRemoved;
+						if (!State->CanRevert())
+						{
+							Expectation.FailureReason = TEXT("source_control_added_file_cannot_revert");
+						}
+					}
+					else if (State->IsSourceControlled())
+					{
+						Expectation.ExpectedPostcondition =
+							FDeleteAssetTarget::ESourceControlPostcondition::MarkedForDelete;
+						if ((State->IsCheckedOut() || State->IsDeleted()) && !State->CanRevert())
+						{
+							Expectation.FailureReason = TEXT("source_control_open_file_cannot_revert");
+						}
+						else if (!State->IsCheckedOut() && !State->IsDeleted() && !State->CanDelete())
+						{
+							Expectation.FailureReason = TEXT("source_control_file_cannot_delete");
+						}
+					}
+					else
+					{
+						Expectation.ExpectedPostcondition =
+							FDeleteAssetTarget::ESourceControlPostcondition::UntrackedAbsent;
+						if (IFileManager::Get().IsReadOnly(*Filename))
+						{
+							Expectation.FailureReason = TEXT("untracked_file_is_read_only");
+						}
+					}
+				}
+
+				if (!Expectation.FailureReason.IsEmpty())
+				{
+					TSharedPtr<FJsonObject> Failure = MakeShared<FJsonObject>();
+					Failure->SetStringField(TEXT("asset_path"), Target.RequestedPath);
+					Failure->SetStringField(TEXT("package_name"), Target.PackageName);
+					Failure->SetStringField(TEXT("filename"), Filename);
+					Failure->SetStringField(TEXT("reason"), Expectation.FailureReason);
+					PreflightFailures.Add(MakeShared<FJsonValueObject>(Failure));
+				}
+				Target.SourceControlExpectations.Add(MoveTemp(Expectation));
+			}
+		}
+
+		if (!PreflightFailures.IsEmpty())
+		{
+			TSharedPtr<FJsonObject> ErrorResult = MakeShared<FJsonObject>();
+			ErrorResult->SetBoolField(TEXT("success"), false);
+			ErrorResult->SetStringField(TEXT("status"), TEXT("source_control_preflight_failed"));
+			ErrorResult->SetBoolField(TEXT("require_source_control"), true);
+			ErrorResult->SetArrayField(TEXT("source_control_failures"), PreflightFailures);
+			return FMonolithActionResult::Error(
+				TEXT("delete_assets source-control preflight failed before any deletion"),
+				FMonolithJsonUtils::ErrInvalidParams)
+				.WithErrorData(ErrorResult);
+		}
 	}
 
 	TArray<UObject*> ObjectsToDelete;
@@ -1349,6 +1508,61 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		}
 	}
 
+	if (!bDryRun && bRequireSourceControl)
+	{
+		ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
+		for (FDeleteAssetTarget& Target : Targets)
+		{
+			for (FDeleteAssetTarget::FSourceControlExpectation& Expectation : Target.SourceControlExpectations)
+			{
+				FSourceControlStatePtr State = Provider.GetState(
+					Expectation.Filename,
+					EStateCacheUsage::ForceUpdate);
+				Expectation.bStateValidAfter = State.IsValid();
+				if (State.IsValid())
+				{
+					Expectation.bSourceControlledAfter = State->IsSourceControlled();
+					Expectation.bAddedAfter = State->IsAdded();
+					Expectation.bDeletedAfter = State->IsDeleted();
+					Expectation.bUnknownAfter = State->IsUnknown();
+				}
+
+				const bool bFileAbsent = !IFileManager::Get().FileExists(*Expectation.Filename);
+				switch (Expectation.ExpectedPostcondition)
+				{
+				case FDeleteAssetTarget::ESourceControlPostcondition::MarkedForDelete:
+					Expectation.bPostconditionMet = State.IsValid()
+						&& State->IsDeleted()
+						&& !State->IsAdded()
+						&& bFileAbsent;
+					break;
+				case FDeleteAssetTarget::ESourceControlPostcondition::PendingAddRemoved:
+				case FDeleteAssetTarget::ESourceControlPostcondition::UntrackedAbsent:
+					Expectation.bPostconditionMet = State.IsValid()
+						&& !State->IsSourceControlled()
+						&& !State->IsAdded()
+						&& !State->IsDeleted()
+						&& !State->IsUnknown()
+						&& bFileAbsent;
+					break;
+				default:
+					Expectation.bPostconditionMet = false;
+					break;
+				}
+
+				if (!Expectation.bPostconditionMet)
+				{
+					Expectation.FailureReason = TEXT("source_control_delete_postcondition_failed");
+					Target.bSourceControlFailure = true;
+					SourceControlFailures.AddUnique(FString::Printf(
+						TEXT("%s:%s"),
+						*Expectation.FailureReason,
+						*Expectation.Filename));
+				}
+			}
+		}
+	}
+
 	TArray<TSharedPtr<FJsonValue>> NotFoundArray;
 	for (const FString& Path : NotFound)
 	{
@@ -1442,7 +1656,8 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 			{
 				Target.bSucceeded = bFinalAbsent
 					&& Target.bFoundObject
-					&& Target.NotFoundRequestedPaths.Num() == 0;
+					&& Target.NotFoundRequestedPaths.Num() == 0
+					&& (!bRequireSourceControl || !Target.bSourceControlFailure);
 				Target.Status = Target.bSucceeded ? TEXT("deleted") : TEXT("failed");
 			}
 
@@ -1491,6 +1706,37 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		TargetResult->SetBoolField(TEXT("package_file_found_before"), Target.InitialPackageFiles.Num() > 0);
 		TargetResult->SetBoolField(TEXT("residual_removed"), Target.bResidualRemoved);
 		TargetResult->SetBoolField(TEXT("source_control_failure"), Target.bSourceControlFailure);
+		if (bRequireSourceControl)
+		{
+			TArray<TSharedPtr<FJsonValue>> SourceControlRows;
+			for (const FDeleteAssetTarget::FSourceControlExpectation& Expectation : Target.SourceControlExpectations)
+			{
+				TSharedPtr<FJsonObject> SourceControlRow = MakeShared<FJsonObject>();
+				SourceControlRow->SetStringField(TEXT("filename"), Expectation.Filename);
+				SourceControlRow->SetStringField(
+					TEXT("expected_postcondition"),
+					SourceControlPostconditionToString(Expectation.ExpectedPostcondition));
+				SourceControlRow->SetBoolField(TEXT("source_controlled_before"), Expectation.bSourceControlledBefore);
+				SourceControlRow->SetBoolField(TEXT("added_before"), Expectation.bAddedBefore);
+				SourceControlRow->SetBoolField(TEXT("deleted_before"), Expectation.bDeletedBefore);
+				SourceControlRow->SetBoolField(TEXT("checked_out_before"), Expectation.bCheckedOutBefore);
+				if (!bDryRun)
+				{
+					SourceControlRow->SetBoolField(TEXT("state_valid_after"), Expectation.bStateValidAfter);
+					SourceControlRow->SetBoolField(TEXT("source_controlled_after"), Expectation.bSourceControlledAfter);
+					SourceControlRow->SetBoolField(TEXT("added_after"), Expectation.bAddedAfter);
+					SourceControlRow->SetBoolField(TEXT("deleted_after"), Expectation.bDeletedAfter);
+					SourceControlRow->SetBoolField(TEXT("unknown_after"), Expectation.bUnknownAfter);
+					SourceControlRow->SetBoolField(TEXT("postcondition_met"), Expectation.bPostconditionMet);
+				}
+				if (!Expectation.FailureReason.IsEmpty())
+				{
+					SourceControlRow->SetStringField(TEXT("failure_reason"), Expectation.FailureReason);
+				}
+				SourceControlRows.Add(MakeShared<FJsonValueObject>(SourceControlRow));
+			}
+			TargetResult->SetArrayField(TEXT("source_control_expectations"), SourceControlRows);
+		}
 		if (Target.NotFoundRequestedPaths.Num() > 0)
 		{
 			TargetResult->SetArrayField(TEXT("not_found_paths"), ToJsonStringArray(Target.NotFoundRequestedPaths));
@@ -1513,6 +1759,7 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	Result->SetBoolField(TEXT("success"), bSuccess);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("force"), bForce);
+	Result->SetBoolField(TEXT("require_source_control"), bRequireSourceControl);
 	Result->SetNumberField(TEXT("deleted"), NumDeletedTargets);
 	Result->SetNumberField(TEXT("object_delete_reported"), NumObjectDeletesReported);
 	Result->SetNumberField(TEXT("requested"), AssetPaths.Num());

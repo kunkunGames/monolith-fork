@@ -28,9 +28,9 @@
     "BEB-391",
     "BEB-392",
     "BEB-393",
-    "BEB-442",
-    "BEB-518",
-    "BEB-529"
+    "BEB-443",
+    "BEB-519",
+    "BEB-530"
   ],
   "task_refs": [
     {
@@ -382,7 +382,7 @@
       "description": "Create a SmartObjectDefinition, add a slot behavior definition, duplicate the definition, save both assets, and inspect behavior metadata"
     },
     {
-      "id": "BEB-442",
+      "id": "BEB-443",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -416,7 +416,7 @@
       "description": "Create a BehaviorTree with direct node, decorator, service, property, and delete edits, then read the exact authored graph back"
     },
     {
-      "id": "BEB-518",
+      "id": "BEB-519",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -445,7 +445,7 @@
       "description": "Build an EQS query from a declarative generator/test/scoring/filter spec, save it, and verify the materialized query graph"
     },
     {
-      "id": "BEB-529",
+      "id": "BEB-530",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -544,7 +544,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-442"
+        "BEB-443"
       ],
       "case_file": "testcases\\behavior_tree_granular_edit.json"
     },
@@ -698,7 +698,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-518"
+        "BEB-519"
       ],
       "case_file": "testcases\\eqs_spec_builder.json"
     },
@@ -720,7 +720,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-529"
+        "BEB-530"
       ],
       "case_file": "testcases\\mass_entity_config.json"
     },

@@ -6,22 +6,23 @@ Generated AssetType slice for the AssetEditing benchmark.
 
 | Operation | Tasks |
 |---|---:|
-| `creation_or_import` | 2 |
-| `edit` | 2 |
-| `save` | 2 |
-| `readback_verify` | 2 |
+| `creation_or_import` | 3 |
+| `edit` | 3 |
+| `save` | 3 |
+| `readback_verify` | 3 |
 
 ## Lifecycle
 
 | Lifecycle phase | Tasks |
 |---|---:|
-| `create_save` | 2 |
+| `create_save` | 3 |
 
 ## Test Cases
 
 | Case | Tasks | Module | Case file |
 |---|---:|---|---|
 | `blueprint_prefab` | 1 | `asset_authoring.level_instance.blueprint_prefab` | `testcases\blueprint_prefab.json` |
+| `blueprint_prefab_guard` | 1 | `asset_authoring.level_instance.blueprint_prefab_guard` | `testcases\blueprint_prefab_guard.json` |
 | `prefab_placement` | 1 | `asset_authoring.level_instance.prefab_placement` | `testcases\prefab_placement.json` |
 
 ## Common Commands

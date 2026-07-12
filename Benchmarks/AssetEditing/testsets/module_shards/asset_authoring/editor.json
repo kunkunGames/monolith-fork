@@ -2,13 +2,13 @@
   "schema_version": 2,
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
-  "generated_at": "2026-06-27T14:12:33.847039+00:00",
+  "generated_at": "2026-07-12T02:14:12.681671+00:00",
   "source_task_file": "Benchmarks/AssetEditing/tasks.jsonl",
-  "source_task_sha256": "4c4cc75b149e80ac807257d021447cb2421236bd9944ddfb186f622b796a9cc3",
+  "source_task_sha256": "308546814b77b03e591343886d3cbee8e70b26d9354f5734789a7255b0f25990",
   "module_storage": "module_shard",
   "shard_id": "asset_authoring.editor",
   "shard_file": "Benchmarks/AssetEditing/testsets/module_shards/asset_authoring/editor.json",
-  "task_count": 577,
+  "task_count": 579,
   "module_count": 6,
   "routing_axes": [
     "category",
@@ -211,10 +211,10 @@
       "task_count": 5,
       "task_ids": [
         "BEB-427",
-        "BEB-436",
-        "BEB-448",
-        "BEB-506",
-        "BEB-545"
+        "BEB-437",
+        "BEB-449",
+        "BEB-507",
+        "BEB-546"
       ],
       "task_refs": [
         {
@@ -243,7 +243,7 @@
           "description": "Create and immediately save a blank UWorld map asset, then inspect it through the asset registry"
         },
         {
-          "id": "BEB-436",
+          "id": "BEB-437",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -274,7 +274,7 @@
           "description": "Create a blank UWorld map, dirty it with editor map authoring, verify scoped dirty-package detection, explicitly save the package, and read the persisted map text back"
         },
         {
-          "id": "BEB-448",
+          "id": "BEB-449",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -303,7 +303,7 @@
           "description": "Create and save a navigation harness UWorld map with floor, nav bounds, camera, target points, and a PlayerStart, then inspect the persisted map"
         },
         {
-          "id": "BEB-506",
+          "id": "BEB-507",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -333,7 +333,7 @@
           "description": "Create a blank UWorld map, author a native actor with reflected property defaults, save it through the editor namespace, and verify the persisted map text"
         },
         {
-          "id": "BEB-545",
+          "id": "BEB-546",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -368,16 +368,16 @@
             "BEB-427"
           ],
           "map_actor_defaults": [
-            "BEB-506"
+            "BEB-507"
           ],
           "nav_harness_map": [
-            "BEB-448"
+            "BEB-449"
           ],
           "package_dirty_save": [
-            "BEB-436"
+            "BEB-437"
           ],
           "texture_flipbook_atlas": [
-            "BEB-545"
+            "BEB-546"
           ]
         },
         "by_operation_semantics": {
@@ -385,10 +385,10 @@
             "BEB-427"
           ],
           "create_save": [
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ]
         },
         "by_lifecycle_phase": {
@@ -396,39 +396,39 @@
             "BEB-427"
           ],
           "create_save": [
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
             "BEB-427",
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ],
           "edit": [
             "BEB-427",
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ],
           "readback_verify": [
             "BEB-427",
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ],
           "save": [
-            "BEB-436",
-            "BEB-448",
-            "BEB-506",
-            "BEB-545"
+            "BEB-437",
+            "BEB-449",
+            "BEB-507",
+            "BEB-546"
           ]
         }
       },
@@ -554,11 +554,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-506"
+        "BEB-507"
       ],
       "task_refs": [
         {
-          "id": "BEB-506",
+          "id": "BEB-507",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -591,26 +591,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-506"
+            "BEB-507"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-506"
+            "BEB-507"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-506"
+            "BEB-507"
           ],
           "edit": [
-            "BEB-506"
+            "BEB-507"
           ],
           "readback_verify": [
-            "BEB-506"
+            "BEB-507"
           ],
           "save": [
-            "BEB-506"
+            "BEB-507"
           ]
         }
       },
@@ -646,11 +646,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-448"
+        "BEB-449"
       ],
       "task_refs": [
         {
-          "id": "BEB-448",
+          "id": "BEB-449",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -682,26 +682,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-448"
+            "BEB-449"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-448"
+            "BEB-449"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-448"
+            "BEB-449"
           ],
           "edit": [
-            "BEB-448"
+            "BEB-449"
           ],
           "readback_verify": [
-            "BEB-448"
+            "BEB-449"
           ],
           "save": [
-            "BEB-448"
+            "BEB-449"
           ]
         }
       },
@@ -737,11 +737,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-436"
+        "BEB-437"
       ],
       "task_refs": [
         {
-          "id": "BEB-436",
+          "id": "BEB-437",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -775,26 +775,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-436"
+            "BEB-437"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-436"
+            "BEB-437"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-436"
+            "BEB-437"
           ],
           "edit": [
-            "BEB-436"
+            "BEB-437"
           ],
           "readback_verify": [
-            "BEB-436"
+            "BEB-437"
           ],
           "save": [
-            "BEB-436"
+            "BEB-437"
           ]
         }
       },
@@ -830,11 +830,11 @@
       },
       "task_count": 1,
       "task_ids": [
-        "BEB-545"
+        "BEB-546"
       ],
       "task_refs": [
         {
-          "id": "BEB-545",
+          "id": "BEB-546",
           "category": "asset_authoring",
           "namespace": "mixed",
           "tool": "monolith_query",
@@ -866,26 +866,26 @@
       "groups": {
         "by_operation_semantics": {
           "create_save": [
-            "BEB-545"
+            "BEB-546"
           ]
         },
         "by_lifecycle_phase": {
           "create_save": [
-            "BEB-545"
+            "BEB-546"
           ]
         },
         "by_asset_operation": {
           "creation_or_import": [
-            "BEB-545"
+            "BEB-546"
           ],
           "edit": [
-            "BEB-545"
+            "BEB-546"
           ],
           "readback_verify": [
-            "BEB-545"
+            "BEB-546"
           ],
           "save": [
-            "BEB-545"
+            "BEB-546"
           ]
         }
       },

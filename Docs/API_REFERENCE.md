@@ -877,7 +877,7 @@ Scan a build/archive output directory and return a JSON manifest object. Optiona
 | `archive_dir` | string | **required** | Existing build/archive directory to scan |
 | `manifest_path` | string | optional | Manifest output path. Defaults to `<archive_dir>/manifest.json` |
 | `recursive` | bool | optional | Scan recursively. Default: `true` |
-| `limit` | number | optional | Maximum files to include, clamped to 1..50000. Default: `5000` |
+| `limit` | integer | optional | Maximum files to include. Values outside `1..50000`, fractional numbers, and wrong types are rejected. Default: `5000` |
 | `write_manifest` | bool | optional | Write the manifest when confirmed. Default: `false` |
 | `dry_run` | bool | optional | Preview without writing. Default: `true` |
 | `confirm` | bool | optional | Required for manifest write |
@@ -891,7 +891,7 @@ Plan or copy screenshot/evidence files to a destination directory. Accepts expli
 | `files` | array | optional | Explicit file paths |
 | `source_dir` | string | optional | Directory scanned when `files` is omitted |
 | `dest_dir` | string | **required** | Destination directory |
-| `limit` | number | optional | Maximum files to mirror, clamped to 1..10000. Default: `200` |
+| `limit` | integer | optional | Maximum files to mirror. Values outside `1..10000`, fractional numbers, and wrong types are rejected. Default: `200` |
 | `dry_run` | bool | optional | Preview copy rows. Default: `true` |
 | `confirm` | bool | optional | Required for copying |
 
@@ -2711,6 +2711,21 @@ Rename assets with find/replace, prefix add/remove, or suffix add/remove. Uses I
 | `add_suffix` | string | optional | Suffix to add |
 | `remove_suffix` | string | optional | Suffix to remove |
 | `dry_run` | boolean | optional | Preview renames without applying. Default: `false` |
+
+### `asset.move_assets`
+
+Move up to 512 exact source packages to exact destination packages through `IAssetTools::RenameAssets`. The action defaults to a no-load dry-run, never overwrites a registry, loaded, or on-disk destination, rejects duplicate sources/destinations and move chains/cycles, and verifies every committed destination/source/redirector postcondition.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `moves` | object[] | **required** | 1-512 objects shaped as `{ "source": "/Root/Old", "destination": "/OtherRoot/New" }`. Values are exact writable long package names, not object paths |
+| `allowed_source_roots` | string[] | required | Non-empty source package-root allowlist. Matching is exact or a slash-delimited descendant, never a raw string-prefix sibling |
+| `allowed_destination_roots` | string[] | required | Non-empty destination package-root allowlist. Matching is exact or a slash-delimited descendant |
+| `dry_run` | boolean | optional | Validate with AssetRegistry/package-file state without loading or moving source assets. Default: `true` |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false` |
+| `cleanup_redirectors` | boolean | optional | After the move, run non-interactive `FixupReferencers(..., DeleteFixedUpRedirectors)` for source redirectors and require them to be gone. Default: `false` |
+
+Dry-run rows use `would_move`/`blocked`. Preflight rows include no-load AssetRegistry `hard_referencer_count` and `soft_referencer_count`. Committed rows use `moved`, `moved_with_redirector`, or `failed` and report destination registry/class/file checks, source-primary absence, redirector target validity, and `postconditions_met`. Redirector cleanup is attempted only when the entire `RenameAssets` batch reports success; a global or partial rename failure preserves Unreal-managed redirectors and reports `cleanup_status=skipped_due_to_rename_failure`. `IAssetTools::RenameAssets` owns reference repair, package saving, and active-provider source-control branch/move behavior; the action does not emulate a filesystem move or overwrite collision.
 
 ### `asset.register_content_mount_points`
 

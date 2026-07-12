@@ -32,12 +32,12 @@
     "BEB-409",
     "BEB-419",
     "BEB-420",
-    "BEB-454",
-    "BEB-457",
-    "BEB-465",
-    "BEB-474",
-    "BEB-509",
-    "BEB-542"
+    "BEB-455",
+    "BEB-458",
+    "BEB-466",
+    "BEB-475",
+    "BEB-510",
+    "BEB-543"
   ],
   "task_refs": [
     {
@@ -521,7 +521,7 @@
       "description": "Create a Material Function with a grouped scalar parameter, rename the function parameter group, save it, and export graph metadata to verify the new group"
     },
     {
-      "id": "BEB-454",
+      "id": "BEB-455",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -550,7 +550,7 @@
       "description": "Create Material Layer and Material Layer Blend assets, edit library metadata, save them, and read back layer type information"
     },
     {
-      "id": "BEB-457",
+      "id": "BEB-458",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -579,7 +579,7 @@
       "description": "Create a Deferred Decal material, edit material-domain and translucent blend settings, save it, and read the material properties back"
     },
     {
-      "id": "BEB-465",
+      "id": "BEB-466",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -610,7 +610,7 @@
       "description": "Create a material, edit render-facing material properties, save it, render a thumbnail preview PNG, and read compilation stats back"
     },
     {
-      "id": "BEB-474",
+      "id": "BEB-475",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -641,7 +641,7 @@
       "description": "Create a parameterized Material and MIC, save both, list inherited parameters, and discover child Material Instances from the parent"
     },
     {
-      "id": "BEB-509",
+      "id": "BEB-510",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -673,7 +673,7 @@
       "description": "Create a PostProcess Unlit material, connect a vector parameter to EmissiveColor, compile/save it, and verify the graph plus material properties"
     },
     {
-      "id": "BEB-542",
+      "id": "BEB-543",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -730,7 +730,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-457"
+        "BEB-458"
       ],
       "case_file": "testcases\\decal_domain.json"
     },
@@ -1038,7 +1038,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-454"
+        "BEB-455"
       ],
       "case_file": "testcases\\layer_assets.json"
     },
@@ -1082,7 +1082,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-474"
+        "BEB-475"
       ],
       "case_file": "testcases\\parameter_inventory.json"
     },
@@ -1126,7 +1126,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-509"
+        "BEB-510"
       ],
       "case_file": "testcases\\postprocess_emissive.json"
     },
@@ -1148,7 +1148,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-465"
+        "BEB-466"
       ],
       "case_file": "testcases\\preview_render.json"
     },
@@ -1170,7 +1170,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-542"
+        "BEB-543"
       ],
       "case_file": "testcases\\texture_preview_tiling.json"
     }

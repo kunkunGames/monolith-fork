@@ -3,10 +3,10 @@
   "description": "Measures Unreal asset editing capability: Blueprint graph/class/component fixture edits plus high-ROI cross-domain asset creation, edit, save/read-back workflows, schema discovery, graceful input-specific error handling, duplicate-name rejection, negative compile reporting, and explicit fixture lifecycle preflight",
   "primary_score": "asset_editing_score",
   "expected_namespace": "blueprint-plus-asset-authoring",
-  "generated_at": "2026-06-27T14:12:35.204398+00:00",
-  "task_count": 577,
+  "generated_at": "2026-07-12T02:14:13.527689+00:00",
+  "task_count": 579,
   "category_counts": {
-    "asset_authoring": 267,
+    "asset_authoring": 269,
     "duplicate_reject": 11,
     "edit_execute": 113,
     "edit_schema": 47,
@@ -67,7 +67,7 @@
   "base_edit_execute_tasks_per_type": 10,
   "additional_edit_execute_tasks": 43,
   "additional_edit_execute_specs": 28,
-  "asset_authoring_tasks": 267,
+  "asset_authoring_tasks": 269,
   "edit_execute_tasks_per_type": {
     "Actor": 20,
     "ActorComponent": 16,
@@ -107,8 +107,8 @@
   "testset_modules": "Benchmarks/AssetEditing/testsets/modules.json",
   "testset_module_storage": "split_shards",
   "testset_module_shard_dir": "Benchmarks/AssetEditing/testsets/module_shards",
-  "testset_module_shard_count": 38,
-  "testset_module_count": 1809,
+  "testset_module_shard_count": 39,
+  "testset_module_count": 1826,
   "testset_routing_axes": [
     "category",
     "domain",
@@ -120,7 +120,7 @@
     "operation_semantics"
   ],
   "asset_type_index": "Benchmarks/AssetEditing/asset_types.json",
-  "asset_type_count": 23,
+  "asset_type_count": 24,
   "asset_types": [
     {
       "asset_type": "ai",
@@ -388,16 +388,16 @@
       "asset_type": "level_instance",
       "asset_type_slug": "level_instance",
       "module_id": "asset_authoring.level_instance",
-      "task_count": 2,
-      "edit_domain_count": 2,
+      "task_count": 3,
+      "edit_domain_count": 3,
       "operation_counts": {
-        "creation_or_import": 2,
-        "edit": 2,
-        "save": 2,
-        "readback_verify": 2
+        "creation_or_import": 3,
+        "edit": 3,
+        "save": 3,
+        "readback_verify": 3
       },
       "lifecycle_counts": {
-        "create_save": 2
+        "create_save": 3
       },
       "directory": "Benchmarks/AssetEditing/level_instance",
       "index_file": "Benchmarks/AssetEditing/level_instance/index.json",
@@ -523,6 +523,26 @@
       "index_file": "Benchmarks/AssetEditing/niagara/index.json",
       "tasks_file": "Benchmarks/AssetEditing/niagara/tasks.jsonl",
       "readme_file": "Benchmarks/AssetEditing/niagara/README.md"
+    },
+    {
+      "asset_type": "pcg",
+      "asset_type_slug": "pcg",
+      "module_id": "asset_authoring.pcg",
+      "task_count": 1,
+      "edit_domain_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "lifecycle_counts": {
+        "create_save": 1
+      },
+      "directory": "Benchmarks/AssetEditing/pcg",
+      "index_file": "Benchmarks/AssetEditing/pcg/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/pcg/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/pcg/README.md"
     },
     {
       "asset_type": "project",

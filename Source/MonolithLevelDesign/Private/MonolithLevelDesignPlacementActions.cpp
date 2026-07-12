@@ -253,7 +253,8 @@ void FMonolithLevelDesignPlacementActions::RegisterActions(FMonolithToolRegistry
 			.Optional(TEXT("mesh_wildcard"), TEXT("string"), TEXT("Wildcard filter on mesh path (e.g. *pipe*)"))
 			.Optional(TEXT("name_wildcard"), TEXT("string"), TEXT("Wildcard filter on actor name/label"))
 			.Optional(TEXT("volume_name"), TEXT("string"), TEXT("Only actors within this volume's bounds"))
-			.Optional(TEXT("radius"), TEXT("number"), TEXT("Radius filter around center point"))
+			.Optional(TEXT("radius"), TEXT("number"), TEXT("Radius filter around center point (0-50000 cm)"))
+			.Range(TEXT("radius"), 0, 50000)
 			.Optional(TEXT("center"), TEXT("array"), TEXT("Center point [x,y,z] for radius filter"))
 			.Optional(TEXT("limit"), TEXT("number"), TEXT("Max actors to return"), TEXT("200"))
 			.Build());
@@ -1457,6 +1458,35 @@ FMonolithActionResult FMonolithLevelDesignPlacementActions::CreateBlueprintPrefa
 	if (Actors.Num() == 0)
 	{
 		return FMonolithActionResult::Error(TEXT("No valid actors resolved from actor_names"));
+	}
+
+	// UE 5.8's FKismetEditorUtilities::HarvestBlueprintFromActors dereferences
+	// AActor::GetRootComponent() with no null check once it identifies more than one root
+	// actor (Kismet2.cpp: `SceneComponentOldRelativeTransforms.Emplace(SceneComponent,
+	// SceneComponent->GetRelativeTransform())`), so handing it a bare AActor — which has no
+	// root component — takes the whole editor down with an access violation instead of
+	// failing the call. Reproduced 2026-07-12: AssetEditing BEB-428 spawned two plain
+	// `Actor`s and killed the headless MCP editor mid-run.
+	//
+	// A prefab is a spatial assembly: this action centers the pivot from the actors' world
+	// locations and offsets their scene-component templates. An actor with no scene root
+	// contributes no transform and no geometry, so it cannot belong to one. Name the
+	// offending actors and reject, rather than passing a null into the engine.
+	TArray<FString> RootlessActorNames;
+	for (const AActor* Actor : Actors)
+	{
+		if (!Actor || !Actor->GetRootComponent())
+		{
+			RootlessActorNames.Add(Actor ? Actor->GetActorNameOrLabel() : TEXT("<null>"));
+		}
+	}
+	if (RootlessActorNames.Num() > 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Cannot harvest a Blueprint prefab from actor(s) with no root component: %s. ")
+			TEXT("A prefab needs a scene root per actor — spawn a class that has one ")
+			TEXT("(for example StaticMeshActor, or a mesh path) instead of a bare Actor."),
+			*FString::Join(RootlessActorNames, TEXT(", "))));
 	}
 
 	AdvancedLevelHelpers::FScopedLevelDesignTransaction Transaction(

@@ -85,7 +85,7 @@
           "tool": "scene_query",
           "args": {
             "action": "spawn_actor",
-            "class_or_mesh": "Actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
             "location": [
               0,
               0,
@@ -95,15 +95,14 @@
             "folder": "MonolithBenchmarks/AssetEditing"
           },
           "contains": [
-            "AE_BenchPrefabActorA",
-            "Actor"
+            "AE_BenchPrefabActorA"
           ]
         },
         {
           "tool": "scene_query",
           "args": {
             "action": "spawn_actor",
-            "class_or_mesh": "Actor",
+            "class_or_mesh": "/Engine/BasicShapes/Cube",
             "location": [
               120,
               0,
@@ -113,8 +112,7 @@
             "folder": "MonolithBenchmarks/AssetEditing"
           },
           "contains": [
-            "AE_BenchPrefabActorB",
-            "Actor"
+            "AE_BenchPrefabActorB"
           ]
         },
         {

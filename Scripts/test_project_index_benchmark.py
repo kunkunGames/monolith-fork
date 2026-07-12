@@ -398,13 +398,13 @@ def test_known_answer_hit_matches_live_asset_path_contract() -> None:
     # (e.g. "MapID" for a variable match). Identity matching must use
     # asset_path, while legacy match_object_path identity rows keep working.
     live_row = {
-        "asset_path": "/SpeedMaps/System/Playlists/DA_TagChase",
-        "asset_name": "DA_TagChase",
+        "asset_path": "/SpeedBox/System/Playlists/DA_SpeedBox_Online",
+        "asset_name": "DA_SpeedBox_Online",
         "match_object_path": "MapID",
-        "match_value": "Map:/SpeedMaps/Maps/L_Lobby",
+        "match_value": "Map:/SpeedBox/Maps/L_Lobby_Box",
         "match_source": "variable",
     }
-    expect(pib.known_answer_hit([live_row], "/SpeedMaps/System/Playlists/DA_TagChase") is True,
+    expect(pib.known_answer_hit([live_row], "/SpeedBox/System/Playlists/DA_SpeedBox_Online") is True,
            "known_answer_hit must match the asset_path package path")
     expect(pib.known_answer_hit([live_row], "/Game/Nope/Missing") is False,
            "known_answer_hit must not match an absent path")
@@ -416,7 +416,7 @@ def test_known_answer_hit_matches_live_asset_path_contract() -> None:
 def test_validated_live_fixtures_drive_schema_and_known_answer_tasks() -> None:
     fixtures = valid_live_fixture()
     fixtures["known_answers"] = [
-        {"query": "DA_TagChase", "expected_object_path": "/SpeedMaps/System/Playlists/DA_TagChase"},
+        {"query": "DA_SpeedBox_Online", "expected_object_path": "/SpeedBox/System/Playlists/DA_SpeedBox_Online"},
     ]
     tasks = pib.build_static_tasks(fixtures)
 
@@ -427,8 +427,8 @@ def test_validated_live_fixtures_drive_schema_and_known_answer_tasks() -> None:
 
     ka_rows = [t for t in tasks if t["category"] == "known_answer"]
     expect(len(ka_rows) == 1, f"live fixtures must replace the static known answers, got {len(ka_rows)}")
-    expect(ka_rows[0]["arguments"]["query"] == "DA_TagChase", "known-answer query must come from fixtures")
-    expect(ka_rows[0]["expected"]["expected_object_path"] == "/SpeedMaps/System/Playlists/DA_TagChase",
+    expect(ka_rows[0]["arguments"]["query"] == "DA_SpeedBox_Online", "known-answer query must come from fixtures")
+    expect(ka_rows[0]["expected"]["expected_object_path"] == "/SpeedBox/System/Playlists/DA_SpeedBox_Online",
            "known-answer expected path must come from fixtures")
 
 

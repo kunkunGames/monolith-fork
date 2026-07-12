@@ -121,9 +121,43 @@
 **Blueprint Prefabs (1)** — Dialog-free blueprint creation from placed actors
 | Action | Params | Description |
 |--------|--------|-------------|
-| `create_blueprint_prefab` | `*actor_names`, `*save_path`, `center_pivot`? (default true), `keep_source_actors`? (default true) | Create a Blueprint from selected actors via HarvestBlueprintFromActors. Returns blueprint_path, asset_name, source_actor_count, component_count |
+| `create_blueprint_prefab` | `*actor_names`, `*save_path`, `center_pivot`? (default true), `keep_source_actors`? (default true) | Create a Blueprint from selected actors via HarvestBlueprintFromActors. Every actor must have a **root component** — rootless actors are rejected by name (see below). Returns blueprint_path, asset_name, source_actor_count, component_count |
+
+### `create_blueprint_prefab` requires a scene root per actor
+
+UE 5.8's `FKismetEditorUtilities::HarvestBlueprintFromActors` dereferences
+`AActor::GetRootComponent()` with no null check once it identifies more than one root actor
+(`Kismet2.cpp`: `SceneComponentOldRelativeTransforms.Emplace(SceneComponent, SceneComponent->GetRelativeTransform())`).
+A bare `AActor` has no root component, so harvesting two of them **crashed the whole editor**
+with an access violation instead of failing the call — reproduced 2026-07-12 by AssetEditing
+task `BEB-428`, which spawned two plain `Actor`s and took down the headless MCP editor mid-run.
+
+A prefab is a spatial assembly: the action centers the pivot from the actors' world locations and
+offsets their scene-component templates, so an actor with no scene root cannot belong to one.
+`create_blueprint_prefab` therefore validates its inputs before calling the engine and returns an
+explicit error naming every offending actor:
+
+```
+Cannot harvest a Blueprint prefab from actor(s) with no root component: <names>.
+A prefab needs a scene root per actor — spawn a class that has one (for example
+StaticMeshActor, or a mesh path) instead of a bare Actor.
+```
+
+Covered by the `Monolith.ParamGuard.LevelDesign.CreateBlueprintPrefabRootlessActors` automation
+test (which crashes the process without the guard) and by AssetEditing task `BEB-429`, which
+asserts the rejection is named and that no prefab asset is left behind.
 
 > **Procedural Geometry Overhaul (2026-03-28):** The proc gen actions (`create_parametric_mesh`, `create_structure`, `create_horror_prop`, etc.) now feature sweep-based thin walls (`wall_mode: "sweep"` default), auto snap-to-floor (`snap_to_floor` param), auto-collision on all saved meshes (`collision: auto/box/convex/complex_as_simple/none`), human-scale defaults (stairs 90/28/18cm, doors 90cm, floor 3cm), door/window/vent trim frames (`add_trim` param), and vent openings via `create_structure`. Collision-aware prop placement uses `collision_mode: none/warn/reject/adjust` on scatter actions with SweepSingle box traces for floor finding. All proc gen actions support `use_cache` and `auto_save` params for the caching system.
+
+### GeometryScript operation range contracts
+
+These actions register only when `WITH_GEOMETRYSCRIPT=1`. Their wire schemas expose the same inclusive bounds that the handlers enforce, so invalid values fail during parameter validation before a mesh-handle lookup or GeometryScript work begins.
+
+| Action | Parameter | Default | Inclusive range | Handler behavior |
+|--------|-----------|---------|-----------------|------------------|
+| `mesh.generate_collision` | `max_hulls` | `4` | `1..256` | Rejects values outside the range before collision generation. |
+| `mesh.generate_lods` | `lod_count` | required | `1..8` | Rejects zero, negative, and more than eight generated LODs. |
+| `mesh.generate_lods` | `reduction_per_lod` | `0.5` | `0.1..0.9` | Rejects ratios outside the range before LOD handle creation. |
 
 ### Mesh Import (`import_mesh` — automated FBX/glTF pipeline)
 

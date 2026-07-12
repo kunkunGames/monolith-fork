@@ -17,13 +17,13 @@
   },
   "edit_domain_count": 3,
   "task_ids": [
-    "BEB-435",
-    "BEB-515",
-    "BEB-516"
+    "BEB-436",
+    "BEB-516",
+    "BEB-517"
   ],
   "task_refs": [
     {
-      "id": "BEB-435",
+      "id": "BEB-436",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -51,7 +51,7 @@
       "description": "Import two Texture2D assets, force an AssetRegistry refresh, then verify saved disk state through the project namespace and batch asset inspection"
     },
     {
-      "id": "BEB-515",
+      "id": "BEB-516",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -82,7 +82,7 @@
       "description": "Import and save a Texture2D, refresh the project index, then verify indexed search, type listing, asset details, saved disk state, and T3D text export"
     },
     {
-      "id": "BEB-516",
+      "id": "BEB-517",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -133,7 +133,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-516"
+        "BEB-517"
       ],
       "case_file": "testcases\\cleanup_generated_assets.json"
     },
@@ -155,7 +155,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-515"
+        "BEB-516"
       ],
       "case_file": "testcases\\index_details_text.json"
     },
@@ -177,7 +177,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-435"
+        "BEB-436"
       ],
       "case_file": "testcases\\saved_asset_state.json"
     }

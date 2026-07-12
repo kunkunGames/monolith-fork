@@ -18,10 +18,10 @@
   "edit_domain_count": 5,
   "task_ids": [
     "BEB-297",
-    "BEB-481",
-    "BEB-490",
-    "BEB-505",
-    "BEB-528"
+    "BEB-482",
+    "BEB-491",
+    "BEB-506",
+    "BEB-529"
   ],
   "task_refs": [
     {
@@ -58,7 +58,7 @@
       "description": "Create an InputAction and InputMappingContext, map SpaceBar, validate mappings, and read the key binding back"
     },
     {
-      "id": "BEB-481",
+      "id": "BEB-482",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -90,7 +90,7 @@
       "description": "Create an Axis2D Enhanced Input action and mapping context, edit action properties, map keyboard movement keys, save, and read the binding state back"
     },
     {
-      "id": "BEB-490",
+      "id": "BEB-491",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -122,7 +122,7 @@
       "description": "Create an InputAction and InputMappingContext, add keyboard and gamepad bindings, remove one binding, save, and verify the removed key is gone while the remaining key persists"
     },
     {
-      "id": "BEB-505",
+      "id": "BEB-506",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -154,7 +154,7 @@
       "description": "Create an Axis3D Enhanced Input action and mapping context, edit action properties, map three keyboard keys, save, and read the bindings back"
     },
     {
-      "id": "BEB-528",
+      "id": "BEB-529",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -208,7 +208,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-481"
+        "BEB-482"
       ],
       "case_file": "testcases\\axis2d_movement_mapping.json"
     },
@@ -230,7 +230,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-505"
+        "BEB-506"
       ],
       "case_file": "testcases\\axis3d_mapping.json"
     },
@@ -252,7 +252,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-528"
+        "BEB-529"
       ],
       "case_file": "testcases\\duplicate_key_conflict.json"
     },
@@ -296,7 +296,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-490"
+        "BEB-491"
       ],
       "case_file": "testcases\\enhanced_input_mapping_removal.json"
     }

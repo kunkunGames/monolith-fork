@@ -36,16 +36,16 @@
     "BEB-399",
     "BEB-402",
     "BEB-406",
-    "BEB-429",
-    "BEB-456",
-    "BEB-472",
-    "BEB-475",
-    "BEB-480",
-    "BEB-500",
+    "BEB-430",
+    "BEB-457",
+    "BEB-473",
+    "BEB-476",
+    "BEB-481",
     "BEB-501",
-    "BEB-508",
-    "BEB-510",
-    "BEB-543"
+    "BEB-502",
+    "BEB-509",
+    "BEB-511",
+    "BEB-544"
   ],
   "task_refs": [
     {
@@ -645,7 +645,7 @@
       "description": "Create a SoundWave, bind Monolith perception user data, save it, and read back exact hearing/noise settings"
     },
     {
-      "id": "BEB-429",
+      "id": "BEB-430",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -676,7 +676,7 @@
       "description": "Create a SoundWave, bind and then remove Monolith perception user data, save it, and verify the binding is absent"
     },
     {
-      "id": "BEB-456",
+      "id": "BEB-457",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -708,7 +708,7 @@
       "description": "Create a MetaSound Source asset, author graph-level input/output pins, edit an input default, save it, and read the graph back"
     },
     {
-      "id": "BEB-472",
+      "id": "BEB-473",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -738,7 +738,7 @@
       "description": "Create a MetaSound Source, add a graph variable with generated get/set nodes, save it, and inspect document variables"
     },
     {
-      "id": "BEB-475",
+      "id": "BEB-476",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -768,7 +768,7 @@
       "description": "Create a SoundWave test tone, build a one-shot MetaSound Source around it, save both assets, and read back graph and asset metadata"
     },
     {
-      "id": "BEB-480",
+      "id": "BEB-481",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -800,7 +800,7 @@
       "description": "Create a looping ambient MetaSound Source from a SoundWave, create a preset referencing it, save all assets, and read back graph and dependency metadata"
     },
     {
-      "id": "BEB-500",
+      "id": "BEB-501",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -830,7 +830,7 @@
       "description": "Create a synthesized MetaSound Source with oscillator and ADSR parameters, save it, and read graph summary, user parameter, and validation state back"
     },
     {
-      "id": "BEB-501",
+      "id": "BEB-502",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -862,7 +862,7 @@
       "description": "Create two deterministic SoundWaves, build a parameter-driven interactive MetaSound crossfade graph, save all assets, and read graph and validation state back"
     },
     {
-      "id": "BEB-508",
+      "id": "BEB-509",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -895,7 +895,7 @@
       "description": "Create a MetaSound Patch asset, add graph-level input/output pins, save it, and verify patch metadata plus user parameters"
     },
     {
-      "id": "BEB-510",
+      "id": "BEB-511",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -927,7 +927,7 @@
       "description": "Build a MetaSound Patch from a JSON spec, add a graph node by alias, edit its editor location, remove it, save, and verify the final graph"
     },
     {
-      "id": "BEB-543",
+      "id": "BEB-544",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -1030,7 +1030,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-543"
+        "BEB-544"
       ],
       "case_file": "testcases\\metasound_explicit_connection.json"
     },
@@ -1052,7 +1052,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-501"
+        "BEB-502"
       ],
       "case_file": "testcases\\metasound_interactive_crossfade.json"
     },
@@ -1074,7 +1074,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-480"
+        "BEB-481"
       ],
       "case_file": "testcases\\metasound_looping_ambient_preset.json"
     },
@@ -1096,7 +1096,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-475"
+        "BEB-476"
       ],
       "case_file": "testcases\\metasound_oneshot_sfx.json"
     },
@@ -1118,7 +1118,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-508"
+        "BEB-509"
       ],
       "case_file": "testcases\\metasound_patch_io.json"
     },
@@ -1140,7 +1140,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-456"
+        "BEB-457"
       ],
       "case_file": "testcases\\metasound_source_graph.json"
     },
@@ -1162,7 +1162,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-510"
+        "BEB-511"
       ],
       "case_file": "testcases\\metasound_spec_node_edit.json"
     },
@@ -1184,7 +1184,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-500"
+        "BEB-501"
       ],
       "case_file": "testcases\\metasound_synth_tone.json"
     },
@@ -1206,7 +1206,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-472"
+        "BEB-473"
       ],
       "case_file": "testcases\\metasound_variable_state.json"
     },
@@ -1492,7 +1492,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-429"
+        "BEB-430"
       ],
       "case_file": "testcases\\sound_perception_unbind.json"
     },

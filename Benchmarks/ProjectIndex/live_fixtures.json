@@ -126,8 +126,8 @@
       "expected_object_path": "/LyraExampleContent/Materials/Textures/GlassPattern/T_Glass_Opacity_Tiled"
     },
     {
-      "query": "DA_SpeedDefault",
-      "expected_object_path": "/SpeedMaps/System/Playlists/DA_SpeedDefault"
+      "query": "DA_SpeedBox_Default",
+      "expected_object_path": "/SpeedBox/System/Playlists/DA_SpeedBox_Default"
     },
     {
       "query": "DT_SurfaceTypes",
@@ -159,7 +159,7 @@
     },
     {
       "query": "DA_SpeedLobbyBackground",
-      "expected_object_path": "/SpeedMaps/System/FrontEnd/Backgrounds/DA_SpeedLobbyBackground"
+      "expected_object_path": "/SpeedCore/System/FrontEnd/Backgrounds/DA_SpeedLobbyBackground"
     },
     {
       "query": "DT_UniversalActions",

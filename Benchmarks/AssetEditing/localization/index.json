@@ -20,9 +20,9 @@
     "BEB-295",
     "BEB-296",
     "BEB-384",
-    "BEB-492",
-    "BEB-527",
-    "BEB-537"
+    "BEB-493",
+    "BEB-528",
+    "BEB-538"
   ],
   "task_refs": [
     {
@@ -116,7 +116,7 @@
       "description": "Create a StringTable, add translator-facing entries, export CSV, remove a debug-only key, save, and read back the remaining table"
     },
     {
-      "id": "BEB-492",
+      "id": "BEB-493",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -146,7 +146,7 @@
       "description": "Create a StringTable, bulk-write entries through the Blueprint action surface, upsert one entry, remove another, save, and read the final entry set back"
     },
     {
-      "id": "BEB-527",
+      "id": "BEB-528",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -177,7 +177,7 @@
       "description": "Create a StringTable, add entry metadata, remove one metadata key, save, and verify retained versus removed metadata"
     },
     {
-      "id": "BEB-537",
+      "id": "BEB-538",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -253,7 +253,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-492"
+        "BEB-493"
       ],
       "case_file": "testcases\\stringtable_blueprint_bulk.json"
     },
@@ -319,7 +319,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-527"
+        "BEB-528"
       ],
       "case_file": "testcases\\stringtable_metadata_remove.json"
     },
@@ -341,7 +341,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-537"
+        "BEB-538"
       ],
       "case_file": "testcases\\stringtable_registry_list.json"
     }

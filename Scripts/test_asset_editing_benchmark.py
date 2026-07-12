@@ -14,6 +14,7 @@ import json
 import pathlib
 import re
 import sys
+import tempfile
 from typing import Any, Dict, Iterable, List, Set
 
 _SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
@@ -36,6 +37,11 @@ READBACK_REQUIRED_CATEGORIES = {
     "edit_execute",
     "workflow_execute",
 }
+
+# The CONSTANT stub the MCP server puts in content[0].text for a successful tools/call when
+# bEnableStructuredToolResults=True (Config/DefaultMonolith.ini). The payload is in
+# structuredContent only — see Docs/specs/SPEC_MonolithStructuredToolResults.md.
+STRUCTURED_STUB_TEXT = "OK; see structuredContent."
 
 _FAILURES: List[str] = []
 
@@ -96,6 +102,754 @@ def count_rows_by_field(rows: Iterable[Dict[str, Any]], field: str) -> Dict[str,
         key = str(row.get(field, ""))
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def mcp_success_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the compact structured MCP success envelope used by offline scorer tests.
+
+    This is the live shape when ``bEnableStructuredToolResults=True`` (Config/DefaultMonolith.ini):
+    ``content[0].text`` is a CONSTANT stub and the payload lives only in ``structuredContent``.
+    """
+    return {
+        "result": {
+            "content": [{"type": "text", "text": STRUCTURED_STUB_TEXT}],
+            "isError": False,
+            "structuredContent": data,
+            "_meta": {"result_kind": "structured", "content_text_mode": "compact_status"},
+        }
+    }
+
+
+def mcp_legacy_text_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the LEGACY (structured results disabled) envelope: payload serialized into
+    ``content[0].text`` with no ``structuredContent``. Other checkouts can still run with the flag
+    off, so every scorer must keep working against this shape."""
+    return {
+        "result": {
+            "content": [{"type": "text", "text": json.dumps(data, ensure_ascii=False)}],
+            "isError": False,
+        }
+    }
+
+
+def mcp_error_response(message: str, data: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Build an MCP error envelope. Errors keep a REAL human message in content[0].text."""
+    payload: Dict[str, Any] = {
+        "content": [{"type": "text", "text": message}],
+        "isError": True,
+    }
+    if data is not None:
+        payload["structuredContent"] = data
+    return {"result": payload}
+
+
+def scripted_mcp_call(responses: List[Dict[str, Any]]):
+    """Return an mcp_call stand-in that replays ``responses`` in order.
+
+    Raises RuntimeError rather than StopIteration if a scorer calls more times than scripted, so an
+    unexpected extra call surfaces as a loud failure instead of a silent generator stop.
+    """
+    queue = iter(responses)
+
+    def call(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
+        try:
+            return next(queue)
+        except StopIteration:
+            raise RuntimeError("scripted_mcp_call exhausted: scorer made an unscripted MCP call")
+
+    return call
+
+
+def evidence_row(scored: Dict[str, Any], key: str) -> Dict[str, Any]:
+    """First evidence row for ``key`` ('steps' / 'verify'), or {} when the scorer never got there.
+
+    A scorer that breaks its chain early produces an EMPTY list; returning {} keeps the assertion a
+    reported FAIL instead of an IndexError that aborts the whole run.
+    """
+    rows = scored.get("evidence", {}).get(key)
+    return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+
+
+def test_structured_results_token_scanning() -> None:
+    """Regression guard for the structured-tool-results contract.
+
+    With ``bEnableStructuredToolResults=True`` a SUCCESSFUL tools/call returns a constant stub in
+    ``content[0].text`` and puts the real payload in ``structuredContent``. Every content-asserting
+    scorer must therefore scan the CANONICAL payload. Each check below fails against a scorer that
+    greps ``result_text()``: the ``contains`` checks score 0, and the ``not_contains`` checks pass
+    vacuously (the stub can never hold a project token).
+    """
+    structured = mcp_success_response({"variables": [{"name": "BenchHealth", "type": "float"}]})
+    check("structured success envelope carries only the stub in content[0].text",
+          aeb.result_text(structured) == STRUCTURED_STUB_TEXT
+          and "BenchHealth" not in aeb.result_text(structured),
+          f"text={aeb.result_text(structured)!r}")
+    scan = aeb.response_scan_text(structured)
+    check("response_scan_text exposes the structured payload to token scans",
+          "BenchHealth" in scan and STRUCTURED_STUB_TEXT in scan, f"scan={scan!r}")
+
+    legacy = mcp_legacy_text_response({"variables": [{"name": "BenchHealth"}]})
+    check("response_scan_text still scans the legacy text-JSON payload",
+          "BenchHealth" in aeb.response_scan_text(legacy)
+          and aeb.response_scan_text(legacy) == aeb.result_text(legacy),
+          f"scan={aeb.response_scan_text(legacy)!r}")
+
+    check("response_scan_text on a transport error is empty rather than raising",
+          aeb.response_scan_text({"transport_error": True, "raw": "boom"}) == "")
+
+    # _response_contains_any — gates graph_read / variable_read content_ok and the fixture preflight.
+    check("_response_contains_any finds a token in the structured payload",
+          aeb._response_contains_any(structured, ["BenchHealth"]))
+    check("_response_contains_any finds a token in a legacy text payload",
+          aeb._response_contains_any(legacy, ["BenchHealth"]))
+    check("_response_contains_any still rejects an absent token",
+          not aeb._response_contains_any(structured, ["MissingVar"]))
+
+    # score_task (variable_read): fixture_vars + expected.contains.
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([structured])
+        var_read = aeb.score_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-VARREAD-STRUCTURED",
+                "category": "variable_read",
+                "tool": "blueprint_query",
+                "action": "get_variables",
+                "arguments": {"action": "get_variables", "asset_path": "/Game/Bench/BP_Test"},
+                "expected": {"fixture_vars": ["BenchHealth"], "contains": ["BenchHealth"]},
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("variable_read scores fixture_vars + expected.contains from structuredContent",
+          var_read.get("direct_success") is True
+          and var_read.get("evidence", {}).get("content_ok") is True
+          and var_read.get("evidence", {}).get("content_check_applied") is True,
+          f"score={var_read}")
+
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([mcp_success_response({"variables": []})])
+        var_read_absent = aeb.score_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-VARREAD-ABSENT",
+                "category": "variable_read",
+                "tool": "blueprint_query",
+                "action": "get_variables",
+                "arguments": {"action": "get_variables", "asset_path": "/Game/Bench/BP_Test"},
+                "expected": {"fixture_vars": ["BenchHealth"]},
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("variable_read still fails when the fixture variable is genuinely absent",
+          var_read_absent.get("direct_success") is False,
+          f"score={var_read_absent}")
+
+    # _verify_readback — the mutation-observability gate for edit_execute / workflow_execute.
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([structured])
+        readback_ok, readback_detail = aeb._verify_readback(
+            "http://offline.invalid/mcp", "/Game/Bench/BP_Test",
+            {"read_action": "get_variables", "contains": ["BenchHealth"],
+             "not_contains": ["DeletedVar"]},
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("_verify_readback proves contains against structuredContent",
+          readback_ok is True and readback_detail.get("contains", {}).get("ok") is True,
+          f"detail={readback_detail}")
+
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([
+            mcp_success_response({"variables": [{"name": "DeletedVar"}]}),
+        ])
+        readback_not_ok, readback_not_detail = aeb._verify_readback(
+            "http://offline.invalid/mcp", "/Game/Bench/BP_Test",
+            {"read_action": "get_variables", "not_contains": ["DeletedVar"]},
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("_verify_readback not_contains catches a token that survives only in structuredContent",
+          readback_not_ok is False
+          and readback_not_detail.get("not_contains", {}).get("ok") is False,
+          f"detail={readback_not_detail}")
+
+    # _score_asset_authoring_task — per-step and verify-loop contains / not_contains.
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([
+            mcp_success_response({"asset_path": "/Game/Bench/DT_Bench", "created": True}),
+            mcp_success_response({"rows": [{"name": "Row_A"}]}),
+        ])
+        authoring = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-AUTHORING-STRUCTURED",
+                "name": "structured_contains_chain",
+                "chain": [{
+                    "tool": "data_query",
+                    "args": {"action": "create_datatable"},
+                    "contains": ["/Game/Bench/DT_Bench"],
+                    "not_contains": ["Row_Removed"],
+                }],
+                "verify": [{
+                    "tool": "data_query",
+                    "args": {"action": "get_datatable_rows"},
+                    "contains": ["Row_A"],
+                    "not_contains": ["Row_Removed"],
+                }],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    authoring_step = evidence_row(authoring, "steps")
+    authoring_verify = evidence_row(authoring, "verify")
+    check("asset-authoring step contains scores against structuredContent",
+          authoring.get("direct_success") is True
+          and authoring_step.get("contains_ok") is True
+          and authoring_verify.get("contains_ok") is True,
+          f"score={authoring}")
+
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([
+            mcp_success_response({"asset_path": "/Game/Bench/DT_Bench"}),
+            mcp_success_response({"rows": [{"name": "Row_Removed"}]}),
+        ])
+        authoring_leak = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-AUTHORING-NOTCONTAINS",
+                "name": "structured_not_contains_chain",
+                "chain": [{
+                    "tool": "data_query",
+                    "args": {"action": "remove_datatable_row"},
+                    "contains": ["/Game/Bench/DT_Bench"],
+                }],
+                "verify": [{
+                    "tool": "data_query",
+                    "args": {"action": "get_datatable_rows"},
+                    "not_contains": ["Row_Removed"],
+                }],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    leak_verify = evidence_row(authoring_leak, "verify")
+    check("asset-authoring verify not_contains catches a row that only structuredContent reveals",
+          authoring_leak.get("direct_success") is False
+          and leak_verify.get("not_contains_ok") is False,
+          f"score={authoring_leak}")
+
+    # negative_compile — the compiler diagnostic lives in structuredContent.errors[].
+    compile_broken = mcp_success_response({
+        "error_count": 1,
+        "errors": ["Bench_Var is bad or unknown type (Structure)"],
+        "status": "Error",
+    })
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([compile_broken])
+        negative = aeb._score_negative_compile(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-NEGATIVE-COMPILE",
+                "category": "negative_compile",
+                "tool": "blueprint_query",
+                "asset_path": "/Game/Bench/BP_Test",
+                "expected": {"error_tokens": ["bad or unknown type"]},
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("negative_compile matches error_tokens against structuredContent.errors",
+          negative.get("direct_success") is True
+          and negative.get("evidence", {}).get("token_ok") is True,
+          f"score={negative}")
+
+
+def test_compile_signal_requires_evidence() -> None:
+    """A compile whose payload carries NO structured signal is unprovable and must FAIL.
+
+    The old code fell back to scanning content[0].text ("0 error" in text or "error" not in text),
+    which evaluates True against the structured stub — i.e. a compile with no evidence scored as a
+    clean PASS. The inverse must not become a free negative_compile pass either.
+    """
+    clean_ok, clean_detail = aeb._compile_is_clean(
+        mcp_success_response({"status": "UpToDate", "errors": [], "error_count": 0}))
+    check("clean compile payload still scores clean",
+          clean_ok is True and clean_detail.get("signal_present") is True, f"detail={clean_detail}")
+
+    broken_ok, broken_detail = aeb._compile_is_clean(
+        mcp_success_response({"error_count": 2, "errors": ["a", "b"], "status": "Error"}))
+    check("failed compile payload still scores dirty",
+          broken_ok is False and broken_detail.get("signal_present") is True,
+          f"detail={broken_detail}")
+
+    validate_ok, validate_detail = aeb._compile_is_clean(mcp_success_response({
+        "unused_variables": ["Unused"], "disconnected_nodes": [], "node_errors": [],
+        "unimplemented_interface_functions": [], "duplicate_custom_events": [],
+    }))
+    check("validate_blueprint lint report still scores clean on warnings only",
+          validate_ok is True and validate_detail.get("signal_present") is True,
+          f"detail={validate_detail}")
+
+    silent_ok, silent_detail = aeb._compile_is_clean(mcp_success_response({"success": True}))
+    check("compile with no structured signal FAILS instead of defaulting to clean",
+          silent_ok is False
+          and silent_detail.get("signal_present") is False
+          and silent_detail.get("reason") == "no_structured_compile_signal",
+          f"detail={silent_detail}")
+
+    silent_err, silent_err_detail = aeb._compile_has_errors(mcp_success_response({"success": True}))
+    check("missing compile signal is not evidence of a compile error either",
+          silent_err is False
+          and silent_err_detail.get("reason") == "no_structured_compile_signal",
+          f"detail={silent_err_detail}")
+
+    real_err, real_err_detail = aeb._compile_has_errors(
+        mcp_success_response({"error_count": 1, "errors": ["boom"]}))
+    check("_compile_has_errors still detects a real compile failure",
+          real_err is True and real_err_detail.get("signal_present") is True,
+          f"detail={real_err_detail}")
+
+    iserror_err, _ = aeb._compile_has_errors(mcp_error_response("asset not found"))
+    check("_compile_has_errors still rejects an isError envelope as a compile signal",
+          iserror_err is False)
+
+
+def test_error_text_assertions_still_use_human_text() -> None:
+    """Errors keep a REAL message in content[0].text; error-path scoring must keep reading it."""
+    err = mcp_error_response("Variable 'NoSuchVar' does not exist on /Game/Bench/BP_Test",
+                             {"ok": False, "error_code": "not_found"})
+    check("error envelopes still expose a human-readable message via result_text",
+          "NoSuchVar" in aeb.result_text(err))
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = scripted_mcp_call([err])
+        scored = aeb.score_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-ERROR-PATH",
+                "category": "error_path",
+                "tool": "blueprint_query",
+                "action": "get_variable_details",
+                "arguments": {"action": "get_variable_details", "variable_name": "NoSuchVar"},
+                "expected": {"specific_tokens": ["NoSuchVar"], "error_tokens": ["does not exist"]},
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("error_path scoring still matches the offending identifier in the error message",
+          scored.get("direct_success") is True, f"score={scored}")
+
+
+def test_expect_error_requires_a_rejection() -> None:
+    """`expect_error` must REQUIRE an error, where `allow_error` only tolerates one.
+
+    Without this, a negative case cannot be expressed in an asset_authoring chain, so a guard
+    regressing from "clean rejection" to "silent success" would still score as a pass. The
+    live case is BEB-429: create_blueprint_prefab must reject rootless actors by name rather
+    than crash the editor (UE 5.8 HarvestBlueprintFromActors null-derefs GetRootComponent()).
+    """
+    original = aeb.mcp_call
+    task = {
+        "id": "TEST-EXPECT-ERROR",
+        "category": "asset_authoring",
+        "chain": [
+            {"tool": "level_instance_query", "expect_error": True,
+             "args": {"action": "create_blueprint_prefab"},
+             "contains": ["AE_Rootless", "root component"]},
+        ],
+        "verify": [
+            {"tool": "asset_query", "expect_error": True,
+             "args": {"action": "inspect_asset"}},
+        ],
+    }
+
+    rejection = mcp_error_response(
+        "Cannot harvest a Blueprint prefab from actor(s) with no root component: AE_Rootless. "
+        "A prefab needs a scene root per actor.")
+    asset_gone = mcp_error_response("Asset not found: /Game/Bench/BP_Rootless")
+
+    try:
+        aeb.mcp_call = scripted_mcp_call([rejection, asset_gone])  # type: ignore[assignment]
+        scored = aeb.score_task("http://x", task, 5.0)
+        check("expect_error passes when the server rejects as required",
+              scored["direct_success"] is True, json.dumps(scored.get("evidence", {}))[:200])
+
+        # A silent SUCCESS where a rejection was required must FAIL — this is exactly the
+        # regression the guard exists to catch.
+        aeb.mcp_call = scripted_mcp_call([
+            mcp_success_response({"blueprint_path": "/Game/Bench/BP_Rootless",
+                                  "source_actor_count": 2,
+                                  "note": "AE_Rootless root component"}),
+        ])  # type: ignore[assignment]
+        scored_silent = aeb.score_task("http://x", task, 5.0)
+        check("expect_error FAILS when the server silently succeeds instead of rejecting",
+              scored_silent["direct_success"] is False,
+              json.dumps(scored_silent.get("evidence", {}).get("steps", []))[:220])
+
+        # A rejection whose message does not name the offending actor must still fail:
+        # expect_error does not weaken the token assertions.
+        aeb.mcp_call = scripted_mcp_call([mcp_error_response("Internal error")])  # type: ignore[assignment]
+        scored_vague = aeb.score_task("http://x", task, 5.0)
+        check("expect_error still requires the error to name the offending input",
+              scored_vague["direct_success"] is False,
+              json.dumps(scored_vague.get("evidence", {}).get("steps", []))[:220])
+
+        # A verify step that expects absence must fail if the asset exists anyway — a guard
+        # that half-wrote the asset is a silent partial success.
+        aeb.mcp_call = scripted_mcp_call([
+            rejection,
+            mcp_success_response({"asset_path": "/Game/Bench/BP_Rootless", "class": "Blueprint"}),
+        ])  # type: ignore[assignment]
+        scored_leftover = aeb.score_task("http://x", task, 5.0)
+        check("expect_error verify FAILS when the rejected asset exists anyway",
+              scored_leftover["direct_success"] is False,
+              json.dumps(scored_leftover.get("evidence", {}).get("verify", []))[:220])
+    finally:
+        aeb.mcp_call = original  # type: ignore[assignment]
+
+
+def test_structured_expect_scoring() -> None:
+    exact_ok, exact_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"status": "updated", "saved": True, "nested": {"value": None}}),
+        {"$.status": "updated", "$.saved": True, "$.nested.value": None},
+    )
+    check("structured expect accepts exact JSONPath values", exact_ok,
+          f"evidence={exact_evidence}")
+
+    bool_ok, bool_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"saved": 1}),
+        {"$.saved": True},
+    )
+    check("structured expect keeps booleans distinct from numeric values", not bool_ok,
+          f"evidence={bool_evidence}")
+
+    nested_value = {
+        "groups": [
+            {"enabled": True, "weights": [1, 2.0, None]},
+            {"enabled": False, "metadata": {"label": "second"}},
+        ]
+    }
+    nested_ok, nested_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": nested_value}),
+        {"$.settings": nested_value},
+    )
+    check("structured expect recursively accepts exact nested dict/list values", nested_ok,
+          f"evidence={nested_evidence}")
+
+    nested_bool_ok, nested_bool_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": {"groups": [{"enabled": 1}]}}),
+        {"$.settings": {"groups": [{"enabled": True}]}},
+    )
+    check("structured expect keeps nested booleans distinct from numbers", not nested_bool_ok,
+          f"evidence={nested_bool_evidence}")
+
+    nested_object_shape_ok, nested_object_shape_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": {"values": [1, 2], "extra": None}}),
+        {"$.settings": {"values": [1, 2]}},
+    )
+    check("structured expect requires exact nested object keys", not nested_object_shape_ok,
+          f"evidence={nested_object_shape_evidence}")
+
+    nested_list_shape_ok, nested_list_shape_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": {"values": [1, 2, 3]}}),
+        {"$.settings": {"values": [1, 2]}},
+    )
+    check("structured expect requires exact nested list length", not nested_list_shape_ok,
+          f"evidence={nested_list_shape_evidence}")
+
+    present_null_ok, present_null_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": {"optional": None}}),
+        {"$.settings.optional": None},
+    )
+    missing_null_ok, missing_null_evidence = aeb._evaluate_structured_expect(
+        mcp_success_response({"settings": {}}),
+        {"$.settings.optional": None},
+    )
+    check("structured expect distinguishes present JSON null from a missing path",
+          present_null_ok and not missing_null_ok
+          and present_null_evidence[0].get("found") is True
+          and missing_null_evidence[0].get("found") is False,
+          f"present={present_null_evidence} missing={missing_null_evidence}")
+
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = lambda *_args, **_kwargs: mcp_success_response({"success": False})
+        scored = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-EXPECT-CHAIN",
+                "name": "structured_expect_false_payload",
+                "chain": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_action"},
+                    "expect": {"$.success": True},
+                }],
+                "verify": [],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    chain_evidence = scored.get("evidence", {}).get("steps", [{}])[0]
+    check("asset-authoring scorer rejects success=false in a transport-success response",
+          scored.get("direct_success") is False
+          and chain_evidence.get("transport_error") is False
+          and chain_evidence.get("expect_ok") is False,
+          f"score={scored}")
+
+    responses = iter([
+        mcp_success_response({"success": True}),
+        mcp_success_response({"class": "Texture2D"}),
+    ])
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = lambda *_args, **_kwargs: next(responses)
+        verify_scored = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-EXPECT-VERIFY",
+                "name": "structured_expect_verify",
+                "chain": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_create"},
+                    "expect": {"$.success": True},
+                }],
+                "verify": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_read"},
+                    "expect": {"$.class": "PCGGraph"},
+                }],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    verify_evidence = verify_scored.get("evidence", {}).get("verify", [{}])[0]
+    check("asset-authoring verify steps enforce structured expect assertions",
+          verify_scored.get("direct_success") is False
+          and verify_evidence.get("expect_ok") is False,
+          f"score={verify_scored}")
+
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = lambda *_args, **_kwargs: {
+            "transport_error": True,
+            "raw": "synthetic chain outage",
+        }
+        chain_transport_scored = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-TRANSPORT-CHAIN",
+                "name": "transport_error_chain",
+                "chain": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_create"},
+                }],
+                "verify": [],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("asset-authoring scorer propagates chain transport diagnostics",
+          chain_transport_scored.get("direct_success") is False
+          and chain_transport_scored.get("transport_error") is True
+          and chain_transport_scored.get("transport_error_raw") == "synthetic chain outage",
+          f"score={chain_transport_scored}")
+
+    responses = iter([
+        mcp_success_response({"success": True}),
+        {"transport_error": True, "raw": "synthetic verify outage"},
+    ])
+    original_mcp_call = aeb.mcp_call
+    try:
+        aeb.mcp_call = lambda *_args, **_kwargs: next(responses)
+        verify_transport_scored = aeb._score_asset_authoring_task(
+            "http://offline.invalid/mcp",
+            {
+                "id": "TEST-TRANSPORT-VERIFY",
+                "name": "transport_error_verify",
+                "chain": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_create"},
+                    "expect": {"$.success": True},
+                }],
+                "verify": [{
+                    "tool": "asset_query",
+                    "args": {"action": "synthetic_read"},
+                }],
+            },
+            timeout_s=0.1,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call
+    check("asset-authoring scorer propagates verify transport diagnostics",
+          verify_transport_scored.get("direct_success") is False
+          and verify_transport_scored.get("transport_error") is True
+          and verify_transport_scored.get("transport_error_raw") == "synthetic verify outage",
+          f"score={verify_transport_scored}")
+
+
+def test_engine_font_resolver_discovery() -> None:
+    with tempfile.TemporaryDirectory(prefix="aeb-font-resolver-") as temp_dir:
+        temp_root = pathlib.Path(temp_dir)
+        project = temp_root / "Speed"
+        project.mkdir()
+        speed_uproject = project / "Speed.uproject"
+        speed_uproject.write_text("{}\n", encoding="utf-8")
+        (project / "Other.uproject").write_text("{}\n", encoding="utf-8")
+
+        resolver = project / "Build" / "BatchFiles" / "Script" / "ResolveUnrealEngine.ps1"
+        resolver.parent.mkdir(parents=True)
+        resolver.write_text("# synthetic resolver\n", encoding="utf-8")
+
+        engine_root = temp_root / "UE_5.8"
+        font = engine_root / "Engine" / "Content" / "Slate" / "Fonts" / "Roboto-Regular.ttf"
+        font.parent.mkdir(parents=True)
+        font.write_bytes(b"synthetic-font")
+
+        observed: Dict[str, Any] = {}
+        original_project_root = aeb.project_root
+        original_check_output = aeb.subprocess.check_output
+        original_cache = aeb._ENGINE_ROBOTO_CACHE
+
+        def fake_check_output(args: List[str], **kwargs: Any) -> str:
+            observed["args"] = args
+            observed["cwd"] = kwargs.get("cwd")
+            return f"resolver diagnostic\n{engine_root}\n"
+
+        try:
+            aeb.project_root = lambda: project
+            aeb.subprocess.check_output = fake_check_output
+            aeb._ENGINE_ROBOTO_CACHE = None
+            resolved = aeb.resolve_engine_roboto_regular_ttf()
+        finally:
+            aeb.project_root = original_project_root
+            aeb.subprocess.check_output = original_check_output
+            aeb._ENGINE_ROBOTO_CACHE = original_cache
+
+        args = observed.get("args", [])
+        check("font resolver discovers the project-name .uproject",
+              "-Project" in args and args[args.index("-Project") + 1] == str(speed_uproject),
+              f"args={args}")
+        check("font resolver discovers the Build/BatchFiles helper",
+              "-File" in args and args[args.index("-File") + 1] == str(resolver),
+              f"args={args}")
+        check("font resolver returns Roboto from the resolved engine root",
+              resolved == font and observed.get("cwd") == str(project),
+              f"resolved={resolved} cwd={observed.get('cwd')}")
+
+
+def test_pcg_asset_authoring_contract(tasks: List[Dict[str, Any]]) -> None:
+    matches = [
+        task for task in tasks
+        if task.get("workflow") == "pcg_graph_idempotent_authoring_roundtrip"
+    ]
+    check("PCG idempotent asset-authoring task exists", len(matches) == 1,
+          f"matches={[task.get('id') for task in matches]}")
+    if len(matches) != 1:
+        return
+
+    task = matches[0]
+    actions = task_actions(task)
+    required_actions = {
+        "create_pcg_graph",
+        "add_pcg_node",
+        "set_pcg_node_params",
+        "connect_pcg_nodes",
+        "save_asset",
+        "get_pcg_graph_info",
+        "validate_pcg_graph",
+    }
+    check("PCG task covers the complete authoring/read-back contract",
+          required_actions.issubset(actions),
+          f"missing={sorted(required_actions - actions)}")
+    check("PCG task targets the stable benchmark graph path",
+          task.get("domain") == "pcg"
+          and task.get("asset_path") == aeb.ASSET_AUTHORING_ROOT
+          and all(
+              step.get("args", {}).get("asset_path") == aeb.ASSET_AUTHORING_PCG_GRAPH
+              for step in task.get("chain", []) + task.get("verify", [])
+          ),
+          f"task={task.get('id')}")
+    check("PCG task is rerunnable without delete or reset actions",
+          not actions.intersection({"delete_asset", "delete_assets", "remove_pcg_node", "disconnect_pcg_nodes"}),
+          f"actions={sorted(actions)}")
+    save_reload_steps = [
+        step for step in task.get("chain", [])
+        if step.get("args", {}).get("action") == "save_asset"
+    ]
+    check("PCG task proves persistence through generic asset save/reload",
+          len(save_reload_steps) == 1
+          and save_reload_steps[0].get("args", {}).get("verify_reload") is True
+          and save_reload_steps[0].get("expect", {}).get("$.reloaded") is True,
+          f"save_reload_steps={save_reload_steps}")
+
+    chain = [step for step in task.get("chain", []) if isinstance(step, dict)]
+    create_steps = [step for step in chain if step.get("args", {}).get("action") == "create_pcg_graph"]
+    add_steps = [step for step in chain if step.get("args", {}).get("action") == "add_pcg_node"]
+    connect_steps = [step for step in chain if step.get("args", {}).get("action") == "connect_pcg_nodes"]
+    set_steps = [step for step in chain if step.get("args", {}).get("action") == "set_pcg_node_params"]
+    check("PCG create/add steps use return_existing policy",
+          bool(create_steps) and bool(add_steps)
+          and all(step.get("args", {}).get("existing_policy") == "return_existing"
+                  for step in create_steps + add_steps))
+    check("PCG Add Tags node uses a stable authored title and native setting",
+          all(step.get("args", {}).get("node_title") == "Bench_AddTag" for step in add_steps)
+          and len(set_steps) == 1
+          and set_steps[0].get("args", {}).get("properties") == {"TagsToAdd": "Monolith.Benchmark"})
+
+    edge_keys = [
+        (
+            step.get("args", {}).get("source_node"),
+            step.get("args", {}).get("source_pin"),
+            step.get("args", {}).get("target_node"),
+            step.get("args", {}).get("target_pin"),
+        )
+        for step in connect_steps
+    ]
+    edge_counts = collections.Counter(edge_keys)
+    check("PCG connections are repeated to prove idempotent edge authoring",
+          len(edge_counts) == 2 and all(count == 2 for count in edge_counts.values()),
+          f"edges={edge_counts}")
+
+    exact_paths = {
+        path
+        for step in chain + [step for step in task.get("verify", []) if isinstance(step, dict)]
+        for path in (step.get("expect") or {})
+    }
+    check("PCG task exact expectations cover status/saved/valid/class",
+          {"$.status", "$.saved", "$.valid", "$.class",
+           "$.nodes[2].settings.TagsToAdd"}.issubset(exact_paths),
+          f"paths={sorted(exact_paths)}")
+
+    selected, selection = aeb.select_tasks(
+        aeb.DEFAULT_TASKS,
+        aeb.DEFAULT_TESTSETS,
+        module_ids=["asset_authoring.pcg.graph_authoring"],
+    )
+    check("PCG asset-authoring module selects exactly the PCG task",
+          [row.get("id") for row in selected] == [task.get("id")]
+          and selection.get("selection_filters", {}).get("module_ids")
+          == ["asset_authoring.pcg.graph_authoring"],
+          f"selected={[row.get('id') for row in selected]} selection={selection}")
 
 
 def test_manifest_matches_tasks(tasks: List[Dict[str, Any]], manifest: Dict[str, Any]) -> None:
@@ -501,12 +1255,151 @@ def test_compact_route_helpers() -> None:
           ]) == ["asset_authoring.asset.batch_delete"])
 
 
+_GATE_STATUS_RESPONSE = {
+    "jsonrpc": "2.0",
+    "result": {
+        "isError": False,
+        "structuredContent": {
+            "version": "0.20.3", "server_running": True, "total_actions": 1840,
+            "namespaces": 61, "catalog_version": "sha256:test",
+            "engine_version": "++UE5+Release-5.8", "project_name": "Speed",
+        },
+        "content": [{"type": "text", "text": STRUCTURED_STUB_TEXT}],
+    },
+}
+
+
+def _gate_row(task: Dict[str, Any], *, transport_error: bool) -> Dict[str, Any]:
+    return {
+        "task_id": task.get("id"), "category": task.get("category"),
+        "namespace": task.get("namespace", ""), "action": task.get("action", ""),
+        "blueprint_type": task.get("blueprint_type", ""), "domain": task.get("domain", ""),
+        "edit_domain": task.get("edit_domain", ""), "workflow": task.get("workflow", ""),
+        "direct_success": not transport_error, "planning_signals": not transport_error,
+        "evidence": {},
+        "transport_error": transport_error,
+        "transport_error_raw": "urlopen error [WinError 10061] connection refused" if transport_error else "",
+        "response_is_error": transport_error, "response_text": "",
+    }
+
+
+def _run_gate_benchmark(out: pathlib.Path, task_ids: List[str], score_task) -> Dict[str, Any]:
+    original_mcp_call = aeb.mcp_call
+    original_score_task = aeb.score_task
+    try:
+        aeb.mcp_call = lambda url, tool, arguments, timeout_s=45.0: _GATE_STATUS_RESPONSE  # type: ignore[assignment]
+        aeb.score_task = score_task  # type: ignore[assignment]
+        return aeb.run_benchmark(
+            "http://localhost:9316/mcp", aeb.DEFAULT_TASKS, out, "gate-test", 5.0,
+            jobs=1, task_ids=task_ids,
+        )
+    finally:
+        aeb.mcp_call = original_mcp_call  # type: ignore[assignment]
+        aeb.score_task = original_score_task  # type: ignore[assignment]
+
+
+def test_transport_failure_gate() -> None:
+    """A run against a dead/restarting editor must be rejected, not scored.
+
+    Transport errors produce empty responses that score exactly like capability failures.
+    On 2026-07-11 a 578-task run with 157 transport errors (27%) still wrote a scored
+    summary.json and exited 0, publishing an editor outage as an AssetEditing capability
+    regression. The gate must instead leave run_failure.json plus partial_summary.json
+    and NO summary.json -- including a stale one from an earlier run in the same dir.
+    """
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))[:40]
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "run"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "summary.json").write_text('{"stale": true}', encoding="utf-8")
+
+        summary = _run_gate_benchmark(
+            out,
+            [str(t["id"]) for t in tasks],
+            lambda url, task, timeout_s: _gate_row(task, transport_error=True),
+        )
+
+        check("transport gate rejects the run", summary.get("run_valid") is False,
+              f"run_valid={summary.get('run_valid')}")
+        check("transport gate reports the abort reason",
+              summary.get("completion_status") == "aborted_transport_failure_budget",
+              str(summary.get("completion_status")))
+        check("transport gate fires on the consecutive-failure budget",
+              summary.get("transport_abort", {}).get("reason") == "consecutive_transport_failures",
+              json.dumps(summary.get("transport_abort", {})))
+        check("transport gate stops early instead of burning the whole corpus",
+              summary.get("completed_task_count", 0) <= aeb.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+              f"completed={summary.get('completed_task_count')}")
+        check("transport gate writes run_failure.json", (out / "run_failure.json").exists())
+        check("transport gate writes partial_summary.json", (out / "partial_summary.json").exists())
+        check("transport gate writes NO summary.json (stale one removed)",
+              not (out / "summary.json").exists())
+        check("transport gate marks metrics as an outage-contaminated prefix",
+              summary.get("metrics_scope") == "attempted_prefix_transport_failure",
+              str(summary.get("metrics_scope")))
+
+
+def test_transport_flapping_editor_gate() -> None:
+    """A flapping editor never trips the consecutive gate; the fraction gate must still reject.
+
+    Every 4th task fails, so consecutive failures never reach 3 -- exactly the shape that
+    let the 27%-outage run through. finalize()/the fraction gate must still reject it.
+    """
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))[:40]
+    seen: List[int] = []
+
+    def flapping(url: str, task: Dict[str, Any], timeout_s: float) -> Dict[str, Any]:
+        seen.append(1)
+        return _gate_row(task, transport_error=(len(seen) % 4 == 0))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "run"
+        summary = _run_gate_benchmark(out, [str(t["id"]) for t in tasks], flapping)
+
+        check("flapping editor is rejected by the fraction gate",
+              summary.get("run_valid") is False, f"run_valid={summary.get('run_valid')}")
+        check("flapping editor never trips the consecutive gate",
+              summary.get("transport_abort", {}).get("reason") != "consecutive_transport_failures",
+              json.dumps(summary.get("transport_abort", {})))
+        check("flapping editor writes NO summary.json", not (out / "summary.json").exists())
+        check("flapping editor writes run_failure.json", (out / "run_failure.json").exists())
+
+
+def test_transport_gate_passes_a_healthy_run() -> None:
+    """A clean run still writes a scored summary.json with run_valid=True."""
+    tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))[:12]
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "run"
+        summary = _run_gate_benchmark(
+            out,
+            [str(t["id"]) for t in tasks],
+            lambda url, task, timeout_s: _gate_row(task, transport_error=False),
+        )
+        check("healthy run stays valid", summary.get("run_valid") is True,
+              f"run_valid={summary.get('run_valid')}")
+        check("healthy run writes summary.json", (out / "summary.json").exists())
+        check("healthy run writes no run_failure.json", not (out / "run_failure.json").exists())
+        check("healthy run records a zero transport-failure snapshot",
+              summary.get("transport", {}).get("transport_failure_count") == 0,
+              json.dumps(summary.get("transport", {})))
+
+
 def main() -> int:
     tasks = aeb.load_jsonl(aeb.resolve_plugin_path(aeb.DEFAULT_TASKS))
     manifest = load_json(aeb.DEFAULT_MANIFEST)
 
     test_manifest_matches_tasks(tasks, manifest)
     test_task_shape(tasks)
+    test_transport_failure_gate()
+    test_transport_flapping_editor_gate()
+    test_transport_gate_passes_a_healthy_run()
+    test_expect_error_requires_a_rejection()
+    test_structured_results_token_scanning()
+    test_compile_signal_requires_evidence()
+    test_error_text_assertions_still_use_human_text()
+    test_structured_expect_scoring()
+    test_engine_font_resolver_discovery()
+    test_pcg_asset_authoring_contract(tasks)
     test_high_error_recovery_coverage(tasks)
     test_asset_type_and_testset_indexes(tasks, manifest)
     test_compact_route_helpers()

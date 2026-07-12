@@ -3,8 +3,8 @@
   "benchmark": "AssetEditing",
   "generated_by": "asset_editing_benchmark.py",
   "description": "Human-browsable AssetEditing slices grouped by asset type/domain. The root tasks.jsonl remains the canonical full-suite stream, and testsets remain the route loader.",
-  "asset_type_count": 23,
-  "asset_authoring_task_count": 267,
+  "asset_type_count": 24,
+  "asset_authoring_task_count": 269,
   "asset_types": [
     {
       "asset_type": "ai",
@@ -272,16 +272,16 @@
       "asset_type": "level_instance",
       "asset_type_slug": "level_instance",
       "module_id": "asset_authoring.level_instance",
-      "task_count": 2,
-      "edit_domain_count": 2,
+      "task_count": 3,
+      "edit_domain_count": 3,
       "operation_counts": {
-        "creation_or_import": 2,
-        "edit": 2,
-        "save": 2,
-        "readback_verify": 2
+        "creation_or_import": 3,
+        "edit": 3,
+        "save": 3,
+        "readback_verify": 3
       },
       "lifecycle_counts": {
-        "create_save": 2
+        "create_save": 3
       },
       "directory": "Benchmarks/AssetEditing/level_instance",
       "index_file": "Benchmarks/AssetEditing/level_instance/index.json",
@@ -407,6 +407,26 @@
       "index_file": "Benchmarks/AssetEditing/niagara/index.json",
       "tasks_file": "Benchmarks/AssetEditing/niagara/tasks.jsonl",
       "readme_file": "Benchmarks/AssetEditing/niagara/README.md"
+    },
+    {
+      "asset_type": "pcg",
+      "asset_type_slug": "pcg",
+      "module_id": "asset_authoring.pcg",
+      "task_count": 1,
+      "edit_domain_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "lifecycle_counts": {
+        "create_save": 1
+      },
+      "directory": "Benchmarks/AssetEditing/pcg",
+      "index_file": "Benchmarks/AssetEditing/pcg/index.json",
+      "tasks_file": "Benchmarks/AssetEditing/pcg/tasks.jsonl",
+      "readme_file": "Benchmarks/AssetEditing/pcg/README.md"
     },
     {
       "asset_type": "project",

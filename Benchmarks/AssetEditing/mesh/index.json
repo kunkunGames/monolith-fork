@@ -25,19 +25,19 @@
     "BEB-405",
     "BEB-414",
     "BEB-424",
-    "BEB-449",
     "BEB-450",
-    "BEB-461",
+    "BEB-451",
     "BEB-462",
     "BEB-463",
-    "BEB-471",
-    "BEB-483",
-    "BEB-495",
+    "BEB-464",
+    "BEB-472",
+    "BEB-484",
     "BEB-496",
     "BEB-497",
-    "BEB-507",
-    "BEB-513",
-    "BEB-544"
+    "BEB-498",
+    "BEB-508",
+    "BEB-514",
+    "BEB-545"
   ],
   "task_refs": [
     {
@@ -287,7 +287,7 @@
       "description": "Generate a procedural pipe-network StaticMesh, save it under the benchmark folder, and inspect the generated mesh asset"
     },
     {
-      "id": "BEB-449",
+      "id": "BEB-450",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -316,7 +316,7 @@
       "description": "Spawn two temporary StaticMeshActors, generate and save a proxy StaticMesh asset from them, clean up the scene, and inspect the mesh"
     },
     {
-      "id": "BEB-450",
+      "id": "BEB-451",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -345,7 +345,7 @@
       "description": "Spawn temporary StaticMeshActors, run the public merge_actors workflow to create a StaticMesh asset, clean up the scene actors, and inspect the merged mesh"
     },
     {
-      "id": "BEB-461",
+      "id": "BEB-462",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -380,7 +380,7 @@
       "description": "Create primitive mesh handles, union them, edit material IDs, remesh, generate a LOD handle, save as StaticMesh, release handles, and inspect the saved mesh"
     },
     {
-      "id": "BEB-462",
+      "id": "BEB-463",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -410,7 +410,7 @@
       "description": "Generate a room StaticMesh with wall thickness, floor/ceiling, and a door opening, save it, and inspect the generated mesh bounds and quality"
     },
     {
-      "id": "BEB-463",
+      "id": "BEB-464",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -440,7 +440,7 @@
       "description": "Generate a deterministic terrain-patch StaticMesh with seeded multi-octave displacement, save it, and read mesh quality and bounds back"
     },
     {
-      "id": "BEB-471",
+      "id": "BEB-472",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -473,7 +473,7 @@
       "description": "Create a GeometryScript sphere handle, simplify it, compute UVs, save it as a StaticMesh, and read UV and vertex data back"
     },
     {
-      "id": "BEB-483",
+      "id": "BEB-484",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -507,7 +507,7 @@
       "description": "Create a primitive mesh handle, plane-cut with hole filling, mirror and repair it, save as StaticMesh, release the handle, and inspect the saved mesh"
     },
     {
-      "id": "BEB-495",
+      "id": "BEB-496",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -536,7 +536,7 @@
       "description": "Generate a multi-floor building shell StaticMesh with a stairwell cutout, save it, and inspect mesh geometry metadata"
     },
     {
-      "id": "BEB-496",
+      "id": "BEB-497",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -565,7 +565,7 @@
       "description": "Generate a seeded maze StaticMesh, save it, and verify deterministic maze metadata and mesh bounds"
     },
     {
-      "id": "BEB-497",
+      "id": "BEB-498",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -594,7 +594,7 @@
       "description": "Generate a seeded barricade StaticMesh with authored board and gap parameters, save it, and inspect mesh geometry metadata"
     },
     {
-      "id": "BEB-507",
+      "id": "BEB-508",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -626,7 +626,7 @@
       "description": "Create a primitive GeometryScript handle, fragment it deterministically, save one fragment as a StaticMesh, release handles, and inspect the saved mesh"
     },
     {
-      "id": "BEB-513",
+      "id": "BEB-514",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -656,7 +656,7 @@
       "description": "Generate a parametric StaticMesh, run mesh quality repair operations through GeometryScript, save it, and read mesh quality and registry state back"
     },
     {
-      "id": "BEB-544",
+      "id": "BEB-545",
       "category": "asset_authoring",
       "namespace": "mixed",
       "tool": "monolith_query",
@@ -710,7 +710,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-495"
+        "BEB-496"
       ],
       "case_file": "testcases\\building_shell_static_mesh.json"
     },
@@ -732,7 +732,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-513"
+        "BEB-514"
       ],
       "case_file": "testcases\\fix_quality.json"
     },
@@ -754,7 +754,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-507"
+        "BEB-508"
       ],
       "case_file": "testcases\\fragment_static_mesh.json"
     },
@@ -820,7 +820,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-461"
+        "BEB-462"
       ],
       "case_file": "testcases\\handle_boolean_remesh_material_ids.json"
     },
@@ -842,7 +842,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-497"
+        "BEB-498"
       ],
       "case_file": "testcases\\horror_prop_static_mesh.json"
     },
@@ -864,7 +864,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-544"
+        "BEB-545"
       ],
       "case_file": "testcases\\material_slots_compare.json"
     },
@@ -886,7 +886,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-496"
+        "BEB-497"
       ],
       "case_file": "testcases\\maze_static_mesh.json"
     },
@@ -908,7 +908,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-450"
+        "BEB-451"
       ],
       "case_file": "testcases\\merge_actors.json"
     },
@@ -952,7 +952,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-483"
+        "BEB-484"
       ],
       "case_file": "testcases\\plane_cut_mirror_repair.json"
     },
@@ -996,7 +996,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-462"
+        "BEB-463"
       ],
       "case_file": "testcases\\procedural_structure_static_mesh.json"
     },
@@ -1018,7 +1018,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-463"
+        "BEB-464"
       ],
       "case_file": "testcases\\procedural_terrain_patch.json"
     },
@@ -1040,7 +1040,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-449"
+        "BEB-450"
       ],
       "case_file": "testcases\\proxy_mesh_from_scene_actors.json"
     },
@@ -1062,7 +1062,7 @@
         "readback_verify": 1
       },
       "task_ids": [
-        "BEB-471"
+        "BEB-472"
       ],
       "case_file": "testcases\\simplify_uv_static_mesh.json"
     },

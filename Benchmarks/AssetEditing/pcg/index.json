@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "pcg",
+  "asset_type_slug": "pcg",
+  "module_id": "asset_authoring.pcg",
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "edit_domain_count": 1,
+  "task_ids": [
+    "BEB-547"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-547",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "pcg",
+      "edit_domain": "graph_authoring",
+      "blueprint_type": "",
+      "workflow": "pcg_graph_idempotent_authoring_roundtrip",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "create_pcg_graph",
+        "add_pcg_node",
+        "set_pcg_node_params",
+        "connect_pcg_nodes",
+        "save_asset",
+        "get_pcg_graph_info",
+        "validate_pcg_graph"
+      ],
+      "description": "Create or reuse a saved PCGGraph, idempotently author one Add Tags node and two edges, update native settings, then read back and validate the graph without delete/reset"
+    }
+  ],
+  "tasks_file": "tasks.jsonl",
+  "index_file": "index.json",
+  "readme_file": "README.md",
+  "testcase_dir": "testcases",
+  "testcases": [
+    {
+      "edit_domain": "graph_authoring",
+      "route_edit_domain": "graph_authoring",
+      "module_id": "asset_authoring.pcg.graph_authoring",
+      "asset_operation_modules": {
+        "creation_or_import": "asset_operation.creation_or_import.pcg.graph_authoring",
+        "edit": "asset_operation.edit.pcg.graph_authoring",
+        "save": "asset_operation.save.pcg.graph_authoring",
+        "readback_verify": "asset_operation.readback_verify.pcg.graph_authoring"
+      },
+      "task_count": 1,
+      "operation_counts": {
+        "creation_or_import": 1,
+        "edit": 1,
+        "save": 1,
+        "readback_verify": 1
+      },
+      "task_ids": [
+        "BEB-547"
+      ],
+      "case_file": "testcases\\graph_authoring.json"
+    }
+  ]
+}

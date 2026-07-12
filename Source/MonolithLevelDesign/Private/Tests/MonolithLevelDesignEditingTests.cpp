@@ -51,7 +51,7 @@ bool FMonolithLevelDesignSetActorMaterialTest::RunTest(const FString& Parameters
 		LocArr.Add(MakeShared<FJsonValueNumber>(0));
 		Params->SetArrayField(TEXT("location"), LocArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestTrue(TEXT("Valid parameters should succeed"), Result.bSuccess);
 	}
 
@@ -73,7 +73,7 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 		LocArr.Add(MakeShared<FJsonValueNumber>(0));
 		Params->SetArrayField(TEXT("location"), LocArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestFalse(TEXT("Missing type should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention type"), Result.ErrorMessage.Contains(TEXT("type")));
 	}
@@ -88,7 +88,7 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 		LocArr.Add(MakeShared<FJsonValueNumber>(0));
 		Params->SetArrayField(TEXT("location"), LocArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestFalse(TEXT("Invalid type should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention invalid light type"), Result.ErrorMessage.Contains(TEXT("Invalid light type")));
 	}
@@ -98,7 +98,7 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("type"), TEXT("point"));
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestFalse(TEXT("Missing location should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention location"), Result.ErrorMessage.Contains(TEXT("location")));
 	}
@@ -109,7 +109,7 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("type"), TEXT("point"));
 		Params->SetStringField(TEXT("location"), TEXT("NotAnArray"));
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestFalse(TEXT("Invalid location type should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention location"), Result.ErrorMessage.Contains(TEXT("location")));
 	}
@@ -124,7 +124,7 @@ bool FMonolithLevelDesignPlaceLightTest::RunTest(const FString& Parameters)
 		LocArr.Add(MakeShared<FJsonValueNumber>(0));
 		Params->SetArrayField(TEXT("location"), LocArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("place_light"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("place_light"), Params);
 		TestTrue(TEXT("Valid parameters should succeed"), Result.bSuccess);
 	}
 

@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "benchmark": "AssetEditing",
+  "generated_by": "asset_editing_benchmark.py",
+  "asset_type": "level_instance",
+  "asset_type_slug": "level_instance",
+  "edit_domain": "blueprint_prefab_guard",
+  "route_edit_domain": "blueprint_prefab_guard",
+  "module_id": "asset_authoring.level_instance.blueprint_prefab_guard",
+  "asset_operation_modules": {
+    "creation_or_import": "asset_operation.creation_or_import.level_instance.blueprint_prefab_guard",
+    "edit": "asset_operation.edit.level_instance.blueprint_prefab_guard",
+    "save": "asset_operation.save.level_instance.blueprint_prefab_guard",
+    "readback_verify": "asset_operation.readback_verify.level_instance.blueprint_prefab_guard"
+  },
+  "task_count": 1,
+  "operation_counts": {
+    "creation_or_import": 1,
+    "edit": 1,
+    "save": 1,
+    "readback_verify": 1
+  },
+  "lifecycle_counts": {
+    "create_save": 1
+  },
+  "task_ids": [
+    "BEB-429"
+  ],
+  "task_refs": [
+    {
+      "id": "BEB-429",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "tool": "monolith_query",
+      "action": "op_chain",
+      "domain": "level_instance",
+      "edit_domain": "blueprint_prefab_guard",
+      "blueprint_type": "",
+      "workflow": "level_instance_rootless_prefab_rejected",
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "asset_operations": [
+        "creation_or_import",
+        "save",
+        "edit",
+        "readback_verify"
+      ],
+      "actions": [
+        "op_chain",
+        "delete_assets",
+        "delete_actors",
+        "spawn_actor",
+        "create_blueprint_prefab",
+        "inspect_asset"
+      ],
+      "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "BEB-429",
+      "category": "asset_authoring",
+      "namespace": "mixed",
+      "action": "op_chain",
+      "tool": "monolith_query",
+      "asset_path": "/Game/Benchmarks/AssetAuthoring",
+      "chain": [
+        {
+          "tool": "asset_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_assets",
+            "asset_paths": [
+              "/Game/Benchmarks/AssetAuthoring/BP_BenchRootlessPrefab"
+            ],
+            "allowed_prefixes": [
+              "/Game/Benchmarks/AssetAuthoring"
+            ],
+            "force": true
+          }
+        },
+        {
+          "tool": "scene_query",
+          "allow_error": true,
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchRootlessA",
+              "AE_BenchRootlessB"
+            ]
+          }
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              0,
+              0,
+              80
+            ],
+            "name": "AE_BenchRootlessA",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchRootlessA"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "spawn_actor",
+            "class_or_mesh": "Actor",
+            "location": [
+              120,
+              0,
+              80
+            ],
+            "name": "AE_BenchRootlessB",
+            "folder": "MonolithBenchmarks/AssetEditing"
+          },
+          "contains": [
+            "AE_BenchRootlessB"
+          ]
+        },
+        {
+          "tool": "level_instance_query",
+          "expect_error": true,
+          "args": {
+            "action": "create_blueprint_prefab",
+            "actor_names": [
+              "AE_BenchRootlessA",
+              "AE_BenchRootlessB"
+            ],
+            "save_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchRootlessPrefab",
+            "center_pivot": true,
+            "keep_source_actors": true
+          },
+          "contains": [
+            "AE_BenchRootlessA",
+            "AE_BenchRootlessB",
+            "root component"
+          ]
+        },
+        {
+          "tool": "scene_query",
+          "args": {
+            "action": "delete_actors",
+            "actor_names": [
+              "AE_BenchRootlessA",
+              "AE_BenchRootlessB"
+            ]
+          },
+          "contains": [
+            "deleted"
+          ]
+        }
+      ],
+      "verify": [
+        {
+          "tool": "asset_query",
+          "expect_error": true,
+          "args": {
+            "action": "inspect_asset",
+            "asset_path": "/Game/Benchmarks/AssetAuthoring/BP_BenchRootlessPrefab"
+          }
+        }
+      ],
+      "expected": {
+        "direct_success": true
+      },
+      "safety": "mutating_benchmark_assets",
+      "edit_domain": "blueprint_prefab_guard",
+      "blueprint_type": "",
+      "domain": "level_instance",
+      "workflow": "level_instance_rootless_prefab_rejected",
+      "description": "Spawn bare rootless Actors, confirm create_blueprint_prefab rejects them by name instead of crashing the editor, and confirm no prefab asset was written",
+      "reference_context": [],
+      "operation_semantics": "create_save",
+      "lifecycle_phase": "create_save",
+      "capabilities": {
+        "actions": [
+          "op_chain",
+          "delete_assets",
+          "delete_actors",
+          "spawn_actor",
+          "create_blueprint_prefab",
+          "inspect_asset"
+        ],
+        "creates_or_imports_assets": true,
+        "saves_assets": true,
+        "asset_edits": true,
+        "readback_verifies": true,
+        "asset_operations": [
+          "creation_or_import",
+          "save",
+          "edit",
+          "readback_verify"
+        ],
+        "operation_semantics": "create_save",
+        "lifecycle_phase": "create_save"
+      }
+    }
+  ]
+}

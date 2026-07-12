@@ -50,6 +50,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] delete_assets` | `asset_paths*` (strict non-empty string array), `allowed_prefixes?` (strict non-empty string array, package-segment guard), `dry_run=false`, `force=false` | Guarded deletion with per-target postconditions; dry-run is non-mutating and force mode removes source-control-aware headers and sidecars. |
 | `validate_naming_conventions` | `scan_path=/Game`, `max_results=100`, `custom_rules?` (obj: {"ClassName": "Prefix_"}) | Scan prefix/path hygiene (SM_/SK_/M_/MI_/T_/BP_ defaults). |
 | `[w] batch_rename_assets` | `asset_paths*` (array), `find?`, `replace?`, `add_prefix?`, `remove_prefix?`, `add_suffix?`, `remove_suffix?`, `dry_run=false` | Find/replace, prefix, or suffix rename with reference fixup + redirectors. |
+| `[w] move_assets` | `moves*` (1-512 `{source,destination}` objects), `allowed_source_roots*`, `allowed_destination_roots*`, `dry_run=true`, `confirm=false`, `cleanup_redirectors=false` | Exact no-overwrite package relocation through `IAssetTools::RenameAssets`; requires non-empty segment-bounded source/destination allowlists, rejects duplicate/chained/cyclic moves, and verifies destination/source/redirector postconditions. |
 | `find_assets` | `query*`, `path=/Game`, `recursive=true`, `class_names?` (array; alias class), `limit=20` (1-100), `threshold?`, `include_tags=false`, `include_score_breakdown=false`, `allow_transposition=true` | Fuzzy, typo-tolerant live AssetRegistry search (sees unsaved assets). |
 | `inspect_asset` | `asset_path*`, `include_references=true`, `array_limit=32` | Read generic/untyped asset details with read-only enrichment. |
 | `inspect_assets_batch` | `asset_paths*` (array), `include_references=false`, `array_limit=16` | Inspect many assets with per-row success/error. |
@@ -77,6 +78,22 @@ asset_query("delete_assets", { "asset_paths": ["/Game/UI/Icons/IconOld"], "dry_r
 
 # Preview a batch rename (add a prefix), then apply by dropping dry_run.
 asset_query("batch_rename_assets", { "asset_paths": ["/Game/UI/Icons/IconSkill"], "add_prefix": "T_", "dry_run": true })
+
+# Preview and then commit an exact cross-plugin package move.
+asset_query("move_assets", {
+  "moves": [{ "source": "/OldPlugin/UI/WBP_Menu", "destination": "/NewPlugin/UI/WBP_Menu" }],
+  "allowed_source_roots": ["/OldPlugin/UI"],
+  "allowed_destination_roots": ["/NewPlugin/UI"],
+  "dry_run": true
+})
+asset_query("move_assets", {
+  "moves": [{ "source": "/OldPlugin/UI/WBP_Menu", "destination": "/NewPlugin/UI/WBP_Menu" }],
+  "allowed_source_roots": ["/OldPlugin/UI"],
+  "allowed_destination_roots": ["/NewPlugin/UI"],
+  "dry_run": false,
+  "confirm": true,
+  "cleanup_redirectors": false
+})
 
 # Prepare optional content mounts, then plan a package graph copy without copying or loading assets.
 asset_query("register_content_mount_points", {
@@ -140,6 +157,9 @@ asset_query("save_asset", { "asset_path": "/Game/UI/Icons/T_icon_skill", "verify
 - `save_asset` always requires a clean package plus an existing, non-empty package file after save. `verify_reload=true` additionally reloads and re-resolves the same class; it is rejected for `UWorld`, any package with `ContainsMap()`, and assets with an open editor.
 - `delete_assets.asset_paths` and a supplied `allowed_prefixes` are strict non-empty string arrays; malformed elements are errors, and a supplied guard may not be empty. Prefixes match an exact package or a slash-delimited descendant, never a sibling with the same string prefix.
 - `delete_assets(dry_run=true)` does not change dirty state, close editors, unregister string tables, modify/delete objects, issue source-control operations, remove files, or rescan the registry. Committed deletion uses the editor GC keep flags so evicting one target cannot collect an unrelated `RF_Standalone` dirty asset. In force mode, check each `targets[]` row: success requires no loaded package, no AssetRegistry row, no `.uasset`/`.umap`/`.utxt`/`.utxtmap` header or `.uexp`/`.ubulk`/`.uptnl`/`.m.ubulk`/`.upayload` sidecar, and no source-control failure. An enabled but unavailable provider/state or failed revert/delete blocks direct deletion and fails that target.
+- `move_assets` accepts package names, not object paths. It defaults to `dry_run=true`, loads no source assets during dry-run, requires `confirm=true` for mutation, and never overwrites or silently suffixes a destination. Supplied allowed roots are slash-segment guards. Duplicate sources/destinations and any destination that is also a source are errors, so a request cannot rely on chain/cycle ordering.
+- `move_assets` requires both allowlists and reports hard/soft package referencer counts during its no-load preflight. `cleanup_redirectors=false` accepts either a fully removed source package or a source redirector that resolves to the exact requested destination. Set `cleanup_redirectors=true` only when `RenameAssets` is expected to leave each source redirector unreferenced and the source package must disappear. Cleanup runs only after full rename success, revalidates exact targets and zero hard/soft referencers, and deletes at most 200 redirectors through one source-control-required hardened `asset.delete_assets` batch; it does not run another reference-fixup pass. A global/partial rename or safe-deletion failure preserves redirectors and makes the requested cleanup fail.
+- `move_assets` uses AssetTools for reference repair, saves, and source-control branch/move semantics. Do not separately copy/delete package files around it. Inspect every row's `postconditions_met`, and move the reported changed files into the task changelist through the normal source-control workflow when the provider created them in a default changelist.
 - `plan_package_graph_copy` and `validate_dependency_closure` are read-only. `register_content_mount_points`, `copy_package_graph_with_remap`, `copy_package_graph_with_strategy`, and `fixup_copied_references` are guarded mutating actions and must be previewed with `dry_run=true` before running with `confirm=true`. `register_content_mount_points` defaults to dry-run.
 - `register_content_mount_points` changes only the current editor process mount table; it does not edit plugin descriptors or assets. It uses `track_dirty_packages`, not a transaction wrapper, because mount registration is not a package edit. It refuses `/Game/`, `/Engine/`, and `/Script/` by default, rejects duplicate/conflicting roots inside one request, rejects `project_plugin_dir` values with absolute or `.`/`..` path segments, and blocks conflicting existing root mappings unless `allow_override=true`.
 - `copy_package_graph_with_remap` never overwrites existing destination packages. Use `collision_policy=skip_existing` only when existing destinations should remain untouched.

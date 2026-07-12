@@ -116,6 +116,7 @@ _stage/
 markdownlint.log
 
 # Agent workflow artifacts
+Monolith_MCP_Agent_Handoff_*.md
 pr_body.txt
 commit_msg.txt
 prs.json
