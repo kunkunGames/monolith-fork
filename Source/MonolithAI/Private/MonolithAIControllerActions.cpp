@@ -1,6 +1,7 @@
 #include "MonolithAIControllerActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithAssetUtils.h"
+#include "MonolithJsonUtils.h"
 
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTree.h"

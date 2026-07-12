@@ -2,6 +2,7 @@
 #include "MonolithAssetUtils.h"
 #include "MonolithParamSchema.h"
 #include "MonolithPackagePathValidator.h"
+#include "MonolithJsonUtils.h"
 
 #include "Animation/MirrorDataTable.h"
 #include "Animation/Skeleton.h"

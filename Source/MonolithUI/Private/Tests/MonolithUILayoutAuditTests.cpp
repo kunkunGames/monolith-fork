@@ -1188,8 +1188,12 @@ bool FMonolithUIMaterialLifecycleAuditTickDynamicMaterialTest::RunTest(const FSt
 }
 
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithUIParamGuardAuditLayoutTest, "Monolith.ParamGuard.UI.AuditLayout.MalformedParams", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
-bool FMonolithUIParamGuardAuditLayoutTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithUIParamGuardMeasureWidgetLayoutTest,
+    "Monolith.ParamGuard.UI.MeasureWidgetLayout.MalformedParams",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithUIParamGuardMeasureWidgetLayoutTest::RunTest(const FString& /*Parameters*/)
 {
     EnsureLayoutAuditActionRegistered();
 
@@ -1197,30 +1201,27 @@ bool FMonolithUIParamGuardAuditLayoutTest::RunTest(const FString& Parameters)
     Params->SetStringField(TEXT("asset_path"), TEXT("/Game/UI/WBP_DummyTest"));
     Params->SetStringField(TEXT("check_overlap"), TEXT("wrong_type_string")); // Malformed
 
-    const FMonolithActionResult Result = MonolithUI::HandleAuditLayout(Params);
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("ui"),
+        TEXT("measure_widget_layout"),
+        Params);
 
     TestFalse(TEXT("Malformed check_overlap should fail"), Result.bSuccess);
-    TestTrue(TEXT("Result is error payload"), Result.Result.IsValid());
-    if (Result.Result.IsValid())
-    {
-        int32 ErrCode = 0;
-        Result.Result->TryGetNumberField(TEXT("error_code"), ErrCode);
-        TestEqual(TEXT("Error code is invalid params"), ErrCode, FMonolithJsonUtils::ErrInvalidParams);
-    }
+    TestEqual(TEXT("Error code is invalid params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+    TestTrue(TEXT("Error identifies check_overlap"), Result.ErrorMessage.Contains(TEXT("check_overlap")));
 
     Params->RemoveField(TEXT("check_overlap"));
 
     TSharedPtr<FJsonObject> MaxOverlapArray = MakeShared<FJsonObject>(); // Malformed
     Params->SetObjectField(TEXT("max_allowed_overlap_ratio"), MaxOverlapArray);
 
-    const FMonolithActionResult Result2 = MonolithUI::HandleAuditLayout(Params);
+    const FMonolithActionResult Result2 = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("ui"),
+        TEXT("measure_widget_layout"),
+        Params);
     TestFalse(TEXT("Malformed max_allowed_overlap_ratio should fail"), Result2.bSuccess);
-    if (Result2.Result.IsValid())
-    {
-        int32 ErrCode = 0;
-        Result2.Result->TryGetNumberField(TEXT("error_code"), ErrCode);
-        TestEqual(TEXT("Error code is invalid params for ratio"), ErrCode, FMonolithJsonUtils::ErrInvalidParams);
-    }
+    TestEqual(TEXT("Error code is invalid params for ratio"), Result2.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+    TestTrue(TEXT("Error identifies max_allowed_overlap_ratio"), Result2.ErrorMessage.Contains(TEXT("max_allowed_overlap_ratio")));
 
     return true;
 }

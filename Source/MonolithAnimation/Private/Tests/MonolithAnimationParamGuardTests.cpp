@@ -19,7 +19,8 @@ bool FMonolithAnimationParamGuardSetSectionNextTest::RunTest(const FString& Para
 		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("animation"), TEXT("set_section_next"), BadParams);
 
 		TestFalse(TEXT("SetSectionNext should fail if section_name is not a string"), Result.bSuccess);
-		TestTrue(TEXT("SetSectionNext error should mention parameter invalidity"), Result.Error.Contains(TEXT("Parameter")));
+		TestEqual(TEXT("SetSectionNext should report invalid_params"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+		TestTrue(TEXT("SetSectionNext error should identify section_name"), Result.ErrorMessage.Contains(TEXT("section_name")));
 	}
 
 	return true;

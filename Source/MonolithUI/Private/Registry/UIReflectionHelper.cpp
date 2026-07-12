@@ -16,6 +16,7 @@
 #include "Math/Color.h"
 #include "Math/Vector2D.h"
 #include "Math/Vector4.h"
+#include "MonolithAssetUtils.h"
 #include "MonolithUICommon.h"
 #include "Registry/MonolithUIRegistrySubsystem.h"
 #include "Registry/UIPropertyAllowlist.h"

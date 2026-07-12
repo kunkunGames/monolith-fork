@@ -1,4 +1,5 @@
 #include "Misc/AutomationTest.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithNiagaraActions.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"

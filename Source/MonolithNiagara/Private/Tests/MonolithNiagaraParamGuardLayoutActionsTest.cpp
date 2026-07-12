@@ -11,7 +11,7 @@ bool FMonolithNiagaraParamGuardLayoutActionsTest::RunTest(const FString& Paramet
 		Params->SetNumberField(TEXT("asset_path"), 123); // Invalid type (number instead of string)
 
 		FMonolithActionResult Result = FMonolithNiagaraLayoutActions::HandleAutoLayout(Params);
-		TestTrue(TEXT("HandleAutoLayout rejects malformed 'asset_path' param"), Result.Type == EMonolithActionResultType::Error);
+		TestFalse(TEXT("HandleAutoLayout rejects malformed 'asset_path' param"), Result.bSuccess);
 		TestEqual(TEXT("HandleAutoLayout rejects malformed 'asset_path' param with ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -20,7 +20,7 @@ bool FMonolithNiagaraParamGuardLayoutActionsTest::RunTest(const FString& Paramet
 		Params->SetNumberField(TEXT("system_path"), 123); // Invalid type (number instead of string)
 
 		FMonolithActionResult Result = FMonolithNiagaraLayoutActions::HandleAutoLayout(Params);
-		TestTrue(TEXT("HandleAutoLayout rejects malformed 'system_path' param"), Result.Type == EMonolithActionResultType::Error);
+		TestFalse(TEXT("HandleAutoLayout rejects malformed 'system_path' param"), Result.bSuccess);
 		TestEqual(TEXT("HandleAutoLayout rejects malformed 'system_path' param with ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -30,7 +30,7 @@ bool FMonolithNiagaraParamGuardLayoutActionsTest::RunTest(const FString& Paramet
 		Params->SetNumberField(TEXT("emitter"), 123); // Invalid type (number instead of string)
 
 		FMonolithActionResult Result = FMonolithNiagaraLayoutActions::HandleAutoLayout(Params);
-		TestTrue(TEXT("HandleAutoLayout rejects malformed 'emitter' param"), Result.Type == EMonolithActionResultType::Error);
+		TestFalse(TEXT("HandleAutoLayout rejects malformed 'emitter' param"), Result.bSuccess);
 		TestEqual(TEXT("HandleAutoLayout rejects malformed 'emitter' param with ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -40,7 +40,7 @@ bool FMonolithNiagaraParamGuardLayoutActionsTest::RunTest(const FString& Paramet
 		Params->SetNumberField(TEXT("script_usage"), 123); // Invalid type
 
 		FMonolithActionResult Result = FMonolithNiagaraLayoutActions::HandleAutoLayout(Params);
-		TestTrue(TEXT("HandleAutoLayout rejects malformed 'script_usage' param"), Result.Type == EMonolithActionResultType::Error);
+		TestFalse(TEXT("HandleAutoLayout rejects malformed 'script_usage' param"), Result.bSuccess);
 		TestEqual(TEXT("HandleAutoLayout rejects malformed 'script_usage' param with ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
@@ -50,7 +50,7 @@ bool FMonolithNiagaraParamGuardLayoutActionsTest::RunTest(const FString& Paramet
 		Params->SetNumberField(TEXT("formatter"), 123); // Invalid type
 
 		FMonolithActionResult Result = FMonolithNiagaraLayoutActions::HandleAutoLayout(Params);
-		TestTrue(TEXT("HandleAutoLayout rejects malformed 'formatter' param"), Result.Type == EMonolithActionResultType::Error);
+		TestFalse(TEXT("HandleAutoLayout rejects malformed 'formatter' param"), Result.bSuccess);
 		TestEqual(TEXT("HandleAutoLayout rejects malformed 'formatter' param with ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
 	}
 

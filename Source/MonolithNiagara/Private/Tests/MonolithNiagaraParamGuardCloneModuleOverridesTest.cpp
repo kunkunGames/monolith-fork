@@ -2,7 +2,7 @@
 #include "MonolithNiagaraActions.h"
 #include "JsonObjectConverter.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardCloneModuleOverridesTest, "Monolith.Niagara.ParamGuard.CloneModuleOverrides", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithNiagaraParamGuardCloneModuleOverridesTest, "Monolith.Niagara.ParamGuard.CloneModuleOverrides", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FMonolithNiagaraParamGuardCloneModuleOverridesTest::RunTest(const FString& Parameters)
 {

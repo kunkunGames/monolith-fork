@@ -1,6 +1,7 @@
 #include "MonolithAnimationRuntimeActions.h"
 #include "MonolithParamSchema.h"
 #include "MonolithStructFieldResolver.h"
+#include "MonolithJsonUtils.h"
 
 #include "Editor.h"
 #include "EngineUtils.h"
@@ -49,7 +50,10 @@ namespace
 		{
 			if (!Params->TryGetStringField(TEXT("component_name"), ComponentName))
 			{
-				return FMonolithActionResult::Error(TEXT("Parameter 'component_name' must be a string"), FMonolithJsonUtils::ErrInvalidParams);
+				Result.Error = FMonolithActionResult::Error(
+					TEXT("Parameter 'component_name' must be a string"),
+					FMonolithJsonUtils::ErrInvalidParams);
+				return Result;
 			}
 		}
 

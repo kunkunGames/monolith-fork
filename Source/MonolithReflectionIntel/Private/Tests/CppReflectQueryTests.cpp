@@ -23,6 +23,7 @@
 
 #include "CppReflect/FCppReflectQueryAdapter.h"
 #include "CppReflect/FUHTArtefactReader.h"
+#include "MonolithJsonUtils.h"
 
 #include "HAL/FileManager.h"
 #include "HAL/PlatformFileManager.h"
@@ -463,7 +464,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FCppReflectFindClassSpecifierParamGuardTest::RunTest(const FString& /*Parameters*/)
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
-	if (!Registry.HasAction(TEXT("cppreflect_query"), TEXT("find_class_specifier")))
+	if (!Registry.HasAction(TEXT("cppreflect"), TEXT("find_class_specifier")))
 	{
 		FCppReflectQueryAdapter::RegisterActions(Registry);
 	}
@@ -473,7 +474,7 @@ bool FCppReflectFindClassSpecifierParamGuardTest::RunTest(const FString& /*Param
 		TSharedPtr<FJsonObject> ValidParams = MakeShared<FJsonObject>();
 		ValidParams->SetStringField(TEXT("specifier_name"), TEXT("BlueprintType"));
 		ValidParams->SetNumberField(TEXT("limit"), 10);
-		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect_query"), TEXT("find_class_specifier"), ValidParams);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect"), TEXT("find_class_specifier"), ValidParams);
 		// EngineSource.db may not exist in this transient environment, but it shouldn't fail with param guard error
 		TestTrue(TEXT("Valid params should not return invalid params error"), Result.ErrorCode != FMonolithJsonUtils::ErrInvalidParams);
 	}
@@ -484,7 +485,7 @@ bool FCppReflectFindClassSpecifierParamGuardTest::RunTest(const FString& /*Param
 		BadParams->SetStringField(TEXT("specifier_name"), TEXT("BlueprintType"));
 		// Setting limit as string instead of number
 		BadParams->SetStringField(TEXT("limit"), TEXT("10"));
-		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect_query"), TEXT("find_class_specifier"), BadParams);
+		FMonolithActionResult Result = Registry.ExecuteAction(TEXT("cppreflect"), TEXT("find_class_specifier"), BadParams);
 
 		TestFalse(TEXT("Wrong limit type should fail safely"), Result.bSuccess);
 		if (!Result.bSuccess)

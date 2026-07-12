@@ -69,12 +69,14 @@ bool FMonolithLevelDesignMeasureDistanceTest::RunTest(const FString& Parameters)
 
         FMonolithActionResult Result = ExecuteMeasureDistanceAction(Params);
 		TestTrue(TEXT("Valid from/to arrays should succeed"), Result.bSuccess);
-        if (Result.bSuccess && Result.ResultData.IsValid())
-        {
-            double Dist = 0.0;
-            Result.ResultData->TryGetNumberField(TEXT("euclidean_distance"), Dist);
-            TestEqual(TEXT("Distance should be 100"), Dist, 100.0);
-        }
+		if (Result.bSuccess && TestTrue(TEXT("Successful distance result should contain a payload"), Result.Result.IsValid()))
+		{
+			double Dist = 0.0;
+			if (TestTrue(TEXT("Distance payload should contain euclidean_distance"), Result.Result->TryGetNumberField(TEXT("euclidean_distance"), Dist)))
+			{
+				TestEqual(TEXT("Distance should be 100"), Dist, 100.0);
+			}
+		}
     }
 
 	return true;

@@ -557,8 +557,7 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Get recent editor log entries"),
 		FMonolithActionHandler::CreateStatic(&HandleGetRecentLogs),
 		FParamSchemaBuilder()
-			.Optional(TEXT("count"), TEXT("integer"), TEXT("Number of entries to return"), TEXT("100"))
-			.AddAlias(TEXT("count"), TEXT("max"))
+			.Optional(TEXT("count"), TEXT("integer"), TEXT("Number of entries to return"), TEXT("100"), {TEXT("max")})
 			.Build());
 
 	Registry.RegisterAction(TEXT("editor"), TEXT("search_logs"),
