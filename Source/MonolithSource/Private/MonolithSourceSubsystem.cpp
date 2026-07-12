@@ -46,6 +46,7 @@ namespace
 
 UMonolithSourceSubsystem::~UMonolithSourceSubsystem()
 {
+	bIsDeinitializing = true;
 	delete Indexer;
 	Indexer = nullptr;
 }
@@ -53,6 +54,7 @@ UMonolithSourceSubsystem::~UMonolithSourceSubsystem()
 void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+	bIsDeinitializing = false;
 
 	// Commandlet mode (cook/compile): skip DB open. Build/cook commandlets do not need the
 	// editor-owned source index, and avoiding a second long-lived DB handle keeps source
@@ -77,6 +79,8 @@ void UMonolithSourceSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UMonolithSourceSubsystem::Deinitialize()
 {
+	bIsDeinitializing = true;
+
 	// F17: Unbind the hot-reload hook BEFORE we tear down anything else, so a late-firing
 	// reload signal during shutdown can't re-enter into a half-destroyed subsystem.
 	if (ReloadCompleteHandle.IsValid())
@@ -102,8 +106,11 @@ void UMonolithSourceSubsystem::Deinitialize()
 
 FMonolithSourceDatabase* UMonolithSourceSubsystem::GetDatabase()
 {
-	EnsureDatabaseOpen();
-	return Database.IsValid() ? Database.Get() : nullptr;
+	if (!EnsureDatabaseOpen() || !Database.IsValid() || !Database->IsOpen())
+	{
+		return nullptr;
+	}
+	return Database.Get();
 }
 
 // ============================================================
@@ -188,7 +195,7 @@ void UMonolithSourceSubsystem::TriggerReindex()
 
 	bIsIndexing = true;
 
-		delete Indexer;
+	delete Indexer;
 	Indexer = new FMonolithSourceIndexer();
 	Indexer->SetSourcePath(GetEngineSourcePath());
 	Indexer->SetShaderPath(GetEngineShaderPath());
@@ -197,19 +204,29 @@ void UMonolithSourceSubsystem::TriggerReindex()
 	Indexer->SetCleanBuild(true);
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors, bSucceeded]()
 		{
-			bIsIndexing = false;
-			UE_LOG(LogMonolithSource, Log, TEXT("C++ source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
-			RebuildSourceCrgCacheAfterIndexing(Database.Get(), TEXT("Full source indexing"));
+			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
+			{
+				Subsystem->FinishIndexingOnGameThread(
+					DbPath, TEXT("Full source indexing"), Files, Symbols, Errors, bSucceeded);
+			}
 		});
 	});
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting full source indexing (engine + project) via C++ indexer"));
-	Indexer->StartAsync();
+	if (!Indexer->StartAsync())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start full source indexing thread"));
+		if (!bDatabaseRequiresSuccessfulReindex)
+		{
+			ReopenDatabase(DbPath);
+		}
+		bIsIndexing = false;
+	}
 }
 
 // ============================================================
@@ -241,7 +258,7 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 
 	bIsIndexing = true;
 
-		delete Indexer;
+	delete Indexer;
 	Indexer = new FMonolithSourceIndexer();
 	// No engine source path — project only
 	Indexer->SetProjectPath(GetProjectPath());
@@ -249,19 +266,29 @@ void UMonolithSourceSubsystem::TriggerProjectReindex()
 	Indexer->SetCleanBuild(false);   // Incremental — keep existing engine symbols
 	Indexer->SetIndexProjectSource(true);
 
-	Indexer->OnComplete.AddLambda([this, DbPath](int32 Files, int32 Symbols, int32 Errors)
+	const TWeakObjectPtr<UMonolithSourceSubsystem> WeakThis(this);
+	Indexer->OnComplete.AddLambda([WeakThis, DbPath](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
 	{
-		AsyncTask(ENamedThreads::GameThread, [this, DbPath, Files, Symbols, Errors]()
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, DbPath, Files, Symbols, Errors, bSucceeded]()
 		{
-			bIsIndexing = false;
-			UE_LOG(LogMonolithSource, Log, TEXT("Project source indexing complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-			ReopenDatabase(DbPath);
-			RebuildSourceCrgCacheAfterIndexing(Database.Get(), TEXT("Project source indexing"));
+			if (UMonolithSourceSubsystem* Subsystem = WeakThis.Get())
+			{
+				Subsystem->FinishIndexingOnGameThread(
+					DbPath, TEXT("Project source indexing"), Files, Symbols, Errors, bSucceeded);
+			}
 		});
 	});
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Starting project source indexing (incremental) via C++ indexer"));
-	Indexer->StartAsync();
+	if (!Indexer->StartAsync())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Failed to start project source indexing thread"));
+		if (!bDatabaseRequiresSuccessfulReindex)
+		{
+			ReopenDatabase(DbPath);
+		}
+		bIsIndexing = false;
+	}
 }
 
 // ============================================================
@@ -275,14 +302,14 @@ bool UMonolithSourceSubsystem::EnsureDatabaseOpen()
 		return false;
 	}
 
+	if (bIsDeinitializing || bIsIndexing || bDatabaseRequiresSuccessfulReindex)
+	{
+		return false;
+	}
+
 	if (Database.IsValid() && Database->IsOpen())
 	{
 		return true;
-	}
-
-	if (bIsIndexing)
-	{
-		return false;
 	}
 
 	const double Now = FPlatformTime::Seconds();
@@ -293,6 +320,47 @@ bool UMonolithSourceSubsystem::EnsureDatabaseOpen()
 	}
 
 	return TryOpenDatabaseWithRetry(GetDatabasePath(), TEXT("Lazy source DB reopen"));
+}
+
+void UMonolithSourceSubsystem::FinishIndexingOnGameThread(
+	const FString& DbPath,
+	const FString& Context,
+	int32 Files,
+	int32 Symbols,
+	int32 Errors,
+	bool bSucceeded)
+{
+	if (bIsDeinitializing)
+	{
+		return;
+	}
+
+	if (!bSucceeded)
+	{
+		bDatabaseRequiresSuccessfulReindex = true;
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("%s failed: %d files, %d symbols, %d errors. EngineSource DB remains closed until a successful reindex."),
+			*Context, Files, Symbols, Errors);
+		bIsIndexing = false;
+		return;
+	}
+
+	ReopenDatabase(DbPath);
+	if (!Database.IsValid() || !Database->IsOpen())
+	{
+		bDatabaseRequiresSuccessfulReindex = true;
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("%s completed indexing but EngineSource DB could not be reopened; a successful reindex is required."),
+			*Context);
+		bIsIndexing = false;
+		return;
+	}
+
+	RebuildSourceCrgCacheAfterIndexing(Database.Get(), *Context);
+	bDatabaseRequiresSuccessfulReindex = false;
+	UE_LOG(LogMonolithSource, Log, TEXT("%s complete: %d files, %d symbols, %d errors"),
+		*Context, Files, Symbols, Errors);
+	bIsIndexing = false;
 }
 
 bool UMonolithSourceSubsystem::TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context)

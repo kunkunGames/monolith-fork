@@ -259,25 +259,6 @@ static size_t max_log_field_bytes() {
     }
 }
 
-static json bounded_json(const json& value, bool& truncated, size_t& original_bytes, std::string& hash) {
-    const size_t MaxBytes = max_log_field_bytes();
-    const std::string text = value.dump();
-    original_bytes = text.size();
-    if (text.size() <= MaxBytes) {
-        truncated = false;
-        hash.clear();
-        return value;
-    }
-    truncated = true;
-    hash = hash_text(text);
-    return json{
-        {"truncated", true},
-        {"original_bytes", original_bytes},
-        {"sha256", hash},
-        {"preview", text.substr(0, MaxBytes)}
-    };
-}
-
 static void prune_empty_json(json& value);
 
 static bool is_empty_log_value(const json& value) {
@@ -308,6 +289,7 @@ static json summarize_query_return(
     size_t stderr_bytes,
     bool truncated,
     const std::string& fatal_error) {
+    (void)fatal_error;
     json summary = {
         {"exit_code", exit_code},
         {"result_shape", result_shape_for_query(stdout_value, stderr_value, exit_code)},
@@ -316,13 +298,11 @@ static json summarize_query_return(
         {"result_bytes", stdout_bytes + stderr_bytes},
         {"truncated", truncated}
     };
-    if (!fatal_error.empty()) summary["fatal_error"] = fatal_error.substr(0, 240);
     if (stdout_value.is_object()) {
         json top_keys = json::array();
         for (auto it = stdout_value.begin(); it != stdout_value.end(); ++it) top_keys.push_back(it.key());
         summary["stdout_top_keys"] = top_keys;
         if (stdout_value.contains("status")) summary["stdout_status"] = stdout_value["status"];
-        if (stdout_value.contains("summary")) summary["summary"] = stdout_value["summary"];
         if (stdout_value.contains("results") && stdout_value["results"].is_array()) summary["results_count"] = stdout_value["results"].size();
         if (stdout_value.contains("items") && stdout_value["items"].is_array()) summary["items_count"] = stdout_value["items"].size();
         if (stdout_value.contains("warnings") && stdout_value["warnings"].is_array()) summary["warnings_count"] = stdout_value["warnings"].size();
@@ -330,9 +310,7 @@ static json summarize_query_return(
     } else if (!stdout_value.is_null()) {
         summary["stdout_type"] = stdout_value.type_name();
     }
-    if (stderr_value.is_string() && !stderr_value.get<std::string>().empty()) {
-        summary["stderr_preview"] = stderr_value.get<std::string>().substr(0, 240);
-    } else if (!stderr_value.is_null()) {
+    if (!stderr_value.is_null() && !stderr_value.is_string()) {
         summary["stderr_type"] = stderr_value.type_name();
     }
     prune_empty_json(summary);

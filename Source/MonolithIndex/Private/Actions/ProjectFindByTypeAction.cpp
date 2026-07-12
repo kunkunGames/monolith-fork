@@ -90,16 +90,10 @@ FMonolithActionResult FProjectFindByTypeAction::Execute(const TSharedPtr<FJsonOb
 		return FMonolithActionResult::Error(TEXT("Index subsystem not available"));
 	}
 
-	TArray<FIndexedAsset> Assets = Subsystem->FindByType(AssetClass, Limit, Offset);
-
-	if (!ModuleFilter.IsEmpty())
-	{
-		Assets.RemoveAll([&ModuleFilter](const FIndexedAsset& A) { return A.ModuleName != ModuleFilter; });
-		if (Assets.Num() > Limit)
-		{
-			Assets.SetNum(Limit);
-		}
-	}
+	// Filter before pagination so a small class page cannot hide matching assets
+	// from the requested module.
+	TArray<FIndexedAsset> Assets = Subsystem->FindByType(
+		AssetClass, ModuleFilter, Limit, Offset);
 
 	auto Result = MakeShared<FJsonObject>();
 	TArray<TSharedPtr<FJsonValue>> AssetsArr;

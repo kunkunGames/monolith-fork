@@ -85,6 +85,7 @@ public:
 	TArray<FSearchResult> Search(const FString& Query, int32 Limit, const FProjectSearchOptions& Options);
 	TSharedPtr<FJsonObject> FindReferences(const FString& PackagePath);
 	TArray<FIndexedAsset> FindByType(const FString& AssetClass, int32 Limit = 100, int32 Offset = 0);
+	TArray<FIndexedAsset> FindByType(const FString& AssetClass, const FString& ModuleFilter, int32 Limit, int32 Offset);
 	TSharedPtr<FJsonObject> GetStats();
 	TSharedPtr<FJsonObject> GetAssetDetails(const FString& PackagePath);
 

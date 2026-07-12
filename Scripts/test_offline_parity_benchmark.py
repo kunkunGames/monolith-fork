@@ -9,7 +9,7 @@ from the real envelope shape::
 
     {"result": {"content": [{"type": "text", "text": <json>}], "isError": <bool>}}
 
-The tests cover two things the 2026-06-18 hardening added:
+The tests cover three benchmark contracts:
 
   ITEM 1 -- the action table loads from Benchmarks/OfflineParity/actions.jsonl and
             the manifest action_count matches the data-file line count.
@@ -18,6 +18,10 @@ The tests cover two things the 2026-06-18 hardening added:
             score (the reclassification); a genuine exe-vs-py disagreement
             (exactly one tool fails) is a DIFF(offline_parity_break) that scores
             LOW; and the same row scored as a plain row is a real ERROR.
+  ITEM 3 -- rollback-journal safety is classified only by the run-level
+            preflight. A one-sided Query refusal observed by ``run_action`` is a
+            real ERROR, while a blocked preflight invalidates the entire run and
+            forces a 0.0 score.
 
 Run::
 
@@ -26,10 +30,14 @@ Run::
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import pathlib
 import sys
+import tempfile
+from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 
 _SCRIPTS_DIR = pathlib.Path(__file__).resolve().parent
@@ -192,6 +200,141 @@ def test_plain_row_both_fail_is_real_error() -> None:
     check("plain both-fail -> ERROR", row["status"] == "ERROR", f"status={row['status']}")
     check("plain both-fail -> error_kind=real", row["error_kind"] == "real",
           f"kind={row['error_kind']}")
+
+
+def test_one_sided_hot_journal_marker_is_real_error() -> None:
+    # A marker appearing after the preflight means the environment changed
+    # during the run. Query failed while Python succeeded, so the row must stay
+    # in the score denominator as a real ERROR rather than an inflationary SKIP.
+    blocked = (
+        "ERROR: Rollback journal exists for database and could not be recovered "
+        "safely: Saved/EngineSource.db-journal - database is locked"
+    )
+    row = _run(
+        "source.get_include_path",
+        offline_unsupported=True,
+        exe=(1, "", blocked),
+        py=(0, _HEALTHY_STDOUT, ""),
+    )
+    check("one-sided rollback journal -> ERROR", row["status"] == "ERROR",
+          f"status={row['status']}")
+    check("one-sided rollback journal -> real error",
+          row["error_kind"] == "real",
+          f"kind={row['error_kind']}")
+    metrics = _metrics([row])
+    check("one-sided rollback journal remains comparable",
+          metrics["comparable_actions"] == 1,
+          f"comparable={metrics['comparable_actions']}")
+    check("one-sided rollback journal cannot inflate score",
+          metrics["offline_parity_score"] < 1.0,
+          f"score={metrics['offline_parity_score']}")
+    check("one-sided rollback journal increments real errors",
+          metrics["real_error_count"] == 1,
+          f"real={metrics['real_error_count']}")
+
+
+def test_blocked_environment_preflight_invalidates_entire_run() -> None:
+    blocked = (
+        "ERROR: Rollback journal exists for database and could not be recovered "
+        "safely: Saved/EngineSource.db-journal - global --readonly forbids recovery"
+    )
+    orig_exe, orig_py = opb.run_exe, opb.run_py
+    opb.run_exe, opb.run_py = _fixed(1, "", 0, _HEALTHY_STDOUT, blocked, "")
+    try:
+        preflight = opb.preflight_execution_environment(_DUMMY, _DUMMY, _DUMMY)
+    finally:
+        opb.run_exe, opb.run_py = orig_exe, orig_py
+
+    check("blocked preflight is run-level invalid",
+          preflight["status"] == "environment_blocked" and not preflight["valid"],
+          f"preflight={preflight}")
+    check("blocked preflight does not open Python reader",
+          preflight["probe"]["py"].get("not_run") is True,
+          f"py={preflight['probe']['py']}")
+    rows = [
+        opb.environment_blocked_action(label, preflight["reason"])
+        for label in ("cppreflect.get_uclass", "network.list_rpc_functions")
+    ]
+    metrics = _metrics(rows)
+    check("blocked run has zero comparable actions",
+          metrics["comparable_actions"] == 0,
+          f"comparable={metrics['comparable_actions']}")
+    check("blocked run score is forced to zero",
+          metrics["offline_parity_score"] == 0.0,
+          f"score={metrics['offline_parity_score']}")
+    check("blocked run reports every invalidated row",
+          metrics["environment_blocked_count"] == len(rows),
+          f"blocked={metrics['environment_blocked_count']}")
+
+
+def test_cmd_run_blocked_preflight_writes_zero_score_summary() -> None:
+    blocked = (
+        "ERROR: Rollback journal exists for database and could not be recovered "
+        "safely: Saved/EngineSource.db-journal - global --readonly forbids recovery"
+    )
+    orig_exe, orig_py = opb.run_exe, opb.run_py
+    orig_version = opb.check_version_parity
+    py_calls = 0
+
+    def _blocked_exe(ns, action, args, exe_path, mono_root):  # noqa: ANN001
+        return 1, "", blocked
+
+    def _counted_py(ns, action, args, py_path, mono_root):  # noqa: ANN001
+        nonlocal py_calls
+        py_calls += 1
+        return 0, _HEALTHY_STDOUT, ""
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        exe = root / "query.exe"
+        py = root / "offline.py"
+        exe.write_bytes(b"test")
+        py.write_text("# test\n", encoding="utf-8")
+        output = root / "result"
+        args = SimpleNamespace(
+            exe_path=str(exe),
+            py_path=str(py),
+            output_dir=str(output),
+            label="blocked-test",
+            ignore_cursor_bytes=False,
+        )
+        opb.run_exe, opb.run_py = _blocked_exe, _counted_py
+        opb.check_version_parity = lambda *unused: (True, "test-rev", "test-rev")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = opb.cmd_run(args)
+        finally:
+            opb.run_exe, opb.run_py = orig_exe, orig_py
+            opb.check_version_parity = orig_version
+
+        summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+        check("blocked cmd_run completes with diagnostic output", exit_code == 0)
+        check("blocked cmd_run never launches Python reader", py_calls == 0,
+              f"py_calls={py_calls}")
+        check("blocked cmd_run invalidates all manifest actions",
+              summary["counts"]["skip"] == opb.EXPECTED_ACTION_COUNT,
+              f"skip={summary['counts']['skip']}")
+        check("blocked cmd_run records run environment",
+              summary["run_environment"]["status"] == "environment_blocked",
+              f"environment={summary['run_environment']}")
+        check("blocked cmd_run cannot produce a positive score",
+              summary["metrics"]["comparable_actions"] == 0
+              and summary["metrics"]["offline_parity_score"] == 0.0,
+              f"metrics={summary['metrics']}")
+
+
+def test_non_marker_preflight_failure_does_not_hide_action_errors() -> None:
+    # A broad process/database error is not an environment exemption. The run
+    # proceeds, allowing the ordinary action rules to record ERROR rows.
+    orig_exe, orig_py = opb.run_exe, opb.run_py
+    opb.run_exe, opb.run_py = _fixed(1, "", 0, _HEALTHY_STDOUT, "database is locked", "")
+    try:
+        preflight = opb.preflight_execution_environment(_DUMMY, _DUMMY, _DUMMY)
+    finally:
+        opb.run_exe, opb.run_py = orig_exe, orig_py
+    check("generic preflight failure remains a valid scored run",
+          preflight["status"] == "valid" and preflight["valid"],
+          f"preflight={preflight}")
 
 
 def test_reclassification_raises_score() -> None:

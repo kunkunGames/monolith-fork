@@ -655,6 +655,16 @@ TArray<FIndexedAsset> UMonolithIndexSubsystem::FindByType(const FString& AssetCl
 	return Database->FindByType(AssetClass, Limit, Offset);
 }
 
+TArray<FIndexedAsset> UMonolithIndexSubsystem::FindByType(
+	const FString& AssetClass,
+	const FString& ModuleFilter,
+	int32 Limit,
+	int32 Offset)
+{
+	if (!Database.IsValid() || !Database->IsOpen()) return {};
+	return Database->FindByType(AssetClass, ModuleFilter, Limit, Offset);
+}
+
 TSharedPtr<FJsonObject> UMonolithIndexSubsystem::GetStats()
 {
 	if (!Database.IsValid() || !Database->IsOpen()) return nullptr;

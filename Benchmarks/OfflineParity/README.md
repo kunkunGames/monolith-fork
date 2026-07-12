@@ -34,6 +34,13 @@ Current coverage:
   than a `real` `ERROR` that would mask the real exe-vs-py signal. Only a genuine
   disagreement (exactly one tool fails) counts against the score
   (`offline_parity_break`). See `METRICS.md` for the full bucket table.
+- Before any scored action, the benchmark runs a read-only Query preflight. If
+  Query emits its exact fail-closed active rollback-journal error, the **entire
+  run** is invalidated as `environment_blocked`: every row is skipped,
+  `comparable_actions` is zero, and `offline_parity_score` is forced to `0.0`.
+  The Python reader is not opened in this state. A journal refusal that appears
+  after a successful preflight is a real per-action `ERROR`, never a `SKIP`, so
+  a one-sided failure cannot shrink the denominator or inflate the score.
 
 ### Scope: what this benchmark cannot see
 
@@ -58,7 +65,7 @@ benchmark as a trend gate: healthy runs should stay at or above `0.95`, with
 | `manifest.json` | Static seed manifest: `action_count`, `action_file`, category/bucket counts, scoring summary. CI validates `action_count` against the `actions.jsonl` line count. |
 | `actions.jsonl` | The externalized parity action table (one action per line). Reviewable as data; CI line-count-validated like the other benchmarks. |
 | `Scripts/offline_parity_benchmark.py` | Standalone benchmark runner (run / compare / report). Loads the table from `actions.jsonl`. |
-| `Scripts/test_offline_parity_benchmark.py` | Offline unit tests for the loader and the `offline_unsupported` scoring bucket (no live editor). |
+| `Scripts/test_offline_parity_benchmark.py` | Offline unit tests for the loader, `offline_unsupported` scoring, run-level active-writer blocking, and one-sided journal failures (no live editor). |
 
 ## Run
 
@@ -120,3 +127,16 @@ primary `offline_parity_score` is forced to `0.0` instead of awarding partial
 credit from absent diff/error rates. This allows the benchmark to run in
 environments where only the Python reference tool is present, while making the
 missing exe visibly absent from the score trend.
+
+An active editor-owned rollback journal is handled more narrowly than a
+missing executable but at run scope, not row scope. The benchmark invokes Query
+with global `--readonly` and uses one DB-backed preflight before chain discovery.
+Only Query's exact fail-closed journal message invalidates the run; all rows are
+then `SKIP(environment_blocked)` and the score is `0.0`. The benchmark does not
+launch the Python reader while blocked, avoiding a second access to an unstable
+corpus. Broad strings such as `database is locked` do not receive this exemption.
+
+Once preflight succeeds, every action remains scoreable. If the exact journal
+marker appears later because the environment changed mid-run, that row is a
+real `ERROR` even when the Python side succeeds. This deliberately makes the
+race visible instead of removing the failed row from `comparable_actions`.

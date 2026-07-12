@@ -5,12 +5,41 @@ REM Run from a VS Developer Command Prompt, or let this script find vcvars64.bat
 
 cd /d "%~dp0"
 
-REM Compute a SHA256 of the source inputs and inject its first 16 hex chars as
+REM Compute the checkout-independent source generation and inject it as
 REM /DSOURCE_HASH so --version reports a hash the staleness guard can match.
-REM Include header-only helper modules because they contribute to the binary.
-set SOURCE_HASH=dev
-for /f "usebackq tokens=*" %%H in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$files=@('monolith_query.cpp','monolith_query_tool_log.h','monolith_query_crg.h','monolith_query_review_ranges.h','monolith_query_bridge.h','monolith_query_help.h'); $ms=New-Object IO.MemoryStream; foreach($f in $files){ $b=[IO.File]::ReadAllBytes((Resolve-Path $f)); $ms.Write($b,0,$b.Length) }; $hash=[Security.Cryptography.SHA256]::Create().ComputeHash($ms.ToArray()); (($hash | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0,16)"`) do set SOURCE_HASH=%%H
+REM The shared helper canonicalizes CRLF/lone-CR to LF for text source inputs;
+REM published artifact SHA-256 values remain hashes of their exact raw bytes.
+where python >nul 2>&1
+if errorlevel 1 (
+  echo FAILED: python is required to compute and publish the Query generation
+  exit /b 1
+)
+set "SOURCE_HASH_TOOL=..\..\Scripts\source_generation_hash.py"
+if not exist "%SOURCE_HASH_TOOL%" (
+  echo FAILED: source generation hash helper is missing
+  exit /b 1
+)
+set "SOURCE_HASH="
+for /f "usebackq tokens=*" %%H in (`python "%SOURCE_HASH_TOOL%" --plugin-root "..\.." --tool query`) do set "SOURCE_HASH=%%H"
+if not defined SOURCE_HASH (
+  echo FAILED: could not compute the Query source generation hash
+  exit /b 1
+)
 echo Source hash: %SOURCE_HASH%
+
+if not exist "Generated\monolith_catalog_snapshot.json" (
+  echo FAILED: generated catalog snapshot is missing
+  exit /b 1
+)
+set "CATALOG_CHECK_ROOT=..\.."
+if defined MONOLITH_CATALOG_CHECK_ROOT set "CATALOG_CHECK_ROOT=%MONOLITH_CATALOG_CHECK_ROOT%"
+python generate_monolith_catalog_snapshot.py --check ^
+  --root "%CATALOG_CHECK_ROOT%" ^
+  --out "Generated\monolith_catalog_snapshot.json"
+if errorlevel 1 (
+  echo FAILED: generated catalog snapshot is stale relative to action registrations
+  exit /b 1
+)
 
 where cl >nul 2>&1
 if not errorlevel 1 goto :build
@@ -43,7 +72,17 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 if exist "%OUT_EXE%" del /F /Q "%OUT_EXE%"
 
 echo Building with cl.exe...
-cl /EHsc /std:c++17 /O2 /MT /I ThirdParty /I ..\MonolithProxy\ThirdParty /DSQLITE_ENABLE_FTS5 /DSOURCE_HASH=\"%SOURCE_HASH%\" monolith_query.cpp ThirdParty\sqlite3.c /Fe:"%OUT_EXE%"
+cl /nologo /c /EHsc /std:c++17 /O2 /MT /I ThirdParty /I ..\MonolithProxy\ThirdParty /DSQLITE_ENABLE_FTS5 /DSOURCE_HASH=\"%SOURCE_HASH%\" monolith_query.cpp /Fo:"%BUILD_DIR%\monolith_query.obj"
+if errorlevel 1 (
+  echo FAILED: monolith_query.cpp compilation failed
+  exit /b 1
+)
+cl /nologo /c /O2 /MT /DSQLITE_ENABLE_FTS5 ThirdParty\sqlite3.c /Fo:"%BUILD_DIR%\sqlite3.obj"
+if errorlevel 1 (
+  echo FAILED: sqlite3.c compilation failed
+  exit /b 1
+)
+cl /nologo /MT "%BUILD_DIR%\monolith_query.obj" "%BUILD_DIR%\sqlite3.obj" /Fe:"%OUT_EXE%" /link /Brepro
 if errorlevel 1 (
   echo FAILED: monolith_query.exe build failed
   exit /b 1
@@ -53,13 +92,21 @@ if not exist "%OUT_EXE%" (
   exit /b 1
 )
 
-if not exist "..\..\Binaries" mkdir "..\..\Binaries"
-copy /Y "%OUT_EXE%" "..\..\Binaries\monolith_query.exe"
+REM Publish the executable and its exact generated catalog under immutable names,
+REM validate both hashes plus --version identity, then atomically replace only the
+REM current manifest. The fixed monolith_query.exe is compatibility-only and a
+REM sharing violation there is intentionally non-fatal.
+python publish_query_bundle.py publish ^
+  --built-exe "%OUT_EXE%" ^
+  --catalog "Generated\monolith_catalog_snapshot.json" ^
+  --binaries-root "..\..\Binaries" ^
+  --expected-source-hash "%SOURCE_HASH%"
 if errorlevel 1 (
-  echo FAILED: could not copy monolith_query.exe to Plugins\Monolith\Binaries
+  echo FAILED: immutable Query/catalog bundle publication failed
   exit /b 1
 )
 
 echo.
-echo Built: Plugins\Monolith\Binaries\monolith_query.exe
+echo Built authoritative bundle: Plugins\Monolith\Binaries\monolith_query.current.json
+echo Compatibility only: Plugins\Monolith\Binaries\monolith_query.exe
 exit /b 0

@@ -22,10 +22,10 @@ This first slice makes the offline tool self-service:
 
 The help catalog must describe the offline executable, not the live editor registry. If an action is not in the executable dispatch table, it must not appear as executable offline help.
 
-`bridge` is not a separate executable in the current checkout; it is the `monolith_query.exe bridge ...` namespace. The only shipped Monolith executables under `Binaries\` are `monolith_query.exe` and `monolith_proxy.exe`. This spec therefore covers both:
+`bridge` is not a separate executable in the current checkout; it is the `monolith_query.exe bridge ...` namespace. The shipped command-line control plane under `Binaries\` is the immutable `monolith_query-<source-hash>.exe` plus `monolith_catalog-<semantic-hash>.json` selected together by `monolith_query.current.json`, and the immutable `monolith_proxy-<source-hash>.exe` selected by `monolith_proxy.current.json` (plus the watchdog wrapper where included). The historical fixed Query and Proxy names are compatibility-only and are not the authoritative release-selected images. This spec therefore covers both:
 
 - Query help for offline DB-backed namespaces, including `bridge`.
-- Proxy help for `monolith_proxy.exe` and the script proxy launchers that agents may configure in MCP clients.
+- Proxy help for the manifest-selected immutable native proxy and the script proxy launchers that agents may configure in MCP clients.
 - Compatibility guidance for `Scripts\monolith_offline.py`, which remains documented as a developer fallback but currently lags the native executable.
 
 ## 2. Pre-Implementation Code Facts
@@ -41,8 +41,8 @@ The source survey for this spec was based on `Tools/MonolithQuery/monolith_query
 | Namespace list | `offline_namespaces()` must return every executable offline namespace, including `bridge` and `console`. | Unknown namespace errors must report the full offline surface. |
 | Action errors | Unknown namespace/action handling should suggest nearby valid names before any DB open. | Agent recovery is inconsistent without the already-available fuzzy helper pattern. |
 | Option arity | `value_options` covers only part of the options read later by `opt`, `opt_int`, and `opt_bool`. | `--max-depth 1 --max-results 1` currently runs as defaults `max_depth=2`, `max_results=200`; inline `--max-depth=1 --max-results=1` works. |
-| Shipped executables | `Binaries\` contains `monolith_query.exe` and `monolith_proxy.exe`. | The spec should not imply a separate bridge executable exists. |
-| Proxy help | `Binaries\monolith_proxy.exe --help` currently starts the stdio proxy and logs startup to stderr instead of printing usage. Script proxies also document usage in comments but do not expose a first-class help path. | Operators and agents cannot safely inspect proxy configuration without accidentally entering the MCP stdio loop. |
+| Shipped executables | `Binaries\` contains a manifest-selected immutable Query/catalog pair and a manifest-selected immutable Proxy. The fixed `monolith_query.exe` is a best-effort documentation compatibility copy; release staging writes it from the selected immutable bytes, while a local build may leave an older locked compatibility image in place. The fixed proxy name is compatibility-only and is not released. | The spec should not imply a separate bridge executable exists or treat either mutable fixed name as runtime authority. |
+| Proxy help | The manifest-selected native proxy must make `--help` inert; script proxies also document usage in comments and expose their own help path. | Operators and agents must be able to inspect configuration without entering the MCP stdio loop. |
 | Proxy call-log env drift | `Tools\MonolithProxy\README.md` and `Docs/SPEC_CORE.md` describe `Saved/Logs/MonolithCalls.jsonl` for both proxies, but `MONOLITH_CALL_LOG` / `MONOLITH_PROJECT_ROOT` are implemented in `monolith_proxy.cpp`; Python/Node script proxies expose daily `MONOLITH_TOOL_LOG_*` logging and tool-cache paths instead. | Proxy help must report runtime-specific support instead of implying every launcher supports every env var. |
 | Python offline fallback | `Scripts\monolith_offline.py` uses `argparse` and exposes some help, but its surface is stale relative to `monolith_query.exe`: top-level `--help` can fail on Windows CP949 because the docstring contains non-ASCII punctuation, `bridge` is unknown, and modern source/project review actions such as `source impact_radius` are missing. | Existing docs call it a byte-identical fallback, but current code does not satisfy that claim. |
 | Agent scripts | Maintenance scripts such as `check_offline_exe_fresh.py`, `verify_offline_parity.py`, `ci_static_checks.py`, `index_project.py`, `tag_path_params.py`, and `make_release.ps1` already have argparse/PowerShell help or narrowly scoped usage comments. | They are useful verification tools, but they are not Monolith runtime binaries and should not be mixed into the binary help contract. |
@@ -194,7 +194,7 @@ All Monolith command-line entrypoints shipped or documented for agents must have
 | Entrypoint | Required help forms |
 |------------|---------------------|
 | `Binaries\monolith_query.exe` | Covered by sections 4.1 through 4.6. |
-| `Binaries\monolith_proxy.exe` | `--help`, `-h`, and `help`. |
+| Manifest-selected `Binaries\monolith_proxy-<source-hash>.exe` | `--help`, `-h`, and `help`. |
 | `Scripts\monolith_proxy.py` | `--help`, `-h`, and `help`. |
 | `Scripts\monolith_proxy.js` | `--help`, `-h`, and `help`. |
 | `Scripts\monolith_proxy.bat` | `--help`, `-h`, and `help`, forwarding to the same text without probing runtimes unnecessarily when possible. |
@@ -266,7 +266,7 @@ P0 also covers shipped/documented Monolith binary help:
 
 | Binary or launcher | P0 help coverage |
 |--------------------|------------------|
-| `monolith_proxy.exe` | Native stdio-to-HTTP proxy usage, env vars, no-loop help behavior, version. |
+| `monolith_proxy-<source-hash>.exe` selected by `monolith_proxy.current.json` | Native stdio-to-HTTP proxy usage, env vars, no-loop help behavior, version. |
 | `monolith_proxy.py` | Same proxy usage and env vars, no-loop help behavior, version. |
 | `monolith_proxy.js` | Same proxy usage and env vars, no-loop help behavior, version. |
 | `monolith_proxy.bat` / `monolith_proxy.sh` | Thin launcher help that identifies runtime selection and points at native/script proxy usage. |
@@ -317,13 +317,13 @@ P0 also covers shipped/documented Monolith binary help:
 | Unknown namespace recovery | `monolith_query.exe sorce health` fails before DB open, suggests `source`, and prints `monolith_query.exe --help` or `source --help` guidance. |
 | Unknown action recovery | `monolith_query.exe source review_contxt` fails before DB open, suggests `review_context`, and prints `monolith_query.exe source --help`. |
 | No output drift | Representative non-help commands keep their JSON shape: `source health --include-counts=false`, `project health --include-counts=false`, and `bridge search_asset_symbols --symbol=UObject --limit=1`. |
-| Proxy help success | `Binaries\monolith_proxy.exe --help`, `python Scripts\monolith_proxy.py --help`, `node Scripts\monolith_proxy.js --help`, `Scripts\monolith_proxy.bat --help`, and `Scripts\monolith_proxy.sh --help` exit 0 where the runtime exists. |
+| Proxy help success | The executable selected by `Binaries\monolith_proxy.current.json --help`, `python Scripts\monolith_proxy.py --help`, `node Scripts\monolith_proxy.js --help`, `Scripts\monolith_proxy.bat --help`, and `Scripts\monolith_proxy.sh --help` exit 0 where the runtime exists. |
 | Proxy help is inert | Proxy help commands do not contact `MONOLITH_URL`, start health polling, enter the stdio MCP loop, or create proxy/query log files. |
-| Proxy version success | `Binaries\monolith_proxy.exe --version`, `python Scripts\monolith_proxy.py --version`, and `node Scripts\monolith_proxy.js --version` exit 0 and print tool/version identity. |
+| Proxy version success | The manifest-selected immutable proxy `--version`, `python Scripts\monolith_proxy.py --version`, and `node Scripts\monolith_proxy.js --version` exit 0 and print tool/version identity; the native identity matches manifest tool/runtime/version/source-hash fields. |
 | Python fallback truthfulness | `python Scripts\monolith_offline.py --help` exits 0 on Windows. If kept as parity, it supports `bridge --help` and current source/project review actions; if kept as limited fallback, help/docs clearly say what it does not support. |
 | Docs sync | `Docs/MONOLITH_GUIDE.md` and `Docs/API_REFERENCE.md` no longer claim `monolith_offline.py` is byte-identical unless parity verification proves it. |
 | Freshness/parity guard | `python Scripts\check_offline_exe_fresh.py` passes after query rebuild; `python Scripts\verify_offline_parity.py` passes when the Python fallback is kept as parity, or is updated to reflect limited-fallback scope. |
-| Build | `Tools\MonolithQuery\build.bat` succeeds and copies the binary to `Binaries\monolith_query.exe`; `Tools\MonolithProxy\build.bat` succeeds and copies the binary to `Binaries\monolith_proxy.exe`. |
+| Build | `Tools\MonolithQuery\build.bat` first hard-gates the generated catalog against current action registrations, then atomically publishes `Binaries\monolith_query-<source-hash>.exe`, `monolith_catalog-<semantic-hash>.json`, and the exact-field `monolith_query.current.json` manifest after executable/version/catalog/SHA validation. Updating fixed `monolith_query.exe` is best-effort compatibility only. `Tools\MonolithProxy\build.bat` independently publishes `Binaries\monolith_proxy-<source-hash>.exe` plus `monolith_proxy.current.json`; updating fixed `monolith_proxy.exe` is also best-effort compatibility only. |
 | Static checks | `python Scripts/ci_static_checks.py --config .github/monolith-static-ci.json --github check` passes or reports only documented nonblocking advisories. |
 | Whitespace/status | `git diff --check` passes and `git status --short` shows only intended files plus any pre-existing user changes. |
 
@@ -331,18 +331,24 @@ P0 also covers shipped/documented Monolith binary help:
 
 Implemented in the first slice:
 
+- `Binaries\monolith_query.current.json`: exact schema `schema_version`, `tool`, `runtime`, `file`, `plugin_version`, `parity_spec_rev`, `source_hash`, `sha256`, `catalog_file`, `catalog_source_hash`, and `catalog_sha256`. `file` is exactly `monolith_query-<16-char source_hash>.exe`; `catalog_file` is exactly `monolith_catalog-<64-char catalog_source_hash>.json`.
+- `Tools/MonolithQuery/build.bat` and `publish_query_bundle.py`: `/MT /O2 /Brepro` makes one source generation byte-reproducible; publication verifies Query `--version` identity (`runtime=native-cpp`), recomputes the catalog semantic hash, validates both content SHA-256 values, refuses semantic immutable-name collisions, and atomically advances the current manifest only after the pair is complete. Nonsemantic catalog regeneration (`generated_at` or source-line provenance only) reuses the already-published immutable catalog bytes.
+- `Scripts/source_generation_hash.py`: Query generation identity hashes the build-contract bytes plus the complete ordered text-input set after normalizing CRLF and lone CR to LF. This makes the same Git/P4 source content produce one generation across clean Git and P4 workspaces. Canonicalization applies only to source-generation identity; executable, catalog, and manifest SHA-256 values always cover the exact raw artifact bytes.
+- Direct `Binaries\monolith_query-<source-hash>.exe` and fixed compatibility Query catalog actions validate the strict current manifest, selected immutable executable SHA, catalog leaf/SHA/semantic identity, and compiled source/version identity before serving the in-memory validated catalog. Invalid or mismatched bundles fail explicitly; an explicit trusted `--snapshot` remains the proxy/developer override. Source-tree developer builds outside `Binaries` retain the generated-snapshot default.
+- `Scripts/make_release.ps1` independently recomputes the Query source hash through the same shared canonical helper contract, runs parity against the selected immutable image (not the fixed alias), and revalidates the same expected hash after allowlist staging.
+
 - `Tools/MonolithQuery/monolith_query_help.h` plus `Tools/MonolithQuery/monolith_query.cpp`: descriptor-backed help catalog, DB-free help paths, descriptor-derived option arity, catalog self-check, and DB-free unknown namespace/action suggestions.
 - `Tools/MonolithProxy/monolith_proxy_help.h`, `Tools/MonolithProxy/monolith_proxy.cpp`, and `Scripts/monolith_proxy.*`: safe proxy `--help` / `--version` paths that return before stdio loop, health polling, and proxy logging.
 - `Scripts/monolith_offline.py`: limited legacy fallback help contract, Windows-safe help output, and native-exe routing for unsupported current namespaces such as `bridge`.
-- `Docs/MONOLITH_GUIDE.md` and `Docs/API_REFERENCE.md`: offline fallback docs now identify `Binaries/monolith_query.exe` as canonical and `monolith_offline.py` as limited legacy fallback.
+- `Docs/MONOLITH_GUIDE.md` and `Docs/API_REFERENCE.md`: public commands retain `Binaries/monolith_query.exe` as a compatibility path while production selection uses the validated immutable Query/catalog manifest; `monolith_offline.py` remains the limited legacy fallback.
 - `Scripts/verify_offline_parity.py`: RI parity verifier now skips decision-id-dependent actions when the active DB corpus has no decision records instead of failing with empty args.
 
 Verified on 2026-06-03:
 
 - `Tools\MonolithQuery\build.bat`
 - `Tools\MonolithProxy\build.bat`
-- `python Scripts\check_offline_exe_fresh.py` verifies the combined query source hash for `monolith_query.cpp` and `monolith_query_help.h`.
-  - Wired into `Scripts\ci_static_checks.py` as the config-gated `offline_exe_freshness` check (`.github/monolith-static-ci.json`) so a stale shipped `monolith_query.exe` is a **blocker** (6A binary-lag gate, `SPEC_MonolithToolCallReliabilityBacklog.md` §6A). The check reuses this script's hashed source list, and gracefully **advisory-skips** when the exe is absent (local/release artifact) or cannot be executed on the CI host (e.g. a Windows PE binary on a Linux runner); only a present, runnable, hash-mismatched exe blocks.
+- `python Scripts\check_offline_exe_fresh.py` verifies the full ordered Query input set through `Scripts/source_generation_hash.py`, including the shared LF/CRLF/lone-CR canonicalization contract.
+  - Wired into `Scripts\ci_static_checks.py` as the config-gated `offline_exe_freshness` check (`.github/monolith-static-ci.json`) so a stale shipped `monolith_query.exe` is a **blocker** (6A binary-lag gate, `SPEC_MonolithToolCallReliabilityBacklog.md` §6A). The check reuses the build's exact contract and source list, and gracefully **advisory-skips** when the exe is absent (local/release artifact) or cannot be executed on the CI host (e.g. a Windows PE binary on a Linux runner); only a present, runnable, hash-mismatched exe blocks.
 - `Binaries\monolith_query.exe --catalog-self-check`
 - Query help matrix for top-level, namespace, and action help forms, including DB-missing help paths.
 - Parser parity for inline and space-separated numeric/boolean options.

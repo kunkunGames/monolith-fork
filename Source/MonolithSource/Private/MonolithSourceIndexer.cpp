@@ -8,6 +8,7 @@
 #include "HAL/RunnableThread.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "Internationalization/Regex.h"
 
 namespace MonolithSourceIndexerDetail
@@ -31,6 +32,64 @@ namespace MonolithSourceIndexerDetail
 			return ModulePath / Found[0];
 		}
 		return FString();
+	}
+
+	static FString NormalizePathForStorage(const FString& InPath)
+	{
+		if (InPath.IsEmpty())
+		{
+			return FString();
+		}
+
+		FString Path = FPaths::ConvertRelativePathToFull(InPath);
+		FPaths::NormalizeFilename(Path);
+		FPaths::CollapseRelativeDirectories(Path);
+		return Path;
+	}
+
+	static FString CanonicalizeExistingRoot(const FString& InPath)
+	{
+		FString Path = NormalizePathForStorage(InPath);
+		if (Path.IsEmpty())
+		{
+			return Path;
+		}
+
+		// Preserve junction identity while stabilizing drive-letter and on-disk
+		// component casing. FPaths::FindCorrectCase uses IterateComponents, whose
+		// UE 5.8 contract does not handle Windows network paths; applying it to a
+		// normalized //server/share root would lose the UNC prefix. Preserve UNC
+		// casing as supplied and correct only local filesystem roots.
+		if (!Path.StartsWith(TEXT("//"), ESearchCase::CaseSensitive))
+		{
+			Path = FPaths::FindCorrectCase(Path);
+		}
+		FPaths::NormalizeFilename(Path);
+		FPaths::CollapseRelativeDirectories(Path);
+		return Path;
+	}
+
+	static FString NormalizePathForIdentity(const FString& InPath)
+	{
+		FString Path = NormalizePathForStorage(InPath);
+#if PLATFORM_WINDOWS
+		Path.ToLowerInline();
+#endif
+		return Path;
+	}
+
+	static bool IsStrictlyUnderPath(const FString& ChildKey, const FString& ParentKey)
+	{
+		if (ChildKey.Len() <= ParentKey.Len())
+		{
+			return false;
+		}
+		FString Prefix = ParentKey;
+		if (!Prefix.EndsWith(TEXT("/")))
+		{
+			Prefix += TEXT("/");
+		}
+		return ChildKey.StartsWith(Prefix, ESearchCase::CaseSensitive);
 	}
 }
 
@@ -77,10 +136,12 @@ bool FMonolithSourceIndexer::StartAsync()
 
 bool FMonolithSourceIndexer::RunSynchronous()
 {
-	if (bIsRunning) return false;
+	if (bIsRunning)
+	{
+		return false;
+	}
 	Init();
-	Run();
-	return true;
+	return Run() == 0;
 }
 
 void FMonolithSourceIndexer::RequestStop()
@@ -116,14 +177,49 @@ void FMonolithSourceIndexer::Stop()
 uint32 FMonolithSourceIndexer::Run()
 {
 	bIsRunning = true;
+	bool bRunSucceeded = false;
+	ON_SCOPE_EXIT
+	{
+		bIsRunning = false;
+
+		const int32 Files = TotalFilesProcessed.Load();
+		const int32 Symbols = TotalSymbolsExtracted.Load();
+		const int32 Errors = TotalErrors.Load();
+
+		UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
+		if (DuplicateFileVisitsSkipped > 0)
+		{
+			UE_LOG(LogMonolithSource, Log,
+				TEXT("Indexer skipped %d duplicate file visits across overlapping module roots"),
+				DuplicateFileVisitsSkipped);
+		}
+		OnComplete.Broadcast(Files, Symbols, Errors, bRunSucceeded);
+	};
+
+	const auto FailRun = [this]() -> uint32
+	{
+		TotalErrors++;
+		return 1;
+	};
 
 	FMonolithSourceDatabase DB;
+	ON_SCOPE_EXIT
+	{
+		DB.Close();
+	};
+
+	// Normalize configured roots before pruning, discovery, traversal, and DB
+	// insertion. This keeps incremental runs stable when Windows callers vary
+	// drive-letter or directory casing and does not resolve directory junctions.
+	SourcePath = MonolithSourceIndexerDetail::CanonicalizeExistingRoot(SourcePath);
+	ShaderPath = MonolithSourceIndexerDetail::CanonicalizeExistingRoot(ShaderPath);
+	ProjectPath = MonolithSourceIndexerDetail::CanonicalizeExistingRoot(ProjectPath);
+
 	const bool bOpenedForWriting = DB.OpenForWriting(DbPath);
 	if (!bOpenedForWriting && !bCleanBuild)
 	{
 		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to open DB for writing: %s"), *DbPath);
-		bIsRunning = false;
-		return 1;
+		return FailRun();
 	}
 
 	if (bCleanBuild)
@@ -131,9 +227,7 @@ uint32 FMonolithSourceIndexer::Run()
 		if (!DB.ResetDatabase())
 		{
 			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to reset/recreate DB for clean source reindex: %s"), *DbPath);
-			DB.Close();
-			bIsRunning = false;
-			return 1;
+			return FailRun();
 		}
 	}
 	else
@@ -141,9 +235,7 @@ uint32 FMonolithSourceIndexer::Run()
 		if (!DB.CreateTablesIfNeeded())
 		{
 			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to create/verify DB schema before source reindex: %s"), *DbPath);
-			DB.Close();
-			bIsRunning = false;
-			return 1;
+			return FailRun();
 		}
 	}
 
@@ -157,7 +249,10 @@ uint32 FMonolithSourceIndexer::Run()
 
 		for (int32 i = 0; i < EngineModules.Num() && !bShouldStop; ++i)
 		{
-			IndexModule(EngineModules[i], DB);
+			if (!IndexModule(EngineModules[i], DB))
+			{
+				return FailRun();
+			}
 			OnProgress.Broadcast(EngineModules[i].Name, i + 1, EngineModules.Num(),
 				TotalFilesProcessed.Load(), TotalSymbolsExtracted.Load());
 		}
@@ -176,9 +271,7 @@ uint32 FMonolithSourceIndexer::Run()
 			if (PrunedFiles < 0)
 			{
 				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: Failed to prune project source rows before scoped source reindex"));
-				DB.Close();
-				bIsRunning = false;
-				return 1;
+				return FailRun();
 			}
 			UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Loading existing symbols for incremental indexing..."));
 			DB.LoadExistingSymbols(SymbolNameToId, ClassNameToId, SymbolSpans, ClassSpans);
@@ -191,7 +284,10 @@ uint32 FMonolithSourceIndexer::Run()
 
 		for (int32 i = 0; i < ProjectModules.Num() && !bShouldStop; ++i)
 		{
-			IndexModule(ProjectModules[i], DB);
+			if (!IndexModule(ProjectModules[i], DB))
+			{
+				return FailRun();
+			}
 			OnProgress.Broadcast(ProjectModules[i].Name, i + 1, ProjectModules.Num(),
 				TotalFilesProcessed.Load(), TotalSymbolsExtracted.Load());
 		}
@@ -200,7 +296,10 @@ uint32 FMonolithSourceIndexer::Run()
 	// --- Finalize ---
 	if (!bShouldStop)
 	{
-		Finalize(DB);
+		if (!Finalize(DB))
+		{
+			return FailRun();
+		}
 		if (!bCleanBuild && bIndexProjectSource)
 		{
 			TSharedPtr<FJsonObject> ScopedCrg = DB.RefreshCrgCacheForFiles(NewFileIds, TEXT("Project source indexing complete"));
@@ -221,17 +320,18 @@ uint32 FMonolithSourceIndexer::Run()
 			}
 		}
 	}
+	else
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: indexing cancelled before finalization"));
+		return 1;
+	}
+	if (bShouldStop)
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("Indexer: indexing cancelled during finalization"));
+		return 1;
+	}
 
-	DB.Close();
-	bIsRunning = false;
-
-	const int32 Files = TotalFilesProcessed.Load();
-	const int32 Symbols = TotalSymbolsExtracted.Load();
-	const int32 Errors = TotalErrors.Load();
-
-	UE_LOG(LogMonolithSource, Log, TEXT("Indexer complete: %d files, %d symbols, %d errors"), Files, Symbols, Errors);
-	OnComplete.Broadcast(Files, Symbols, Errors);
-
+	bRunSucceeded = true;
 	return 0;
 }
 
@@ -259,25 +359,11 @@ void FMonolithSourceIndexer::DiscoverEngineModules(TArray<FModuleEntry>& OutModu
 		});
 	}
 
-	// Engine plugins — find Source dirs under Engine/Plugins/
+	// Engine plugins — preserve every top-level Source corpus while suppressing
+	// non-plugin Source directories nested below another Source root.
 	// SourcePath is Engine/Source, parent is Engine/
 	FString PluginsDir = FPaths::GetPath(SourcePath) / TEXT("Plugins");
-
-	IFileManager::Get().IterateDirectoryRecursively(*PluginsDir, [&](const TCHAR* Path, bool bIsDir) -> bool
-	{
-		if (bIsDir)
-		{
-			FString DirName = FPaths::GetCleanFilename(Path);
-			if (DirName == TEXT("Source"))
-			{
-				FString ParentDir = FPaths::GetPath(FString(Path));
-				FString ModuleName = FPaths::GetCleanFilename(ParentDir);
-				OutModules.Add({ FString(Path), ModuleName, TEXT("Plugin"),
-					MonolithSourceIndexerDetail::DeriveBuildCsPath(FString(Path), ModuleName) });
-			}
-		}
-		return true;
-	});
+	DiscoverPluginSourceRoots(PluginsDir, /*bProjectPlugins=*/false, OutModules);
 
 	// Shaders — no Build.cs
 	if (!ShaderPath.IsEmpty())
@@ -301,36 +387,129 @@ void FMonolithSourceIndexer::DiscoverProjectModules(TArray<FModuleEntry>& OutMod
 		return true;
 	});
 
-	// Plugin modules: ProjectPath/Plugins/**/Source/
+	// Preserve standalone project-plugin source corpora while suppressing false
+	// Source roots nested inside an enclosing source tree.
 	FString ProjectPluginsDir = ProjectPath / TEXT("Plugins");
-	IFileManager::Get().IterateDirectoryRecursively(*ProjectPluginsDir, [&](const TCHAR* Path, bool bIsDir) -> bool
-	{
-		if (bIsDir)
-		{
-			FString DirName = FPaths::GetCleanFilename(Path);
-			if (DirName == TEXT("Source"))
-			{
-				FString ParentDir = FPaths::GetPath(FString(Path));
-				FString ModuleName = FPaths::GetCleanFilename(ParentDir);
-				FString FullPath = FString(Path);
+	DiscoverPluginSourceRoots(ProjectPluginsDir, /*bProjectPlugins=*/true, OutModules);
+}
 
-				// Detect GameFeature plugins
-				FString ModuleType = FullPath.Contains(TEXT("GameFeatures")) ? TEXT("GameFeature") : TEXT("Plugin");
-				OutModules.Add({ FullPath, ModuleName, ModuleType,
-					MonolithSourceIndexerDetail::DeriveBuildCsPath(FullPath, ModuleName) });
-			}
+void FMonolithSourceIndexer::DiscoverPluginSourceRoots(
+	const FString& PluginsDir,
+	bool bProjectPlugins,
+	TArray<FModuleEntry>& OutModules)
+{
+	struct FSourceRootCandidate
+	{
+		FModuleEntry Module;
+		FString Key;
+		bool bDescriptorOwned = false;
+		int32 NestingDepth = 0;
+	};
+
+	TArray<FSourceRootCandidate> Candidates;
+	TSet<FString> SeenSourceRoots;
+	IFileManager::Get().IterateDirectoryRecursively(*PluginsDir, [&](const TCHAR* Path, bool bIsDir) -> bool
+	{
+		if (!bIsDir || FPaths::GetCleanFilename(Path) != TEXT("Source"))
+		{
+			return true;
 		}
+
+		const FString SourceDir = MonolithSourceIndexerDetail::NormalizePathForStorage(Path);
+		const FString SourceKey = MonolithSourceIndexerDetail::NormalizePathForIdentity(SourceDir);
+		if (SeenSourceRoots.Contains(SourceKey))
+		{
+			return true;
+		}
+		SeenSourceRoots.Add(SourceKey);
+
+		const FString ParentDir = FPaths::GetPath(SourceDir);
+		const FString ModuleName = FPaths::GetCleanFilename(ParentDir);
+		const FString ModuleType = bProjectPlugins && SourceDir.Contains(TEXT("/GameFeatures/"), ESearchCase::IgnoreCase)
+			? TEXT("GameFeature")
+			: TEXT("Plugin");
+		TArray<FString> Descriptors;
+		IFileManager::Get().FindFiles(
+			Descriptors, *(ParentDir / TEXT("*.uplugin")),
+			/*Files=*/true, /*Directories=*/false);
+		Candidates.Add({
+			{ SourceDir, ModuleName, ModuleType,
+				MonolithSourceIndexerDetail::DeriveBuildCsPath(SourceDir, ModuleName) },
+			SourceKey,
+			Descriptors.Num() > 0,
+			0 });
 		return true;
 	});
+
+	TArray<FSourceRootCandidate> KeptCandidates;
+	int32 NestedNonPluginRootsSkipped = 0;
+	for (FSourceRootCandidate& Candidate : Candidates)
+	{
+		bool bNestedBelowSourceRoot = false;
+		for (const FSourceRootCandidate& PossibleParent : Candidates)
+		{
+			if (MonolithSourceIndexerDetail::IsStrictlyUnderPath(Candidate.Key, PossibleParent.Key))
+			{
+				bNestedBelowSourceRoot = true;
+				++Candidate.NestingDepth;
+			}
+		}
+
+		// A nested Source without its own descriptor is data, a fixture, docs, or
+		// vendor output already covered by the enclosing source root. A real nested
+		// plugin descriptor remains a valid, more-specific owner.
+		if (bNestedBelowSourceRoot && !Candidate.bDescriptorOwned)
+		{
+			++NestedNonPluginRootsSkipped;
+			continue;
+		}
+		// Keep every source key intact until all candidates have completed their
+		// ancestry checks. Moving here would clear an earlier parent's key and make
+		// later nested candidates appear standalone.
+		KeptCandidates.Add(Candidate);
+	}
+
+	// Most-specific descriptor-backed roots claim their files before an enclosing
+	// root. Unrelated roots use normalized lexical ordering for reproducibility.
+	KeptCandidates.Sort([](const FSourceRootCandidate& A, const FSourceRootCandidate& B)
+	{
+		if (A.NestingDepth != B.NestingDepth)
+		{
+			return A.NestingDepth > B.NestingDepth;
+		}
+		if (A.Key != B.Key)
+		{
+			return A.Key < B.Key;
+		}
+		return A.Module.Name < B.Module.Name;
+	});
+
+	for (FSourceRootCandidate& Candidate : KeptCandidates)
+	{
+		OutModules.Add(MoveTemp(Candidate.Module));
+	}
+	if (NestedNonPluginRootsSkipped > 0)
+	{
+		UE_LOG(LogMonolithSource, Log,
+			TEXT("Indexer ignored %d non-plugin Source roots nested below another Source root"),
+			NestedNonPluginRootsSkipped);
+	}
 }
 
 // ============================================================
 // Module indexing
 // ============================================================
 
-void FMonolithSourceIndexer::IndexModule(const FModuleEntry& Module, FMonolithSourceDatabase& DB)
+bool FMonolithSourceIndexer::IndexModule(const FModuleEntry& Module, FMonolithSourceDatabase& DB)
 {
-	int64 ModuleId = DB.InsertModule(Module.Name, Module.Path, Module.Type, Module.BuildCsPath);
+	const FString ModulePath = MonolithSourceIndexerDetail::NormalizePathForStorage(Module.Path);
+	const FString BuildCsPath = MonolithSourceIndexerDetail::NormalizePathForStorage(Module.BuildCsPath);
+	const int64 ModuleId = DB.InsertModule(Module.Name, ModulePath, Module.Type, BuildCsPath);
+	if (ModuleId <= 0)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to create or resolve module row for '%s'"), *Module.Name);
+		return false;
+	}
 
 	// Collect all source files for this module
 	TArray<FString> Files;
@@ -338,40 +517,73 @@ void FMonolithSourceIndexer::IndexModule(const FModuleEntry& Module, FMonolithSo
 	if (Module.Type == TEXT("Shaders"))
 	{
 		// Shader module — only shader files
-		IFileManager::Get().FindFilesRecursive(Files, *Module.Path, TEXT("*.usf"), true, false, true);
-		IFileManager::Get().FindFilesRecursive(Files, *Module.Path, TEXT("*.ush"), true, false, false); // bClearFileNames=false!
+		IFileManager::Get().FindFilesRecursive(Files, *ModulePath, TEXT("*.usf"), true, false, true);
+		IFileManager::Get().FindFilesRecursive(Files, *ModulePath, TEXT("*.ush"), true, false, false); // bClearFileNames=false!
 	}
 	else
 	{
 		// C++ module — headers, source, inline files
-		IFileManager::Get().FindFilesRecursive(Files, *Module.Path, TEXT("*.h"), true, false, true);
-		IFileManager::Get().FindFilesRecursive(Files, *Module.Path, TEXT("*.cpp"), true, false, false); // bClearFileNames=false!
-		IFileManager::Get().FindFilesRecursive(Files, *Module.Path, TEXT("*.inl"), true, false, false); // bClearFileNames=false!
+		IFileManager::Get().FindFilesRecursive(Files, *ModulePath, TEXT("*.h"), true, false, true);
+		IFileManager::Get().FindFilesRecursive(Files, *ModulePath, TEXT("*.cpp"), true, false, false); // bClearFileNames=false!
+		IFileManager::Get().FindFilesRecursive(Files, *ModulePath, TEXT("*.inl"), true, false, false); // bClearFileNames=false!
 	}
 
-	DB.BeginTransaction();
+	if (!DB.BeginTransaction())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to begin transaction for module '%s'"), *Module.Name);
+		return false;
+	}
 
 	for (const FString& FilePath : Files)
 	{
 		if (bShouldStop) break;
 
-		FString Ext = FPaths::GetExtension(FilePath).ToLower();
+		const FString StorageFilePath = MonolithSourceIndexerDetail::NormalizePathForStorage(FilePath);
+		const FString FilePathKey = MonolithSourceIndexerDetail::NormalizePathForIdentity(StorageFilePath);
+		if (IndexedFilePathKeys.Contains(FilePathKey))
+		{
+			++DuplicateFileVisitsSkipped;
+			continue;
+		}
+		IndexedFilePathKeys.Add(FilePathKey);
+
+		FString Ext = FPaths::GetExtension(StorageFilePath).ToLower();
 		int32 SymbolCount = 0;
 
 		if (Ext == TEXT("usf") || Ext == TEXT("ush"))
 		{
-			SymbolCount = IndexShaderFile(FilePath, ModuleId, DB);
+			SymbolCount = IndexShaderFile(StorageFilePath, ModuleId, DB);
 		}
 		else
 		{
-			SymbolCount = IndexCppFile(FilePath, ModuleId, DB);
+			SymbolCount = IndexCppFile(StorageFilePath, ModuleId, DB);
+		}
+
+		if (SymbolCount < 0)
+		{
+			DB.RollbackTransaction();
+			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: database write failed while indexing module '%s'"), *Module.Name);
+			return false;
 		}
 
 		TotalFilesProcessed++;
 		TotalSymbolsExtracted += SymbolCount;
 	}
 
-	DB.CommitTransaction();
+	if (bShouldStop)
+	{
+		DB.RollbackTransaction();
+		return false;
+	}
+
+	if (!DB.CommitTransaction())
+	{
+		DB.RollbackTransaction();
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to commit transaction for module '%s'"), *Module.Name);
+		return false;
+	}
+
+	return true;
 }
 
 // ============================================================
@@ -393,7 +605,12 @@ int32 FMonolithSourceIndexer::IndexCppFile(const FString& FilePath, int64 Module
 	FDateTime ModTime = IFileManager::Get().GetTimeStamp(*FilePath);
 	double LastModified = static_cast<double>(ModTime.ToUnixTimestamp());
 
-	int64 FileId = DB.InsertFile(FilePath, ModuleId, FileType, ParseResult.SourceLines.Num(), LastModified);
+	const int64 FileId = DB.InsertFile(FilePath, ModuleId, FileType, ParseResult.SourceLines.Num(), LastModified);
+	if (FileId <= 0)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to create or resolve file row for '%s'"), *FilePath);
+		return -1;
+	}
 	NewFileIds.Add(FileId);
 
 	// Includes
@@ -437,6 +654,11 @@ int32 FMonolithSourceIndexer::IndexCppFile(const FString& FilePath, int64 Module
 			ParentSymbolId, Sym.Access, Sym.Signature, Sym.Docstring,
 			Sym.bIsUEMacro
 		);
+		if (SymId <= 0)
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to insert symbol '%s' from '%s'"), *QualifiedName, *FilePath);
+			return -1;
+		}
 
 		// Update symbol maps
 		UpdateSymbolMap(Sym.Name, SymId, Sym.LineStart, Sym.LineEnd);
@@ -615,7 +837,12 @@ int32 FMonolithSourceIndexer::IndexShaderFile(const FString& FilePath, int64 Mod
 	FDateTime ModTime = IFileManager::Get().GetTimeStamp(*FilePath);
 	double LastModified = static_cast<double>(ModTime.ToUnixTimestamp());
 
-	int64 FileId = DB.InsertFile(FilePath, ModuleId, FileType, ParseResult.SourceLines.Num(), LastModified);
+	const int64 FileId = DB.InsertFile(FilePath, ModuleId, FileType, ParseResult.SourceLines.Num(), LastModified);
+	if (FileId <= 0)
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to create or resolve shader file row for '%s'"), *FilePath);
+		return -1;
+	}
 	NewFileIds.Add(FileId);
 
 	// Includes
@@ -645,12 +872,17 @@ int32 FMonolithSourceIndexer::IndexShaderFile(const FString& FilePath, int64 Mod
 			QualifiedName = Sym.ParentClass + TEXT("::") + Sym.Name;
 		}
 
-		DB.InsertSymbol(
+		const int64 SymId = DB.InsertSymbol(
 			Sym.Name, QualifiedName, Sym.Kind,
 			FileId, Sym.LineStart, Sym.LineEnd,
 			0, Sym.Access, Sym.Signature, Sym.Docstring,
 			Sym.bIsUEMacro
 		);
+		if (SymId <= 0)
+		{
+			UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to insert shader symbol '%s' from '%s'"), *QualifiedName, *FilePath);
+			return -1;
+		}
 
 		SymbolCount++;
 	}
@@ -709,14 +941,24 @@ void FMonolithSourceIndexer::UpdateClassMap(const FString& Name, int64 SymId, in
 // Finalization — inheritance resolution + reference extraction
 // ============================================================
 
-void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
+bool FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 {
 	UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Finalizing — resolving inheritance..."));
 
 	// Phase 1: Resolve inheritance
-	DB.BeginTransaction();
+	if (!DB.BeginTransaction())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to begin inheritance finalization transaction"));
+		return false;
+	}
 	for (const auto& Pair : PendingBaseClasses)
 	{
+		if (bShouldStop)
+		{
+			DB.RollbackTransaction();
+			return false;
+		}
+
 		const FString& ChildName = Pair.Key;
 		const TArray<FString>& BaseClasses = Pair.Value;
 
@@ -744,14 +986,23 @@ void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 			}
 		}
 	}
-	DB.CommitTransaction();
+	if (!DB.CommitTransaction())
+	{
+		DB.RollbackTransaction();
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to commit inheritance finalization transaction"));
+		return false;
+	}
 
 	// Phase 2: Reference extraction (only new files)
 	UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Extracting references from %d new files..."), NewFileIds.Num());
 
 	FMonolithReferenceBuilder RefBuilder(DB, SymbolNameToId);
 
-	DB.BeginTransaction();
+	if (!DB.BeginTransaction())
+	{
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to begin reference extraction transaction"));
+		return false;
+	}
 	int32 RefCount = 0;
 	int32 FilesProcessed = 0;
 
@@ -773,12 +1024,31 @@ void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 		// Periodic commit every 500 files to keep WAL size manageable
 		if (FilesProcessed % 500 == 0)
 		{
-			DB.CommitTransaction();
-			DB.BeginTransaction();
+			if (!DB.CommitTransaction())
+			{
+				DB.RollbackTransaction();
+				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to commit reference extraction batch"));
+				return false;
+			}
+			if (!DB.BeginTransaction())
+			{
+				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to begin next reference extraction batch"));
+				return false;
+			}
 			UE_LOG(LogMonolithSource, Log, TEXT("  References: %d files processed, %d refs found"), FilesProcessed, RefCount);
 		}
 	}
-	DB.CommitTransaction();
+	if (bShouldStop)
+	{
+		DB.RollbackTransaction();
+		return false;
+	}
+	if (!DB.CommitTransaction())
+	{
+		DB.RollbackTransaction();
+		UE_LOG(LogMonolithSource, Error, TEXT("Indexer: failed to commit final reference extraction batch"));
+		return false;
+	}
 
 	UE_LOG(LogMonolithSource, Log, TEXT("Indexer: Reference extraction complete — %d refs from %d files"), RefCount, FilesProcessed);
 
@@ -801,7 +1071,13 @@ void FMonolithSourceIndexer::Finalize(FMonolithSourceDatabase& DB)
 			MaintOpts.bRunPragmaOptimize = true;
 			MaintOpts.bRunIncrementalVacuum = false;
 			MaintOpts.FtsTablesToOptimize = { TEXT("symbols_fts") };
-			RunMonolithSQLiteMaintenance(*RawDb, MaintOpts);
+			if (!RunMonolithSQLiteMaintenance(*RawDb, MaintOpts))
+			{
+				UE_LOG(LogMonolithSource, Error, TEXT("Indexer: final SQLite maintenance failed"));
+				return false;
+			}
 		}
 	}
+
+	return true;
 }

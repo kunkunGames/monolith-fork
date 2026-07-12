@@ -2,10 +2,13 @@
 """
 check_offline_exe_fresh.py -- staleness guard for the offline Monolith CLI.
 
-The offline tool monolith_query.exe is built from Tools/MonolithQuery/monolith_query.cpp
-plus header-only helper modules by Tools/MonolithQuery/build.bat. That build injects
-the SHA256-first-16 of the source inputs as a /DSOURCE_HASH define, which the exe echoes
-back under --version as "source_hash".
+The native Query image is built from Tools/MonolithQuery/monolith_query.cpp,
+header-only helpers, SQLite, and nlohmann/json by Tools/MonolithQuery/build.bat.
+That build injects the SHA256-first-16 of its build-contract bytes plus ordered text
+source inputs after CRLF/lone-CR canonicalization to LF as a /DSOURCE_HASH define,
+which the exe echoes back under --version as "source_hash".
+When present, monolith_query.current.json selects the authoritative immutable image;
+the fixed monolith_query.exe is only the legacy compatibility fallback.
 
 This script recomputes that same hash from the on-disk source, asks the exe what it was
 built from, and exits non-zero if they disagree -- i.e. the shipped exe is stale relative
@@ -25,37 +28,65 @@ Exit codes:
 stdlib-only. Do not add third-party deps.
 """
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+from source_generation_hash import (
+    HASH_PREFIX_LENGTH,
+    SOURCE_GENERATION_SPECS,
+    compute_source_generation_hash,
+    source_paths_for_tool,
+)
+
 # Script lives in <MonolithRoot>/Scripts/, so the plugin root is parent.parent.
 SCRIPT_DIR = Path(__file__).resolve().parent
 MONO_ROOT = SCRIPT_DIR.parent
-SRC_PATHS = [
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query.cpp",
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query_tool_log.h",
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query_crg.h",
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query_review_ranges.h",
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query_bridge.h",
-    MONO_ROOT / "Tools" / "MonolithQuery" / "monolith_query_help.h",
-]
-EXE_PATH = MONO_ROOT / "Binaries" / "monolith_query.exe"
+SRC_PATHS = list(source_paths_for_tool(MONO_ROOT, "query"))
+BINARY_ROOT = MONO_ROOT / "Binaries"
+MANIFEST_PATH = BINARY_ROOT / "monolith_query.current.json"
+BUILD_CONTRACT = SOURCE_GENERATION_SPECS["query"].build_contract
 
-# Must match build.bat: first 16 hex chars of the source's SHA256.
-HASH_PREFIX_LEN = 16
+
+def resolve_authoritative_exe_path():
+    """Resolve the manifest-selected image, with fixed-name legacy fallback."""
+    if not MANIFEST_PATH.is_file():
+        return BINARY_ROOT / "monolith_query.exe"
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid Query current manifest: {0}".format(exc))
+    source_hash = manifest.get("source_hash")
+    file_name = manifest.get("file")
+    expected = "monolith_query-{0}.exe".format(source_hash)
+    if (
+        manifest.get("tool") != "monolith_query"
+        or manifest.get("runtime") != "native-cpp"
+        or not isinstance(source_hash, str)
+        or len(source_hash) != 16
+        or any(ch not in "0123456789abcdef" for ch in source_hash)
+        or file_name != expected
+        or Path(file_name).name != file_name
+    ):
+        raise ValueError("Query current manifest has an invalid identity or file binding")
+    return BINARY_ROOT / file_name
+
+
+try:
+    EXE_PATH = resolve_authoritative_exe_path()
+except ValueError:
+    # Preserve importability for ci_static_checks.py so it can report the manifest
+    # problem through the existing missing/unrunnable finding path.
+    EXE_PATH = MANIFEST_PATH
+
+# Must match the shared build/check/release source-generation contract.
+HASH_PREFIX_LEN = HASH_PREFIX_LENGTH
 
 
 def compute_source_hash(paths):
-    """SHA256 of the concatenated source-input bytes, lowercase hex prefix."""
-    h = hashlib.sha256()
-    for path in paths:
-        with open(path, "rb") as fh:
-            for chunk in iter(lambda: fh.read(65536), b""):
-                h.update(chunk)
-    return h.hexdigest()[:HASH_PREFIX_LEN]
+    """Mirror the canonical build/check/release source generation exactly."""
+    return compute_source_generation_hash(BUILD_CONTRACT, paths)
 
 
 def read_exe_source_hash(exe_path):
@@ -88,6 +119,8 @@ def read_exe_source_hash(exe_path):
                 exc, (proc.stdout or "")[:300]
             )
         )
+    if data.get("tool") != "monolith_query" or data.get("runtime") != "native-cpp":
+        raise ValueError("exe --version has the wrong tool/runtime identity")
     return data.get("source_hash")
 
 

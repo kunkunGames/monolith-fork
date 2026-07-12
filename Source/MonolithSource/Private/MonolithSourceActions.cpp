@@ -1754,13 +1754,15 @@ FMonolithActionResult FMonolithSourceActions::HandleReadSource(const TSharedPtr<
 		}
 		return HandleReadFile(FileParams);
 	}
-	bool bIncludeHeader = true;
+	// Keep runtime defaults identical to the public schema/API contract. These
+	// bounds also prevent an omitted option from producing an unbounded payload.
+	bool bIncludeHeader = false;
 	TSharedPtr<FJsonValue> IncludeHeaderField = Params->TryGetField(TEXT("include_header"));
 	if (IncludeHeaderField.IsValid() && !IncludeHeaderField->TryGetBool(bIncludeHeader))
 	{
 		return FMonolithActionResult::Error(TEXT("'include_header' must be a boolean"), -32602);
 	}
-	int32 MaxLines = 0;
+	int32 MaxLines = 500;
 	if (Params->HasField(TEXT("max_lines")))
 	{
 		double RawMaxLines = 0;
@@ -2244,7 +2246,7 @@ FMonolithActionResult FMonolithSourceActions::HandleSearchSource(const TSharedPt
 	{
 		return FMonolithActionResult::Error(TEXT("'scope' must be a string"), -32602);
 	}
-	int32 RequestedLimit = 20;
+	int32 RequestedLimit = 50;
 	TSharedPtr<FJsonValue> LimitField = Params->TryGetField(TEXT("limit"));
 	if (LimitField.IsValid())
 	{

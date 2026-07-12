@@ -15,6 +15,32 @@ REGISTER_RE = re.compile(
     r"Registry\.RegisterAction\s*\(\s*TEXT\(\"([^\"]+)\"\)\s*,\s*TEXT\(\"([^\"]+)\"\)",
     re.S,
 )
+TEMPLATE_HELPER_RE = re.compile(
+    r"(?:static\s+)?(?:void|bool)\s+(Register[A-Za-z0-9_]*Action)\s*\([^)]*\)\s*\{"
+    r"(?:(?!\n\}).)*?Registry\.RegisterAction\s*\(\s*TEXT\(\"([^\"]+)\"\)\s*,"
+    r"\s*TAction::GetName\s*\(\s*\)",
+    re.S,
+)
+TEMPLATE_CALL_RE = re.compile(
+    r"\b(Register[A-Za-z0-9_]*Action)\s*<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>\s*\(",
+)
+GET_NAME_RE = re.compile(
+    r"static\s+FString\s+GetName\s*\(\s*\)\s*\{\s*return\s+TEXT\(\"([^\"]+)\"\)",
+    re.S,
+)
+DESCRIPTION_RE = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)::GetDescription\s*\(\s*\)\s*\{(.*?)\r?\n[ \t]*\}",
+    re.S,
+)
+INLINE_DESCRIPTION_RE = re.compile(
+    r"static\s+FString\s+GetDescription\s*\(\s*\)\s*\{(.*?)\}",
+    re.S,
+)
+RETURN_TEXT_RE = re.compile(
+    r"return\s+TEXT\s*\(\s*((?:\"(?:\\.|[^\"\\])*\"\s*)+)\)\s*;",
+    re.S,
+)
+CPP_STRING_RE = re.compile(r'\"((?:\\.|[^\"\\])*)\"', re.S)
 TEXT_RE = re.compile(r"TEXT\(\"((?:\\.|[^\"])*)\"\)", re.S)
 
 READ_PREFIXES = (
@@ -135,6 +161,8 @@ OFFLINE_AVAILABLE_ACTIONS = {
         "find_by_type",
         "find_references",
         "get_stats",
+        "list_gameplay_tags",
+        "search_gameplay_tags",
         "get_asset_details",
         "impact_radius",
         "health",
@@ -340,20 +368,67 @@ def relpath(path: Path, root: Path) -> str:
     return path.resolve().relative_to(root.resolve()).as_posix()
 
 
-def source_hash(paths: list[Path], root: Path) -> str:
+def action_semantic_view(action: dict) -> dict:
+    """Return the stable action contract, excluding line-number provenance."""
+
+    return {
+        key: value
+        for key, value in action.items()
+        if key != "source_line"
+    }
+
+
+def action_semantic_hash(actions: list[dict]) -> str:
+    """Hash extracted registry semantics instead of unrelated source bytes."""
+
     digest = hashlib.sha256()
-    for path in sorted(paths, key=lambda p: relpath(p, root)):
-        digest.update(relpath(path, root).encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
+    for action in sorted(actions, key=lambda row: (row["namespace"], row["action"])):
+        semantic = action_semantic_view(action)
+        digest.update(
+            json.dumps(
+                semantic,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def catalog_contract(snapshot: dict) -> dict:
+    """Normalize a snapshot for drift checks without line-only churn."""
+
+    contract_keys = (
+        "schema_version",
+        "source",
+        "source_root",
+        "source_hash",
+        "source_hash_kind",
+        "action_count",
+        "proof_anchors",
+    )
+    contract = {key: snapshot.get(key) for key in contract_keys}
+    contract["actions"] = [
+        action_semantic_view(action)
+        for action in snapshot.get("actions", [])
+    ]
+    return contract
 
 
 def clean_text(value: str) -> str:
     value = value.replace('\\"', '"')
     value = value.replace("\\n", " ")
     return " ".join(value.split())
+
+
+def extract_return_text(body: str) -> str:
+    """Extract adjacent C++ string literals from a return TEXT(...) body."""
+
+    match = RETURN_TEXT_RE.search(body)
+    if not match:
+        return ""
+    return clean_text("".join(CPP_STRING_RE.findall(match.group(1))))
 
 
 def extract_summary(text: str, match_end: int) -> str:
@@ -380,6 +455,13 @@ ACTION_FIELD_OVERRIDES = {
         "mutates_assets": False,
         "long_running": False,
     },
+    ("project", "export_asset_text"): {
+        "mutates_assets": False,
+        "long_running": False,
+    },
+    ("project", "cleanup_generated_assets"): {
+        "mutates_assets": True,
+    },
 }
 
 
@@ -391,17 +473,17 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
     long_running = overrides.get("long_running", long_running)
     supports_progress = (namespace, action) in PROGRESS_ACTIONS
     proof_anchor = ""
-    implementation_status = "live_registry_snapshot"
+    implementation_status = "source_scanned_candidate"
     skill = NAMESPACE_SKILLS.get(namespace, namespace)
     preconditions_status = "snapshot_only"
     output_contract_status = "snapshot_only"
     next_actions_status = "availability_required"
     preconditions: list[str] = []
     outputs: list[str] = []
-    planning_signals = [f"skill:{skill}", namespace, "live_registry", "read_only" if not mutating else "mutating"]
+    planning_signals = [f"skill:{skill}", namespace, "source_scanned_candidate", "read_only" if not mutating else "mutating"]
     if namespace == "mesh" and action == "validate_game_ready":
         proof_anchor = "game_ready_asset.static_mesh_readiness"
-        implementation_status = "live_action_proof_anchor"
+        implementation_status = "source_scanned_proof_anchor"
         skill = "unreal-mesh"
         preconditions_status = "declared_or_derived"
         output_contract_status = "declared"
@@ -430,7 +512,7 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
     elif namespace == "workflow" and action in WORKFLOW_METADATA:
         workflow = WORKFLOW_METADATA[action]
         proof_anchor = workflow["proof_anchor"]
-        implementation_status = "live_workflow_proof_anchor"
+        implementation_status = "source_scanned_workflow_proof_anchor"
         skill = workflow["skill"]
         preconditions_status = "declared_or_derived"
         output_contract_status = "declared"
@@ -448,6 +530,8 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
         ]
 
     available_offline = action in OFFLINE_AVAILABLE_ACTIONS.get(namespace, set())
+    if available_offline:
+        implementation_status = "offline_query_implemented"
 
     return {
         "namespace": namespace,
@@ -475,10 +559,60 @@ def action_metadata(namespace: str, action: str, summary: str, source_file: str,
     }
 
 
+def is_catalog_source(path: Path, source_root: Path) -> bool:
+    """Return whether a source file can contribute runtime catalog entries.
+
+    Unreal automation fixtures register synthetic actions in directories named
+    ``Tests``.  Those registrations are compiled only for tests and must never
+    leak into the distributable offline catalog.
+    """
+    relative_parts = path.relative_to(source_root).parts
+    return all(part.casefold() != "tests" for part in relative_parts)
+
+
 def collect_actions(root: Path) -> tuple[list[dict], list[Path]]:
     source_root = root / "Source"
-    source_files = sorted(source_root.rglob("*.cpp"))
+    source_files = sorted(
+        path for path in source_root.rglob("*.cpp") if is_catalog_source(path, source_root)
+    )
+    header_files = sorted(
+        path for path in source_root.rglob("*.h") if is_catalog_source(path, source_root)
+    )
     actions: dict[tuple[str, str], dict] = {}
+
+    helper_namespaces: dict[str, str] = {}
+    class_action_names: dict[str, str] = {}
+    class_summaries: dict[str, str] = {}
+
+    for path in source_files:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for match in TEMPLATE_HELPER_RE.finditer(text):
+            helper_namespaces[match.group(1)] = match.group(2)
+        for match in DESCRIPTION_RE.finditer(text):
+            description = extract_return_text(match.group(2))
+            if description:
+                class_summaries[match.group(1)] = description
+
+    for path in header_files:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        class_matches = list(
+            re.finditer(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)", text)
+        )
+        for name_match in GET_NAME_RE.finditer(text):
+            owners = [
+                match for match in class_matches if match.start() < name_match.start()
+            ]
+            if owners:
+                class_action_names[owners[-1].group(1)] = name_match.group(1)
+        for description_match in INLINE_DESCRIPTION_RE.finditer(text):
+            owners = [
+                match for match in class_matches if match.start() < description_match.start()
+            ]
+            if not owners:
+                continue
+            description = extract_return_text(description_match.group(1))
+            if description:
+                class_summaries[owners[-1].group(1)] = description
 
     for path in source_files:
         text = path.read_text(encoding="utf-8", errors="ignore")
@@ -496,7 +630,25 @@ def collect_actions(root: Path) -> tuple[list[dict], list[Path]]:
                 line,
             )
 
-    return [actions[key] for key in sorted(actions)], source_files
+        for match in TEMPLATE_CALL_RE.finditer(text):
+            helper, class_name = match.groups()
+            namespace = helper_namespaces.get(helper)
+            action = class_action_names.get(class_name)
+            if not namespace or not action:
+                continue
+            key = (namespace, action)
+            if key in actions:
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            actions[key] = action_metadata(
+                namespace,
+                action,
+                class_summaries.get(class_name, ""),
+                relpath(path, root),
+                line,
+            )
+
+    return [actions[key] for key in sorted(actions)], source_files + header_files
 
 
 def main() -> int:
@@ -507,10 +659,15 @@ def main() -> int:
         type=Path,
         default=Path(__file__).resolve().parent / "Generated" / "monolith_catalog_snapshot.json",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero when the existing output differs from extracted action semantics.",
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
-    actions, source_files = collect_actions(root)
+    actions, _source_files = collect_actions(root)
     now = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     snapshot = {
@@ -519,7 +676,9 @@ def main() -> int:
         "generator": "Tools/MonolithQuery/generate_monolith_catalog_snapshot.py",
         "source": "cpp_registry_scan",
         "source_root": "Source",
-        "source_hash": source_hash(source_files, root),
+        "source_hash": action_semantic_hash(actions),
+        "source_hash_kind": "action_semantics_v1",
+        "action_count": len(actions),
         "partial": False,
         "actions": actions,
         "proof_anchors": {
@@ -685,6 +844,26 @@ def main() -> int:
             },
         },
     }
+
+    if args.check:
+        if not args.out.is_file():
+            print(f"catalog snapshot missing: {args.out}")
+            return 1
+        try:
+            existing = json.loads(args.out.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            print(f"catalog snapshot unreadable: {error}")
+            return 1
+        expected_contract = catalog_contract(snapshot)
+        actual_contract = catalog_contract(existing)
+        if actual_contract != expected_contract:
+            print(
+                "catalog snapshot drift: run "
+                "python Tools/MonolithQuery/generate_monolith_catalog_snapshot.py"
+            )
+            return 1
+        print(f"catalog snapshot current: {len(actions)} actions")
+        return 0
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(

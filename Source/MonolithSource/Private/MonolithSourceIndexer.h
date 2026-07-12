@@ -9,8 +9,9 @@ DECLARE_MULTICAST_DELEGATE_FiveParams(FOnSourceIndexProgress,
 	const FString& /* ModuleName */, int32 /* Current */, int32 /* Total */,
 	int32 /* FilesProcessed */, int32 /* SymbolsExtracted */);
 
-DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnSourceIndexComplete,
-	int32 /* FilesProcessed */, int32 /* SymbolsExtracted */, int32 /* Errors */);
+DECLARE_MULTICAST_DELEGATE_FourParams(FOnSourceIndexComplete,
+	int32 /* FilesProcessed */, int32 /* SymbolsExtracted */, int32 /* Errors */,
+	bool /* bSucceeded */);
 
 struct FSourceIndexDiagnostics
 {
@@ -38,7 +39,7 @@ public:
 	/** Start indexing on a background thread. Non-blocking. */
 	bool StartAsync();
 
-	/** Run synchronously (blocks calling thread). For commandlet use. */
+	/** Run synchronously; returns false for run-level failure or cancellation. */
 	bool RunSynchronous();
 
 	/** Request cancellation. */
@@ -68,10 +69,11 @@ private:
 
 	void DiscoverEngineModules(TArray<FModuleEntry>& OutModules);
 	void DiscoverProjectModules(TArray<FModuleEntry>& OutModules);
-	void IndexModule(const FModuleEntry& Module, FMonolithSourceDatabase& DB);
+	void DiscoverPluginSourceRoots(const FString& PluginsDir, bool bProjectPlugins, TArray<FModuleEntry>& OutModules);
+	bool IndexModule(const FModuleEntry& Module, FMonolithSourceDatabase& DB);
 	int32 IndexCppFile(const FString& FilePath, int64 ModuleId, FMonolithSourceDatabase& DB);
 	int32 IndexShaderFile(const FString& FilePath, int64 ModuleId, FMonolithSourceDatabase& DB);
-	void Finalize(FMonolithSourceDatabase& DB);
+	bool Finalize(FMonolithSourceDatabase& DB);
 
 	// Symbol tracking (accumulated during indexing)
 	void UpdateSymbolMap(const FString& Name, int64 SymId, int32 LineStart, int32 LineEnd);
@@ -86,8 +88,8 @@ private:
 	bool bIndexProjectSource = false;
 
 	// Thread state
-	FThreadSafeBool bShouldStop;
-	FThreadSafeBool bIsRunning;
+	FThreadSafeBool bShouldStop{false};
+	FThreadSafeBool bIsRunning{false};
 	FRunnableThread* Thread = nullptr;
 
 	// Symbol maps
@@ -97,6 +99,8 @@ private:
 	TMap<FString, TPair<int32, int32>> ClassSpans;
 	TMap<FString, TArray<FString>> PendingBaseClasses; // className -> [baseClassName, ...]
 	TSet<int64> NewFileIds;
+	TSet<FString> IndexedFilePathKeys;
+	int32 DuplicateFileVisitsSkipped = 0;
 
 	// Stats
 	mutable FCriticalSection DiagLock;

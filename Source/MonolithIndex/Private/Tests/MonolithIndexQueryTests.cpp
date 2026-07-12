@@ -368,6 +368,35 @@ namespace
 	};
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectFindByTypeFiltersModuleBeforePaginationTest,
+	"Monolith.IndexGuard.Project.FindByTypeFiltersModuleBeforePagination",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FProjectFindByTypeFiltersModuleBeforePaginationTest::RunTest(const FString& Parameters)
+{
+	FTempIndexDb T;
+	TestTrue(TEXT("temp index db built"), T.Build());
+
+	FIndexedAsset Target;
+	Target.PackagePath = TEXT("/Game/ModuleTarget");
+	Target.AssetName = TEXT("ModuleTarget");
+	Target.AssetClass = TEXT("Blueprint");
+	Target.ModuleName = TEXT("TargetModule");
+	TestTrue(TEXT("module target inserted"), T.Db.InsertAsset(Target) > 0);
+
+	const TArray<FIndexedAsset> Results = T.Db.FindByType(
+		TEXT("Blueprint"), TEXT("TargetModule"), 1, 0);
+	TestEqual(TEXT("module-filtered page returns one row"), Results.Num(), 1);
+	if (Results.Num() == 1)
+	{
+		TestEqual(TEXT("module filter is applied before limit"),
+			Results[0].ModuleName, FString(TEXT("TargetModule")));
+		TestEqual(TEXT("target asset survives a one-row page"),
+			Results[0].PackagePath, FString(TEXT("/Game/ModuleTarget")));
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FProjectImpactRadiusCycleSafeTest, "Monolith.IndexGuard.Project.ImpactRadiusCycleSafe", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FProjectImpactRadiusCycleSafeTest::RunTest(const FString& Parameters)
 {

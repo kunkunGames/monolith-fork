@@ -33,6 +33,7 @@
     "match_rate": "fraction of non-skipped actions with status=MATCH (includes expected_error and expected_offline rows where the two offline tools agree on the failure)",
     "diff_rate": "fraction of non-skipped actions with status=DIFF (genuine exe-vs-py disagreement, including one-sided offline_unsupported failures)",
     "error_rate": "fraction of non-skipped actions with status=ERROR (unexpected real tool/process/parse failures only)",
+    "environment_blocked_count": "number of rows invalidated when the run-level read-only preflight detects monolith_query's exact fail-closed active rollback-journal message; a blocked run has zero comparable actions and score 0.0",
     "version_parity_score": "1.0 if exe parity_spec_rev == py parity_spec_rev, else 0.0",
     "forced_zero_when": "comparable_actions == 0"
   },
@@ -40,5 +41,8 @@
     "expected_error": "Deliberate negative-path probe (bad input). Both tools should exit non-zero; both-fail => MATCH (error_kind=expected). One-sided or both-succeed => DIFF.",
     "offline_unsupported": "Action whose offline surface may legitimately be absent. If BOTH offline tools agree on the failure (both exit non-zero) parity holds => MATCH (error_kind=expected_offline). Only a genuine exe-vs-py disagreement (exactly one tool fails) => DIFF (error_kind=offline_parity_break). If both succeed, outputs are compared normally.",
     "normal": "Standard parity row. Either tool exiting non-zero => ERROR (error_kind=real)."
+  },
+  "runtime_classifications": {
+    "environment_blocked": "Before chain discovery and scoring, a global --readonly Query preflight detects the exact active rollback-journal safety refusal. It invalidates every row as SKIP(environment_blocked), forces zero comparable actions and score 0.0, and does not launch the Python reader. After preflight, the same marker is ERROR(real), never a row-level SKIP. Generic lock/process errors are not reclassified."
   }
 }

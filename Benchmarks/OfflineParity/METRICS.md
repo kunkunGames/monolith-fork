@@ -55,7 +55,7 @@ no comparable actions).
 | `match_rate` | Higher is better | Fraction of non-skipped actions where exe and py outputs deep-equal (status=MATCH). |
 | `diff_rate` | Lower is better | Fraction of non-skipped actions where exe and py outputs diverge (status=DIFF). |
 | `error_rate` | Lower is better | Fraction of non-skipped actions where either tool returned a non-zero exit code or unparseable output (status=ERROR). |
-| `skip_rate` | Lower is better | Fraction of all actions that were skipped due to missing tool, missing corpus input, or other non-runnable condition. |
+| `skip_rate` | Lower is better | Fraction of all actions that were skipped due to missing tool, missing corpus input, or a run-level active-writer environment block. |
 | `expected_error_rate` | Informational | Fraction of comparable actions that intentionally exercise an expected negative path and matched as expected. These rows keep `status=MATCH` with `error_kind=expected` (bad-input probe) or `error_kind=expected_offline` (offline-unsupported surface where both tools agree on the failure). |
 | `real_error_rate` | Lower is better | Fraction of comparable actions with unexpected tool/process/parse failures (`error_kind=real`). This is the first diagnostic to inspect when `error_rate` moves. |
 | `version_parity_score` | Higher is better | 1.0 if `parity_spec_rev` matches between exe and py; 0.0 otherwise. |
@@ -65,8 +65,9 @@ no comparable actions).
 | `expected_error_count` | Informational | Count of expected-match negative-path actions where both tools agreed on the failure (`error_kind` in `expected`, `expected_offline`). |
 | `expected_error_problem_count` | Lower is better | Count of negative/offline-unsupported actions where the tools disagreed (`error_kind` in `expected_missing`, `expected_mismatch`, `offline_parity_break`): one tool succeeded, both tools succeeded, or only one tool failed. |
 | `real_error_count` | Lower is better | Count of unexpected tool failures. CI trend gates should require this to be 0. |
+| `environment_blocked_count` | Informational | Number of rows invalidated after the run-level preflight detected Query's exact fail-closed active rollback-journal error. A blocked run has `environment_blocked_count == total_actions`, zero comparable actions, and score 0.0. |
 | `mean_diffs_per_diff_action` | Lower is better | Average number of diverging fields among actions with status=DIFF. |
-| `category_breakdown` | Informational | Per-namespace breakdown of match/diff/error/skip counts, expected-error diagnostics, real-error diagnostics, and `action_count` (non-skipped). Keys are namespace prefixes (`cppreflect`, `network`, `decision`, `risk`, `source`). |
+| `category_breakdown` | Informational | Per-namespace breakdown of match/diff/error/skip counts, expected-error diagnostics, real-error diagnostics, `environment_blocked`, and `action_count` (non-skipped). Keys are namespace prefixes (`cppreflect`, `network`, `decision`, `risk`, `source`). |
 
 ## Action Statuses
 
@@ -75,7 +76,7 @@ no comparable actions).
 | `MATCH` | Both tools returned exit 0 and their outputs deep-equal (within cursor/time tolerances). |
 | `DIFF` | Both tools returned exit 0 but at least one field diverges. |
 | `ERROR` | At least one tool returned non-zero exit code or unparseable output. |
-| `SKIP` | Action was not run (missing tool executable, no valid corpus input for chained args). |
+| `SKIP` | Action was not comparable (missing tool executable, no valid corpus input for chained args, or the complete run was invalidated by the active-writer preflight). |
 
 Expected-error cases are deliberate negative-path probes. If both tools exit
 non-zero, the row is a parity match with `status=MATCH` and
@@ -83,6 +84,26 @@ non-zero, the row is a parity match with `status=MATCH` and
 row becomes `status=DIFF` with `error_kind=expected_missing` or
 `error_kind=expected_mismatch`. Unexpected non-zero exits on a plain row remain
 `status=ERROR` with `error_kind=real`.
+
+### Active-writer environment classification
+
+`monolith_query.exe` intentionally refuses to recover or open a hot rollback
+journal when an Unreal Editor may still own `EngineSource.db`. The benchmark
+always invokes Query with global `--readonly`, then runs a DB-backed preflight
+before chain discovery or scored actions. If preflight stderr contains the exact
+fail-closed marker
+`Rollback journal exists for database and could not be recovered safely:`, the
+benchmark does not launch the Python reader and invalidates the **entire run**.
+Every action becomes `SKIP(environment_blocked)`, `comparable_actions` becomes
+zero, and the score is forced to 0.0. This preserves safety without selecting
+only Query's failed rows out of the denominator.
+
+This classification does not match broad strings such as `database is locked`
+and does not turn generic process/tool failures into skips. After a successful
+preflight, the marker has no row-level skip privilege: if it appears because the
+environment changed mid-run, that action is `ERROR(real)` and stays comparable.
+In particular, Query failure plus Python success is an error and cannot inflate
+the score.
 
 ### Action buckets and offline-unsupported reclassification
 

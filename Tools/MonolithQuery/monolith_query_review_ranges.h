@@ -4,13 +4,9 @@
 
 static std::vector<std::string> collect_changed_paths(const Args& args) {
     std::vector<std::string> paths = args.positional;
-    std::string csv = args.opt("changed_paths");
-    if (!csv.empty()) {
-        std::stringstream ss(csv);
-        std::string path;
-        while (std::getline(ss, path, ',')) {
-            if (!path.empty()) paths.push_back(path);
-        }
+    for (const std::string& key : {std::string("changed_paths"), std::string("paths")}) {
+        std::vector<std::string> values = string_list_option(args, key);
+        paths.insert(paths.end(), values.begin(), values.end());
     }
     return paths;
 }
@@ -78,16 +74,49 @@ parse_unified_diff_ranges(const std::string& diff_text) {
 static std::map<std::string, std::vector<std::pair<int,int>>>
 collect_changed_ranges(const Args& args) {
     std::map<std::string, std::vector<std::pair<int,int>>> ranges;
-    std::string diff_text;
+    std::string diff_text = args.opt("diff_text");
     std::string df = args.opt("diff_file");
     if (!df.empty()) {
         std::ifstream f(df, std::ios::binary);
         if (f) { std::stringstream b; b << f.rdbuf(); diff_text = b.str(); }
     }
-    if (args.options.count("diff_stdin")) {
+    if (args.opt_bool("diff_stdin", false)) {
         std::stringstream b; b << std::cin.rdbuf(); diff_text += b.str();
     }
     if (!diff_text.empty()) ranges = parse_unified_diff_ranges(diff_text);
+
+    if (args.options.count("changed_ranges"))
+        args.require_mcp_type("changed_ranges", {"array"}, "an array");
+    std::string changed_ranges_json = args.raw_opt("changed_ranges");
+    if (!changed_ranges_json.empty()) {
+        try {
+            json entries = json::parse(changed_ranges_json);
+            if (!entries.is_array())
+                die("--changed-ranges must be a JSON array");
+            for (const json& entry : entries) {
+                if (!entry.is_object())
+                    die("--changed-ranges entries must be objects");
+                std::string path = entry.value("path", "");
+                std::replace(path.begin(), path.end(), '\\', '/');
+                if (path.empty() || !entry.contains("ranges") || !entry["ranges"].is_array())
+                    die("--changed-ranges entries require path and ranges");
+                for (const json& span : entry["ranges"]) {
+                    if (!span.is_array() || span.size() != 2
+                        || !span[0].is_number_integer() || !span[1].is_number_integer())
+                        die("--changed-ranges spans must be [start,end] integer pairs");
+                    int start = span[0].get<int>();
+                    int end = span[1].get<int>();
+                    if (start <= 0 || end < start)
+                        die("--changed-ranges spans require start > 0 and end >= start");
+                    ranges[path].push_back({start, end});
+                }
+            }
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (const std::exception&) {
+            die("--changed-ranges must be valid JSON: [{path,ranges:[[start,end]]}]");
+        }
+    }
 
     std::string spec = args.opt("ranges");
     if (!spec.empty()) {

@@ -99,9 +99,14 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 
 	int32 ResultFiles = 0, ResultSymbols = 0, ResultErrors = 0;
 	bool bCompleted = false;
-	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors)
+	bool bCompletionSucceeded = false;
+	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
 	{
-		ResultFiles = Files; ResultSymbols = Symbols; ResultErrors = Errors; bCompleted = true;
+		ResultFiles = Files;
+		ResultSymbols = Symbols;
+		ResultErrors = Errors;
+		bCompletionSucceeded = bSucceeded;
+		bCompleted = true;
 	});
 	Indexer.OnProgress.AddLambda([](const FString& ModuleName, int32 Cur, int32 Total, int32 Files, int32 Syms)
 	{
@@ -110,12 +115,26 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 	});
 
 	const double StartedAt = FPlatformTime::Seconds();
-	const bool bStarted = Indexer.RunSynchronous(); // blocks until done
+	const bool bRunSucceeded = Indexer.RunSynchronous(); // blocks until done
 	const double Elapsed = FPlatformTime::Seconds() - StartedAt;
 
-	if (!bStarted)
+	if (!bRunSucceeded)
 	{
-		UE_LOG(LogMonolithSource, Error, TEXT("MonolithReindex: indexer was already running; aborted."));
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("MonolithReindex: indexer did not complete successfully (files=%d symbols=%d errors=%d)."),
+			ResultFiles, ResultSymbols, ResultErrors);
+		return 1;
+	}
+	if (!bCompleted)
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("MonolithReindex: indexer returned without firing OnComplete; failing closed."));
+		return 1;
+	}
+	if (!bCompletionSucceeded)
+	{
+		UE_LOG(LogMonolithSource, Error,
+			TEXT("MonolithReindex: completion callback reported failure; failing closed."));
 		return 1;
 	}
 
@@ -130,11 +149,6 @@ int32 UMonolithReindexCommandlet::Main(const FString& Params)
 		TEXT("MonolithReindex: done in %.1fs — files=%d symbols=%d errors=%d (db=%s)"),
 		Elapsed, ResultFiles, ResultSymbols, ResultErrors, *DbPath);
 
-	if (!bCompleted)
-	{
-		UE_LOG(LogMonolithSource, Warning,
-			TEXT("MonolithReindex: OnComplete did not fire; DB exists so treating as success."));
-	}
 	// Per-file parse errors are expected across a large engine tree and are
 	// non-fatal (matches the in-editor subsystem). DB-produced == success.
 	return 0;

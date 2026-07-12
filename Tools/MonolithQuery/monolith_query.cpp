@@ -28,6 +28,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
+#include <iterator>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <cerrno>
@@ -207,6 +209,7 @@ static std::string escape_console_fts(const std::string& query) {
 // ============================================================
 
 static std::string lower_copy(std::string value);
+static bool g_immutable_readonly = false;
 
 class Database {
 public:
@@ -229,10 +232,15 @@ public:
     void open(const std::string& path, bool query_only = true) {
         if (!fs::exists(path))
             die("Database not found: " + path);
+        if (!query_only && g_immutable_readonly)
+            die("global --readonly forbids opening a database read-write: " + path);
 
         if (query_only) {
             std::string recovery_error;
-            if (!recover_rollback_journal(path, recovery_error)) {
+            if (!recover_rollback_journal(
+                    path,
+                    recovery_error,
+                    !g_immutable_readonly)) {
                 die("Rollback journal exists for database and could not be recovered safely: " + path + "-journal - " + recovery_error);
             }
         }
@@ -255,6 +263,8 @@ public:
     }
 
     void open_or_create(const std::string& path) {
+        if (g_immutable_readonly)
+            die("global --readonly forbids creating or opening a database read-write: " + path);
         fs::path parent = fs::path(path).parent_path();
         if (!parent.empty())
             fs::create_directories(parent);
@@ -353,13 +363,21 @@ private:
             || lower.find("rollback") != std::string::npos;
     }
 
-    static bool recover_rollback_journal(const std::string& path, std::string& error) {
+    static bool recover_rollback_journal(
+        const std::string& path,
+        std::string& error,
+        bool allow_writable_recovery) {
         if (!rollback_journal_exists(path)) return true;
 
         std::string probe_error;
         if (readonly_probe_ok(path, probe_error)) return true;
         if (!needs_writable_recovery(probe_error)) {
             error = probe_error;
+            return false;
+        }
+        if (!allow_writable_recovery) {
+            error = "global --readonly forbids writable rollback-journal recovery; "
+                "close the database writer and run an intentional non-readonly recovery before retrying";
             return false;
         }
 
@@ -967,41 +985,139 @@ static std::pair<double, std::string> sensitivity_factor(const std::string& text
 // CRG graph/cache, snapshot, and source review maintenance helpers.
 #include "monolith_query_crg.h"
 
+static void set_operation_error(json& root, const std::string& summary) {
+    root["success"] = false;
+    root["status"] = "error";
+    root["summary"] = summary;
+    root["error"] = summary;
+}
+
 // ============================================================
 // CLI argument parser
 // ============================================================
+
+static bool is_valid_action_name(const std::string& value) {
+    if (value.empty()) return false;
+    return std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+        return (ch >= 'A' && ch <= 'Z')
+            || (ch >= 'a' && ch <= 'z')
+            || (ch >= '0' && ch <= '9')
+            || ch == '_';
+    });
+}
 
 struct Args {
     std::string ns;       // "source" or "project"
     std::string action;   // e.g. "search_source", "read_source"
     std::vector<std::string> positional;
     std::map<std::string, std::string> options;
+    std::map<std::string, std::string> mcp_types;
+
+    std::string raw_opt(const std::string& key, const std::string& def = "") const {
+        auto it = options.find(key);
+        return (it != options.end()) ? it->second : def;
+    }
+
+    std::string mcp_type(const std::string& key) const {
+        auto it = mcp_types.find(key);
+        return it == mcp_types.end() ? "" : it->second;
+    }
+
+    void require_mcp_type(
+        const std::string& key,
+        std::initializer_list<const char*> accepted,
+        const std::string& expected) const {
+        const std::string actual = mcp_type(key);
+        if (actual.empty()) return;
+        for (const char* value : accepted) {
+            if (actual == value) return;
+        }
+        die("MCP parameter '" + key + "' for " + ns + "." + action
+            + " must be " + expected + "; received " + actual);
+    }
 
     std::string opt(const std::string& key, const std::string& def = "") const {
+        if (options.count(key))
+            require_mcp_type(key, {"string"}, "a string");
         auto it = options.find(key);
         return (it != options.end()) ? it->second : def;
     }
 
     int opt_int(const std::string& key, int def) const {
         auto it = options.find(key);
-        if (it == options.end() || it->second.empty()) return def;
-        try { return std::stoi(it->second); }
-        catch (...) { return def; }
+        if (it == options.end()) return def;
+        require_mcp_type(key, {"integer", "number"}, "an integer");
+        const std::string value = trim_copy(it->second);
+        if (value.empty()) die("--" + key + " requires an integer value");
+        try {
+            size_t consumed = 0;
+            const double numeric = std::stod(value, &consumed);
+            if (consumed != value.size() || !std::isfinite(numeric)
+                || std::trunc(numeric) != numeric
+                || numeric < static_cast<double>(std::numeric_limits<int>::min())
+                || numeric > static_cast<double>(std::numeric_limits<int>::max()))
+                die("--" + key + " must be an integer: " + it->second);
+            return static_cast<int>(numeric);
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (...) {
+            die("--" + key + " must be an integer: " + it->second);
+        }
+        return def;
+    }
+
+    int64_t opt_int64(const std::string& key, int64_t def) const {
+        auto it = options.find(key);
+        if (it == options.end()) return def;
+        require_mcp_type(key, {"integer", "number"}, "an integer");
+        const std::string value = trim_copy(it->second);
+        if (value.empty()) die("--" + key + " requires an integer value");
+        try {
+            size_t consumed = 0;
+            const long double numeric = std::stold(value, &consumed);
+            if (consumed != value.size() || !std::isfinite(numeric)
+                || std::trunc(numeric) != numeric
+                || numeric < static_cast<long double>(std::numeric_limits<int64_t>::min())
+                || numeric > static_cast<long double>(std::numeric_limits<int64_t>::max()))
+                die("--" + key + " must be an integer: " + it->second);
+            return static_cast<int64_t>(numeric);
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (...) {
+            die("--" + key + " must be an integer: " + it->second);
+        }
+        return def;
     }
 
     bool opt_bool(const std::string& key, bool def = false) const {
         auto it = options.find(key);
         if (it == options.end()) return def;
+        require_mcp_type(key, {"boolean"}, "a boolean");
         const auto& v = it->second;
         if (v.empty()) return true;
+        if (!is_bool_literal(v))
+            die("--" + key + " must be true or false: " + v);
         return parse_bool_literal(v, def);
     }
 
     double opt_double(const std::string& key, double def) const {
         auto it = options.find(key);
-        if (it == options.end() || it->second.empty()) return def;
-        try { return std::stod(it->second); }
-        catch (...) { return def; }
+        if (it == options.end()) return def;
+        require_mcp_type(key, {"integer", "number"}, "a number");
+        const std::string value = trim_copy(it->second);
+        if (value.empty()) die("--" + key + " requires a numeric value");
+        try {
+            size_t consumed = 0;
+            const double parsed = std::stod(value, &consumed);
+            if (consumed != value.size() || !std::isfinite(parsed))
+                die("--" + key + " must be a finite number: " + it->second);
+            return parsed;
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (...) {
+            die("--" + key + " must be a finite number: " + it->second);
+        }
+        return def;
     }
 };
 
@@ -1009,11 +1125,69 @@ static std::string first_positional_or_query_option(const Args& args) {
     if (!args.positional.empty() && !trim_copy(args.positional[0]).empty())
         return args.positional[0];
 
+    std::string symbol = args.opt("symbol");
+    if (!trim_copy(symbol).empty())
+        return symbol;
+
     std::string q = args.opt("query");
     if (!trim_copy(q).empty())
         return q;
 
     return args.opt("q");
+}
+
+static std::vector<std::string> string_list_option(
+    const Args& args,
+    const std::string& option_name) {
+    if (args.options.count(option_name)) {
+        if (option_name == "symbols")
+            args.require_mcp_type(option_name, {"array"}, "an array");
+        else
+            args.require_mcp_type(option_name, {"array", "string"}, "an array or string");
+    }
+    const std::string raw = trim_copy(args.raw_opt(option_name));
+    if (raw.empty())
+        return {};
+
+    if (raw.front() == '[') {
+        try {
+            const json parsed = json::parse(raw);
+            if (!parsed.is_array())
+                die("--" + option_name + " must be a JSON string array or comma-separated string");
+
+            std::vector<std::string> values;
+            for (const json& item : parsed) {
+                if (!item.is_string())
+                    die("--" + option_name + " JSON array items must be strings");
+                const std::string value = trim_copy(item.get<std::string>());
+                if (!value.empty())
+                    values.push_back(value);
+            }
+            return values;
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (const std::exception&) {
+            die("--" + option_name + " must be a valid JSON string array or comma-separated string");
+        }
+    }
+
+    std::vector<std::string> values;
+    std::stringstream stream(raw);
+    std::string value;
+    while (std::getline(stream, value, ',')) {
+        value = trim_copy(value);
+        if (!value.empty())
+            values.push_back(value);
+    }
+    return values;
+}
+
+static std::vector<std::string> positional_or_string_list_option(
+    const Args& args,
+    const std::string& option_name) {
+    if (!args.positional.empty())
+        return args.positional;
+    return string_list_option(args, option_name);
 }
 
 static Args parse_args(int argc, char* argv[]) {
@@ -1025,6 +1199,8 @@ static Args parse_args(int argc, char* argv[]) {
 
     args.ns = argv[1];
     args.action = argv[2];
+    if (!is_valid_action_name(args.action))
+        die("Invalid action name '" + args.action + "'; action names must match [A-Za-z0-9_]+");
 
     for (int i = 3; i < argc; ++i) {
         std::string a = argv[i];
@@ -1066,7 +1242,159 @@ static Args parse_args(int argc, char* argv[]) {
         }
     }
 
+    const std::string mcp_types_json = getenv_str("MONOLITH_MCP_PARAM_TYPES_JSON");
+    if (!mcp_types_json.empty()) {
+        try {
+            const json types = json::parse(mcp_types_json);
+            if (!types.is_object())
+                die("MONOLITH_MCP_PARAM_TYPES_JSON must be an object");
+            for (auto it = types.begin(); it != types.end(); ++it) {
+                if (!it.value().is_string())
+                    die("MONOLITH_MCP_PARAM_TYPES_JSON values must be strings");
+                args.mcp_types[it.key()] = it.value().get<std::string>();
+            }
+        } catch (const QueryFatal&) {
+            throw;
+        } catch (const std::exception& error) {
+            die(std::string("Invalid MONOLITH_MCP_PARAM_TYPES_JSON: ") + error.what());
+        }
+    }
+
     return args;
+}
+
+static void add_help_option_keys(
+    const std::string& text,
+    std::set<std::string>& keys) {
+    size_t cursor = 0;
+    while ((cursor = text.find("--", cursor)) != std::string::npos) {
+        cursor += 2;
+        const size_t begin = cursor;
+        while (cursor < text.size()) {
+            const unsigned char c = static_cast<unsigned char>(text[cursor]);
+            if (!(std::isalnum(c) || c == '_' || c == '-')) break;
+            ++cursor;
+        }
+        if (cursor > begin)
+            keys.insert(normalize_option_key(text.substr(begin, cursor - begin)));
+    }
+}
+
+static std::string help_positional_key(const std::string& descriptor) {
+    size_t end = 0;
+    while (end < descriptor.size()) {
+        const unsigned char c = static_cast<unsigned char>(descriptor[end]);
+        if (!(std::isalnum(c) || c == '_')) break;
+        ++end;
+    }
+    return lower_copy(descriptor.substr(0, end));
+}
+
+static void reject_mcp_alias_collision(
+    const Args& args,
+    std::initializer_list<const char*> aliases) {
+    std::vector<std::string> supplied;
+    for (const char* alias : aliases) {
+        if (args.mcp_types.count(alias)) supplied.emplace_back(alias);
+    }
+    if (supplied.size() < 2) return;
+    std::string joined;
+    for (const std::string& key : supplied) {
+        if (!joined.empty()) joined += ", ";
+        joined += key;
+    }
+    die("MCP parameters collide for " + args.ns + "." + args.action
+        + ": " + joined + " are aliases of the same canonical parameter");
+}
+
+static void validate_mcp_parameter_contract(const Args& args) {
+    if (args.mcp_types.empty()) return;
+
+    const CliNamespaceHelp* ns_help = find_namespace_help(args.ns);
+    const CliActionHelp* action_help = ns_help
+        ? find_action_help(*ns_help, args.action)
+        : nullptr;
+    if (!action_help)
+        die("Offline fallback has no parameter contract for " + args.ns + "." + args.action);
+
+    std::set<std::string> allowed;
+    if (!action_help->mcp_parameters.empty()) {
+        for (const std::string& parameter : action_help->mcp_parameters)
+            allowed.insert(normalize_option_key(parameter));
+    } else {
+        // Legacy descriptors remain accepted until they are migrated to the
+        // explicit machine contract. New/high-traffic routes must populate
+        // mcp_parameters so prose drift cannot change the validation boundary.
+        for (const std::string& option : action_help->options)
+            add_help_option_keys(option, allowed);
+        add_help_option_keys(action_help->syntax, allowed);
+        for (const std::string& positional : action_help->positionals) {
+            const std::string key = help_positional_key(positional);
+            if (!key.empty()) allowed.insert(key);
+        }
+    }
+
+    // Explicit offline database overrides are process-local query options, not
+    // live action parameters. Keep them typed and scoped to their DB owners.
+    if (args.ns == "source" || args.ns == "console" || args.ns == "cppreflect"
+        || args.ns == "network" || args.ns == "decision" || args.ns == "risk") {
+        allowed.insert("db");
+        allowed.insert("source_db");
+    } else if (args.ns == "project") {
+        allowed.insert("db");
+        allowed.insert("project_db");
+    } else if (args.ns == "bridge") {
+        allowed.insert("db");
+        allowed.insert("source_db");
+        allowed.insert("project_db");
+    }
+    if (args.ns == "monolith") {
+        // The native proxy injects the immutable bundle's pinned catalog path.
+        // Callers cannot supply this option through the proxy contract.
+        allowed.insert("snapshot");
+    }
+
+    for (const auto& pair : args.mcp_types) {
+        if (!args.options.count(pair.first))
+            die("MCP parameter type metadata has no matching value: " + pair.first);
+        if (!allowed.count(pair.first))
+            die("Offline fallback does not support parameter '" + pair.first
+                + "' for " + args.ns + "." + args.action
+                + "; call monolith_discover on a live endpoint for the full action schema");
+    }
+    for (const auto& pair : args.options) {
+        if (!args.mcp_types.count(pair.first))
+            die("Offline fallback parameter is missing original JSON type metadata: " + pair.first);
+    }
+
+    const std::string action_id = args.ns + "." + args.action;
+    if (action_id == "source.read_source")
+        reject_mcp_alias_collision(args, {"symbol", "query", "name", "path"});
+    else if (action_id == "source.find_callers" || action_id == "source.find_callees")
+        reject_mcp_alias_collision(args, {"symbol", "query", "q"});
+    else if (action_id == "source.search_source"
+        || action_id == "source.search_crg_graph"
+        || action_id == "project.search"
+        || action_id == "project.search_gameplay_tags")
+        reject_mcp_alias_collision(args, {"query", "q"});
+    else if (action_id == "source.get_class_hierarchy")
+        reject_mcp_alias_collision(args, {"symbol", "class_name"});
+    else if (action_id == "source.read_file")
+        reject_mcp_alias_collision(args, {"file_path", "path"});
+    else if (action_id == "source.get_module_info")
+        reject_mcp_alias_collision(args, {"module_name", "module"});
+    else if (action_id == "project.find_by_type")
+        reject_mcp_alias_collision(args, {"asset_type", "asset_class", "type"});
+    else if (action_id == "project.find_references"
+        || action_id == "project.get_asset_details")
+        reject_mcp_alias_collision(args, {"asset_path", "package_path"});
+    else if (action_id == "project.risk_score")
+        reject_mcp_alias_collision(args, {"asset_path", "seed"});
+    else if (action_id == "source.detect_changes"
+        || action_id == "source.pre_merge_check"
+        || action_id == "project.detect_changes"
+        || action_id == "project.pre_merge_check")
+        reject_mcp_alias_collision(args, {"changed_paths", "paths"});
 }
 
 struct GlobalCliOptions {
@@ -1300,10 +1628,19 @@ public:
     void search_source(const Args& args) {
         std::string q = first_positional_or_query_option(args);
         if (trim_copy(q).empty()) die("search_source requires a query argument (positional or --query=<text>)");
-        int requested_limit = args.opt_int("limit", 20);
-        int limit = clamp_int(requested_limit <= 0 ? 20 : requested_limit, 1, 200);
+        int requested_limit = args.opt_int("limit", 50);
+        int limit = clamp_int(requested_limit <= 0 ? 50 : requested_limit, 1, 200);
         std::string module = args.opt("module");
-        std::string kind = args.opt("kind");
+        std::string kind = args.opt("symbol_kind", args.opt("kind"));
+        std::string mode = lower_copy(args.opt("mode", "fts"));
+        std::string scope = lower_copy(args.opt("scope", "all"));
+        if (mode != "fts" && mode != "exact")
+            die("search_source offline mode supports mode=fts or mode=exact; use the live editor action for regex mode");
+        if (scope != "all")
+            die("search_source offline mode supports only scope=all; use the live editor action for scoped searches");
+        std::string path_filter = args.opt("path_filter");
+        if (!args.opt("cursor").empty())
+            die("search_source cursor pagination is not supported by the offline text result; restart without cursor or use the live editor action");
         std::string fts_q = escape_fts(q);
 
         std::ostringstream out;
@@ -1311,11 +1648,20 @@ public:
         // Symbol FTS search
         {
             std::string sql = "SELECT s.id, s.name, s.qualified_name, s.kind, s.file_id, "
-                              "s.line_start, s.line_end, s.access, s.signature, s.docstring "
-                              "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
-                              "LEFT JOIN files p ON p.id = s.file_id";
-            std::vector<std::string> conditions = {"symbols_fts MATCH ?"};
-            std::vector<std::string> params = {fts_q};
+                              "s.line_start, s.line_end, s.access, s.signature, s.docstring ";
+            std::vector<std::string> conditions;
+            std::vector<std::string> params;
+            if (mode == "exact") {
+                sql += "FROM symbols s LEFT JOIN files p ON p.id = s.file_id";
+                conditions.push_back("(s.name = ? COLLATE NOCASE OR s.qualified_name = ? COLLATE NOCASE)");
+                params.push_back(q);
+                params.push_back(q);
+            } else {
+                sql += "FROM symbols_fts f JOIN symbols s ON s.id = f.rowid "
+                       "LEFT JOIN files p ON p.id = s.file_id";
+                conditions.push_back("symbols_fts MATCH ?");
+                params.push_back(fts_q);
+            }
 
             if (!module.empty()) {
                 sql += " JOIN modules m ON m.id = p.module_id";
@@ -1326,13 +1672,21 @@ public:
                 conditions.push_back("s.kind = ?");
                 params.push_back(kind);
             }
+            if (!path_filter.empty()) {
+                conditions.push_back("p.path LIKE ? ESCAPE '\\'");
+                params.push_back("%" + escape_sql_like(path_filter) + "%");
+            }
 
             sql += " WHERE ";
             for (size_t i = 0; i < conditions.size(); ++i) {
                 if (i > 0) sql += " AND ";
                 sql += conditions[i];
             }
-            sql += " ORDER BY CASE WHEN p.path IS NULL OR p.path = '' OR p.path = '<unknown>' THEN 1 ELSE 0 END, bm25(symbols_fts) LIMIT " + std::to_string(limit);
+            sql += " ORDER BY CASE WHEN p.path IS NULL OR p.path = '' OR p.path = '<unknown>' THEN 1 ELSE 0 END, ";
+            sql += mode == "exact"
+                ? "s.qualified_name, s.id LIMIT "
+                : "bm25(symbols_fts), s.id LIMIT ";
+            sql += std::to_string(limit);
 
             auto rows = query(db, sql, params);
             if (!rows.empty()) {
@@ -1353,14 +1707,26 @@ public:
 
         // Source line FTS search
         {
-            std::string sql = "SELECT sf.file_id, sf.line_number, sf.text FROM source_fts sf";
-            std::vector<std::string> conditions = {"source_fts MATCH ?"};
-            std::vector<std::string> params = {fts_q};
+            std::string sql = "SELECT sf.file_id, sf.line_number, sf.text FROM source_fts sf "
+                              "LEFT JOIN files fi ON fi.id = sf.file_id";
+            std::vector<std::string> conditions;
+            std::vector<std::string> params;
+            if (mode == "exact") {
+                conditions.push_back("instr(lower(sf.text), lower(?)) > 0");
+                params.push_back(q);
+            } else {
+                conditions.push_back("source_fts MATCH ?");
+                params.push_back(fts_q);
+            }
 
             if (!module.empty()) {
-                sql += " JOIN files fi ON fi.id = sf.file_id JOIN modules m ON m.id = fi.module_id";
+                sql += " JOIN modules m ON m.id = fi.module_id";
                 conditions.push_back("m.name = ?");
                 params.push_back(module);
+            }
+            if (!path_filter.empty()) {
+                conditions.push_back("fi.path LIKE ? ESCAPE '\\'");
+                params.push_back("%" + escape_sql_like(path_filter) + "%");
             }
 
             sql += " WHERE ";
@@ -1368,7 +1734,10 @@ public:
                 if (i > 0) sql += " AND ";
                 sql += conditions[i];
             }
-            sql += " ORDER BY bm25(source_fts) LIMIT " + std::to_string(limit);
+            sql += mode == "exact"
+                ? " ORDER BY fi.path, sf.line_number LIMIT "
+                : " ORDER BY bm25(source_fts), sf.rowid LIMIT ";
+            sql += std::to_string(limit);
 
             auto rows = query(db, sql, params);
             if (!rows.empty()) {
@@ -1401,25 +1770,30 @@ public:
     // --- read_source ---
     void read_source(const Args& args) {
         std::string path = args.opt("path", args.opt("file_path"));
-        if (args.positional.empty()) {
+        std::string symbol = args.opt("symbol", args.opt("query", args.opt("name")));
+        if (symbol.empty() && !args.positional.empty())
+            symbol = args.positional[0];
+        if (symbol.empty()) {
             if (!path.empty()) {
                 Args file_args = args;
                 file_args.positional = {path};
                 read_file(file_args);
                 return;
             }
-            die("read_source requires a symbol argument; use read_file or --path for source file paths");
+            die("read_source requires a symbol argument (--symbol/--query/--name); use read_file or --path for source file paths");
         }
-        std::string symbol = args.positional[0];
         if (looks_like_source_file_path(symbol)) {
             Args file_args = args;
             file_args.positional = {symbol};
             read_file(file_args);
             return;
         }
-        int max_lines = args.opt_int("max_lines", 0);
-        bool include_header = !args.options.count("no_header");
-        // bool members_only = args.opt_bool("members_only"); // reserved for future use
+        int max_lines = args.opt_int("max_lines", 500);
+        bool include_header = args.opt_bool("include_header", false);
+        if (args.options.count("no_header") && args.opt_bool("no_header", false))
+            include_header = false;
+        if (args.opt_bool("members_only", false))
+            die("read_source --members-only is not supported by the offline index; omit it or use the live editor action");
 
         // Exact name lookup
         auto rows = query(db, "SELECT * FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC", {symbol});
@@ -1487,8 +1861,9 @@ public:
 
     // --- find_references ---
     void find_references(const Args& args) {
-        if (args.positional.empty()) die("find_references requires a symbol argument");
-        std::string symbol = args.positional[0];
+        std::string symbol = args.opt("symbol", args.opt("query"));
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("find_references requires a symbol argument (positional or --symbol=<name>)");
         std::string ref_kind = args.opt("ref_kind");
         int limit = args.opt_int("limit", 50);
 
@@ -1591,8 +1966,9 @@ public:
 
     // --- get_class_hierarchy ---
     void get_class_hierarchy(const Args& args) {
-        if (args.positional.empty()) die("get_class_hierarchy requires a symbol argument");
-        std::string symbol = args.positional[0];
+        std::string symbol = args.opt("symbol", args.opt("class_name"));
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("get_class_hierarchy requires a symbol argument (positional, --symbol, or --class-name)");
         std::string direction = args.opt("direction", "both");
         int depth = args.opt_int("depth", 5);
 
@@ -1663,8 +2039,9 @@ public:
 
     // --- get_module_info ---
     void get_module_info(const Args& args) {
-        if (args.positional.empty()) die("get_module_info requires a module_name argument");
-        std::string module_name = args.positional[0];
+        std::string module_name = args.opt("module_name", args.opt("module"));
+        if (module_name.empty() && !args.positional.empty()) module_name = args.positional[0];
+        if (module_name.empty()) die("get_module_info requires a module_name argument (positional or --module-name)");
 
         auto mods = query(db, "SELECT id, name, path, module_type FROM modules WHERE name = ?", {module_name});
         if (mods.empty()) die("No module found matching '" + module_name + "'.");
@@ -1700,8 +2077,9 @@ public:
 
     // --- get_symbol_context ---
     void get_symbol_context(const Args& args) {
-        if (args.positional.empty()) die("get_symbol_context requires a symbol argument");
-        std::string symbol = args.positional[0];
+        std::string symbol = args.opt("symbol", args.opt("query"));
+        if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
+        if (symbol.empty()) die("get_symbol_context requires a symbol argument (positional or --symbol)");
         int ctx_lines = args.opt_int("context_lines", 10);
 
         auto rows = query(db, "SELECT * FROM symbols WHERE name = ? ORDER BY (line_end > line_start) DESC", {symbol});
@@ -1752,51 +2130,85 @@ public:
         int line_count = args.opt_int("line_count", args.opt_int("max_lines", 0));
 
         std::string resolved;
+        const fs::path requested_path = fs::u8path(file_path);
+        const bool requested_absolute_path = requested_path.is_absolute();
 
-        bool requested_absolute_path = fs::path(file_path).is_absolute();
+        auto canonical_path_key = [](const fs::path& path, std::string& out) {
+            std::error_code error;
+            fs::path canonical = fs::weakly_canonical(path, error);
+            if (error || canonical.empty()) return false;
+            out = canonical.lexically_normal().u8string();
+            std::replace(out.begin(), out.end(), '\\', '/');
+#ifdef _WIN32
+            std::transform(out.begin(), out.end(), out.begin(),
+                           [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+#endif
+            return true;
+        };
 
-        if (fs::exists(file_path)) {
-            resolved = file_path;
-        } else if (requested_absolute_path) {
-            die("Absolute file path does not exist or is not readable: '" + file_path +
-                "'. Check the path spelling or use source.search_source/read_source to locate an indexed file. "
-                "Reindexing will not fix a missing absolute path. [error_class=path_not_found]");
-        } else {
-            std::vector<std::string> lookup_paths;
-            auto add_lookup_path = [&lookup_paths](std::string value) {
-                if (std::find(lookup_paths.begin(), lookup_paths.end(), value) == lookup_paths.end())
-                    lookup_paths.push_back(std::move(value));
-            };
-            add_lookup_path(file_path);
-            std::string backslash_path = file_path;
-            std::replace(backslash_path.begin(), backslash_path.end(), '/', '\\');
-            add_lookup_path(backslash_path);
-            std::string slash_path = file_path;
-            std::replace(slash_path.begin(), slash_path.end(), '\\', '/');
-            add_lookup_path(slash_path);
-
-            Rows rows;
-            for (const auto& lookup_path : lookup_paths) {
-                rows = query(db, "SELECT path FROM files WHERE path = ?", {lookup_path});
-                if (!rows.empty())
-                    break;
-            }
-            if (rows.empty()) {
-                for (const auto& lookup_path : lookup_paths) {
-                    rows = query(db, "SELECT path FROM files WHERE path LIKE ? LIMIT 1", {"%" + lookup_path});
-                    if (!rows.empty())
-                        break;
-                }
-            }
-
-            if (!rows.empty())
-                resolved = rows[0].get("path");
+        std::string requested_canonical;
+        if (requested_absolute_path && !canonical_path_key(requested_path, requested_canonical)) {
+            die("Absolute file path does not exist or cannot be canonicalized: '" + file_path
+                + "'. Use source.search_source/read_source to locate an indexed file. [error_class=path_not_found]");
         }
 
-        if (resolved.empty()) die("No file found matching '" + file_path + "' in EngineSource.db. "
-            "Absolute on-disk paths are read directly; a relative path that exists on disk but is missing here "
-            "is likely an index coverage gap. Pass an absolute path, or refresh via 'source.trigger_project_reindex' "
-            "(live editor), then retry. Do not fall back to editor.run_python for source reads. [error_class=coverage_miss]");
+        std::vector<std::string> lookup_paths;
+        auto add_lookup_path = [&lookup_paths](std::string value) {
+            if (std::find(lookup_paths.begin(), lookup_paths.end(), value) == lookup_paths.end())
+                lookup_paths.push_back(std::move(value));
+        };
+        add_lookup_path(file_path);
+        std::string backslash_path = file_path;
+        std::replace(backslash_path.begin(), backslash_path.end(), '/', '\\');
+        add_lookup_path(backslash_path);
+        std::string slash_path = file_path;
+        std::replace(slash_path.begin(), slash_path.end(), '\\', '/');
+        add_lookup_path(slash_path);
+
+        Rows rows;
+        for (const auto& lookup_path : lookup_paths) {
+            rows = query(db,
+                "SELECT path FROM files WHERE path = ? COLLATE NOCASE LIMIT 2",
+                {lookup_path});
+            if (!rows.empty()) break;
+        }
+        if (rows.empty() && !requested_absolute_path) {
+            for (const auto& lookup_path : lookup_paths) {
+                rows = query(db,
+                    "SELECT path FROM files WHERE path LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY length(path), path LIMIT 2",
+                    {"%" + escape_sql_like(lookup_path)});
+                if (!rows.empty()) break;
+            }
+        }
+        if (rows.size() > 1 && !requested_absolute_path) {
+            die("Relative source path is ambiguous in EngineSource.db: '" + file_path
+                + "'. Pass the complete indexed path. [error_class=ambiguous_path]");
+        }
+
+        for (const Row& row : rows) {
+            const fs::path indexed_path = fs::u8path(row.get("path"));
+            std::error_code status_error;
+            if (!fs::is_regular_file(indexed_path, status_error) || status_error)
+                continue;
+#ifdef _WIN32
+            const DWORD attributes = GetFileAttributesW(indexed_path.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES
+                || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+                continue;
+#endif
+            std::string indexed_canonical;
+            if (!canonical_path_key(indexed_path, indexed_canonical))
+                continue;
+            if (requested_absolute_path && indexed_canonical != requested_canonical)
+                continue;
+            resolved = indexed_path.u8string();
+            break;
+        }
+
+        if (resolved.empty()) die("No readable, non-reparse indexed file matched '" + file_path + "' in EngineSource.db. "
+            "Offline source.read_file is intentionally restricted to indexed source paths and never reads arbitrary filesystem files. "
+            "Refresh via source.trigger_project_reindex on a live editor if this is a legitimate project source file. "
+            "[error_class=untrusted_or_unindexed_path]");
 
         if (end <= 0 && line_count > 0) end = start + line_count - 1;
         if (end <= 0) end = start + 199;
@@ -1866,6 +2278,7 @@ public:
             {"kind", r.get("kind")},
             {"file", short_path(file_path)},
             {"path_status", source_path_status(file_path)},
+            {"line", r.get_int("line_start")},
             {"line_start", r.get_int("line_start")},
             {"line_end", r.get_int("line_end")},
         };
@@ -2542,8 +2955,9 @@ LIMIT ?
     }
 
     void search_crg_graph(const Args& args) {
-        if (args.positional.empty()) die("search_crg_graph requires a query argument");
-        std::string q = args.positional[0];
+        std::string q = args.opt("query", args.opt("q"));
+        if (q.empty() && !args.positional.empty()) q = args.positional[0];
+        if (q.empty()) die("search_crg_graph requires a query argument (positional or --query)");
         int cap = clamp_int(args.opt_int("limit", 20), 1, 200);
         std::string kind = args.opt("kind");
         std::string graph_path = graph_db_path(args);
@@ -2707,11 +3121,14 @@ LIMIT ?
         if (callers == 0 && sym.get("kind").find("function") != std::string::npos)
             reasons.push_back("missing direct callers: function has 0 indexed callers; may be reflection/delegate/Blueprint-invoked");
         double score = std::max(0.0, std::min(raw, 1.0));
+        const std::string file = short_path(get_file_path(sym.get_int("file_id")));
         return {
             {"id", id},
             {"name", sym.get("name")},
             {"qualified_name", sym.get("qualified_name")},
             {"kind", sym.get("kind")},
+            {"file", file},
+            {"line", sym.get_int("line_start")},
             {"score", std::round(score * 1000.0) / 1000.0},
             {"tier", tier_for(score)},
             {"reasons", reasons},
@@ -2756,6 +3173,8 @@ LIMIT ?
                 scored["name"] = row.get("name");
                 scored["qualified_name"] = row.get("qualified_name");
                 scored["kind"] = row.get("kind");
+                scored["file"] = short_path(get_file_path(row.get_int("file_id")));
+                scored["line"] = row.get_int("line_start");
             } else {
                 scored = score_symbol(row);
                 scored["cache"] = {{"status", crg_cache_present(db) ? "miss" : "unavailable"}};
@@ -2779,7 +3198,11 @@ LIMIT ?
         std::string symbol = args.opt("symbol");
         if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
         if (symbol.empty()) die("risk_score requires a symbol argument");
-        print_json(source_risk_score_json(symbol, args.opt_int("limit", 10), args.opt("min_tier", "low")));
+        json result = source_risk_score_json(
+            symbol, args.opt_int("limit", 10), args.opt("min_tier", "low"));
+        if (result.value("status", "") == "error")
+            set_operation_error(result, result.value("summary", "Symbol not found: " + symbol));
+        print_json(result);
     }
 
     json source_review_hotspots_json(const std::string& kind, int limit, int min_lines, bool include_questions) {
@@ -3138,7 +3561,13 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         std::string symbol = args.opt("symbol");
         if (symbol.empty() && !args.positional.empty()) symbol = args.positional[0];
         if (symbol.empty()) die("impact_radius requires a symbol argument");
-        print_json(source_impact_radius_json(symbol, args.opt("edge_kinds", "call|type|inheritance"), args.opt("direction", "both"), args.opt_int("max_depth", 2), args.opt_int("max_results", 200)));
+        json result = source_impact_radius_json(
+            symbol, args.opt("edge_kinds", "call|type|inheritance"),
+            args.opt("direction", "both"), args.opt_int("max_depth", 2),
+            args.opt_int("max_results", 200));
+        if (result.value("status", "") == "error")
+            set_operation_error(result, result.value("summary", "Symbol not found: " + symbol));
+        print_json(result);
     }
 
     void find_overrides(const Args& args) {
@@ -3152,18 +3581,33 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         bool standard = detail == "standard" || detail == "full";
         if (!standard && detail != "minimal") die("find_overrides --detail-level must be minimal or standard");
         int offset = clamp_int(args.opt_int("offset", 0), 0, 1000);
-        int cursor_in = args.opt_int("cursor", 0);
+        int cursor_in = 0;
+        const std::string cursor_text = args.opt("cursor");
+        if (!cursor_text.empty()) {
+            if (!std::all_of(cursor_text.begin(), cursor_text.end(), [](unsigned char c) {
+                    return std::isdigit(c) != 0;
+                }))
+                die("find_overrides --cursor must be a non-negative numeric cursor");
+            try {
+                const long long parsed_cursor = std::stoll(cursor_text);
+                if (parsed_cursor < 0 || parsed_cursor > 1000)
+                    die("find_overrides --cursor must be within 0..1000");
+                cursor_in = static_cast<int>(parsed_cursor);
+            } catch (const QueryFatal&) {
+                throw;
+            } catch (...) {
+                die("find_overrides --cursor must be a non-negative numeric cursor");
+            }
+        }
         if (cursor_in > 0) offset = clamp_int(cursor_in, 0, 1000);
         static const std::vector<std::string> valid_fields = {
             "id", "name", "qualified_name", "kind", "file", "path_status",
-            "line_start", "line_end", "signature", "depth"};
+            "line", "line_start", "line_end", "signature", "depth"};
         std::vector<std::string> projected_fields;
         std::vector<std::string> unknown_fields;
         {
-            std::string csv = args.opt("fields", "");
-            std::string token;
-            std::stringstream ss(csv);
-            while (std::getline(ss, token, ',')) {
+            const std::vector<std::string> requested_fields = string_list_option(args, "fields");
+            for (const std::string& token : requested_fields) {
                 size_t begin = token.find_first_not_of(" \t");
                 size_t end = token.find_last_not_of(" \t");
                 if (begin == std::string::npos) continue;
@@ -3213,7 +3657,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
             std::string joined;
             for (const auto& f : unknown_fields) { if (!joined.empty()) joined += ", "; joined += f; }
             if (!root.contains("warnings")) root["warnings"] = json::array();
-            root["warnings"].push_back("Unknown fields ignored: " + joined + ". Valid fields: id, name, qualified_name, kind, file, path_status, line_start, line_end, signature, depth");
+            root["warnings"].push_back("Unknown fields ignored: " + joined + ". Valid fields: id, name, qualified_name, kind, file, path_status, line, line_start, line_end, signature, depth");
         }
         root["direct_override_edges"] = json::array();
         root["detail_level"] = standard ? "standard" : "minimal";
@@ -3278,8 +3722,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         json root = {{"input", {{"symbol", symbol}, {"direction", direction}, {"detail_level", minimal ? "minimal" : "standard"}}},
                      {"limits", {{"max_depth", clamp_int(max_depth <= 0 ? 2 : max_depth, 0, 8)}, {"max_results", minimal ? std::min(clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000), 25) : clamp_int(max_results <= 0 ? 200 : max_results, 1, 1000)}}}};
         if (seeds.empty()) {
-            root["status"] = "error";
-            root["summary"] = "Symbol not found: " + symbol;
+            set_operation_error(root, "Symbol not found: " + symbol);
             root["truncated"] = false;
             add_next(root, {"source.search_source"});
             print_json(root);
@@ -3294,6 +3737,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
             risk["name"] = seed.get("name");
             risk["qualified_name"] = seed.get("qualified_name");
             risk["kind"] = seed.get("kind");
+            risk["file"] = short_path(get_file_path(seed.get_int("file_id")));
+            risk["line"] = seed.get_int("line_start");
         } else {
             risk = score_symbol(seed);
         }
@@ -3383,7 +3828,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         };
         if (all_paths.empty()) {
             root["status"] = "error";
-            root["summary"] = "detect_changes requires >=1 changed path (positional, --changed-paths=a,b, --ranges, or --diff-file/--diff-stdin)";
+            root["summary"] = "detect_changes requires >=1 changed path (positional, --changed-paths=a,b, --paths=a,b, --changed-ranges, --diff-text, --ranges, or --diff-file/--diff-stdin)";
             root["changed_entities"] = json::array();
             add_next(root, {"source.search_source"});
             return root;
@@ -3426,6 +3871,8 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
                 item["qualified_name"] = r.get("qualified_name");
                 item["kind"] = r.get("kind");
                 item["file"] = short_path(get_file_path(r.get_int("file_id")));
+                item["line"] = r.get_int("line_start");
+                item["matched_path"] = norm;
                 if (line_mode && !minimal) {
                     int ls = r.get_int("line_start"), le = r.get_int("line_end");
                     json mr = json::array();
@@ -3473,6 +3920,15 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
                   [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
         json priorities = json::array();
         for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        json impacted_entities = json::array();
+        if (!minimal) {
+            for (int64_t id : impacted) {
+                if (impacted_entities.size() >= 200) break;
+                Row impacted_symbol = symbol_by_id(std::to_string(id));
+                if (!impacted_symbol.cols.empty())
+                    impacted_entities.push_back(symbol_json(impacted_symbol));
+            }
+        }
         const char* sv = "3";
         root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
         root["scoring_version"] = sv;
@@ -3481,6 +3937,9 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
         root["changed_entity_count"] = changed.size();
         root["impacted_count"] = impacted.size();
         root["test_gap_count"] = test_gaps.size();
+        root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+        if (!minimal)
+            root["impact"]["impacted_entities"] = impacted_entities;
         if (minimal) {
             json topn = json::array();
             for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("name", std::string()));
@@ -3493,7 +3952,6 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
                 + (line_precision ? "line" : "file") + "; risk=" + tier_for(overall)
                 + " scoring_version=" + sv;
             root["changed_entities"] = changed;
-            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
             root["test_gaps"] = test_gaps;
             root["review_priorities"] = priorities;
         }
@@ -3502,13 +3960,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(fetch_limit) + ";"
     }
 
     void detect_changes(const Args& args) {
-        std::vector<std::string> paths = args.positional;
-        std::string csv = args.opt("changed_paths");
-        if (!csv.empty()) {
-            std::stringstream ss(csv);
-            std::string p;
-            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
-        }
+        std::vector<std::string> paths = collect_changed_paths(args);
         print_json(source_detect_changes_json(paths, args.opt_int("max_results", 200),
                                               args.opt("detail_level", "minimal"),
                                               collect_changed_ranges(args)));
@@ -4017,7 +4469,10 @@ public:
 
     // item 3: check_deprecations
     void check_deprecations(const Args& args) {
-        const std::vector<std::string>& symbols = args.positional;
+        const std::vector<std::string> symbols =
+            positional_or_string_list_option(args, "symbols");
+        if (symbols.empty())
+            die("check_deprecations requires one or more symbols (positional or --symbols)");
         auto cnt = query(db, "SELECT COUNT(*) as c FROM symbol_deprecations");
         int total = cnt.empty() ? 0 : cnt[0].get_int("c");
         if (total == 0) {
@@ -4114,7 +4569,10 @@ private:
 public:
     // item 4: verify_symbols
     void verify_symbols(const Args& args) {
-        const std::vector<std::string>& symbols = args.positional;
+        const std::vector<std::string> symbols =
+            positional_or_string_list_option(args, "symbols");
+        if (symbols.empty())
+            die("verify_symbols requires one or more symbols (positional or --symbols)");
         auto cntrows = query(db, "SELECT COUNT(*) as c FROM symbol_deprecations");
         int cnt = cntrows.empty() ? 0 : cntrows[0].get_int("c");
         bool dep_empty = (cnt == 0);
@@ -4179,7 +4637,13 @@ public:
     // item 5: find_example_usage
     void find_example_usage(const Args& args) {
         std::string symbol = args.positional.empty() ? args.opt("symbol") : args.positional[0];
+        if (trim_copy(symbol).empty())
+            die("find_example_usage requires a symbol argument (positional or --symbol)");
         std::string prefer = lower_copy(args.opt("prefer", "engine"));
+        if (prefer != "engine" && prefer != "project")
+            die("find_example_usage prefer must be engine or project");
+        if (!args.opt("cursor").empty())
+            die("find_example_usage cursor pagination is not supported by the offline text result; restart without cursor or use the live editor action");
         bool prefer_project = (prefer == "project");
         int limit = std::max(1, args.opt_int("limit", 10));
         const int HARD_CAP = 500, FTS_FETCH = 400;
@@ -4776,6 +5240,36 @@ class ProjectActions {
         return missing;
     }
 
+    json references_for_asset_id(const std::string& asset_id) {
+        auto deps = query(db,
+            "SELECT a.package_path, a.asset_class, d.dependency_type "
+            "FROM dependencies d JOIN assets a ON a.id = d.target_asset_id WHERE d.source_asset_id = ?",
+            {asset_id});
+        auto refs = query(db,
+            "SELECT a.package_path, a.asset_class, d.dependency_type "
+            "FROM dependencies d JOIN assets a ON a.id = d.source_asset_id WHERE d.target_asset_id = ?",
+            {asset_id});
+
+        json depends_on = json::array();
+        for (const auto& row : deps) {
+            depends_on.push_back({
+                {"path", row.get("package_path")},
+                {"class", row.get("asset_class")},
+                {"type", row.get("dependency_type")},
+            });
+        }
+
+        json referenced_by = json::array();
+        for (const auto& row : refs) {
+            referenced_by.push_back({
+                {"path", row.get("package_path")},
+                {"class", row.get("asset_class")},
+                {"type", row.get("dependency_type")},
+            });
+        }
+        return {{"depends_on", depends_on}, {"referenced_by", referenced_by}};
+    }
+
 public:
     void open(const std::string& path, bool query_only = true) { db.open(path, query_only); }
 
@@ -4812,6 +5306,12 @@ public:
             std::min<long long>(max_window, std::max<long long>(required_window, required_window * 3)));
         bool include_content = args.opt_bool("include_content", true);
         bool detail = args.opt_bool("detail", false);
+        std::string asset_class_filter = args.opt("asset_class");
+        std::string path_filter = args.opt("path_filter");
+        if (args.opt_bool("explain", false))
+            die("project search explain is not supported by the offline index; omit it or use the live editor action");
+        if (args.opt_int("min_should_match_pct", 0) != 0)
+            die("project search min_should_match_pct is not supported by the offline index; omit it or use the live editor action");
         std::string projection = lower_copy(args.opt("projection", detail ? "full" : "compact"));
         if (projection == "full") {
             detail = true;
@@ -4826,9 +5326,25 @@ public:
 
         auto add_matches = [&](const std::string& fts_table, const std::string& sql, const std::string& match_source) {
             if (!object_exists(db, "table", fts_table)) return;
+            std::string filtered_sql = sql;
+            std::vector<std::string> params = {q};
+            const size_t order_by = filtered_sql.rfind(" ORDER BY ");
+            const size_t insert_at = order_by == std::string::npos
+                ? filtered_sql.size()
+                : order_by;
+            std::string filters;
+            if (!asset_class_filter.empty()) {
+                filters += " AND a.asset_class = ?";
+                params.push_back(asset_class_filter);
+            }
+            if (!path_filter.empty()) {
+                filters += " AND a.package_path LIKE ? ESCAPE '\\'";
+                params.push_back("%" + escape_sql_like(path_filter) + "%");
+            }
+            filtered_sql.insert(insert_at, filters);
             auto rows = query(db,
-                sql + " LIMIT " + std::to_string(candidate_limit) + ";",
-                {q});
+                filtered_sql + " LIMIT " + std::to_string(candidate_limit) + ";",
+                params);
             for (auto& r : rows) {
                 const std::string full_match_value = r.get("match_value");
                 auto [projected_match_value, match_value_truncated] = compact_match_value(full_match_value, detail);
@@ -5083,15 +5599,24 @@ public:
 
     // --- find_by_type ---
     void find_by_type(const Args& args) {
-        if (args.positional.empty()) die("find_by_type requires an asset_class argument");
-        std::string asset_class = args.positional[0];
-        int limit = args.opt_int("limit", 50);
-        int offset = args.opt_int("offset", 0);
+        std::string asset_class = args.opt(
+            "asset_type", args.opt("asset_class", args.opt("type")));
+        if (asset_class.empty() && !args.positional.empty()) asset_class = args.positional[0];
+        if (asset_class.empty()) die("find_by_type requires an asset type (positional, --asset-type, --asset-class, or --type)");
+        ProjectPage page = parse_page(args, "find_by_type", 100);
+        std::string module = args.opt("module");
 
-        auto rows = query(db,
-            "SELECT package_path, asset_name, asset_class, module_name, description FROM assets "
-            "WHERE asset_class = ? LIMIT " + std::to_string(limit) + " OFFSET " + std::to_string(offset),
-            {asset_class});
+        std::string sql =
+            "SELECT package_path, asset_name, asset_class, module_name, description, "
+            "file_size_bytes, indexed_at FROM assets "
+            "WHERE asset_class = ?";
+        std::vector<std::string> params = {asset_class};
+        if (!module.empty()) {
+            sql += " AND module_name = ?";
+            params.push_back(module);
+        }
+        sql += " LIMIT " + std::to_string(page.limit) + " OFFSET " + std::to_string(page.offset);
+        auto rows = query(db, sql, params);
 
         json results = json::array();
         for (auto& r : rows) {
@@ -5100,18 +5625,28 @@ public:
                 {"asset_name", r.get("asset_name")},
                 {"asset_class", r.get("asset_class")},
                 {"module_name", r.get("module_name")},
+                {"file_size_bytes", r.get_int64("file_size_bytes")},
+                {"indexed_at", r.get("indexed_at")},
                 {"description", r.get("description")},
             });
         }
 
-        json out = {{"success", true}, {"count", results.size()}, {"results", results}};
+        json out = {
+            {"success", true},
+            {"assets", results},
+            {"count", results.size()},
+            {"offset", page.offset},
+            {"limit", page.limit},
+            {"results", results},
+        };
         std::cout << out.dump(2) << std::endl;
     }
 
     // --- find_references ---
     void find_references(const Args& args) {
-        if (args.positional.empty()) die("find_references requires an asset_path argument");
-        std::string asset_path = args.positional[0];
+        std::string asset_path = args.opt("asset_path", args.opt("package_path"));
+        if (asset_path.empty() && !args.positional.empty()) asset_path = args.positional[0];
+        if (asset_path.empty()) die("find_references requires an asset path (positional, --asset-path, or --package-path)");
 
         auto assets = query(db, "SELECT id FROM assets WHERE package_path = ?", {asset_path});
         if (assets.empty()) {
@@ -5120,39 +5655,14 @@ public:
             return;
         }
 
-        std::string aid = assets[0].get("id");
-
-        // Depends on
-        auto deps = query(db,
-            "SELECT a.package_path, a.asset_class, d.dependency_type "
-            "FROM dependencies d JOIN assets a ON a.id = d.target_asset_id WHERE d.source_asset_id = ?",
-            {aid});
-
-        // Referenced by
-        auto refs = query(db,
-            "SELECT a.package_path, a.asset_class, d.dependency_type "
-            "FROM dependencies d JOIN assets a ON a.id = d.source_asset_id WHERE d.target_asset_id = ?",
-            {aid});
-
-        json depends_on = json::array();
-        for (auto& r : deps) {
-            depends_on.push_back({
-                {"path", r.get("package_path")},
-                {"class", r.get("asset_class")},
-                {"type", r.get("dependency_type")},
-            });
-        }
-
-        json referenced_by = json::array();
-        for (auto& r : refs) {
-            referenced_by.push_back({
-                {"path", r.get("package_path")},
-                {"class", r.get("asset_class")},
-                {"type", r.get("dependency_type")},
-            });
-        }
-
-        json out = {{"success", true}, {"depends_on", depends_on}, {"referenced_by", referenced_by}};
+        json references = references_for_asset_id(assets[0].get("id"));
+        json out = {
+            {"success", true},
+            {"asset_path", asset_path},
+            {"references", references},
+            {"depends_on", references["depends_on"]},
+            {"referenced_by", references["referenced_by"]},
+        };
         std::cout << out.dump(2) << std::endl;
     }
 
@@ -5186,13 +5696,19 @@ public:
             mod_breakdown[r.get("mod")] = r.get_int("cnt");
         stats["module_breakdown"] = mod_breakdown;
 
-        std::cout << stats.dump(2) << std::endl;
+        json out = {
+            {"success", true},
+            {"indexing", false},
+            {"stats", stats},
+        };
+        std::cout << out.dump(2) << std::endl;
     }
 
     // --- get_asset_details ---
     void get_asset_details(const Args& args) {
-        if (args.positional.empty()) die("get_asset_details requires an asset_path argument");
-        std::string asset_path = args.positional[0];
+        std::string asset_path = args.opt("asset_path", args.opt("package_path"));
+        if (asset_path.empty() && !args.positional.empty()) asset_path = args.positional[0];
+        if (asset_path.empty()) die("get_asset_details requires an asset path (positional, --asset-path, or --package-path)");
 
         auto assets = query(db, "SELECT * FROM assets WHERE package_path = ?", {asset_path});
         if (assets.empty()) {
@@ -5204,14 +5720,31 @@ public:
         auto& asset = assets[0];
         json details;
         for (auto& [k, v] : asset.cols) details[k] = v;
+        details["file_size_bytes"] = asset.get_int64("file_size_bytes");
 
         std::string aid = asset.get("id");
 
         // Nodes
-        auto nodes = query(db, "SELECT node_type, node_name, node_class FROM nodes WHERE asset_id = ?", {aid});
+        auto nodes = query(db, "SELECT node_type, node_name, node_class, properties FROM nodes WHERE asset_id = ?", {aid});
         json jnodes = json::array();
-        for (auto& n : nodes)
-            jnodes.push_back({{"node_type", n.get("node_type")}, {"node_name", n.get("node_name")}, {"node_class", n.get("node_class")}});
+        for (auto& n : nodes) {
+            json node = {
+                {"node_type", n.get("node_type")},
+                {"node_name", n.get("node_name")},
+                {"node_class", n.get("node_class")},
+            };
+            const std::string properties = trim_copy(n.get("properties"));
+            if (!properties.empty() && properties != "{}") {
+                try {
+                    json parsed_properties = json::parse(properties);
+                    if (parsed_properties.is_object() && !parsed_properties.empty())
+                        node["properties"] = parsed_properties;
+                } catch (const std::exception&) {
+                    // Preserve the live contract: malformed optional metadata is omitted.
+                }
+            }
+            jnodes.push_back(node);
+        }
         details["nodes"] = jnodes;
 
         // Variables
@@ -5221,9 +5754,12 @@ public:
         json jvars = json::array();
         for (auto& v : vars) {
             jvars.push_back({
-                {"var_name", v.get("var_name")}, {"var_type", v.get("var_type")},
-                {"category", v.get("category")}, {"default_value", v.get("default_value")},
-                {"is_exposed", v.get("is_exposed")}, {"is_replicated", v.get("is_replicated")},
+                {"name", v.get("var_name")},
+                {"type", v.get("var_type")},
+                {"category", v.get("category")},
+                {"exposed", v.get_int("is_exposed") != 0},
+                {"default_value", v.get("default_value")},
+                {"replicated", v.get_int("is_replicated") != 0},
             });
         }
         details["variables"] = jvars;
@@ -5239,8 +5775,10 @@ public:
             });
         }
         details["parameters"] = jparams;
+        details["references"] = references_for_asset_id(aid);
 
-        std::cout << details.dump(2) << std::endl;
+        json out = {{"success", true}, {"asset", details}};
+        std::cout << out.dump(2) << std::endl;
     }
 
     Row asset_by_id(const std::string& id) {
@@ -5870,7 +6408,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         };
         if (changed_paths.empty()) {
             root["status"] = "error";
-            root["summary"] = "detect_changes requires >=1 changed path (positional or --changed-paths=a,b)";
+            root["summary"] = "detect_changes requires >=1 changed path (positional, --changed-paths=a,b, or --paths=a,b)";
             root["changed_entities"] = json::array();
             add_next(root, {"project.search"});
             return root;
@@ -5904,6 +6442,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 item["asset_path"] = r.get("package_path");
                 item["asset_name"] = r.get("asset_name");
                 item["asset_class"] = r.get("asset_class");
+                item["matched_path"] = norm;
                 changed.push_back(item);
             }
         }
@@ -5924,6 +6463,15 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                   [](const json& a, const json& b) { return a.value("score", 0.0) > b.value("score", 0.0); });
         json priorities = json::array();
         for (size_t i = 0; i < changed.size() && i < 10; ++i) priorities.push_back(changed[i]);
+        json impacted_entities = json::array();
+        if (!minimal) {
+            for (int64_t id : impacted) {
+                if (impacted_entities.size() >= 200) break;
+                Row impacted_asset = asset_by_id(std::to_string(id));
+                if (!impacted_asset.cols.empty())
+                    impacted_entities.push_back(asset_json(impacted_asset));
+            }
+        }
         const char* sv = "3";
         root["risk_score"] = std::round(overall * 1000.0) / 1000.0;
         root["scoring_version"] = sv;
@@ -5931,6 +6479,11 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
         root["status"] = "ok";
         root["changed_entity_count"] = changed.size();
         root["impacted_count"] = impacted.size();
+        root["test_gap_count"] = 0;
+        root["test_gaps"] = json::array();
+        root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
+        if (!minimal)
+            root["impact"]["impacted_entities"] = impacted_entities;
         if (minimal) {
             json topn = json::array();
             for (size_t i = 0; i < changed.size() && i < 3; ++i) topn.push_back(changed[i].value("asset_name", std::string()));
@@ -5942,8 +6495,6 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
                 + std::to_string(changed_paths.size()) + " path(s); risk=" + tier_for(overall)
                 + " scoring_version=" + sv;
             root["changed_entities"] = changed;
-            root["impact"] = {{"depth", 1}, {"impacted_count", impacted.size()}};
-            root["test_gaps"] = json::array();  // assets have no native test concept
             root["review_priorities"] = priorities;
         }
         if (changed.empty()) {
@@ -5956,13 +6507,7 @@ FROM scored )SQL" + where + order + "LIMIT " + std::to_string(cap + 1) + ";";
     }
 
     void detect_changes(const Args& args) {
-        std::vector<std::string> paths = args.positional;
-        std::string csv = args.opt("changed_paths");
-        if (!csv.empty()) {
-            std::stringstream ss(csv);
-            std::string p;
-            while (std::getline(ss, p, ',')) if (!p.empty()) paths.push_back(p);
-        }
+        std::vector<std::string> paths = collect_changed_paths(args);
         print_json(project_detect_changes_json(paths, args.opt_int("max_results", 200),
                                                args.opt("detail_level", "minimal")));
     }
@@ -7109,19 +7654,15 @@ static int clamp_limit(const Args& args) {
 }
 
 static bool validate_cppreflect_limit(const Args& args, int& limit) {
-    auto it = args.options.find("limit");
-    if (it == args.options.end() || it->second.empty()) {
+    if (!args.options.count("limit")) {
         limit = 50;
         return true;
     }
-
     try {
-        std::size_t parsed = 0;
-        limit = std::stoi(it->second, &parsed);
-        if (parsed != it->second.size()) {
-            emit_invalid_params_error("`limit` must be a number.");
-            return false;
-        }
+        limit = args.opt_int("limit", 50);
+    } catch (const QueryFatal& error) {
+        emit_invalid_params_error(error.what());
+        return false;
     } catch (...) {
         emit_invalid_params_error("`limit` must be a number.");
         return false;
@@ -7821,13 +8362,7 @@ public:
     void list_decisions(const Args& args) {
         if (!table_exists(db, "decision_records")) { emit_missing_table("decision_records"); return; }
         std::string path_filter = args.opt("path_filter");
-        double min_conf = 0.6;
-        {
-            auto it = args.options.find("min_confidence");
-            if (it != args.options.end() && !it->second.empty()) {
-                try { min_conf = std::stod(it->second); } catch (...) {}
-            }
-        }
+        double min_conf = args.opt_double("min_confidence", 0.6);
         std::string status = args.opt("status");
         int limit = clamp_limit(args);
 
@@ -7887,11 +8422,19 @@ public:
     void list_stale(const Args& args) {
         if (!table_exists(db, "decision_records")) { emit_missing_table("decision_records"); return; }
         // max_age_days required + positive.
-        auto it = args.options.find("max_age_days");
-        std::string raw = (it != args.options.end()) ? it->second : "";
-        if (raw.empty() && !args.positional.empty()) raw = args.positional[0];
         int max_age_days = 0;
-        try { max_age_days = std::stoi(raw); } catch (...) { max_age_days = 0; }
+        if (args.options.count("max_age_days")) {
+            max_age_days = args.opt_int("max_age_days", 0);
+        } else if (!args.positional.empty()) {
+            const std::string raw = args.positional[0];
+            try {
+                size_t consumed = 0;
+                max_age_days = std::stoi(raw, &consumed);
+                if (consumed != raw.size()) max_age_days = 0;
+            } catch (...) {
+                max_age_days = 0;
+            }
+        }
         if (max_age_days <= 0) { emit_param_error("`max_age_days` must be positive."); return; }
 
         std::string path_filter = args.opt("path_filter");
@@ -8122,12 +8665,7 @@ public:
         // Spec §risk.get_release_window_hotspots default window = now - 30 days.
         // int64 arithmetic throughout to match the Python sibling exactly.
         int64_t since = now_unix - (int64_t)30 * 86400;
-        {
-            auto it = args.options.find("since_unix");
-            if (it != args.options.end() && !it->second.empty()) {
-                try { since = std::stoll(it->second); } catch (...) {}
-            }
-        }
+        since = args.opt_int64("since_unix", since);
         int limit = clamp_limit(args);
 
         // FilterHash part: stringified int value used.
@@ -8221,9 +8759,8 @@ public:
 // DB path resolution
 // ============================================================
 
-// Directory containing the running executable, or empty on failure.
-
-static fs::path get_exe_dir() {
+// Running executable path / directory, or empty on failure.
+static fs::path get_exe_path() {
     fs::path exe_path;
 #ifdef _WIN32
     char buf[MAX_PATH];
@@ -8231,6 +8768,11 @@ static fs::path get_exe_dir() {
     if (len > 0 && len < MAX_PATH)
         exe_path = buf;
 #endif
+    return exe_path;
+}
+
+static fs::path get_exe_dir() {
+    const fs::path exe_path = get_exe_path();
     return exe_path.empty() ? fs::path() : exe_path.parent_path();
 }
 
@@ -8365,6 +8907,218 @@ static std::string parse_uplugin_version(const fs::path& plugin_root) {
     return contents.substr(open_quote + 1, close_quote - open_quote - 1);
 }
 
+static bool is_lower_hex(const std::string& value, size_t exact_length) {
+    return value.size() == exact_length
+        && std::all_of(value.begin(), value.end(), [](unsigned char ch) {
+            return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+        });
+}
+
+static bool read_bounded_regular_file(
+    const fs::path& path,
+    uintmax_t max_bytes,
+    std::string& out_bytes,
+    std::string& out_error) {
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(path.wstring().c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        out_error = "file is missing or unreadable: " + path.string();
+        return false;
+    }
+    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0
+        || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+        out_error = "file must be regular and non-reparse: " + path.string();
+        return false;
+    }
+#else
+    std::error_code status_error;
+    const fs::file_status status = fs::symlink_status(path, status_error);
+    if (status_error || !fs::is_regular_file(status) || fs::is_symlink(status)) {
+        out_error = "file must be regular and non-symlink: " + path.string();
+        return false;
+    }
+#endif
+    std::error_code size_error;
+    const uintmax_t size = fs::file_size(path, size_error);
+    if (size_error || size == 0 || size > max_bytes) {
+        out_error = "file has invalid size: " + path.string();
+        return false;
+    }
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream.is_open()) {
+        out_error = "file could not be opened: " + path.string();
+        return false;
+    }
+    out_bytes.assign(
+        std::istreambuf_iterator<char>(stream),
+        std::istreambuf_iterator<char>());
+    if (stream.bad() || out_bytes.size() != size) {
+        out_error = "file could not be read completely: " + path.string();
+        return false;
+    }
+    return true;
+}
+
+static std::string sha256_hex_or_die(const std::string& bytes, const std::string& label) {
+    const std::string tagged = hash_text(bytes);
+    constexpr const char* Prefix = "sha256:";
+    if (tagged.rfind(Prefix, 0) != 0 || !is_lower_hex(tagged.substr(7), 64))
+        die(label + " SHA-256 calculation failed");
+    return tagged.substr(7);
+}
+
+static json parse_strict_flat_manifest_or_die(
+    const std::string& bytes,
+    const fs::path& path) {
+    bool duplicate_key = false;
+    std::set<std::string> seen_keys;
+    auto callback = [&](int, json::parse_event_t event, json& parsed) {
+        if (event == json::parse_event_t::key) {
+            const std::string key = parsed.get<std::string>();
+            if (!seen_keys.insert(key).second)
+                duplicate_key = true;
+        }
+        return true;
+    };
+    json manifest;
+    try {
+        manifest = json::parse(bytes, callback, true, false);
+    } catch (const std::exception& error) {
+        die("Query bundle manifest is invalid JSON: " + path.string() + ": " + error.what());
+    }
+    if (duplicate_key)
+        die("Query bundle manifest contains duplicate keys: " + path.string());
+    if (!manifest.is_object())
+        die("Query bundle manifest must be one JSON object: " + path.string());
+    return manifest;
+}
+
+static std::string required_manifest_string(
+    const json& manifest,
+    const char* field) {
+    auto it = manifest.find(field);
+    if (it == manifest.end() || !it->is_string() || it->get<std::string>().empty())
+        die(std::string("Query bundle manifest field must be a non-empty string: ") + field);
+    return it->get<std::string>();
+}
+
+static bool g_validated_bundle_catalog_loaded = false;
+static fs::path g_validated_bundle_catalog_path;
+static json g_validated_bundle_catalog;
+
+static fs::path resolve_current_bundle_catalog_or_die() {
+    const fs::path plugin_root = resolve_plugin_root();
+    const fs::path exe_path = get_exe_path();
+    if (plugin_root.empty() || exe_path.empty())
+        die("Query bundle identity cannot be resolved from the running executable");
+
+    const fs::path binaries_root = fs::canonical(plugin_root / "Binaries");
+    std::error_code equivalent_error;
+    const bool launched_from_binaries = fs::equivalent(
+        exe_path.parent_path(), binaries_root, equivalent_error);
+    if (equivalent_error || !launched_from_binaries) {
+        // Developer builds under Tools/MonolithQuery keep the generated snapshot
+        // default. Installed/fixed Binaries executions must use the strict bundle.
+        return plugin_root / "Tools" / "MonolithQuery" / "Generated" / "monolith_catalog_snapshot.json";
+    }
+    const fs::path canonical_exe = fs::absolute(exe_path).lexically_normal();
+
+    const fs::path manifest_path = binaries_root / "monolith_query.current.json";
+    std::string manifest_bytes;
+    std::string read_error;
+    if (!read_bounded_regular_file(manifest_path, 64 * 1024, manifest_bytes, read_error))
+        die("Query bundle manifest validation failed: " + read_error);
+    const json manifest = parse_strict_flat_manifest_or_die(manifest_bytes, manifest_path);
+
+    static const std::set<std::string> RequiredFields = {
+        "schema_version", "tool", "runtime", "file", "plugin_version",
+        "parity_spec_rev", "source_hash", "sha256", "catalog_file",
+        "catalog_source_hash", "catalog_sha256"
+    };
+    if (manifest.size() != RequiredFields.size())
+        die("Query bundle manifest must contain exactly the 11 published fields");
+    for (const std::string& field : RequiredFields) {
+        if (!manifest.contains(field))
+            die("Query bundle manifest is missing field: " + field);
+    }
+    if (!manifest["schema_version"].is_number_integer()
+        || manifest["schema_version"].get<int>() != 1
+        || required_manifest_string(manifest, "tool") != "monolith_query"
+        || required_manifest_string(manifest, "runtime") != "native-cpp") {
+        die("Query bundle manifest has an invalid schema/tool/runtime identity");
+    }
+
+    const std::string source_hash = required_manifest_string(manifest, "source_hash");
+    const std::string file_name = required_manifest_string(manifest, "file");
+    const std::string executable_sha = required_manifest_string(manifest, "sha256");
+    const std::string catalog_source_hash = required_manifest_string(manifest, "catalog_source_hash");
+    const std::string catalog_name = required_manifest_string(manifest, "catalog_file");
+    const std::string catalog_sha = required_manifest_string(manifest, "catalog_sha256");
+    if (!is_lower_hex(source_hash, 16) || source_hash != SOURCE_HASH
+        || file_name != "monolith_query-" + source_hash + ".exe"
+        || fs::path(file_name).filename().string() != file_name
+        || !is_lower_hex(executable_sha, 64)
+        || !is_lower_hex(catalog_source_hash, 64)
+        || catalog_name != "monolith_catalog-" + catalog_source_hash + ".json"
+        || fs::path(catalog_name).filename().string() != catalog_name
+        || !is_lower_hex(catalog_sha, 64)) {
+        die("Query bundle manifest has an invalid source/file/catalog/SHA binding");
+    }
+    if (required_manifest_string(manifest, "plugin_version") != parse_uplugin_version(plugin_root)
+        || required_manifest_string(manifest, "parity_spec_rev") != PARITY_SPEC_REV) {
+        die("Query bundle manifest version/parity identity does not match this executable");
+    }
+
+    const fs::path selected_exe = binaries_root / file_name;
+    const fs::path catalog_path = binaries_root / catalog_name;
+    if (selected_exe.parent_path() != binaries_root || catalog_path.parent_path() != binaries_root)
+        die("Query bundle artifact path escapes Binaries");
+
+    std::string selected_exe_bytes;
+    if (!read_bounded_regular_file(
+            selected_exe, 256ull * 1024ull * 1024ull, selected_exe_bytes, read_error)
+        || sha256_hex_or_die(selected_exe_bytes, "selected Query") != executable_sha) {
+        die("Query bundle selected executable failed SHA-256 validation: " + read_error);
+    }
+    std::string current_exe_bytes;
+    if (!read_bounded_regular_file(
+            canonical_exe, 256ull * 1024ull * 1024ull, current_exe_bytes, read_error)
+        || sha256_hex_or_die(current_exe_bytes, "running Query") != executable_sha) {
+        die("Running Query is not the current manifest generation: " + read_error);
+    }
+    const std::string current_name = canonical_exe.filename().string();
+    if (current_name != file_name && current_name != "monolith_query.exe")
+        die("Running Query leaf is neither the selected immutable file nor the fixed compatibility name");
+
+    std::string catalog_bytes;
+    if (!read_bounded_regular_file(
+            catalog_path, 64ull * 1024ull * 1024ull, catalog_bytes, read_error)
+        || sha256_hex_or_die(catalog_bytes, "Query catalog") != catalog_sha) {
+        die("Query bundle catalog failed SHA-256 validation: " + read_error);
+    }
+    json catalog;
+    try {
+        catalog = json::parse(catalog_bytes);
+    } catch (const std::exception& error) {
+        die("Query bundle catalog is invalid JSON: " + std::string(error.what()));
+    }
+    if (!catalog.is_object() || !catalog.contains("actions") || !catalog["actions"].is_array()
+        || !catalog.contains("source_hash") || !catalog["source_hash"].is_string()
+        || catalog["source_hash"].get<std::string>() != catalog_source_hash) {
+        die("Query bundle catalog identity/actions contract is invalid");
+    }
+
+    std::string manifest_after;
+    if (!read_bounded_regular_file(manifest_path, 64 * 1024, manifest_after, read_error)
+        || manifest_after != manifest_bytes) {
+        die("Query bundle manifest changed during validation");
+    }
+    g_validated_bundle_catalog = std::move(catalog);
+    g_validated_bundle_catalog_path = catalog_path;
+    g_validated_bundle_catalog_loaded = true;
+    return catalog_path;
+}
+
 // ============================================================
 // Monolith namespace — offline guide server
 // ============================================================
@@ -8467,10 +9221,7 @@ static void split_sections(const std::string& markdown,
 
 class MonolithActions {
     static fs::path default_catalog_snapshot_path() {
-        fs::path plugin_root = resolve_plugin_root();
-        if (!plugin_root.empty())
-            return plugin_root / "Tools" / "MonolithQuery" / "Generated" / "monolith_catalog_snapshot.json";
-        return fs::path("Tools") / "MonolithQuery" / "Generated" / "monolith_catalog_snapshot.json";
+        return resolve_current_bundle_catalog_or_die();
     }
 
     static fs::path resolve_catalog_snapshot_path(const Args& args) {
@@ -8482,6 +9233,12 @@ class MonolithActions {
 
     static bool load_catalog_snapshot(const Args& args, json& out_snapshot, fs::path& out_path, std::string& out_error) {
         out_path = resolve_catalog_snapshot_path(args);
+        if (args.opt("snapshot").empty()
+            && g_validated_bundle_catalog_loaded
+            && out_path == g_validated_bundle_catalog_path) {
+            out_snapshot = g_validated_bundle_catalog;
+            return true;
+        }
         std::ifstream f(out_path.string());
         if (!f.is_open()) {
             out_error = "offline catalog snapshot not found: " + out_path.string();
@@ -8598,8 +9355,8 @@ class MonolithActions {
             ? fs::path("Scripts") / "recover_mcp.ps1"
             : plugin_root / "Scripts" / "recover_mcp.ps1";
         fs::path headless_command = host_root.empty()
-            ? fs::path("BatchFiles") / "RunHeadlessEditor.bat"
-            : host_root / "BatchFiles" / "RunHeadlessEditor.bat";
+            ? fs::path("Build") / "BatchFiles" / "RunHeadlessEditor.bat"
+            : host_root / "Build" / "BatchFiles" / "RunHeadlessEditor.bat";
         fs::path headless_log_glob = host_root.empty()
             ? fs::path("Saved") / "HeadlessMcp" / "Logs" / "HeadlessEditor-*.log"
             : host_root / "Saved" / "HeadlessMcp" / "Logs" / "HeadlessEditor-*.log";
@@ -8671,13 +9428,51 @@ class MonolithActions {
         return std::find(it->second.begin(), it->second.end(), action) != it->second.end();
     }
 
+    enum class OfflineMode {
+        Unavailable,
+        Execute,
+        Guidance,
+    };
+
+    static OfflineMode offline_mode(const std::string& ns, const std::string& action) {
+        if (!is_offline_action(ns, action))
+            return OfflineMode::Unavailable;
+
+        const CliNamespaceHelp* ns_help = find_namespace_help(ns);
+        const CliActionHelp* action_help = ns_help ? find_action_help(*ns_help, action) : nullptr;
+        if (action_help) {
+            const std::string group = lower_copy(action_help->group);
+            const std::string access = lower_copy(action_help->access);
+            const std::string defaults = lower_copy(action_help->defaults);
+            if (group == "live-only"
+                || access.find("guidance") != std::string::npos
+                || defaults.find("offline guidance") != std::string::npos)
+            {
+                return OfflineMode::Guidance;
+            }
+        }
+        return OfflineMode::Execute;
+    }
+
+    static const char* offline_mode_name(OfflineMode mode) {
+        switch (mode) {
+        case OfflineMode::Execute: return "execute";
+        case OfflineMode::Guidance: return "guidance";
+        default: return "unavailable";
+        }
+    }
+
     static json public_action_row(const json& source) {
         json row = source;
         const std::string ns = row.value("namespace", "");
         const std::string action = row.value("action", "");
-        const bool offline = is_offline_action(ns, action);
-        row["available_offline"] = offline;
-        row["requires_live_editor"] = !offline;
+        const OfflineMode mode = offline_mode(ns, action);
+        const bool available_offline = mode != OfflineMode::Unavailable;
+        const bool executes_offline = mode == OfflineMode::Execute;
+        row["available_offline"] = available_offline;
+        row["executes_offline"] = executes_offline;
+        row["offline_mode"] = offline_mode_name(mode);
+        row["requires_live_editor"] = !executes_offline;
         if (!row.contains("full_name") || !row["full_name"].is_string())
             row["full_name"] = ns + "." + action;
         if (!row.contains("planning_signals") || !row["planning_signals"].is_array())
@@ -8687,11 +9482,107 @@ class MonolithActions {
         return row;
     }
 
+    static json offline_help_action_row(
+        const CliNamespaceHelp& ns_help,
+        const CliActionHelp& action_help) {
+        const std::string access = lower_copy(action_help.access);
+        const bool mutates = access.find("write") != std::string::npos
+            || access.find("execute") != std::string::npos;
+        const OfflineMode mode = offline_mode(ns_help.name, action_help.name);
+        const bool executes_offline = mode == OfflineMode::Execute;
+        json positionals = json::array();
+        for (const auto& value : action_help.positionals) positionals.push_back(value);
+        json options = json::array();
+        for (const auto& value : action_help.options) options.push_back(value);
+        json output_keys = json::array();
+        for (const auto& value : action_help.output_keys) output_keys.push_back(value);
+        json next_actions = json::array();
+        for (const auto& value : action_help.related) next_actions.push_back(value);
+        json examples = json::array();
+        for (const auto& value : action_help.examples) examples.push_back(value);
+
+        return public_action_row({
+            {"namespace", ns_help.name},
+            {"action", action_help.name},
+            {"full_name", ns_help.name + "." + action_help.name},
+            {"summary", action_help.summary},
+            {"description", action_help.summary},
+            {"category", lower_copy(action_help.group)},
+            {"skill", "monolith-mcp"},
+            {"planning_signals", json::array({
+                lower_copy(action_help.group),
+                executes_offline ? "offline_query" : "offline_guidance",
+            })},
+            {"preconditions_status", "declared"},
+            {"output_contract_status", action_help.output_keys.empty() ? "text_or_empty" : "declared"},
+            {"next_actions_status", action_help.related.empty() ? "not_applicable" : "declared"},
+            {"input_contract", {
+                {"syntax", action_help.syntax},
+                {"positionals", positionals},
+                {"options", options},
+                {"defaults", action_help.defaults},
+            }},
+            {"output_contract", {{"keys", output_keys}}},
+            {"next_actions", next_actions},
+            {"examples", examples},
+            {"available_offline", true},
+            {"executes_offline", executes_offline},
+            {"offline_mode", offline_mode_name(mode)},
+            {"requires_live_editor", !executes_offline},
+            {"mutates_assets", mutates},
+            {"writes_logs", false},
+            {"long_running", false},
+            {"supports_progress", false},
+            {"implementation_status", executes_offline ? "implemented_offline" : "live_only_guidance"},
+            {"source_file", "Tools/MonolithQuery/monolith_query_help.h"},
+            {"proof_anchor", "offline_dispatch_action_names"},
+        });
+    }
+
     static std::vector<json> catalog_actions(const json& snapshot) {
         std::vector<json> rows;
+        std::map<std::string, size_t> row_by_name;
         for (const auto& item : snapshot.value("actions", json::array())) {
-            if (item.is_object())
-                rows.push_back(public_action_row(item));
+            if (!item.is_object()) continue;
+            json row = public_action_row(item);
+            const std::string full_name = row.value("full_name", "");
+            if (!full_name.empty()) row_by_name[full_name] = rows.size();
+            rows.push_back(std::move(row));
+        }
+
+        // The generated snapshot is a live-registry view and can miss actions
+        // registered through templates. Overlay the executable's own dispatch
+        // catalog so discovery can never hide a route that this binary serves.
+        for (const auto& ns_help : cli_help_catalog()) {
+            for (const auto& action_help : ns_help.actions) {
+                if (!is_offline_action(ns_help.name, action_help.name)) continue;
+                json overlay = offline_help_action_row(ns_help, action_help);
+                const std::string full_name = overlay.value("full_name", "");
+                auto existing = row_by_name.find(full_name);
+                if (existing == row_by_name.end()) {
+                    row_by_name[full_name] = rows.size();
+                    rows.push_back(std::move(overlay));
+                    continue;
+                }
+                json& row = rows[existing->second];
+                for (auto it = overlay.begin(); it != overlay.end(); ++it) {
+                    const auto current = row.find(it.key());
+                    const bool missing = current == row.end() || current->is_null()
+                        || (current->is_string() && current->get<std::string>().empty())
+                        || (current->is_array() && current->empty());
+                    if (missing)
+                        row[it.key()] = it.value();
+                }
+                for (const char* key : {
+                    "available_offline",
+                    "executes_offline",
+                    "offline_mode",
+                    "requires_live_editor",
+                    "implementation_status",
+                }) {
+                    row[key] = overlay[key];
+                }
+            }
         }
         return rows;
     }
@@ -8842,6 +9733,8 @@ class MonolithActions {
             {"full_name", row.value("full_name", "")},
             {"summary", row.value("summary", "")},
             {"available_offline", row.value("available_offline", false)},
+            {"executes_offline", row.value("executes_offline", false)},
+            {"offline_mode", row.value("offline_mode", "unavailable")},
             {"requires_live_editor", row.value("requires_live_editor", true)},
             {"mutates_assets", row.value("mutates_assets", false)},
             {"writes_logs", row.value("writes_logs", false)},
@@ -9109,6 +10002,55 @@ class MonolithActions {
     }
 
 public:
+    static bool emit_live_only_guidance_if_catalogued(const Args& args) {
+        const CliNamespaceHelp* ns_help = find_namespace_help(args.ns);
+        if (ns_help && find_action_help(*ns_help, args.action))
+            return false;
+
+        json snapshot;
+        fs::path path;
+        std::string error;
+        if (!load_catalog_snapshot(args, snapshot, path, error))
+            return false;
+
+        for (const json& row : catalog_actions(snapshot)) {
+            if (row.value("namespace", "") != args.ns
+                || row.value("action", "") != args.action)
+                continue;
+            if (row.value("available_offline", false))
+                return false;
+
+            json ignored = json::array();
+            for (const auto& pair : args.options) {
+                if (pair.first != "snapshot") ignored.push_back(pair.first);
+            }
+            print_json({
+                {"success", false},
+                {"status", "live_only"},
+                {"completion_class", "requires_live"},
+                {"action_id", args.ns + "." + args.action},
+                {"offline_supported", false},
+                {"requires_live_editor", true},
+                {"catalog_source", "offline_snapshot"},
+                {"catalog_matches_live", "unknown"},
+                {"snapshot", snapshot_metadata(snapshot, path)},
+                {"action", row},
+                {"ignored_execution_parameters", ignored},
+                {"summary", "The action is known to the bundled catalog but cannot execute in the read-only offline Query process."},
+                {"warnings", json::array({
+                    "No mutation or live UObject access was attempted. Restore the configured Monolith editor endpoint and retry the same action."
+                })},
+                {"next_actions", json::array({
+                    "monolith status",
+                    "monolith discover --namespace " + args.ns + " --action " + args.action + " --mode schema",
+                    "Run Scripts\\recover_mcp.ps1, reconnect the MCP client, and retry " + args.ns + "." + args.action,
+                })},
+            });
+            return true;
+        }
+        return false;
+    }
+
     // --- guide ---
     void print_guide(const Args& args) {
         fs::path plugin_root = resolve_plugin_root();
@@ -9234,14 +10176,46 @@ public:
         const std::string action_filter = args.opt("action");
         const std::string text_filter = args.opt("filter");
         const std::string category_filter = args.opt("category");
-        const bool detail = args.opt_bool("detail", true);
-        std::string mode = lower_copy(args.opt("mode", ns_filter.empty() ? "summary" : "actions"));
-        if (mode != "namespaces" && mode != "actions" && mode != "summary")
-            die("monolith discover --mode must be namespaces, actions, or summary");
+        const bool detail = args.opt_bool("detail", false)
+            || args.opt_bool("verbose", false);
+        const std::string planning_detail = lower_copy(args.opt(
+            "planning_detail", action_filter.empty() ? "compact" : "full"));
+        const std::string schema_detail = lower_copy(args.opt(
+            "schema_detail", action_filter.empty() ? "compact" : "full"));
+        if (planning_detail != "compact" && planning_detail != "full")
+            die("monolith discover --planning-detail must be compact or full");
+        if (schema_detail != "compact" && schema_detail != "full")
+            die("monolith discover --schema-detail must be compact or full");
+
+        std::string mode = lower_copy(args.opt(
+            "mode", ns_filter.empty() ? "summary" : (action_filter.empty() ? "actions" : "schema")));
+        if (mode == "namespaces") mode = "summary"; // legacy offline alias
+        if (mode != "actions" && mode != "summary" && mode != "schema")
+            die("monolith discover --mode must be summary, actions, or schema");
+        if (!action_filter.empty() && ns_filter.empty())
+            die("monolith discover --action requires --namespace");
+        if (mode == "schema" && (ns_filter.empty() || action_filter.empty()))
+            die("monolith discover --mode=schema requires --namespace and --action");
         const bool namespace_summary_mode = mode == "namespaces" || mode == "summary";
         const std::string response_mode = namespace_summary_mode ? "summary" : mode;
 
-        const int limit = clamp_int(args.opt_int("limit", 50), 1, 200);
+        const std::string if_version = trim_copy(args.opt("if_version"));
+        const std::string snapshot_version = snapshot.value("source_hash", "");
+        if (!if_version.empty() && !snapshot_version.empty() && if_version == snapshot_version) {
+            print_json({
+                {"success", true},
+                {"status", "unchanged"},
+                {"catalog_source", "offline_snapshot"},
+                {"catalog_version", snapshot_version},
+                {"snapshot", snapshot_metadata(snapshot, path)},
+                {"total_actions", catalog_actions(snapshot).size()},
+            });
+            return;
+        }
+
+        int requested_limit = args.opt_int("limit", 50);
+        if (requested_limit <= 0) requested_limit = 50;
+        const int limit = clamp_int(requested_limit, 1, 1000);
         const int offset = std::max(0, args.opt_int("offset", 0));
         std::vector<json> rows;
         for (const auto& row : catalog_actions(snapshot)) {
@@ -9264,7 +10238,7 @@ public:
             all_results = namespace_summaries(rows);
         } else {
             for (const auto& row : rows)
-                all_results.push_back(detail ? row : compact_action_row(row));
+                all_results.push_back((detail || mode == "schema") ? row : compact_action_row(row));
         }
 
         json page = json::array();
@@ -9273,25 +10247,44 @@ public:
             page.push_back(all_results[i]);
 
         json warnings = json::array();
+        warnings.push_back(
+            "Offline discovery is source-scanned guidance, not proof that an action is present in the currently running editor/profile. Recover the live editor and re-run discovery before execution.");
         if (!ns_filter.empty() && rows.empty())
             warnings.push_back("Namespace/action filter matched no snapshot actions.");
+        if (mode == "schema" && !rows.empty())
+            warnings.push_back(
+                "Exact live JSON input schema is unavailable offline. The returned schema is snapshot contract metadata; recover the live editor before executing the action.");
 
         json root = {
             {"success", true},
-            {"status", warnings.empty() ? "ok" : "warning"},
+            {"status", "degraded"},
+            {"completion_class", "degraded_guidance"},
+            {"catalog_source", "offline_snapshot"},
+            {"catalog_matches_live", "unknown"},
+            {"catalog_version", snapshot_version},
             {"snapshot", snapshot_metadata(snapshot, path)},
             {"source_hash", SOURCE_HASH},
             {"mode", response_mode},
-            {"query", {{"namespace", ns_filter}, {"action", action_filter}, {"mode", response_mode}, {"filter", text_filter}, {"category", category_filter}, {"detail", detail}}},
+            {"query", {{"namespace", ns_filter}, {"action", action_filter}, {"mode", response_mode}, {"filter", text_filter}, {"category", category_filter}, {"detail", detail}, {"planning_detail", planning_detail}, {"schema_detail", schema_detail}}},
             {"results", page},
             {"limits", limits_json(limit, offset, total)},
-            {"projection", namespace_summary_mode ? "summary" : (detail ? "full" : "compact")},
+            {"projection", namespace_summary_mode ? "summary" : ((detail || mode == "schema") ? "full" : "compact")},
             {"truncated", offset + limit < total},
             {"warnings", warnings},
         };
+        root["limits"]["max_limit"] = 1000;
         if (namespace_summary_mode) {
             root["namespaces"] = page;
             root["actions_hint"] = "Use monolith discover --namespace <name> --mode actions --limit 50 --offset 0 for paginated action listings.";
+        }
+        if (mode == "schema") {
+            root["namespace"] = ns_filter;
+            root["action"] = action_filter;
+            root["schema_available"] = false;
+            root["requires_live_editor"] = rows.empty()
+                ? true
+                : rows.front().value("requires_live_editor", true);
+            root["schema"] = rows.empty() ? json(nullptr) : rows.front();
         }
         if (offset + limit < total)
             root["next_cursor"] = std::to_string(offset + limit);
@@ -9314,13 +10307,56 @@ public:
         if (query.empty())
             die("monolith find requires a query argument or --query");
 
-        const int limit = clamp_int(args.opt_int("limit", 20), 1, 200);
+        const std::string ns_filter = trim_copy(args.opt("namespace"));
+        const bool include_schema = args.opt_bool("include_schema", false);
+        const std::string planning_detail = lower_copy(args.opt("planning_detail", "compact"));
+        if (planning_detail != "compact" && planning_detail != "full")
+            die("monolith find --planning-detail must be compact or full");
+
+        int offset = std::max(0, args.opt_int("offset", 0));
+        const std::string cursor = trim_copy(args.opt("cursor"));
+        if (!cursor.empty()) {
+            try {
+                size_t consumed = 0;
+                const long long parsed = std::stoll(cursor, &consumed);
+                if (consumed != cursor.size() || parsed < 0 || parsed > 10000)
+                    die("monolith find --cursor must be a non-negative numeric offset within 0..10000");
+                offset = static_cast<int>(parsed);
+            } catch (const QueryFatal&) {
+                throw;
+            } catch (...) {
+                die("monolith find --cursor must be a non-negative numeric offset within 0..10000");
+            }
+        }
+
+        const int limit = clamp_int(args.opt_int("limit", 8), 1, 50);
+        const std::vector<std::string> requested_fields = string_list_option(args, "fields");
         const std::string query_lower = lower_copy(query);
         std::vector<json> matches;
         for (auto row : catalog_actions(snapshot)) {
+            if (!ns_filter.empty() && row.value("namespace", "") != ns_filter)
+                continue;
             const int score = find_score(row, query_lower);
             if (score <= 0) continue;
+            row["action_id"] = row.value("full_name", "");
+            row["description"] = row.value("summary", "");
+            row["mcp_tool"] = row.value("namespace", "") == "monolith"
+                ? "monolith_" + row.value("action", "")
+                : row.value("namespace", "") + "_query";
+            row["status"] = row.value("available_offline", false)
+                ? "available_offline"
+                : "live_only";
             row["score"] = score;
+            if (!include_schema)
+                row.erase("input_contract");
+            if (planning_detail == "compact") {
+                if (row.contains("preconditions") && row["preconditions"].is_array())
+                    row["precondition_count"] = row["preconditions"].size();
+                if (row.contains("planning_signals") && row["planning_signals"].is_array())
+                    row["planning_signal_count"] = row["planning_signals"].size();
+                row.erase("preconditions");
+                row.erase("planning_signals");
+            }
             matches.push_back(row);
         }
         std::sort(matches.begin(), matches.end(), [](const json& a, const json& b) {
@@ -9331,24 +10367,77 @@ public:
         });
 
         json page = json::array();
-        for (const auto& row : matches) {
+        std::set<std::string> available_fields;
+        for (size_t index = static_cast<size_t>(std::min<int>(offset, static_cast<int>(matches.size())));
+             index < matches.size(); ++index) {
             if ((int)page.size() >= limit) break;
-            page.push_back(row);
+            const json& row = matches[index];
+            for (auto it = row.begin(); it != row.end(); ++it)
+                available_fields.insert(it.key());
+            if (requested_fields.empty()) {
+                page.push_back(row);
+                continue;
+            }
+            json projected = json::object();
+            for (const std::string& field : requested_fields) {
+                auto found = row.find(field);
+                if (found != row.end()) projected[field] = *found;
+            }
+            page.push_back(std::move(projected));
+        }
+
+        json warnings = json::array();
+        warnings.push_back(
+            "Offline find results are source-scanned candidates, not proof that an action is present in the currently running editor/profile. Recover the live editor and re-run discovery before execution.");
+        if (matches.empty())
+            warnings.push_back("No snapshot actions matched the query.");
+        if (include_schema)
+            warnings.push_back(
+                "include_schema requested, but the offline snapshot exposes only input_contract metadata, not the authoritative live JSON input schema.");
+        if (!requested_fields.empty() && !page.empty()) {
+            std::vector<std::string> unknown_fields;
+            for (const std::string& field : requested_fields) {
+                if (!available_fields.count(field)) unknown_fields.push_back(field);
+            }
+            if (!unknown_fields.empty()) {
+                std::string joined;
+                for (const std::string& field : unknown_fields) {
+                    if (!joined.empty()) joined += ", ";
+                    joined += field;
+                }
+                warnings.push_back("Fields not present on any match row: " + joined);
+            }
         }
 
         json root = {
             {"success", true},
-            {"status", "ok"},
+            {"status", "degraded"},
+            {"completion_class", "degraded_guidance"},
+            {"catalog_source", "offline_snapshot"},
+            {"catalog_matches_live", "unknown"},
             {"snapshot", snapshot_metadata(snapshot, path)},
             {"source_hash", SOURCE_HASH},
             {"query", query},
+            {"namespace", ns_filter},
             {"results", page},
-            {"limits", limits_json(limit, 0, (int)matches.size())},
-            {"truncated", (int)matches.size() > limit},
-            {"warnings", json::array()},
+            {"matches", page},
+            {"count", page.size()},
+            {"total", matches.size()},
+            {"returned", page.size()},
+            {"limits", limits_json(limit, offset, (int)matches.size())},
+            {"projection", {
+                {"planning_detail", planning_detail},
+                {"fields", requested_fields.empty() ? json("all") : json(requested_fields)},
+                {"include_schema", include_schema},
+                {"offset", offset},
+                {"limit", limit},
+            }},
+            {"truncated", offset + (int)page.size() < (int)matches.size()},
+            {"warnings", warnings},
         };
-        if (matches.empty())
-            root["warnings"].push_back("No snapshot actions matched the query.");
+        root["limits"]["max_limit"] = 50;
+        if (offset + (int)page.size() < (int)matches.size())
+            root["next_cursor"] = std::to_string(offset + page.size());
         print_json(root);
     }
 
@@ -9363,8 +10452,8 @@ public:
 
         const std::string ns_filter = args.opt("namespace");
         double min_contract_ratio = args.opt_double("min_contract_ratio", 0.8);
-        if (min_contract_ratio < 0.0) min_contract_ratio = 0.0;
-        if (min_contract_ratio > 1.0) min_contract_ratio = 1.0;
+        if (min_contract_ratio < 0.0 || min_contract_ratio > 1.0)
+            die("monolith get_action_metadata_coverage --min-contract-ratio must be between 0 and 1");
         std::string gate_scope = lower_copy(args.opt("gate_scope", "high_traffic"));
         if (gate_scope != "high_traffic" && gate_scope != "filtered" && gate_scope != "all" && gate_scope != "off")
             die("monolith get_action_metadata_coverage --gate-scope must be high_traffic, filtered, all, or off");
@@ -9409,23 +10498,37 @@ public:
 
 int main(int argc, char* argv[]) {
     CliInvocation cli = normalize_global_cli_options(argc, argv);
+    g_immutable_readonly = cli.globals.readonly;
     const int effective_argc = cli.argc();
     char** effective_argv = cli.argv_data();
 
-    // --version / -v: print the build stamp before the 3-arg usage gate fires.
-    for (int i = 1; i < effective_argc; ++i) {
-        std::string a = effective_argv[i];
-        if (a == "--version" || a == "-v") {
+    // Version is a top-level command only. Treating it as an action (or action
+    // option) would bypass namespace routing and the readonly fallback guard.
+    if (effective_argc == 2) {
+        const std::string command = effective_argv[1];
+        if (command == "--version" || command == "-v") {
             fs::path plugin_root = resolve_plugin_root();
             std::string version = parse_uplugin_version(plugin_root);
             ojson out;
             out["tool"] = "monolith_query";
+            out["runtime"] = "native-cpp";
             out["plugin_version"] = version;
             out["parity_spec_rev"] = PARITY_SPEC_REV;
             out["source_hash"] = SOURCE_HASH;
             std::cout << out.dump(2) << std::endl;
             return 0;
         }
+    }
+
+    // Reject option-like and path-like action tokens before help/version
+    // routing. `help <namespace> [action]` remains the explicit help form.
+    if (effective_argc >= 3
+        && lower_copy(effective_argv[1]) != "help"
+        && !is_valid_action_name(effective_argv[2]))
+    {
+        std::cerr << "Invalid action name '" << effective_argv[2]
+                  << "'; action names must match [A-Za-z0-9_]+\n";
+        return 2;
     }
 
     bool handled_help = false;
@@ -9455,12 +10558,26 @@ int main(int argc, char* argv[]) {
         parsed_args = true;
         parse_args_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - phase_start).count();
 
+        // The fixed-name executable is only a compatibility view of the
+        // current immutable generation. Windows may keep an older fixed image
+        // locked while publication advances the manifest, so validate it
+        // before every real action (not only catalog actions). Deliberately
+        // selected immutable leaves remain usable as explicit generations.
+        const fs::path running_executable = get_exe_path();
+        if (lower_copy(running_executable.filename().string())
+            == "monolith_query.exe") {
+            (void)resolve_current_bundle_catalog_or_die();
+        }
+
         if (cli.globals.readonly && args.opt_bool("execute", false)) {
             die("--readonly cannot be combined with --execute=true; rerun without --readonly for execute-gated maintenance actions.");
         }
 
         validate_help_catalog_or_die();
+        if (MonolithActions::emit_live_only_guidance_if_catalogued(args))
+            throw QueryFatal("", 3, true);
         validate_known_command_or_die(args.ns, args.action);
+        validate_mcp_parameter_contract(args);
 
         phase_start = std::chrono::steady_clock::now();
         const std::string db_arg = args.opt("db");
@@ -9783,16 +10900,10 @@ int main(int argc, char* argv[]) {
             for (const auto& value : args.positional) positional.push_back(value);
         }
 
-        bool stdout_truncated = false;
-        bool stderr_truncated = false;
-        size_t stdout_bytes = 0;
-        size_t stderr_bytes = 0;
-        std::string stdout_hash;
-        std::string stderr_hash;
+        const size_t stdout_bytes = stdout_text.size();
+        const size_t stderr_bytes = stderr_text.size();
         json raw_stdout = redact_json(stdout_text);
         json raw_stderr = redact_json(stderr_text);
-        json bounded_stdout = bounded_json(raw_stdout, stdout_truncated, stdout_bytes, stdout_hash);
-        json bounded_stderr = bounded_json(raw_stderr, stderr_truncated, stderr_bytes, stderr_hash);
 
         const std::string signal_text = fatal_error.empty() ? stderr_text : fatal_error;
         std::string outcome = exit_code == 0 ? "success" : "tool_error";
@@ -9827,7 +10938,7 @@ int main(int argc, char* argv[]) {
         const std::string span_id = log_id("span", trace_id + ":query:" + start_time + ":" + argv_json(effective_argc, effective_argv).dump());
         const std::string proc_instance_id = process_instance_id();
         const std::string record_id = log_id("rec", proc_instance_id + ":query:1:" + trace_id + ":" + span_id + ":" + start_time);
-        const bool truncated = stdout_truncated || stderr_truncated;
+        const bool truncated = false;
 
         json call = {
             {"argv", argv_json(effective_argc, effective_argv)},
@@ -9841,11 +10952,9 @@ int main(int argc, char* argv[]) {
 
         json redaction = {
             {"stdout_bytes", stdout_bytes},
-            {"stderr_bytes", stderr_bytes}
+            {"stderr_bytes", stderr_bytes},
+            {"result_omitted", true}
         };
-        if (truncated) redaction["truncated"] = true;
-        if (!stdout_hash.empty()) redaction["stdout_sha256"] = stdout_hash;
-        if (!stderr_hash.empty()) redaction["stderr_sha256"] = stderr_hash;
 
         json agent_signal = {
             {"outcome", outcome},
@@ -9901,12 +11010,6 @@ int main(int argc, char* argv[]) {
             {"workflow", workflow},
             {"phase_timing", phase_timing},
             {"call", call},
-            {"return", {
-                {"exit_code", exit_code},
-                {"stdout", bounded_stdout},
-                {"stderr", bounded_stderr},
-                {"fatal_error", fatal_error}
-            }},
             {"return_summary", summarize_query_return(
                 raw_stdout,
                 raw_stderr,

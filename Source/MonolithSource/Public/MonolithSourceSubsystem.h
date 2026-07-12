@@ -22,7 +22,7 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	/** Get the source database (read-only). Lazily reopens the DB after transient startup/open failures. */
+	/** Get the open source database, or nullptr while indexing/after a failed reindex. */
 	FMonolithSourceDatabase* GetDatabase();
 
 	/** Full reindex: engine + shaders + project source (clean build). */
@@ -42,6 +42,8 @@ private:
 	bool EnsureDatabaseOpen();
 	bool TryOpenDatabaseWithRetry(const FString& DbPath, const TCHAR* Context);
 	void ReopenDatabase(const FString& DbPath);
+	void FinishIndexingOnGameThread(const FString& DbPath, const FString& Context,
+		int32 Files, int32 Symbols, int32 Errors, bool bSucceeded);
 
 	/**
 	 * F17 (2026-04-26): Auto-reindex hook. Fires when Live Coding / hot-reload completes.
@@ -56,6 +58,8 @@ private:
 	TUniquePtr<FMonolithSourceDatabase> Database;
 	FMonolithSourceIndexer* Indexer = nullptr;
 	TAtomic<bool> bIsIndexing{false};
+	TAtomic<bool> bIsDeinitializing{false};
+	TAtomic<bool> bDatabaseRequiresSuccessfulReindex{false};
 
 	/** F17: Handle into FCoreUObjectDelegates::ReloadCompleteDelegate; cleared on Deinitialize. */
 	FDelegateHandle ReloadCompleteHandle;

@@ -6793,9 +6793,13 @@ int64 FMonolithSourceDatabase::InsertSymbol(
 	if (!Database || !Database->IsValid()) return 0;
 
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database,
+	if (!Stmt.Create(*Database,
 		TEXT("INSERT INTO symbols (name, qualified_name, kind, file_id, line_start, line_end, parent_symbol_id, access, signature, docstring, is_ue_macro) ")
-		TEXT("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"));
+		TEXT("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")))
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("InsertSymbol: statement creation failed for '%s': %s"), *QualifiedName, *Database->GetLastError());
+		return 0;
+	}
 
 	Stmt.SetBindingValueByIndex(1, Name);
 	Stmt.SetBindingValueByIndex(2, QualifiedName);
@@ -6823,7 +6827,11 @@ int64 FMonolithSourceDatabase::InsertSymbol(
 	Stmt.SetBindingValueByIndex(10, Docstring);
 	Stmt.SetBindingValueByIndex(11, static_cast<int64>(bIsUEMacro ? 1 : 0));
 
-	Stmt.Step();
+	if (Stmt.Step() != ESQLitePreparedStatementStepResult::Done)
+	{
+		UE_LOG(LogMonolithSource, Warning, TEXT("InsertSymbol: insert failed for '%s': %s"), *QualifiedName, *Database->GetLastError());
+		return 0;
+	}
 
 	return Database->GetLastInsertRowId();
 }

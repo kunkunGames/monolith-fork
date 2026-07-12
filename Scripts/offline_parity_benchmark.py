@@ -115,7 +115,9 @@ def run_exe(
     exe_path: pathlib.Path,
     mono_root: pathlib.Path,
 ) -> Tuple[int, str, str]:
-    cmd = [str(exe_path), ns, action, *[str(a) for a in args]]
+    # A parity benchmark is strictly read-only. Query must never recover or
+    # modify the live corpus while probing whether it is safe to compare.
+    cmd = [str(exe_path), "--readonly", ns, action, *[str(a) for a in args]]
     return _run(cmd, mono_root)
 
 
@@ -185,6 +187,9 @@ TOKEN_RISK_PATH = "{{risk_path}}"
 #     DISAGREE (genuine exe-vs-py parity break). These fail.
 EXPECTED_MATCH_KINDS = ("expected", "expected_offline")
 EXPECTED_PROBLEM_KINDS = ("expected_missing", "expected_mismatch", "offline_parity_break")
+ACTIVE_WRITER_BLOCK_MARKERS = (
+    "rollback journal exists for database and could not be recovered safely:",
+)
 
 
 def _clip_text(text: str, limit: int = 400) -> str:
@@ -197,6 +202,65 @@ def _process_diagnostics(returncode: int, stdout: str, stderr: str) -> Dict[str,
         "exit_code": returncode,
         "stdout": _clip_text(stdout),
         "stderr": _clip_text(stderr),
+    }
+
+
+def is_active_writer_environment_block(returncode: int, stderr: str) -> bool:
+    """Return true only for Query's fail-closed active-writer boundary.
+
+    This marker is only allowed to invalidate the run-level environment
+    preflight. If it appears after a successful preflight, ``run_action`` keeps
+    the affected row comparable as a real ERROR; it must never become a
+    score-improving per-row SKIP.
+    """
+    if returncode == 0:
+        return False
+    lowered = (stderr or "").lower()
+    return any(marker in lowered for marker in ACTIVE_WRITER_BLOCK_MARKERS)
+
+
+def preflight_execution_environment(
+    exe_path: pathlib.Path,
+    py_path: pathlib.Path,
+    mono_root: pathlib.Path,
+) -> Dict[str, Any]:
+    """Probe the shared source DB before scoring any actions.
+
+    A Query rollback-journal refusal means a stable comparison corpus is not
+    available. The caller must invalidate the *entire* run (zero comparable
+    actions and therefore score 0.0), rather than selectively removing Query
+    failures from the denominator. Other failures remain valid benchmark input
+    and are surfaced by the normal per-action ERROR rules.
+    """
+    namespace = "cppreflect"
+    action = "list_class_specifiers"
+    args: List[str] = []
+    erc, eout, eerr = run_exe(namespace, action, args, exe_path, mono_root)
+    blocked = is_active_writer_environment_block(erc, eerr)
+    if blocked:
+        py_diagnostics: Dict[str, Any] = {
+            "exit_code": None,
+            "stdout": "",
+            "stderr": "",
+            "not_run": True,
+        }
+    else:
+        prc, pout, perr = run_py(namespace, action, args, py_path, mono_root)
+        py_diagnostics = _process_diagnostics(prc, pout, perr)
+    return {
+        "status": "environment_blocked" if blocked else "valid",
+        "valid": not blocked,
+        "reason": (
+            "monolith_query refused the source database rollback journal during "
+            "the run-level preflight"
+            if blocked else None
+        ),
+        "probe": {
+            "label": f"{namespace}.{action}",
+            "args": args,
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": py_diagnostics,
+        },
     }
 
 
@@ -500,7 +564,7 @@ def run_action(
 ) -> Dict[str, Any]:
     """
     Returns a result dict:
-      status: MATCH | DIFF | ERROR
+      status: MATCH | DIFF | ERROR | SKIP
       diffs:  list of (path, exe_val, py_val)
       warnings: list of (path, exe_val, py_val)
       error:  str | None
@@ -536,6 +600,22 @@ def run_action(
     prc, pout, perr = run_py(ns, action, args, py_path, mono_root)
     res["exe_exit_code"] = erc
     res["py_exit_code"] = prc
+
+    if is_active_writer_environment_block(erc, eerr):
+        # The run-level preflight is the only place where this condition may
+        # invalidate comparison. Seeing it here means the environment changed
+        # after preflight; retain the row in the denominator as a real error.
+        res["status"] = "ERROR"
+        res["error_kind"] = "real"
+        res["error_sources"] = {
+            "exe": _process_diagnostics(erc, eout, eerr),
+            "py": _process_diagnostics(prc, pout, perr),
+        }
+        res["error"] = (
+            "environment changed after preflight: monolith_query refused an "
+            "active rollback journal"
+        )
+        return res
 
     if expected_error:
         res["error_sources"] = {
@@ -658,6 +738,13 @@ def skipped_action(label: str, reason: str) -> Dict[str, Any]:
     }
 
 
+def environment_blocked_action(label: str, reason: str) -> Dict[str, Any]:
+    """Return one row from a run invalidated before action execution."""
+    result = skipped_action(label, reason)
+    result["error_kind"] = "environment_blocked"
+    return result
+
+
 # ------------------------------------------------------------------ version parity
 # (inlined from verify_offline_parity.py)
 
@@ -709,6 +796,9 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
         )
         n_real_error = sum(1 for r in rows if r.get("error_kind") == "real")
+        n_environment_blocked = sum(
+            1 for r in rows if r.get("error_kind") == "environment_blocked"
+        )
         action_count = len(statuses) - n_skip
         breakdown[ns] = {
             "match": n_match,
@@ -719,6 +809,7 @@ def _build_category_breakdown(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "expected_error": n_expected,
             "expected_error_problem": n_expected_problem,
             "real_error": n_real_error,
+            "environment_blocked": n_environment_blocked,
         }
     return breakdown
 
@@ -730,6 +821,10 @@ def build_error_diagnostics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
     ]
     real_errors = [r["label"] for r in results if r.get("error_kind") == "real"]
+    environment_blocked = [
+        r["label"] for r in results
+        if r.get("error_kind") == "environment_blocked"
+    ]
     return {
         "expected_error": {
             "match_count": len(expected_matches),
@@ -740,6 +835,10 @@ def build_error_diagnostics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         "real_error": {
             "count": len(real_errors),
             "labels": real_errors,
+        },
+        "environment_blocked": {
+            "count": len(environment_blocked),
+            "labels": environment_blocked,
         },
     }
 
@@ -774,6 +873,9 @@ def compute_metrics(
         if r.get("error_kind") in EXPECTED_PROBLEM_KINDS
     )
     n_real_error = sum(1 for r in results if r.get("error_kind") == "real")
+    n_environment_blocked = sum(
+        1 for r in results if r.get("error_kind") == "environment_blocked"
+    )
 
     match_rate = n_match / comparable if comparable > 0 else 0.0
     diff_rate = n_diff / comparable if comparable > 0 else 0.0
@@ -812,6 +914,7 @@ def compute_metrics(
         "expected_error_count": n_expected_error,
         "expected_error_problem_count": n_expected_error_problem,
         "real_error_count": n_real_error,
+        "environment_blocked_count": n_environment_blocked,
         "mean_diffs_per_diff_action": round(mean_diffs, 6),
         "category_breakdown": _build_category_breakdown(results),
     }
@@ -825,6 +928,7 @@ def build_summary(
     py_rev: Optional[str],
     chain: Dict[str, Any],
     ignore_cursor_bytes: bool,
+    run_environment: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     metrics = compute_metrics(results, version_parity_ok)
     n_match = sum(1 for r in results if r["status"] == "MATCH")
@@ -835,6 +939,7 @@ def build_summary(
         "label": label,
         "created_at": utc_now(),
         "ignore_cursor_bytes": ignore_cursor_bytes,
+        "run_environment": run_environment or {"status": "valid", "valid": True},
         "version": {
             "exe_parity_spec_rev": exe_rev,
             "py_parity_spec_rev": py_rev,
@@ -905,8 +1010,27 @@ def cmd_run(args: argparse.Namespace) -> int:
         ver_ok = False
     print(f"Version parity: exe_rev={exe_rev!r}  py_rev={py_rev!r}  ok={ver_ok}\n")
 
-    # Chain discovery (requires exe)
-    if not exe_missing:
+    if exe_missing or py_missing:
+        run_environment: Dict[str, Any] = {
+            "status": "tool_missing",
+            "valid": False,
+            "reason": "required offline parity executable is missing",
+        }
+    else:
+        run_environment = preflight_execution_environment(
+            exe_path, py_path, MONO_ROOT
+        )
+        if not run_environment["valid"]:
+            print(
+                "[WARN] offline parity run invalidated by environment preflight: "
+                f"{run_environment['reason']}",
+                flush=True,
+            )
+
+    # Chain discovery requires a valid shared database environment. A blocked
+    # preflight invalidates every action in the run instead of selectively
+    # skipping the Query failures that would otherwise shrink the denominator.
+    if not exe_missing and run_environment["valid"]:
         chain = discover_chain_inputs(exe_path, MONO_ROOT)
     else:
         chain = {"uclass": None, "decision_id": None, "risk_path": "Docs/SPEC_CORE.md"}
@@ -934,6 +1058,11 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         if exe_missing or py_missing:
             r = skipped_action(lbl, "tool not found: " + ("exe" if exe_missing else "py"))
+        elif not run_environment["valid"]:
+            r = environment_blocked_action(
+                lbl,
+                "run invalidated before scoring: " + str(run_environment["reason"]),
+            )
         elif aargs is None:
             r = skipped_action(lbl, "current DB corpus has no decision_id input")
         else:
@@ -960,14 +1089,18 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         if index % PARTIAL_INTERVAL == 0 or index == len(actions):
             partial = build_summary(
-                label, results, ver_ok, exe_rev, py_rev, chain, ignore_cursor_bytes
+                label, results, ver_ok, exe_rev, py_rev, chain,
+                ignore_cursor_bytes, run_environment
             )
             partial["completed_action_count"] = index
             partial["total_action_count"] = len(actions)
             attach_benchmark_inputs(partial, benchmark_inputs)
             write_json(output_dir / "partial_summary.json", partial)
 
-    summary = build_summary(label, results, ver_ok, exe_rev, py_rev, chain, ignore_cursor_bytes)
+    summary = build_summary(
+        label, results, ver_ok, exe_rev, py_rev, chain,
+        ignore_cursor_bytes, run_environment
+    )
     attach_benchmark_inputs(summary, benchmark_inputs)
     write_json(output_dir / "summary.json", summary)
 
@@ -1038,6 +1171,7 @@ def _write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) -
         "expected_error_count",
         "expected_error_problem_count",
         "real_error_count",
+        "environment_blocked_count",
         "mean_diffs_per_diff_action",
     ]
 
@@ -1062,6 +1196,7 @@ def _write_comparison_markdown(path: pathlib.Path, comparison: Dict[str, Any]) -
         "Higher is better for `offline_parity_score`, `match_rate`, `version_parity_score`.",
         "Lower is better for `diff_rate`, `error_rate`, `real_error_rate`, `skip_rate`, `mean_diffs_per_diff_action`.",
         "`expected_error_*` fields track negative-case parity and are additive diagnostics.",
+        "`environment_blocked_count` tracks unavailable active-writer comparisons and is not a parity result.",
     ]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
@@ -1079,8 +1214,10 @@ def cmd_report(args: argparse.Namespace) -> int:
     c = summary.get("counts", {})
     v = summary.get("version", {})
     d = summary.get("diagnostics", {})
+    run_environment = summary.get("run_environment", {})
     expected_diag = d.get("expected_error", {})
     real_diag = d.get("real_error", {})
+    environment_diag = d.get("environment_blocked", {})
 
     print(f"Offline Parity Benchmark Report")
     print(f"  label      : {label}")
@@ -1088,6 +1225,9 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"  exe_rev    : {v.get('exe_parity_spec_rev', '?')}")
     print(f"  py_rev     : {v.get('py_parity_spec_rev', '?')}")
     print(f"  ver_ok     : {v.get('version_parity_ok', '?')}")
+    print(f"  environment: {run_environment.get('status', '?')}")
+    if run_environment.get("reason"):
+        print(f"  env_reason : {run_environment['reason']}")
     print()
     print(f"  {'offline_parity_score':<30} {m.get('offline_parity_score', '?')}")
     print(f"  {'match_rate':<30} {m.get('match_rate', '?')}")
@@ -1102,6 +1242,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"  {'expected_error_count':<30} {m.get('expected_error_count', '?')}")
     print(f"  {'expected_error_problem_count':<30} {m.get('expected_error_problem_count', '?')}")
     print(f"  {'real_error_count':<30} {m.get('real_error_count', '?')}")
+    print(f"  {'environment_blocked_count':<30} {m.get('environment_blocked_count', '?')}")
     print(f"  {'mean_diffs_per_diff_action':<30} {m.get('mean_diffs_per_diff_action', '?')}")
     print()
     print(
@@ -1111,7 +1252,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(
         f"  Error diagnostics: expected={expected_diag.get('match_count', 0)} "
         f"expected_problem={expected_diag.get('problem_count', 0)} "
-        f"real={real_diag.get('count', 0)}"
+        f"real={real_diag.get('count', 0)} "
+        f"environment_blocked={environment_diag.get('count', 0)}"
     )
     return 0
 

@@ -16,6 +16,7 @@ and every text action's raw stdout to byte-match (trailing newline normalised).
 
 Usage (run from the Monolith plugin root):
     python Scripts/verify_offline_parity.py
+    python Scripts/verify_offline_parity.py --exe Binaries/monolith_query-<source-hash>.exe
     python Scripts/verify_offline_parity.py --ignore-cursor-bytes
     python Scripts/verify_offline_parity.py --live          # FUTURE stub, see below
 
@@ -602,13 +603,17 @@ def _clip(v, n=160):
 
 
 def main():
+    global EXE_PATH
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--exe", type=Path, default=EXE_PATH,
+                    help="Authoritative native Query image to verify (default: fixed compatibility path).")
     ap.add_argument("--ignore-cursor-bytes", action="store_true",
                     help="Decode cursors and compare {p,tc}; treat qh mismatch as WARNING.")
     ap.add_argument("--live", action="store_true",
                     help="FUTURE three-way vs live MCP (stub -- refuses to run).")
     args = ap.parse_args()
+    EXE_PATH = args.exe.resolve()
 
     if args.live:
         try:

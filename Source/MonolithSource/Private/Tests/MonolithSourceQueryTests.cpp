@@ -1,12 +1,16 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithSourceBridgeHelpers.h"
 #include "MonolithSourceDatabase.h"
+#include "MonolithSourceIndexer.h"
+#include "MonolithReindexCommandlet.h"
 #include "MonolithSourceReview.h"
 #include "MonolithSourceSchema.h"
 #include "HAL/PlatformFilemanager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeExit.h"
 #include "SQLiteDatabase.h"
+#include "UObject/UObjectGlobals.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 
@@ -49,6 +53,30 @@ namespace
 	{
 		FPaths::NormalizeFilename(Path);
 		return Path;
+	}
+
+	bool CreateProjectPruneFailureDb(const FString& DbPath)
+	{
+		FSQLiteDatabase Db;
+		if (!Db.Open(*DbPath, ESQLiteDatabaseOpenMode::ReadWriteCreate))
+		{
+			return false;
+		}
+
+		// CREATE TABLE IF NOT EXISTS treats this view as an existing `files`
+		// object, but project pruning's SELECT id,path then fails deterministically.
+		const bool bCreated = Db.Execute(TEXT("CREATE VIEW files AS SELECT 1 AS wrong_column;"));
+		Db.Close();
+		return bCreated;
+	}
+
+	void DeleteSourceTestDb(const FString& DbPath)
+	{
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		PlatformFile.DeleteFile(*DbPath);
+		PlatformFile.DeleteFile(*(DbPath + TEXT("-journal")));
+		PlatformFile.DeleteFile(*(DbPath + TEXT("-wal")));
+		PlatformFile.DeleteFile(*(DbPath + TEXT("-shm")));
 	}
 }
 
@@ -252,6 +280,293 @@ bool FSourceResetDatabaseRecreatesMalformedFileTest::RunTest(const FString& Para
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-wal")));
 	FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*(DbPath + TEXT("-shm")));
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourcePluginDescriptorDiscoveryDeduplicatesNestedSourceDirsTest, "Monolith.IndexGuard.Source.PluginDescriptorDiscoveryDeduplicatesNestedSourceDirs", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourcePluginDescriptorDiscoveryDeduplicatesNestedSourceDirsTest::RunTest(const FString& Parameters)
+{
+	const FString FixtureRoot = FPaths::CreateTempFilename(
+		*FPaths::ProjectIntermediateDir(), TEXT("MonolithPluginDiscovery"), TEXT(""));
+	const FString DbPath = FPaths::CreateTempFilename(
+		*FPaths::ProjectIntermediateDir(), TEXT("MonolithPluginDiscovery"), TEXT(".sqlite"));
+	IFileManager& FileManager = IFileManager::Get();
+	FileManager.Delete(*FixtureRoot, /*RequireExists=*/false, /*EvenReadOnly=*/true);
+	ON_SCOPE_EXIT
+	{
+		DeleteSourceTestDb(DbPath);
+		FileManager.DeleteDirectory(*FixtureRoot, /*RequireExists=*/false, /*Tree=*/true);
+	};
+
+	const FString PluginRoot = FixtureRoot / TEXT("Plugins/RealPlugin");
+	const FString PublicDir = PluginRoot / TEXT("Source/RealPlugin/Public");
+	const FString NestedFalseSourceDir = PluginRoot / TEXT("Source/RealPlugin/Private/Templates/Source");
+	const FString EmbeddedPluginRoot = PluginRoot / TEXT("Source/RealPlugin/Private/EmbeddedPlugin");
+	const FString EmbeddedPublicDir = EmbeddedPluginRoot / TEXT("Source/EmbeddedPlugin/Public");
+	const FString LegacyModuleRoot = FixtureRoot / TEXT("Plugins/LegacyModule");
+	const FString LegacyPublicDir = LegacyModuleRoot / TEXT("Source/LegacyModule/Public");
+	if (!TestTrue(TEXT("plugin fixture directories created"),
+		FileManager.MakeDirectory(*PublicDir, /*Tree=*/true)
+		&& FileManager.MakeDirectory(*NestedFalseSourceDir, /*Tree=*/true)
+		&& FileManager.MakeDirectory(*EmbeddedPublicDir, /*Tree=*/true)
+		&& FileManager.MakeDirectory(*LegacyPublicDir, /*Tree=*/true)))
+	{
+		return false;
+	}
+
+	if (!TestTrue(TEXT("plugin descriptor fixture written"),
+		FFileHelper::SaveStringToFile(
+			TEXT("{\"FileVersion\":3,\"Version\":1,\"VersionName\":\"1.0\",\"FriendlyName\":\"RealPlugin\",\"Modules\":[]}\n"),
+			*(PluginRoot / TEXT("RealPlugin.uplugin"))))
+		|| !TestTrue(TEXT("primary module rules fixture written"),
+			FFileHelper::SaveStringToFile(
+				TEXT("using UnrealBuildTool; public class RealPlugin : ModuleRules { public RealPlugin(ReadOnlyTargetRules Target) : base(Target) {} }\n"),
+				*(PluginRoot / TEXT("Source/RealPlugin/RealPlugin.Build.cs"))))
+		|| !TestTrue(TEXT("primary source fixture written"),
+			FFileHelper::SaveStringToFile(TEXT("class FPrimaryFixtureType {};\n"), *(PublicDir / TEXT("PrimaryFixture.h"))))
+		|| !TestTrue(TEXT("nested false-Source fixture written"),
+			FFileHelper::SaveStringToFile(TEXT("class FNestedFixtureType {};\n"), *(NestedFalseSourceDir / TEXT("NestedFixture.h"))))
+		|| !TestTrue(TEXT("embedded plugin descriptor fixture written"),
+			FFileHelper::SaveStringToFile(
+				TEXT("{\"FileVersion\":3,\"Version\":1,\"VersionName\":\"1.0\",\"FriendlyName\":\"EmbeddedPlugin\",\"Modules\":[]}\n"),
+				*(EmbeddedPluginRoot / TEXT("EmbeddedPlugin.uplugin"))))
+		|| !TestTrue(TEXT("embedded module rules fixture written"),
+			FFileHelper::SaveStringToFile(
+				TEXT("using UnrealBuildTool; public class EmbeddedPlugin : ModuleRules { public EmbeddedPlugin(ReadOnlyTargetRules Target) : base(Target) {} }\n"),
+				*(EmbeddedPluginRoot / TEXT("Source/EmbeddedPlugin/EmbeddedPlugin.Build.cs"))))
+		|| !TestTrue(TEXT("embedded source fixture written"),
+			FFileHelper::SaveStringToFile(TEXT("class FEmbeddedFixtureType {};\n"), *(EmbeddedPublicDir / TEXT("EmbeddedFixture.h"))))
+		|| !TestTrue(TEXT("descriptor-free module rules fixture written"),
+			FFileHelper::SaveStringToFile(
+				TEXT("using UnrealBuildTool; public class LegacyModule : ModuleRules { public LegacyModule(ReadOnlyTargetRules Target) : base(Target) {} }\n"),
+				*(LegacyModuleRoot / TEXT("Source/LegacyModule/LegacyModule.Build.cs"))))
+		|| !TestTrue(TEXT("descriptor-free source fixture written"),
+			FFileHelper::SaveStringToFile(TEXT("class FLegacyFixtureType {};\n"), *(LegacyPublicDir / TEXT("LegacyFixture.h")))))
+	{
+		return false;
+	}
+
+	const auto RunFixtureIndex = [&](const FString& InProjectPath, bool bClean, const TCHAR* Context) -> bool
+	{
+		FMonolithSourceIndexer Indexer;
+		Indexer.SetProjectPath(InProjectPath);
+		Indexer.SetDatabasePath(DbPath);
+		Indexer.SetCleanBuild(bClean);
+		Indexer.SetIndexProjectSource(true);
+
+		int32 CompletionFiles = INDEX_NONE;
+		int32 CompletionErrors = INDEX_NONE;
+		bool bCompletionSucceeded = false;
+		Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+		{
+			CompletionFiles = Files;
+			CompletionErrors = Errors;
+			bCompletionSucceeded = bSucceeded;
+		});
+
+		const bool bRan = Indexer.RunSynchronous();
+		TestTrue(FString::Printf(TEXT("%s indexes successfully"), Context), bRan);
+		TestTrue(FString::Printf(TEXT("%s completion reports success"), Context), bCompletionSucceeded);
+		TestEqual(FString::Printf(TEXT("%s completion reports four unique normalized source paths"), Context), CompletionFiles, 4);
+		TestEqual(FString::Printf(TEXT("%s completion reports no errors"), Context), CompletionErrors, 0);
+		return bRan && bCompletionSucceeded && CompletionFiles == 4 && CompletionErrors == 0;
+	};
+
+	if (!RunFixtureIndex(FixtureRoot, /*bClean=*/true, TEXT("clean descriptor-owned fixture")))
+	{
+		return false;
+	}
+
+	FMonolithSourceDatabase VerificationDb;
+	if (!TestTrue(TEXT("fixture DB reopens read-only"), VerificationDb.Open(DbPath)))
+	{
+		return false;
+	}
+	TestEqual(TEXT("the two descriptor roots and standalone descriptor-free root are discovered"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules;")), static_cast<int64>(3));
+	TestEqual(TEXT("descriptor-adjacent Source root uses its parent directory name"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules WHERE name='RealPlugin';")), static_cast<int64>(1));
+	TestEqual(TEXT("embedded descriptor Source root uses its parent directory name"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules WHERE name='EmbeddedPlugin';")), static_cast<int64>(1));
+	TestEqual(TEXT("nested arbitrary Source directory is not a module"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules WHERE name='Templates';")), static_cast<int64>(0));
+	TestEqual(TEXT("standalone descriptor-free Source root remains indexed"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules WHERE name='LegacyModule';")), static_cast<int64>(1));
+	TestEqual(TEXT("each normalized source path has one DB row"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM files;")), static_cast<int64>(4));
+	TestEqual(TEXT("most-specific descriptor root owns the embedded source file"),
+		CountSourceRows(VerificationDb, TEXT(
+			"SELECT COUNT(*) FROM files f JOIN modules m ON m.id=f.module_id"
+			" WHERE f.path LIKE '%/EmbeddedFixture.h' AND m.name='EmbeddedPlugin';")), static_cast<int64>(1));
+	TestEqual(TEXT("nested Source traversal creates no exact duplicate symbols"),
+		CountSourceRows(VerificationDb, TEXT(
+			"SELECT COUNT(*) FROM ("
+			" SELECT file_id,name,qualified_name,kind,line_start,line_end,COALESCE(signature,''),COUNT(*) AS c"
+			" FROM symbols"
+			" GROUP BY file_id,name,qualified_name,kind,line_start,line_end,COALESCE(signature,'')"
+			" HAVING c>1"
+			");")), static_cast<int64>(0));
+	VerificationDb.Close();
+
+	FString AliasProjectPath = FixtureRoot / TEXT(".");
+#if PLATFORM_WINDOWS
+	AliasProjectPath.ToLowerInline();
+#endif
+	if (!RunFixtureIndex(AliasProjectPath, /*bClean=*/false, TEXT("incremental case/alias fixture")))
+	{
+		return false;
+	}
+
+	if (!TestTrue(TEXT("fixture DB reopens after incremental indexing"), VerificationDb.Open(DbPath)))
+	{
+		return false;
+	}
+	TestEqual(TEXT("incremental case/alias input does not duplicate module rows"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM modules;")), static_cast<int64>(3));
+	TestEqual(TEXT("incremental case/relative spelling preserves one row per normalized source path"),
+		CountSourceRows(VerificationDb, TEXT("SELECT COUNT(*) FROM files;")), static_cast<int64>(4));
+	TestEqual(TEXT("incremental case/alias input creates no exact duplicate symbols"),
+		CountSourceRows(VerificationDb, TEXT(
+			"SELECT COUNT(*) FROM ("
+			" SELECT file_id,name,qualified_name,kind,line_start,line_end,COALESCE(signature,''),COUNT(*) AS c"
+			" FROM symbols"
+			" GROUP BY file_id,name,qualified_name,kind,line_start,line_end,COALESCE(signature,'')"
+			" HAVING c>1"
+			");")), static_cast<int64>(0));
+	VerificationDb.Close();
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceIndexerFatalPruneCompletesExactlyOnceTest, "Monolith.IndexGuard.Source.IndexerFatalPruneCompletesExactlyOnce", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceIndexerFatalPruneCompletesExactlyOnceTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceIndexerFatal"), TEXT(".sqlite"));
+	if (!TestTrue(TEXT("prune-failure source DB fixture created"), CreateProjectPruneFailureDb(DbPath)))
+	{
+		DeleteSourceTestDb(DbPath);
+		return false;
+	}
+
+	FMonolithSourceIndexer Indexer;
+	Indexer.SetProjectPath(FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+	Indexer.SetDatabasePath(DbPath);
+	Indexer.SetCleanBuild(false);
+	Indexer.SetIndexProjectSource(true);
+
+	int32 CompletionCount = 0;
+	int32 CompletionFiles = INDEX_NONE;
+	int32 CompletionSymbols = INDEX_NONE;
+	int32 CompletionErrors = 0;
+	bool bCompletionSucceeded = true;
+	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	{
+		++CompletionCount;
+		CompletionFiles = Files;
+		CompletionSymbols = Symbols;
+		CompletionErrors = Errors;
+		bCompletionSucceeded = bSucceeded;
+	});
+
+	AddExpectedError(
+		TEXT("Failed to create prepared statement from 'SELECT id,path FROM files;'"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("PruneIndexedFilesUnderRoots failed to read files table"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("Indexer: Failed to prune project source rows before scoped source reindex"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	const bool bRunSucceeded = Indexer.RunSynchronous();
+
+	TestFalse(TEXT("prune failure reports synchronous failure"), bRunSucceeded);
+	TestFalse(TEXT("fatal run clears running state"), Indexer.IsRunning());
+	TestEqual(TEXT("fatal run broadcasts completion exactly once"), CompletionCount, 1);
+	TestEqual(TEXT("fatal prune processes no files"), CompletionFiles, 0);
+	TestEqual(TEXT("fatal prune extracts no symbols"), CompletionSymbols, 0);
+	TestTrue(TEXT("fatal completion reports a nonzero error count"), CompletionErrors > 0);
+	TestFalse(TEXT("fatal completion reports unsuccessful outcome"), bCompletionSucceeded);
+
+	DeleteSourceTestDb(DbPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSourceIndexerCancellationReportsFailureTest, "Monolith.IndexGuard.Source.IndexerCancellationReportsFailure", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSourceIndexerCancellationReportsFailureTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithSourceIndexerCancel"), TEXT(".sqlite"));
+	FMonolithSourceIndexer Indexer;
+	Indexer.SetDatabasePath(DbPath);
+	Indexer.SetCleanBuild(true);
+	Indexer.RequestStop();
+
+	int32 CompletionCount = 0;
+	bool bCompletionSucceeded = true;
+	Indexer.OnComplete.AddLambda([&](int32 Files, int32 Symbols, int32 Errors, bool bSucceeded)
+	{
+		++CompletionCount;
+		bCompletionSucceeded = bSucceeded;
+	});
+
+	AddExpectedError(
+		TEXT("Indexer: indexing cancelled before finalization"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	TestFalse(TEXT("cancelled synchronous run reports failure"), Indexer.RunSynchronous());
+	TestFalse(TEXT("cancelled run clears running state"), Indexer.IsRunning());
+	TestEqual(TEXT("cancelled run broadcasts completion exactly once"), CompletionCount, 1);
+	TestFalse(TEXT("cancelled completion reports unsuccessful outcome"), bCompletionSucceeded);
+
+	DeleteSourceTestDb(DbPath);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithReindexCommandletFatalIndexerExitCodeTest, "Monolith.IndexGuard.Source.ReindexCommandletFatalIndexerExitCode", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithReindexCommandletFatalIndexerExitCodeTest::RunTest(const FString& Parameters)
+{
+	const FString DbPath = FPaths::CreateTempFilename(*FPaths::ProjectIntermediateDir(), TEXT("MonolithReindexCommandletFatal"), TEXT(".sqlite"));
+	if (!TestTrue(TEXT("commandlet prune-failure DB fixture created"), CreateProjectPruneFailureDb(DbPath)))
+	{
+		DeleteSourceTestDb(DbPath);
+		return false;
+	}
+
+	AddExpectedError(
+		TEXT("Failed to create prepared statement from 'SELECT id,path FROM files;'"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("PruneIndexedFilesUnderRoots failed to read files table"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("Indexer: Failed to prune project source rows before scoped source reindex"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+	AddExpectedError(
+		TEXT("MonolithReindex: indexer did not complete successfully"),
+		EAutomationExpectedErrorFlags::Contains,
+		1);
+
+	UMonolithReindexCommandlet* Commandlet = NewObject<UMonolithReindexCommandlet>();
+	TestNotNull(TEXT("MonolithReindex commandlet created"), Commandlet);
+	if (Commandlet)
+	{
+		const FString CommandletParams = FString::Printf(
+			TEXT("-mode=project -db=\"%s\" -projectpath=\"%s\""),
+			*DbPath,
+			*FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()));
+		TestEqual(TEXT("fatal indexer failure returns commandlet exit code 1"), Commandlet->Main(CommandletParams), 1);
+	}
+
+	DeleteSourceTestDb(DbPath);
 	return true;
 }
 

@@ -1717,14 +1717,32 @@ TSharedPtr<FJsonObject> FMonolithIndexDatabase::GetAssetDetails(const FString& P
 
 TArray<FIndexedAsset> FMonolithIndexDatabase::FindByType(const FString& AssetClass, int32 Limit, int32 Offset)
 {
+	return FindByType(AssetClass, FString(), Limit, Offset);
+}
+
+TArray<FIndexedAsset> FMonolithIndexDatabase::FindByType(
+	const FString& AssetClass,
+	const FString& ModuleFilter,
+	int32 Limit,
+	int32 Offset)
+{
 	TArray<FIndexedAsset> Result;
 	if (!IsOpen()) return Result;
 
 	FSQLitePreparedStatement Stmt;
-	Stmt.Create(*Database, TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE asset_class = ? LIMIT ? OFFSET ?;"));
+	const bool bFilterModule = !ModuleFilter.IsEmpty();
+	const TCHAR* Sql = bFilterModule
+		? TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE asset_class = ? AND module_name = ? LIMIT ? OFFSET ?;")
+		: TEXT("SELECT id, package_path, asset_name, asset_class, module_name, description, file_size_bytes, last_modified, saved_hash, indexed_at FROM assets WHERE asset_class = ? LIMIT ? OFFSET ?;");
+	Stmt.Create(*Database, Sql);
 	Stmt.SetBindingValueByIndex(1, AssetClass);
-	Stmt.SetBindingValueByIndex(2, static_cast<int64>(Limit));
-	Stmt.SetBindingValueByIndex(3, static_cast<int64>(Offset));
+	int32 BindIndex = 2;
+	if (bFilterModule)
+	{
+		Stmt.SetBindingValueByIndex(BindIndex++, ModuleFilter);
+	}
+	Stmt.SetBindingValueByIndex(BindIndex++, static_cast<int64>(Limit));
+	Stmt.SetBindingValueByIndex(BindIndex, static_cast<int64>(Offset));
 
 	while (Stmt.Step() == ESQLitePreparedStatementStepResult::Row)
 	{
