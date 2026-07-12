@@ -1326,7 +1326,7 @@ def check_offline_parity_smoke(ctx: CheckContext) -> None:
             )
 
 
-def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
+def check_analyzer_smoke(ctx: CheckContext) -> None:
     config = ctx.config.get("analyzer_smoke", {})
     if not config.get("enabled", False):
         return
@@ -1361,14 +1361,74 @@ def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
             separators=(",", ":"),
         )
 
+    def retry_record(record_id: str, date: str, status: str, retry_signature: str) -> str:
+        is_success = status == "success"
+        agent_signal: dict[str, Any] = {
+            "outcome": "success" if is_success else "invalid_params",
+            "retry_signature": retry_signature,
+            "result_bytes": 100,
+        }
+        if not is_success:
+            agent_signal.update(
+                {
+                    "error_class": "validation",
+                    "error_code": "invalid_params",
+                    "improvement_tags": ["schema_confusion"],
+                }
+            )
+        return json.dumps(
+            {
+                "format_version": 3,
+                "surface": "action",
+                "record_id": record_id,
+                "trace_id": f"trace-{record_id}",
+                "span_id": f"span-{record_id}",
+                "start_time": f"{date[:4]}-{date[4:6]}-{date[6:]}T00:00:00+09:00",
+                "duration_ms": 1.0,
+                "status": status,
+                "call": {
+                    "namespace": "source",
+                    "action": "search_source",
+                    "arguments": {"query": "FixtureSymbol"},
+                },
+                "agent_signal": agent_signal,
+                "return": {"success": is_success},
+            },
+            separators=(",", ":"),
+        )
+
     with tempfile.TemporaryDirectory() as log_tmp, tempfile.TemporaryDirectory() as out_tmp:
         log_root = Path(log_tmp)
         old_dir = log_root / "20260101"
         recent_dir = log_root / "20260102"
         old_dir.mkdir()
         recent_dir.mkdir()
-        (old_dir / "action.jsonl").write_text(record("old-large", "20260101", 250_000) + "\n", encoding="utf-8")
-        (recent_dir / "action.jsonl").write_text(record("recent-large", "20260102", 260_000) + "\n", encoding="utf-8")
+        successful_signature = "sha256:successful-repeat"
+        failed_signature = "sha256:failed-repeat"
+        old_rows = [record("old-large", "20260101", 250_000)]
+        old_rows.extend(
+            retry_record(f"successful-repeat-{index}", "20260101", "success", successful_signature)
+            for index in range(3)
+        )
+        old_rows.extend(
+            retry_record(f"failed-repeat-{index}", "20260101", "error", failed_signature)
+            for index in range(2)
+        )
+        recent_rows = [record("recent-large", "20260102", 260_000)]
+        recent_rows.extend(
+            retry_record(f"successful-repeat-{index}", "20260102", "success", successful_signature)
+            for index in range(3, 6)
+        )
+        recent_rows.extend(
+            retry_record(f"failed-repeat-{index}", "20260102", "error", failed_signature)
+            for index in range(2, 5)
+        )
+        recent_rows.extend(
+            retry_record(f"recovered-repeat-{index}", "20260102", "success", failed_signature)
+            for index in range(2)
+        )
+        (old_dir / "action.jsonl").write_text("\n".join(old_rows) + "\n", encoding="utf-8")
+        (recent_dir / "action.jsonl").write_text("\n".join(recent_rows) + "\n", encoding="utf-8")
 
         proc = subprocess.run(
             [
@@ -1382,6 +1442,8 @@ def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
                 "json",
                 "--category",
                 "large_result",
+                "--category",
+                "duplicate_retry",
                 "--rank-by-recency",
                 "--fix-boundary",
                 "20260102",
@@ -1395,7 +1457,7 @@ def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
         )
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
-            ctx.block("analyzer-smoke", f"Analyzer large_result smoke failed: {'; '.join(detail)}", script)
+            ctx.block("analyzer-smoke", f"Analyzer smoke failed: {'; '.join(detail)}", script)
             return
 
         findings_path = Path(out_tmp) / "findings.json"
@@ -1431,6 +1493,50 @@ def check_analyzer_large_result_smoke(ctx: CheckContext) -> None:
                 script,
             )
 
+        retries = [item for item in findings if item.get("category") == "duplicate_retry"]
+        successful_retry = next(
+            (
+                item
+                for item in retries
+                if (item.get("sample") or {}).get("retry_signature") == successful_signature
+            ),
+            None,
+        )
+        if successful_retry:
+            ctx.block(
+                "analyzer-smoke",
+                "Analyzer mislabeled repeated successful calls as a duplicate retry",
+                script,
+            )
+
+        failed_retries = [
+            item
+            for item in retries
+            if (item.get("sample") or {}).get("retry_signature") == failed_signature
+        ]
+        if len(failed_retries) != 1:
+            ctx.block(
+                "analyzer-smoke",
+                "Analyzer did not emit exactly one finding for repeated failed retry signatures",
+                script,
+            )
+        else:
+            failed_retry = failed_retries[0]
+            sample = failed_retry.get("sample") or {}
+            evidence = failed_retry.get("evidence") or []
+            if int(sample.get("count") or 0) != 5:
+                ctx.block(
+                    "analyzer-smoke",
+                    "Duplicate retry count included successful recovery calls",
+                    script,
+                )
+            if not evidence or any(item.get("status") != "error" for item in evidence):
+                ctx.block(
+                    "analyzer-smoke",
+                    "Duplicate retry evidence included a successful call",
+                    script,
+                )
+
 
 def run_checks(ctx: CheckContext) -> list[Finding]:
     check_uplugin_and_modules(ctx)
@@ -1449,7 +1555,7 @@ def run_checks(ctx: CheckContext) -> list[Finding]:
     check_benchmark_contract_tests(ctx)
     check_offline_exe_freshness(ctx)
     check_offline_parity_smoke(ctx)
-    check_analyzer_large_result_smoke(ctx)
+    check_analyzer_smoke(ctx)
     return ctx.findings
 
 
