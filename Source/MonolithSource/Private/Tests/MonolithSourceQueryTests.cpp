@@ -1169,13 +1169,14 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	Db.InsertReference(ProjectSymbol, EngineSymbol, TEXT("call"), ProjectFile, 12);
 	Db.InsertReference(EngineSymbol, ProjectSymbol, TEXT("type"), EngineFile, 2);
 	Db.InsertReference(EngineSymbol, EngineLeafSymbol, TEXT("call"), EngineFile, 6);
+	Db.InsertReference(EngineSymbol, EngineLeafSymbol, TEXT("call"), ProjectFile, 13);
 	Db.InsertInheritance(OrphanDerivedSymbol, OrphanBaseSymbol);
 	Db.SetMeta(TEXT("schema_version"), FString::FromInt(MonolithSourceSchema::SchemaVersion));
 
 	TSharedPtr<FJsonObject> Built = Db.RepairCrgCache(true);
 	TestEqual(TEXT("initial CRG cache build ok"), Built->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestEqual(TEXT("initial source CRG node count includes orphan fixture"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(5));
-	TestEqual(TEXT("initial source CRG edge count includes orphan fixture"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(4));
+	TestEqual(TEXT("initial source CRG edge count includes orphan and file-owned reference fixtures"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(5));
 
 	TArray<FString> Roots;
 	Roots.Add(ProjectSourceRoot);
@@ -1184,6 +1185,7 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	TestEqual(TEXT("project symbol removed"), Db.GetSymbolsByName(TEXT("ProjectTouched"), TEXT("function"), 10).Num(), 0);
 	TestEqual(TEXT("engine symbol preserved"), Db.GetSymbolsByName(TEXT("EngineKeep"), TEXT("function"), 10).Num(), 1);
 	TestEqual(TEXT("references to/from pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM \"references\";")), static_cast<int64>(1));
+	TestEqual(TEXT("CRG reference edges owned by a pruned file are removed even when both endpoint symbols survive"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges e LEFT JOIN \"references\" r ON r.id=e.native_id WHERE e.domain='source' AND e.native_table='references' AND r.id IS NULL;")), static_cast<int64>(0));
 	TestEqual(TEXT("orphan symbols removed during project prune"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON f.id = s.file_id WHERE f.id IS NULL;")), static_cast<int64>(0));
 	TestEqual(TEXT("orphan inheritance removed during project prune"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM inheritance i LEFT JOIN symbols cs ON cs.id = i.child_id LEFT JOIN symbols ps ON ps.id = i.parent_id WHERE cs.id IS NULL OR ps.id IS NULL;")), static_cast<int64>(0));
 	TestEqual(TEXT("CRG nodes for pruned symbols removed"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(2));
@@ -1207,7 +1209,7 @@ bool FSourcePruneIndexedFilesUnderRootsRemovesProjectSliceTest::RunTest(const FS
 	TestEqual(TEXT("scoped source CRG refresh ok"), ScopedRefresh->GetStringField(TEXT("status")), FString(TEXT("ok")));
 	TestEqual(TEXT("scoped source CRG refresh mode"), ScopedRefresh->GetStringField(TEXT("refresh_mode")), FString(TEXT("scoped_files")));
 	const TSharedPtr<FJsonObject> ScopedCounts = ScopedRefresh->GetObjectField(TEXT("counts"));
-	TestEqual(TEXT("scoped refresh keeps affected set to changed and pending neighbor symbols"), ScopedCounts->GetNumberField(TEXT("affected_symbols")), 2.0);
+	TestEqual(TEXT("scoped refresh keeps the changed symbol and both surviving reference endpoints affected"), ScopedCounts->GetNumberField(TEXT("affected_symbols")), 3.0);
 	TestEqual(TEXT("scoped refresh restores source CRG node parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_nodes WHERE domain='source';")), static_cast<int64>(3));
 	TestEqual(TEXT("scoped refresh restores source CRG edge parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_edges WHERE domain='source';")), static_cast<int64>(1));
 	TestEqual(TEXT("scoped refresh restores source CRG metric parity"), CountSourceRows(Db, TEXT("SELECT COUNT(*) FROM crg_node_metrics m JOIN crg_nodes n ON n.id = m.node_id WHERE n.domain='source';")), static_cast<int64>(3));

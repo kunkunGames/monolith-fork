@@ -3568,6 +3568,8 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_prune_files;"));
 	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_prune_symbols(id INTEGER PRIMARY KEY);"));
 	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_prune_symbols;"));
+	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_prune_references(id INTEGER PRIMARY KEY);"));
+	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_prune_references;"));
 	if (bOk) bOk = Exec(TEXT("CREATE TEMP TABLE IF NOT EXISTS monolith_source_crg_pending_ids(id INTEGER PRIMARY KEY);"));
 	if (bOk) bOk = Exec(TEXT("DELETE FROM monolith_source_crg_pending_ids;"));
 
@@ -3597,6 +3599,15 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 			"LEFT JOIN files f ON f.id = s.file_id "
 			"WHERE f.id IS NULL;"));
 	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_prune_references(id) "
+			"SELECT id FROM \"references\" "
+			"WHERE file_id IN (SELECT id FROM monolith_prune_files) "
+			"OR from_symbol_id IN (SELECT id FROM monolith_prune_symbols) "
+			"OR to_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+	}
 
 	const bool bHasCrgNodes = ObjectExists(TEXT("table"), TEXT("crg_nodes"));
 	const bool bHasCrgEdges = ObjectExists(TEXT("table"), TEXT("crg_edges"));
@@ -3622,6 +3633,20 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 		bOk = Exec(TEXT(
 			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
 			"SELECT id FROM monolith_prune_symbols;"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT from_symbol_id FROM \"references\" "
+			"WHERE id IN (SELECT id FROM monolith_prune_references);"));
+	}
+	if (bOk)
+	{
+		bOk = Exec(TEXT(
+			"INSERT OR IGNORE INTO monolith_source_crg_pending_ids(id) "
+			"SELECT to_symbol_id FROM \"references\" "
+			"WHERE id IN (SELECT id FROM monolith_prune_references);"));
 	}
 	if (bOk && bHasCrgNodes && bHasCrgEdges)
 	{
@@ -3667,7 +3692,8 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 			"DELETE FROM crg_edges "
 			"WHERE domain='source' AND ("
 			"source_node_id IN (SELECT id FROM monolith_prune_crg_nodes) "
-			"OR target_node_id IN (SELECT id FROM monolith_prune_crg_nodes));"));
+			"OR target_node_id IN (SELECT id FROM monolith_prune_crg_nodes) "
+			"OR (native_table='references' AND native_id IN (SELECT id FROM monolith_prune_references)));"));
 	}
 	if (bOk && bHasCrgNodes)
 	{
@@ -3683,10 +3709,7 @@ int32 FMonolithSourceDatabase::PruneIndexedFilesUnderRoots(const TArray<FString>
 	if (bOk)
 	{
 		bOk = Exec(TEXT(
-			"DELETE FROM \"references\" "
-			"WHERE file_id IN (SELECT id FROM monolith_prune_files) "
-			"OR from_symbol_id IN (SELECT id FROM monolith_prune_symbols) "
-			"OR to_symbol_id IN (SELECT id FROM monolith_prune_symbols);"));
+			"DELETE FROM \"references\" WHERE id IN (SELECT id FROM monolith_prune_references);"));
 	}
 	if (bOk)
 	{
