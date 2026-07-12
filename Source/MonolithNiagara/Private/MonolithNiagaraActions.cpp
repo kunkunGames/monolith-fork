@@ -4729,9 +4729,12 @@ FMonolithActionResult FMonolithNiagaraActions::HandleSetCustomHLSLText(const TSh
 FMonolithActionResult FMonolithNiagaraActions::HandleAddModule(const TSharedPtr<FJsonObject>& Params)
 {
 	FString SystemPath = NA_GetAssetPath(Params);
-	FString EmitterHandleId = Params->GetStringField(TEXT("emitter"));
-	FString ScriptUsage = Params->GetStringField(TEXT("usage"));
-	FString ModuleScriptPath = Params->GetStringField(TEXT("module_script"));
+	FString EmitterHandleId;
+	if (!Params->TryGetStringField(TEXT("emitter"), EmitterHandleId)) return FMonolithActionResult::Error(TEXT("Parameter 'emitter' must be a string"));
+	FString ScriptUsage;
+	if (!Params->TryGetStringField(TEXT("usage"), ScriptUsage)) return FMonolithActionResult::Error(TEXT("Parameter 'usage' must be a string"));
+	FString ModuleScriptPath;
+	if (!Params->TryGetStringField(TEXT("module_script"), ModuleScriptPath)) return FMonolithActionResult::Error(TEXT("Parameter 'module_script' must be a string"));
 	FString ModuleScriptBaseName = FPaths::GetBaseFilename(ModuleScriptPath);
 	int32 Index = -1;
 	double Index_Double = Index;
