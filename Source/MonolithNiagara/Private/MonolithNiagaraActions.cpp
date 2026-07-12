@@ -445,6 +445,7 @@ namespace MonolithNiagaraHelpers
 	TArray<TSharedPtr<FJsonValue>> SerializeCurveKeys(const FRichCurve& Curve)
 	{
 		TArray<TSharedPtr<FJsonValue>> KeyArr;
+		KeyArr.Reserve(Curve.GetConstRefOfKeys().Num());
 		for (const FRichCurveKey& Key : Curve.GetConstRefOfKeys())
 		{
 			TSharedRef<FJsonObject> KO = MakeShared<FJsonObject>();
