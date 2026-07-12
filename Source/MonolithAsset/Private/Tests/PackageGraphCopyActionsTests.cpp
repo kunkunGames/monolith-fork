@@ -9,6 +9,7 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "HAL/FileManager.h"
+#include "ISourceControlModule.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -485,6 +486,7 @@ bool FMonolithAssetPackageGraphRegistryTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("copy_package_graph_with_strategy temp source asset"), TempSourceAsset);
 	if (TempPackage && TempSourceAsset)
 	{
+		FScopedDisableSourceControl DisableSourceControlForIgnoredTempMount;
 		IAssetRegistry& TestAssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
 		TestAssetRegistry.AssetCreated(TempSourceAsset);
 		TempPackage->SetDirtyFlag(false);

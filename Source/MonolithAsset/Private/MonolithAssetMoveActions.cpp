@@ -40,6 +40,7 @@ namespace
 		FString DestinationFilename;
 		FAssetData SourceAssetData;
 		FAssetData DestinationAssetData;
+		TArray<FAssetData> SourceRedirectorAssets;
 		bool bSourceAlreadyCleaned = false;
 		TArray<FString> PreflightErrors;
 		TSharedPtr<FJsonObject> Report;
@@ -602,40 +603,93 @@ namespace
 				AddPreflightError(Plan, TEXT("source_file_exists_without_registry_asset"));
 			}
 		}
-		else if (!ExactSourceAsset.IsValid())
+		bool bSourcePackageRedirectorsValid = true;
+		if (!ExactSourceAsset.IsValid() && !Plan.bSourceAlreadyCleaned)
 		{
 			AddPreflightError(Plan, TEXT("source_redirector_object_missing"));
+			bSourcePackageRedirectorsValid = false;
 		}
-		else if (SourceAssets.Num() != 1
-			|| !SourceAssets[0].GetSoftObjectPath().ToString().Equals(
-				Plan.SourceObjectPath,
-				ESearchCase::CaseSensitive))
-		{
-			AddPreflightError(Plan, TEXT("source_package_must_contain_exactly_one_redirector"));
-		}
-		else if (!ExactSourceAsset.IsRedirector())
+		else if (ExactSourceAsset.IsValid() && !ExactSourceAsset.IsRedirector())
 		{
 			AddPreflightError(Plan, TEXT("source_is_not_redirector"));
+			bSourcePackageRedirectorsValid = false;
 		}
-		else
+
+		TArray<TSharedPtr<FJsonValue>> SourcePackageAssets;
+		SourcePackageAssets.Reserve(SourceAssets.Num());
+		bool bExactSourceListed = false;
+		for (const FAssetData& SourceAsset : SourceAssets)
 		{
-			Plan.SourceAssetData = ExactSourceAsset;
+			const FString SourceAssetObjectPath = SourceAsset.GetSoftObjectPath().ToString();
+			bExactSourceListed |= SourceAssetObjectPath.Equals(
+				Plan.SourceObjectPath,
+				ESearchCase::CaseSensitive);
 			FString DestinationExportPath;
 			FString TaggedDestinationObjectPath;
-			if (!ExactSourceAsset.GetTagValue(FName(TEXT("DestinationObject")), DestinationExportPath))
-			{
-				AddPreflightError(Plan, TEXT("source_redirector_destination_tag_missing"));
-			}
-			else
+			const bool bHasDestinationTag = SourceAsset.GetTagValue(
+				FName(TEXT("DestinationObject")),
+				DestinationExportPath);
+			if (bHasDestinationTag)
 			{
 				TaggedDestinationObjectPath = FPackageName::ExportTextPathToObjectPath(DestinationExportPath);
-				if (!TaggedDestinationObjectPath.Equals(Plan.DestinationObjectPath, ESearchCase::CaseSensitive))
+			}
+			const FString TaggedDestinationPackage = TaggedDestinationObjectPath.IsEmpty()
+				? FString()
+				: FPackageName::ObjectPathToPackageName(TaggedDestinationObjectPath);
+			const bool bTargetsExpectedPackage = TaggedDestinationPackage.Equals(
+				Plan.DestinationPackage,
+				ESearchCase::CaseSensitive);
+
+			TSharedPtr<FJsonObject> SourceAssetReport = MakeShared<FJsonObject>();
+			SourceAssetReport->SetStringField(TEXT("object_path"), SourceAssetObjectPath);
+			SourceAssetReport->SetStringField(TEXT("asset_class"), SourceAsset.AssetClassPath.ToString());
+			SourceAssetReport->SetBoolField(TEXT("is_redirector"), SourceAsset.IsRedirector());
+			SourceAssetReport->SetStringField(TEXT("destination_export_path"), DestinationExportPath);
+			SourceAssetReport->SetStringField(TEXT("destination_object_path"), TaggedDestinationObjectPath);
+			SourceAssetReport->SetStringField(TEXT("destination_package"), TaggedDestinationPackage);
+			SourceAssetReport->SetBoolField(TEXT("targets_expected_package"), bTargetsExpectedPackage);
+			SourcePackageAssets.Add(MakeShared<FJsonValueObject>(SourceAssetReport));
+
+			if (!SourceAsset.IsRedirector())
+			{
+				AddPreflightError(Plan, TEXT("source_package_contains_non_redirector"));
+				bSourcePackageRedirectorsValid = false;
+			}
+			else if (!bHasDestinationTag || TaggedDestinationObjectPath.IsEmpty())
+			{
+				AddPreflightError(Plan, TEXT("source_redirector_destination_tag_missing"));
+				bSourcePackageRedirectorsValid = false;
+			}
+			else if (!bTargetsExpectedPackage)
+			{
+				AddPreflightError(Plan, TEXT("source_package_redirector_target_outside_destination_package"));
+				bSourcePackageRedirectorsValid = false;
+			}
+
+			if (SourceAssetObjectPath.Equals(Plan.SourceObjectPath, ESearchCase::CaseSensitive))
+			{
+				Plan.Report->SetStringField(TEXT("redirector_destination_export_path"), DestinationExportPath);
+				Plan.Report->SetStringField(TEXT("redirector_destination_object_path"), TaggedDestinationObjectPath);
+				if (!TaggedDestinationObjectPath.Equals(
+						Plan.DestinationObjectPath,
+						ESearchCase::CaseSensitive))
 				{
 					AddPreflightError(Plan, TEXT("source_redirector_target_mismatch"));
+					bSourcePackageRedirectorsValid = false;
 				}
 			}
-			Plan.Report->SetStringField(TEXT("redirector_destination_export_path"), DestinationExportPath);
-			Plan.Report->SetStringField(TEXT("redirector_destination_object_path"), TaggedDestinationObjectPath);
+		}
+		Plan.Report->SetNumberField(TEXT("source_package_asset_count"), SourceAssets.Num());
+		Plan.Report->SetArrayField(TEXT("source_package_assets"), MoveTemp(SourcePackageAssets));
+		if (ExactSourceAsset.IsValid() && !bExactSourceListed)
+		{
+			AddPreflightError(Plan, TEXT("source_redirector_missing_from_package_query"));
+			bSourcePackageRedirectorsValid = false;
+		}
+		if (bSourcePackageRedirectorsValid && ExactSourceAsset.IsValid())
+		{
+			Plan.SourceAssetData = ExactSourceAsset;
+			Plan.SourceRedirectorAssets = SourceAssets;
 		}
 
 		const FAssetData ExactDestinationAsset = AssetRegistry.GetAssetByObjectPath(
@@ -784,6 +838,96 @@ namespace
 		}
 	}
 
+	static bool CapturePostRenameCleanupState(
+		IAssetRegistry& AssetRegistry,
+		TArray<FAssetMovePlan>& Plans,
+		FString& OutError)
+	{
+		for (FAssetMovePlan& Plan : Plans)
+		{
+			TArray<FAssetData> SourceAssets;
+			AssetRegistry.GetAssetsByPackageName(
+				FName(*Plan.SourcePackage),
+				SourceAssets,
+				/*bIncludeOnlyOnDiskAssets=*/false);
+			if (SourceAssets.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("rename did not leave a redirector package at '%s'"),
+					*Plan.SourcePackage);
+				return false;
+			}
+
+			bool bFoundExactSourceRedirector = false;
+			for (const FAssetData& SourceAsset : SourceAssets)
+			{
+				const FString SourceObjectPath = SourceAsset.GetSoftObjectPath().ToString();
+				const bool bIsExactSourceRedirector = SourceObjectPath.Equals(
+					Plan.SourceObjectPath,
+					ESearchCase::CaseSensitive);
+				bFoundExactSourceRedirector |= bIsExactSourceRedirector;
+
+				UObjectRedirector* Redirector = SourceAsset.IsRedirector()
+					? Cast<UObjectRedirector>(SourceAsset.GetAsset())
+					: nullptr;
+				const FString DestinationObjectPath = Redirector && Redirector->DestinationObject
+					? Redirector->DestinationObject->GetPathName()
+					: FString();
+				const FString DestinationPackage = DestinationObjectPath.IsEmpty()
+					? FString()
+					: FPackageName::ObjectPathToPackageName(DestinationObjectPath);
+				if (!Redirector
+					|| !Redirector->DestinationObject
+					|| !DestinationPackage.Equals(
+						Plan.DestinationPackage,
+						ESearchCase::CaseSensitive)
+					|| (bIsExactSourceRedirector
+						&& !DestinationObjectPath.Equals(
+							Plan.DestinationObjectPath,
+							ESearchCase::CaseSensitive)))
+				{
+					OutError = FString::Printf(
+						TEXT("post-rename source object '%s' is not an expected redirector into destination package '%s'"),
+						*SourceObjectPath,
+						*Plan.DestinationPackage);
+					return false;
+				}
+			}
+			if (!bFoundExactSourceRedirector)
+			{
+				OutError = FString::Printf(
+					TEXT("post-rename source package '%s' does not contain the exact requested redirector '%s'"),
+					*Plan.SourcePackage,
+					*Plan.SourceObjectPath);
+				return false;
+			}
+
+			const FAssetData DestinationAsset = AssetRegistry.GetAssetByObjectPath(
+				FSoftObjectPath(Plan.DestinationObjectPath),
+				/*bIncludeOnlyOnDiskAssets=*/false,
+				/*bSkipARFilteredAssets=*/true);
+			FString DestinationFilename;
+			if (!DestinationAsset.IsValid()
+				|| !Plan.SourceAssetData.IsValid()
+				|| DestinationAsset.AssetClassPath != Plan.SourceAssetData.AssetClassPath
+				|| !FPackageName::DoesPackageExist(Plan.DestinationPackage, &DestinationFilename)
+				|| IFileManager::Get().FileSize(*DestinationFilename) <= 0)
+			{
+				OutError = FString::Printf(
+					TEXT("post-rename destination object '%s' failed exact integrity validation"),
+					*Plan.DestinationObjectPath);
+				return false;
+			}
+
+			Plan.SourceRedirectorAssets = MoveTemp(SourceAssets);
+			Plan.DestinationAssetData = DestinationAsset;
+			Plan.Report->SetNumberField(
+				TEXT("post_rename_redirector_count"),
+				Plan.SourceRedirectorAssets.Num());
+		}
+		return true;
+	}
+
 	static bool DeleteUnreferencedMovedRedirectors(
 		IAssetRegistry& AssetRegistry,
 		const TArray<FAssetMovePlan>& Plans,
@@ -820,14 +964,36 @@ namespace
 			{
 				continue;
 			}
-			if (SourceAssets.Num() != 1
-				|| !SourceAssets[0].IsRedirector()
-				|| !SourceAssets[0].GetSoftObjectPath().ToString().Equals(
-					Plan.SourceObjectPath,
-					ESearchCase::CaseSensitive))
+
+			TSet<FString> ExpectedSourceObjectPaths;
+			for (const FAssetData& ExpectedSourceAsset : Plan.SourceRedirectorAssets)
+			{
+				ExpectedSourceObjectPaths.Add(ExpectedSourceAsset.GetSoftObjectPath().ToString());
+			}
+			if (SourceAssets.Num() != ExpectedSourceObjectPaths.Num())
 			{
 				OutError = FString::Printf(
-					TEXT("source package '%s' is not exactly one expected redirector before delete"),
+					TEXT("source package '%s' redirector set changed after preflight (expected=%d actual=%d)"),
+					*Plan.SourcePackage,
+					ExpectedSourceObjectPaths.Num(),
+					SourceAssets.Num());
+				return false;
+			}
+			for (const FAssetData& SourceAsset : SourceAssets)
+			{
+				const FString SourceObjectPath = SourceAsset.GetSoftObjectPath().ToString();
+				if (!ExpectedSourceObjectPaths.Contains(SourceObjectPath) || !SourceAsset.IsRedirector())
+				{
+					OutError = FString::Printf(
+						TEXT("source package '%s' no longer contains only the preflighted redirectors"),
+						*Plan.SourcePackage);
+					return false;
+				}
+			}
+			if (!ExpectedSourceObjectPaths.Contains(Plan.SourceObjectPath))
+			{
+				OutError = FString::Printf(
+					TEXT("source package '%s' no longer contains the exact requested redirector"),
 					*Plan.SourcePackage);
 				return false;
 			}
@@ -854,17 +1020,37 @@ namespace
 				return false;
 			}
 
-			UObjectRedirector* Redirector = Cast<UObjectRedirector>(SourceAssets[0].GetAsset());
-			if (!Redirector
-				|| !Redirector->DestinationObject
-				|| !Redirector->DestinationObject->GetPathName().Equals(
-					Plan.DestinationObjectPath,
-					ESearchCase::CaseSensitive))
+			for (const FAssetData& SourceAsset : SourceAssets)
 			{
-				OutError = FString::Printf(
-					TEXT("redirector '%s' failed exact target revalidation before delete"),
-					*Plan.SourcePackage);
-				return false;
+				const FString SourceObjectPath = SourceAsset.GetSoftObjectPath().ToString();
+				UObjectRedirector* Redirector = Cast<UObjectRedirector>(SourceAsset.GetAsset());
+				const FString DestinationObjectPath = Redirector && Redirector->DestinationObject
+					? Redirector->DestinationObject->GetPathName()
+					: FString();
+				const FString DestinationPackage = DestinationObjectPath.IsEmpty()
+					? FString()
+					: FPackageName::ObjectPathToPackageName(DestinationObjectPath);
+				const bool bExactRequestedTargetMatches = !SourceObjectPath.Equals(
+						Plan.SourceObjectPath,
+						ESearchCase::CaseSensitive)
+					|| DestinationObjectPath.Equals(
+						Plan.DestinationObjectPath,
+						ESearchCase::CaseSensitive);
+				if (!Redirector
+					|| !Redirector->DestinationObject
+					|| !DestinationPackage.Equals(
+						Plan.DestinationPackage,
+						ESearchCase::CaseSensitive)
+					|| !bExactRequestedTargetMatches)
+				{
+					OutError = FString::Printf(
+						TEXT("redirector '%s' failed package or exact target revalidation before delete"),
+						*SourceObjectPath);
+					return false;
+				}
+
+				AssetPathsToDelete.Add(SourceObjectPath);
+				++OutSubmittedRedirectorCount;
 			}
 
 			const FAssetData DestinationAsset = AssetRegistry.GetAssetByObjectPath(
@@ -884,9 +1070,7 @@ namespace
 				return false;
 			}
 
-			AssetPathsToDelete.Add(Plan.SourceObjectPath);
-			AllowedPrefixesToDelete.Add(Plan.SourcePackage);
-			++OutSubmittedRedirectorCount;
+			AllowedPrefixesToDelete.AddUnique(Plan.SourcePackage);
 		}
 
 		if (OutSubmittedRedirectorCount == 0)
@@ -924,9 +1108,15 @@ namespace
 			OutError = TEXT("hardened asset.delete_assets batch reported one or more target or source-control failures");
 			return false;
 		}
-		double DeletedCount = 0.0;
-		DeleteResult.Result->TryGetNumberField(TEXT("deleted"), DeletedCount);
-		OutDeletedObjectCount = static_cast<int32>(DeletedCount);
+		double DeletedObjectCount = 0.0;
+		if (!DeleteResult.Result->TryGetNumberField(
+				TEXT("object_delete_reported"),
+				DeletedObjectCount))
+		{
+			OutError = TEXT("hardened asset.delete_assets batch omitted object_delete_reported");
+			return false;
+		}
+		OutDeletedObjectCount = static_cast<int32>(DeletedObjectCount);
 		RefreshMovedPaths(AssetRegistry, Plans);
 		return true;
 	}
@@ -1326,12 +1516,15 @@ FMonolithActionResult FMonolithAssetMoveActions::MoveAssets(const TSharedPtr<FJs
 	if (bCleanupRedirectors && bAssetToolsSuccess)
 	{
 		bCleanupAttempted = true;
-		DeleteUnreferencedMovedRedirectors(
-			AssetRegistry,
-			Plans,
-			RedirectorsSubmittedForCleanup,
-			CleanupDeletedCount,
-			CleanupError);
+		if (CapturePostRenameCleanupState(AssetRegistry, Plans, CleanupError))
+		{
+			DeleteUnreferencedMovedRedirectors(
+				AssetRegistry,
+				Plans,
+				RedirectorsSubmittedForCleanup,
+				CleanupDeletedCount,
+				CleanupError);
+		}
 	}
 	else if (bCleanupRedirectors)
 	{
@@ -1444,6 +1637,7 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 	RefreshMovedPaths(AssetRegistry, Plans);
 	int32 PreflightErrorCount = 0;
 	int32 AlreadyCleanedCount = 0;
+	int32 EligibleSourcePackageCount = 0;
 	int32 EligibleRedirectorCount = 0;
 	for (FAssetMovePlan& Plan : Plans)
 	{
@@ -1454,7 +1648,8 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 			AllowedDestinationRoots);
 		PreflightErrorCount += Plan.PreflightErrors.Num();
 		AlreadyCleanedCount += Plan.bSourceAlreadyCleaned ? 1 : 0;
-		EligibleRedirectorCount += Plan.SourceAssetData.IsValid() ? 1 : 0;
+		EligibleSourcePackageCount += Plan.SourceAssetData.IsValid() ? 1 : 0;
+		EligibleRedirectorCount += Plan.SourceRedirectorAssets.Num();
 		Plan.Report->SetStringField(
 			TEXT("status"),
 			Plan.PreflightErrors.Num() > 0
@@ -1476,10 +1671,33 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 			false);
 		Report->SetNumberField(TEXT("preflight_error_count"), PreflightErrorCount);
 		Report->SetNumberField(TEXT("already_cleaned_count"), AlreadyCleanedCount);
+		Report->SetNumberField(TEXT("eligible_source_package_count"), EligibleSourcePackageCount);
 		Report->SetNumberField(TEXT("eligible_redirector_count"), EligibleRedirectorCount);
 		Report->SetNumberField(TEXT("loaded_redirector_count"), 0);
 		return FMonolithActionResult::Error(
 			TEXT("asset.cleanup_moved_redirectors preflight failed"),
+			InvalidParamsErrorCode)
+			.WithErrorData(Report);
+	}
+	if (EligibleRedirectorCount > MaxCleanupCount)
+	{
+		TSharedPtr<FJsonObject> Report = MakeCleanupReport(
+			Plans,
+			AllowedSourceRoots,
+			AllowedDestinationRoots,
+			bDryRun,
+			bConfirm,
+			TEXT("redirector_object_limit_exceeded"),
+			false);
+		Report->SetNumberField(TEXT("eligible_source_package_count"), EligibleSourcePackageCount);
+		Report->SetNumberField(TEXT("eligible_redirector_count"), EligibleRedirectorCount);
+		Report->SetNumberField(TEXT("maximum_redirector_count"), MaxCleanupCount);
+		Report->SetNumberField(TEXT("loaded_redirector_count"), 0);
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("asset.cleanup_moved_redirectors resolved %d redirector objects, exceeding the single-delete batch maximum of %d"),
+				EligibleRedirectorCount,
+				MaxCleanupCount),
 			InvalidParamsErrorCode)
 			.WithErrorData(Report);
 	}
@@ -1494,7 +1712,8 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 			bConfirm,
 			TEXT("dry_run"),
 			true);
-		Report->SetNumberField(TEXT("would_clean_count"), EligibleRedirectorCount);
+		Report->SetNumberField(TEXT("would_clean_count"), EligibleSourcePackageCount);
+		Report->SetNumberField(TEXT("would_clean_redirector_count"), EligibleRedirectorCount);
 		Report->SetNumberField(TEXT("already_cleaned_count"), AlreadyCleanedCount);
 		Report->SetNumberField(TEXT("loaded_redirector_count"), 0);
 		return FMonolithActionResult::Success(Report);
@@ -1592,6 +1811,7 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 			false);
 		Report->SetNumberField(TEXT("source_control_error_count"), AlreadyCleanedSourceControlErrorCount);
 		Report->SetNumberField(TEXT("already_cleaned_count"), AlreadyCleanedCount);
+		Report->SetNumberField(TEXT("eligible_source_package_count"), EligibleSourcePackageCount);
 		Report->SetNumberField(TEXT("eligible_redirector_count"), EligibleRedirectorCount);
 		return FMonolithActionResult::Error(
 			TEXT("asset.cleanup_moved_redirectors could not prove source-control cleanup state before mutation"),
@@ -1610,6 +1830,7 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 			TEXT("already_cleaned"),
 			true);
 		Report->SetNumberField(TEXT("already_cleaned_count"), AlreadyCleanedCount);
+		Report->SetNumberField(TEXT("eligible_source_package_count"), 0);
 		Report->SetNumberField(TEXT("eligible_redirector_count"), 0);
 		Report->SetNumberField(TEXT("redirectors_submitted_for_delete"), 0);
 		Report->SetNumberField(TEXT("delete_objects_return_count"), 0);
@@ -1648,6 +1869,7 @@ FMonolithActionResult FMonolithAssetMoveActions::CleanupMovedRedirectors(
 		Status,
 		bSuccess);
 	Report->SetNumberField(TEXT("already_cleaned_count"), AlreadyCleanedCount);
+	Report->SetNumberField(TEXT("eligible_source_package_count"), EligibleSourcePackageCount);
 	Report->SetNumberField(TEXT("eligible_redirector_count"), EligibleRedirectorCount);
 	Report->SetNumberField(TEXT("redirectors_submitted_for_delete"), SubmittedRedirectorCount);
 	Report->SetNumberField(TEXT("delete_objects_return_count"), DeletedObjectCount);

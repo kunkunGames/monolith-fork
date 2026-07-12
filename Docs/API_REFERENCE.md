@@ -1,4 +1,4 @@
-# Monolith API Reference
+﻿# Monolith API Reference
 
 **Version:** v0.20.3 · **Last updated:** 2026-07-04
 
@@ -2635,8 +2635,9 @@ Delete UE assets by path with package-segment guards and per-target postconditio
 | `allowed_prefixes` | string[] | optional | When supplied, this must be a non-empty array of non-empty strings. Each package must equal an allowed prefix or be a slash-delimited descendant. A prefix such as `/Game/Foo` does not permit `/Game/FooSibling`. |
 | `dry_run` | boolean | optional | Validate and report without changing dirty/editor/string-table/package/source-control/file/registry state. Default: `false` |
 | `force` | boolean | optional | Also evict package state and remove source-control-aware disk-only package residuals, including targets with no loaded object or AssetRegistry row. Default: `false` |
+| `require_source_control` | boolean | optional | Before any mutation, require an enabled/available provider, valid per-file state, and verified delete or revert-add postconditions for every target. Any preflight failure aborts the whole request. Default: `false` |
 
-The response includes one `targets[]` row per normalized package. Commit statuses are `deleted`, `residual_removed`, `already_absent`, or `failed`; dry-run statuses are `would_delete`, `would_remove_residual`, force-mode `already_absent`, or `not_found`. Committed deletion uses Unreal's editor garbage-collection keep flags, so evicting the requested package does not collect unrelated `RF_Standalone` assets or discard their unsaved edits. In force mode a target succeeds only when no loaded package, AssetRegistry entry, `.uasset`/`.umap`/`.utxt`/`.utxtmap` header, or `.uexp`/`.ubulk`/`.uptnl`/`.m.ubulk`/`.upayload` sidecar remains and no source-control failure occurred. When source control is enabled, provider/state unavailability or a failed/unsupported revert/delete blocks direct deletion and fails the target. Each committed row reports `postcondition_met`, remaining package/registry state, `residual_files`, `source_control_failure`, and an optional `failure_reason`; top-level `success` is true only when every target succeeds.
+The response includes one `targets[]` row per normalized package. Commit statuses are `deleted`, `residual_removed`, `already_absent`, or `failed`; dry-run statuses are `would_delete`, `would_remove_residual`, force-mode `already_absent`, or `not_found`. Committed deletion uses Unreal's editor garbage-collection keep flags, so evicting the requested package does not collect unrelated `RF_Standalone` assets or discard their unsaved edits. In force mode a target succeeds only when no loaded package, AssetRegistry entry, `.uasset`/`.umap`/`.utxt`/`.utxtmap` header, or `.uexp`/`.ubulk`/`.uptnl`/`.m.ubulk`/`.upayload` sidecar remains and no source-control failure occurred. When source control is enabled, provider/state unavailability or a failed/unsupported revert/delete blocks direct deletion and fails the target. `require_source_control=true` strengthens this into an all-target preflight: a missing/unknown provider state, unsupported delete/revert-add transition, or unverifiable postcondition prevents the first deletion instead of allowing a partial filesystem-only result. Each committed row reports `postcondition_met`, remaining package/registry state, `residual_files`, `source_control_failure`, and an optional `failure_reason`; top-level `success` is true only when every target succeeds.
 
 ### `asset.find_assets`
 
@@ -2723,9 +2724,24 @@ Move up to 512 exact source packages to exact destination packages through `IAss
 | `allowed_destination_roots` | string[] | required | Non-empty destination package-root allowlist. Matching is exact or a slash-delimited descendant |
 | `dry_run` | boolean | optional | Validate with AssetRegistry/package-file state without loading or moving source assets. Default: `true` |
 | `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false` |
-| `cleanup_redirectors` | boolean | optional | After the move, run non-interactive `FixupReferencers(..., DeleteFixedUpRedirectors)` for source redirectors and require them to be gone. Default: `false` |
+| `cleanup_redirectors` | boolean | optional | After a fully successful rename, delete at most 200 exact source redirector objects through the same guarded contract as `asset.cleanup_moved_redirectors`; never opens the AssetTools fixup report or rewrites references. Default: `false` |
+| `accept_cdo_reference_warning` | boolean | optional | Explicitly accept only AssetRenameManager's exact CDO/config-reference warning during an interactive editor mutation. It does not accept any other modal and is rejected in commandlet or `-Unattended` contexts. Default: `false` |
 
-Dry-run rows use `would_move`/`blocked`. Preflight rows include no-load AssetRegistry `hard_referencer_count` and `soft_referencer_count`. Committed rows use `moved`, `moved_with_redirector`, or `failed` and report destination registry/class/file checks, source-primary absence, redirector target validity, and `postconditions_met`. Redirector cleanup is attempted only when the entire `RenameAssets` batch reports success; a global or partial rename failure preserves Unreal-managed redirectors and reports `cleanup_status=skipped_due_to_rename_failure`. `IAssetTools::RenameAssets` owns reference repair, package saving, and active-provider source-control branch/move behavior; the action does not emulate a filesystem move or overwrite collision.
+Dry-run rows use `would_move`/`blocked`. Preflight rows include no-load AssetRegistry `hard_referencer_count` and `soft_referencer_count`. Committed rows use `moved`, `moved_with_redirector`, or `failed` and report destination registry/class/file checks, source-primary absence, redirector target validity, and `postconditions_met`. Redirector cleanup is attempted only when the entire `RenameAssets` batch reports success; a global or partial rename failure preserves Unreal-managed redirectors and reports `cleanup_status=skipped_due_to_rename_failure`. Cleanup captures and revalidates the complete redirector-object set in each source package, so Blueprint generated-class/CDO companion rows are permitted only when every source-package AssetRegistry row is a redirector and every companion targets the exact requested destination package. The exact requested source redirector must still target the exact requested destination object. All eligible redirector objects are submitted together to one `asset.delete_assets(require_source_control=true)` batch, capped at 200 objects, and source package/registry/file postconditions are checked afterward. `IAssetTools::RenameAssets` owns reference repair, package saving, and active-provider source-control branch/move behavior; the action does not emulate a filesystem move or overwrite collision.
+
+### `asset.cleanup_moved_redirectors`
+
+Idempotently finalize already-completed moves by deleting only exact, unreferenced source redirectors. This action performs no rename and no reference rewrite, and it never calls the modal `IAssetTools::FixupReferencers` report path.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `moves` | object[] | **required** | 1-200 completed move rows with exact `source` and `destination` package names. A row may also provide both `source_object_path` and `destination_object_path` for non-leaf object names. Destination packages/objects may be shared across rows; source packages/objects must remain unique. |
+| `allowed_source_roots` | string[] | **required** | Non-empty, package-segment-bounded allowlist for source packages. |
+| `allowed_destination_roots` | string[] | **required** | Non-empty, package-segment-bounded allowlist for destinations. Read-only roots are accepted because destinations are validated but never mutated. |
+| `dry_run` | boolean | optional | Validate exact targets, complete source-package redirector sets, zero hard/soft referencers, destination integrity, and already-cleaned state without loading or deleting redirectors. Default: `true` |
+| `confirm` | boolean | optional | Required when `dry_run=false`. Default: `false` |
+
+For each source package, the exact requested source object must be a redirector to the exact destination object. Additional generated-class/CDO or other companion AssetRegistry rows are accepted only when every row is a redirector and every companion targets an object inside the same requested destination package; any non-redirector or foreign-package target blocks the whole preflight. The 200-item safety cap counts resolved redirector objects, not just input packages. Mutation additionally requires an editor game-thread call, a completed AssetRegistry scan, and an enabled/available source-control provider. One hardened `asset.delete_assets(require_source_control=true)` batch deletes the full captured object set, then the action rechecks destination class/file integrity and complete source registry/file removal. On a confirmed idempotent cleanup, already-cleaned sources succeed only when source control also proves the expected delete or revert-add state; dry-run remains observational. Results distinguish `success`, `already_cleaned`, `partial_failure`, and `failed`, and report package counts separately from `eligible_redirector_count`, `redirectors_submitted_for_delete`, and delete/postcondition counts.
 
 ### `asset.register_content_mount_points`
 
@@ -2792,7 +2808,7 @@ Orchestrate a guarded package graph copy workflow with explicit copy strategy cl
 | `raw_package_roots` / `raw_package_packages` | string[] | optional | Select packages that should use `raw_package_file_copy` when `copy_strategy=auto` |
 | `manual_copy_roots` / `manual_copy_packages` | string[] | optional | Select packages known to require manual single-object duplication |
 | `allow_raw_package_copy` | boolean | optional | Required opt-in before `raw_package_file_copy` rows can execute. Default: `false` |
-| `cleanup_redirectors` | boolean | optional | Run explicit copied-root redirector cleanup after reference fixup and before closure validation. Default: `false` |
+| `cleanup_redirectors` | boolean | optional | After reference fixup, run one exact affected-package cleanup batch through `asset.cleanup_moved_redirectors` before closure validation. No modal fixup report is opened. Default: `false` |
 | `allowed_external_roots` | string[] | optional | External roots allowed during dependency-closure validation |
 | `legacy_source_roots` | string[] | optional | Source roots that should not remain referenced; defaults to `root_remaps` sources when omitted |
 | `require_targets` | boolean | optional | Fail fixup when a remapped reference target package is missing. Default: `true` |
@@ -2801,6 +2817,8 @@ Orchestrate a guarded package graph copy workflow with explicit copy strategy cl
 | `confirm` | boolean | optional | Required for mutation when `dry_run=false`. Default: `false` |
 | `save` | boolean | optional | Save duplicated or changed packages. Default: `true` |
 | `strict` | boolean | optional | Treat fixup blockers as errors. Default: `true` |
+
+When `cleanup_redirectors=true`, the workflow builds one cleanup request for the exact affected copied packages, reuses the source/destination object mapping established by the copy plan, and delegates deletion to `asset.cleanup_moved_redirectors`. That action's full-package redirector validation, 200-object cap, zero hard/soft referencer requirement, source-control preflight, idempotent already-cleaned handling, and postconditions remain authoritative. The workflow never calls `IAssetTools::FixupReferencers`; a cleanup failure is surfaced as a workflow failure instead of opening a report window or silently leaving a partial result.
 
 ### `asset.fixup_copied_references`
 

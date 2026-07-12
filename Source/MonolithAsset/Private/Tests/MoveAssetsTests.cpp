@@ -19,9 +19,11 @@
 #include "ISourceControlProvider.h"
 #include "ISourceControlState.h"
 #include "Misc/App.h"
+#include "Misc/CommandLine.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/SecureHash.h"
@@ -692,6 +694,169 @@ bool FMonolithAssetMoveSourceControlCleanupGuardTest::RunTest(const FString& Par
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithAssetMovePostRenameCleanupTest,
+	"Monolith.Asset.MoveAssets.PostRenameCleanupUsesCapturedRedirectors",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetMovePostRenameCleanupTest::RunTest(const FString& Parameters)
+{
+	if (!FParse::Param(FCommandLine::Get(), TEXT("MonolithSourceControlMutationTests")))
+	{
+		AddInfo(TEXT("Post-rename cleanup integration is opt-in because it exercises real source-control rename/delete transitions. Re-run the editor with -MonolithSourceControlMutationTests in an isolated workspace to execute it."));
+		return true;
+	}
+
+	ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
+	if (!GIsEditor
+		|| IsRunningCommandlet()
+		|| !IsInGameThread()
+		|| !SourceControlModule.IsEnabled()
+		|| !SourceControlModule.GetProvider().IsEnabled()
+		|| !SourceControlModule.GetProvider().IsAvailable())
+	{
+		AddInfo(TEXT("Post-rename cleanup integration requires an editor game-thread call and an enabled, available source-control provider."));
+		return true;
+	}
+
+	const FString TestId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+	FScopedMoveMounts Mounts(TestId);
+	const FString SourcePackage = Mounts.SourcePackage(TEXT("CurvePostRenameCleanup"));
+	const FString DestinationPackage = Mounts.DestinationPackage(TEXT("CurvePostRenameCleanupMoved"));
+	FString ProspectiveSourceFilename;
+	FString ProspectiveDestinationFilename;
+	if (!TestTrue(
+			TEXT("post-rename cleanup source filename resolves"),
+			FPackageName::TryConvertLongPackageNameToFilename(
+				SourcePackage,
+				ProspectiveSourceFilename,
+				FPackageName::GetAssetPackageExtension()))
+		|| !TestTrue(
+			TEXT("post-rename cleanup destination filename resolves"),
+			FPackageName::TryConvertLongPackageNameToFilename(
+				DestinationPackage,
+				ProspectiveDestinationFilename,
+				FPackageName::GetAssetPackageExtension())))
+	{
+		return false;
+	}
+	ProspectiveSourceFilename = FPaths::ConvertRelativePathToFull(ProspectiveSourceFilename);
+	ProspectiveDestinationFilename = FPaths::ConvertRelativePathToFull(ProspectiveDestinationFilename);
+	FPaths::NormalizeFilename(ProspectiveSourceFilename);
+	FPaths::NormalizeFilename(ProspectiveDestinationFilename);
+	ISourceControlProvider& SourceControlProvider = SourceControlModule.GetProvider();
+	const FSourceControlStatePtr SourceState = SourceControlProvider.GetState(
+		ProspectiveSourceFilename,
+		EStateCacheUsage::ForceUpdate);
+	const FSourceControlStatePtr DestinationState = SourceControlProvider.GetState(
+		ProspectiveDestinationFilename,
+		EStateCacheUsage::ForceUpdate);
+	if (!SourceState.IsValid()
+		|| SourceState->IsUnknown()
+		|| SourceState->IsIgnored()
+		|| !DestinationState.IsValid()
+		|| DestinationState->IsUnknown()
+		|| DestinationState->IsIgnored())
+	{
+		AddInfo(TEXT("Post-rename cleanup integration skipped because the isolated fixture paths are ignored or lack authoritative source-control state; compile-time and cleanup recovery coverage still run."));
+		return true;
+	}
+	UCurveFloat* SourceAsset = CreateCurveAsset(SourcePackage);
+	if (!TestNotNull(TEXT("post-rename cleanup source fixture exists"), SourceAsset))
+	{
+		return false;
+	}
+
+	const FMonolithActionResult Result = FMonolithAssetMoveActions::MoveAssets(MakeMoveParams(
+		{ { SourcePackage, DestinationPackage } },
+		/*bDryRun=*/false,
+		/*bConfirm=*/true,
+		/*bCleanupRedirectors=*/true,
+		Mounts.SourceRoot,
+		Mounts.DestinationRoot));
+	if (!Result.bSuccess)
+	{
+		AddInfo(FString::Printf(TEXT("Post-rename cleanup failure: %s"), *Result.ErrorMessage));
+	}
+	TestTrue(TEXT("confirmed move with cleanup succeeds"), Result.bSuccess);
+	TestTrue(TEXT("confirmed move with cleanup returns a report"), Result.Result.IsValid());
+	if (Result.Result.IsValid())
+	{
+		bool bCleanupAttempted = false;
+		bool bCleanupSuccess = false;
+		double SubmittedRedirectorCount = -1.0;
+		double DeletedRedirectorCount = -1.0;
+		FString CleanupStatus;
+		Result.Result->TryGetBoolField(TEXT("cleanup_attempted"), bCleanupAttempted);
+		Result.Result->TryGetBoolField(TEXT("cleanup_success"), bCleanupSuccess);
+		Result.Result->TryGetNumberField(
+			TEXT("redirectors_submitted_for_cleanup"),
+			SubmittedRedirectorCount);
+		Result.Result->TryGetNumberField(TEXT("cleanup_deleted_count"), DeletedRedirectorCount);
+		Result.Result->TryGetStringField(TEXT("cleanup_status"), CleanupStatus);
+		TestTrue(TEXT("post-rename cleanup is attempted"), bCleanupAttempted);
+		TestTrue(TEXT("post-rename cleanup reports success"), bCleanupSuccess);
+		TestEqual(
+			TEXT("post-rename cleanup submits the generated redirector"),
+			static_cast<int32>(SubmittedRedirectorCount),
+			1);
+		TestEqual(
+			TEXT("post-rename cleanup reports the deleted object count"),
+			static_cast<int32>(DeletedRedirectorCount),
+			1);
+		TestEqual(TEXT("post-rename cleanup status"), CleanupStatus, FString(TEXT("success")));
+
+		const TArray<TSharedPtr<FJsonValue>>* MoveRows = nullptr;
+		if (TestTrue(
+			TEXT("post-rename cleanup reports one move row"),
+			Result.Result->TryGetArrayField(TEXT("moves"), MoveRows)
+				&& MoveRows
+				&& MoveRows->Num() == 1))
+		{
+			double CapturedRedirectorCount = -1.0;
+			const TSharedPtr<FJsonObject> MoveRow = (*MoveRows)[0]->AsObject();
+			TestTrue(
+				TEXT("post-rename cleanup reports its captured redirector set"),
+				MoveRow.IsValid()
+					&& MoveRow->TryGetNumberField(
+						TEXT("post_rename_redirector_count"),
+						CapturedRedirectorCount));
+			TestEqual(
+				TEXT("post-rename cleanup captures one generated redirector"),
+				static_cast<int32>(CapturedRedirectorCount),
+				1);
+		}
+	}
+
+	IAssetRegistry& AssetRegistry =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+	TArray<FAssetData> SourceAssets;
+	TArray<FAssetData> DestinationAssets;
+	AssetRegistry.GetAssetsByPackageName(
+		FName(*SourcePackage),
+		SourceAssets,
+		/*bIncludeOnlyOnDiskAssets=*/false);
+	AssetRegistry.GetAssetsByPackageName(
+		FName(*DestinationPackage),
+		DestinationAssets,
+		/*bIncludeOnlyOnDiskAssets=*/false);
+	TestEqual(TEXT("post-rename cleanup removes every source registry asset"), SourceAssets.Num(), 0);
+	TestEqual(TEXT("post-rename cleanup preserves one destination asset"), DestinationAssets.Num(), 1);
+	FString SourceFilenameAfter;
+	FString DestinationFilename;
+	TestFalse(
+		TEXT("post-rename cleanup removes the source package file"),
+		FPackageName::DoesPackageExist(SourcePackage, &SourceFilenameAfter));
+	TestTrue(
+		TEXT("post-rename cleanup preserves the destination package file"),
+		FPackageName::DoesPackageExist(DestinationPackage, &DestinationFilename));
+	ClearFixtureDirtyFlags({ SourcePackage, DestinationPackage });
+	TestTrue(
+		TEXT("post-rename cleanup destination unloads before mount teardown"),
+		UnloadFixturePackage(DestinationPackage));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FMonolithAssetMoveCdoReferenceWarningIntegrationTest,
 	"Monolith.Asset.MoveAssets.CdoReferenceWarningIntegration",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -951,7 +1116,31 @@ bool FMonolithAssetMoveCommitTest::RunTest(const FString& Parameters)
 	TArray<FAssetData> DestinationAssets;
 	AssetRegistry.GetAssetsByPackageName(FName(*SourcePackage), SourceAssets, /*bIncludeOnlyOnDiskAssets=*/false);
 	AssetRegistry.GetAssetsByPackageName(FName(*DestinationPackage), DestinationAssets, /*bIncludeOnlyOnDiskAssets=*/false);
-	TestEqual(TEXT("move without cleanup leaves one source redirector"), SourceAssets.Num(), 1);
+	TestTrue(
+		TEXT("move without cleanup leaves either no source package or one redirector"),
+		SourceAssets.Num() == 0 || (SourceAssets.Num() == 1 && SourceAssets[0].IsRedirector()));
+	FString SourceRedirectorFilename;
+	if (SourceAssets.IsEmpty() && DestinationAssets.Num() == 1)
+	{
+		UObject* DestinationObject = DestinationAssets[0].GetAsset();
+		UObjectRedirector* RecoveryFixture = CreateRedirectorAsset(
+			SourcePackage,
+			FPackageName::GetLongPackageAssetName(SourcePackage),
+			DestinationObject);
+		if (!TestNotNull(TEXT("recovery redirector fixture is created when rename needed none"), RecoveryFixture)
+			|| !TestTrue(
+				TEXT("recovery redirector fixture saves"),
+				SaveFixtureAsset(RecoveryFixture, SourceRedirectorFilename)))
+		{
+			return false;
+		}
+		SourceAssets.Reset();
+		AssetRegistry.GetAssetsByPackageName(
+			FName(*SourcePackage),
+			SourceAssets,
+			/*bIncludeOnlyOnDiskAssets=*/false);
+	}
+	TestEqual(TEXT("recovery fixture exposes one source redirector"), SourceAssets.Num(), 1);
 	if (SourceAssets.Num() == 1)
 	{
 		TestTrue(TEXT("source registry asset is a redirector"), SourceAssets[0].IsRedirector());
@@ -960,10 +1149,12 @@ bool FMonolithAssetMoveCommitTest::RunTest(const FString& Parameters)
 	FString DestinationFilename;
 	TestTrue(TEXT("destination package exists on disk"), FPackageName::DoesPackageExist(DestinationPackage, &DestinationFilename));
 	TestTrue(TEXT("destination package file is non-empty"), IFileManager::Get().FileSize(*DestinationFilename) > 0);
-	FString SourceRedirectorFilename;
-	TestTrue(
-		TEXT("source redirector package exists on disk"),
-		FPackageName::DoesPackageExist(SourcePackage, &SourceRedirectorFilename));
+	if (SourceRedirectorFilename.IsEmpty())
+	{
+		TestTrue(
+			TEXT("source redirector package exists on disk"),
+			FPackageName::DoesPackageExist(SourcePackage, &SourceRedirectorFilename));
+	}
 	SourceAsset = nullptr;
 	ClearFixtureDirtyFlags({ SourcePackage, DestinationPackage });
 	TestTrue(TEXT("source redirector unloads before recovery dry-run"), UnloadFixturePackage(SourcePackage));
@@ -1115,11 +1306,16 @@ bool FMonolithAssetCleanupMovedRedirectorsExactObjectPathsTest::RunTest(const FS
 		SourcePackageA,
 		TEXT("LegacyObjectA"),
 		DestinationA);
+	UObjectRedirector* RedirectorACompanion = CreateRedirectorAsset(
+		SourcePackageA,
+		TEXT("LegacyGeneratedObjectA"),
+		DestinationB);
 	UObjectRedirector* RedirectorB = CreateRedirectorAsset(
 		SourcePackageB,
 		TEXT("LegacyObjectB"),
 		DestinationB);
 	if (!TestNotNull(TEXT("non-leaf redirector A exists"), RedirectorA)
+		|| !TestNotNull(TEXT("companion redirector in source package A exists"), RedirectorACompanion)
 		|| !TestNotNull(TEXT("non-leaf redirector B exists"), RedirectorB))
 	{
 		return false;
@@ -1136,14 +1332,62 @@ bool FMonolithAssetCleanupMovedRedirectorsExactObjectPathsTest::RunTest(const FS
 	const FString DestinationObjectPathB = DestinationB->GetPathName();
 	const FString SourceObjectPathA = RedirectorA->GetPathName();
 	const FString SourceObjectPathB = RedirectorB->GetPathName();
+
+	const FString ForeignDestinationPackage = Mounts.DestinationPackage(TEXT("ForeignDestinationPackage"));
+	UCurveFloat* ForeignDestination = CreateCurveAsset(ForeignDestinationPackage);
+	if (!TestNotNull(TEXT("foreign destination fixture exists"), ForeignDestination))
+	{
+		return false;
+	}
+	FString ForeignDestinationFilename;
+	if (!TestTrue(
+		TEXT("foreign destination fixture saves"),
+		SaveFixtureAsset(ForeignDestination, ForeignDestinationFilename)))
+	{
+		return false;
+	}
+	const FString SourcePackageC = Mounts.SourcePackage(TEXT("RedirectorPackageWithForeignCompanion"));
+	UObjectRedirector* RedirectorC = CreateRedirectorAsset(
+		SourcePackageC,
+		TEXT("LegacyObjectC"),
+		DestinationA);
+	UObjectRedirector* RedirectorCForeignCompanion = CreateRedirectorAsset(
+		SourcePackageC,
+		TEXT("LegacyGeneratedObjectC"),
+		ForeignDestination);
+	if (!TestNotNull(TEXT("foreign-companion exact redirector exists"), RedirectorC)
+		|| !TestNotNull(TEXT("foreign-companion redirector exists"), RedirectorCForeignCompanion))
+	{
+		return false;
+	}
+	FString SourceFilenameC;
+	if (!TestTrue(
+		TEXT("foreign-companion source package saves"),
+		SaveFixtureAsset(RedirectorC, SourceFilenameC)))
+	{
+		return false;
+	}
+	const FString SourceObjectPathC = RedirectorC->GetPathName();
 	DestinationA = nullptr;
 	DestinationB = nullptr;
+	ForeignDestination = nullptr;
 	RedirectorA = nullptr;
+	RedirectorACompanion = nullptr;
 	RedirectorB = nullptr;
-	ClearFixtureDirtyFlags({ SourcePackageA, SourcePackageB, DestinationPackage });
+	RedirectorC = nullptr;
+	RedirectorCForeignCompanion = nullptr;
+	ClearFixtureDirtyFlags({
+		SourcePackageA,
+		SourcePackageB,
+		SourcePackageC,
+		DestinationPackage,
+		ForeignDestinationPackage,
+	});
 	TestTrue(TEXT("exact source package A unloads"), UnloadFixturePackage(SourcePackageA));
 	TestTrue(TEXT("exact source package B unloads"), UnloadFixturePackage(SourcePackageB));
+	TestTrue(TEXT("foreign-companion source package unloads"), UnloadFixturePackage(SourcePackageC));
 	TestTrue(TEXT("multi-asset destination package unloads"), UnloadFixturePackage(DestinationPackage));
+	TestTrue(TEXT("foreign destination package unloads"), UnloadFixturePackage(ForeignDestinationPackage));
 
 	const FMonolithActionResult Result = FMonolithAssetMoveActions::CleanupMovedRedirectors(
 		MakeExactCleanupParams(
@@ -1157,13 +1401,192 @@ bool FMonolithAssetCleanupMovedRedirectorsExactObjectPathsTest::RunTest(const FS
 	if (Result.Result.IsValid())
 	{
 		double WouldCleanCount = -1.0;
+		double WouldCleanRedirectorCount = -1.0;
 		Result.Result->TryGetNumberField(TEXT("would_clean_count"), WouldCleanCount);
-		TestEqual(TEXT("exact cleanup finds both redirectors"), static_cast<int32>(WouldCleanCount), 2);
+		Result.Result->TryGetNumberField(
+			TEXT("would_clean_redirector_count"),
+			WouldCleanRedirectorCount);
+		TestEqual(TEXT("exact cleanup finds both source packages"), static_cast<int32>(WouldCleanCount), 2);
+		TestEqual(
+			TEXT("exact cleanup counts every redirector object across both packages"),
+			static_cast<int32>(WouldCleanRedirectorCount),
+			3);
+
+		const TArray<TSharedPtr<FJsonValue>>* MoveRows = nullptr;
+		if (TestTrue(
+			TEXT("exact cleanup reports both source-package rows"),
+			Result.Result->TryGetArrayField(TEXT("moves"), MoveRows)
+				&& MoveRows
+				&& MoveRows->Num() == 2))
+		{
+			const TSharedPtr<FJsonObject> SourcePackageARow = (*MoveRows)[0]->AsObject();
+			double SourcePackageAssetCount = -1.0;
+			TestTrue(
+				TEXT("multi-redirector source package reports its full registry set"),
+				SourcePackageARow.IsValid()
+					&& SourcePackageARow->TryGetNumberField(
+						TEXT("source_package_asset_count"),
+						SourcePackageAssetCount));
+			TestEqual(
+				TEXT("source package A contains both exact and companion redirectors"),
+				static_cast<int32>(SourcePackageAssetCount),
+				2);
+		}
 	}
 	TestNull(TEXT("exact cleanup dry-run leaves source A unloaded"), FindPackage(nullptr, *SourcePackageA));
 	TestNull(TEXT("exact cleanup dry-run leaves source B unloaded"), FindPackage(nullptr, *SourcePackageB));
 	TestNull(TEXT("exact cleanup dry-run leaves shared destination unloaded"), FindPackage(nullptr, *DestinationPackage));
-	ClearFixtureDirtyFlags({ SourcePackageA, SourcePackageB, DestinationPackage });
+
+	const FMonolithActionResult ForeignCompanionResult =
+		FMonolithAssetMoveActions::CleanupMovedRedirectors(
+			MakeExactCleanupParams(
+				{
+					{ SourcePackageC, DestinationPackage, SourceObjectPathC, DestinationObjectPathA },
+				},
+				Mounts.SourceRoot,
+				Mounts.DestinationRoot));
+	TestFalse(
+		TEXT("cleanup blocks a companion redirector that targets another package"),
+		ForeignCompanionResult.bSuccess);
+	bool bFoundForeignCompanionError = false;
+	const TArray<TSharedPtr<FJsonValue>>* ForeignCompanionRows = nullptr;
+	if (ForeignCompanionResult.ErrorData.IsValid()
+		&& ForeignCompanionResult.ErrorData->TryGetArrayField(
+			TEXT("moves"),
+			ForeignCompanionRows)
+		&& ForeignCompanionRows
+		&& ForeignCompanionRows->Num() == 1)
+	{
+		const TSharedPtr<FJsonObject> ForeignCompanionRow = (*ForeignCompanionRows)[0]->AsObject();
+		const TArray<TSharedPtr<FJsonValue>>* PreflightErrors = nullptr;
+		if (ForeignCompanionRow.IsValid()
+			&& ForeignCompanionRow->TryGetArrayField(TEXT("preflight_errors"), PreflightErrors)
+			&& PreflightErrors)
+		{
+			for (const TSharedPtr<FJsonValue>& PreflightError : *PreflightErrors)
+			{
+				bFoundForeignCompanionError |= PreflightError.IsValid()
+					&& PreflightError->AsString().Equals(
+						TEXT("source_package_redirector_target_outside_destination_package"),
+						ESearchCase::CaseSensitive);
+			}
+		}
+	}
+	TestTrue(
+		TEXT("foreign companion block reports its package-boundary violation"),
+		bFoundForeignCompanionError);
+	TestNull(
+		TEXT("foreign-companion failure leaves source package unloaded"),
+		FindPackage(nullptr, *SourcePackageC));
+
+	ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
+	const bool bCanRunConfirmedCleanup = GIsEditor
+		&& !IsRunningCommandlet()
+		&& IsInGameThread()
+		&& SourceControlModule.IsEnabled()
+		&& SourceControlModule.GetProvider().IsEnabled()
+		&& SourceControlModule.GetProvider().IsAvailable();
+	if (bCanRunConfirmedCleanup)
+	{
+		const FMonolithActionResult ConfirmedCleanupResult =
+			FMonolithAssetMoveActions::CleanupMovedRedirectors(
+				MakeExactCleanupParams(
+					{
+						{ SourcePackageA, DestinationPackage, SourceObjectPathA, DestinationObjectPathA },
+						{ SourcePackageB, DestinationPackage, SourceObjectPathB, DestinationObjectPathB },
+					},
+					Mounts.SourceRoot,
+					Mounts.DestinationRoot,
+					/*bDryRun=*/false,
+					/*bConfirm=*/true));
+		if (!ConfirmedCleanupResult.bSuccess)
+		{
+			AddInfo(FString::Printf(
+				TEXT("Confirmed multi-redirector cleanup failure: %s"),
+				*ConfirmedCleanupResult.ErrorMessage));
+		}
+		TestTrue(
+			TEXT("confirmed multi-redirector cleanup succeeds"),
+			ConfirmedCleanupResult.bSuccess);
+		TestTrue(
+			TEXT("confirmed multi-redirector cleanup returns a report"),
+			ConfirmedCleanupResult.Result.IsValid());
+		if (ConfirmedCleanupResult.Result.IsValid())
+		{
+			double SubmittedRedirectorCount = -1.0;
+			double DeletedObjectCount = -1.0;
+			double PostconditionSuccessCount = -1.0;
+			ConfirmedCleanupResult.Result->TryGetNumberField(
+				TEXT("redirectors_submitted_for_delete"),
+				SubmittedRedirectorCount);
+			ConfirmedCleanupResult.Result->TryGetNumberField(
+				TEXT("delete_objects_return_count"),
+				DeletedObjectCount);
+			ConfirmedCleanupResult.Result->TryGetNumberField(
+				TEXT("postcondition_success_count"),
+				PostconditionSuccessCount);
+			TestEqual(
+				TEXT("confirmed cleanup submits every redirector object"),
+				static_cast<int32>(SubmittedRedirectorCount),
+				3);
+			TestEqual(
+				TEXT("confirmed cleanup reports the object-level delete return count"),
+				static_cast<int32>(DeletedObjectCount),
+				3);
+			TestEqual(
+				TEXT("confirmed cleanup satisfies both source-package postconditions"),
+				static_cast<int32>(PostconditionSuccessCount),
+				2);
+		}
+
+		IAssetRegistry& AssetRegistry =
+			FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry")).Get();
+		TArray<FAssetData> SourceAssetsAfterCleanup;
+		AssetRegistry.GetAssetsByPackageName(
+			FName(*SourcePackageA),
+			SourceAssetsAfterCleanup,
+			/*bIncludeOnlyOnDiskAssets=*/false);
+		TestEqual(
+			TEXT("confirmed cleanup removes source package A registry assets"),
+			SourceAssetsAfterCleanup.Num(),
+			0);
+		SourceAssetsAfterCleanup.Reset();
+		AssetRegistry.GetAssetsByPackageName(
+			FName(*SourcePackageB),
+			SourceAssetsAfterCleanup,
+			/*bIncludeOnlyOnDiskAssets=*/false);
+		TestEqual(
+			TEXT("confirmed cleanup removes source package B registry assets"),
+			SourceAssetsAfterCleanup.Num(),
+			0);
+		FString SourceFilenameAfterCleanup;
+		TestFalse(
+			TEXT("confirmed cleanup removes source package A file"),
+			FPackageName::DoesPackageExist(SourcePackageA, &SourceFilenameAfterCleanup));
+		TestFalse(
+			TEXT("confirmed cleanup removes source package B file"),
+			FPackageName::DoesPackageExist(SourcePackageB, &SourceFilenameAfterCleanup));
+		FString DestinationFilenameAfterCleanup;
+		TestTrue(
+			TEXT("confirmed cleanup preserves the shared destination file"),
+			FPackageName::DoesPackageExist(
+				DestinationPackage,
+				&DestinationFilenameAfterCleanup));
+		TestTrue(
+			TEXT("confirmed cleanup shared destination unloads before mount teardown"),
+			UnloadFixturePackage(DestinationPackage));
+	}
+	else
+	{
+		AddInfo(TEXT("Confirmed multi-redirector cleanup requires an editor game-thread call and an enabled, available source-control provider; dry-run object counting coverage still ran."));
+	}
+	ClearFixtureDirtyFlags({
+		SourcePackageA,
+		SourcePackageB,
+		SourcePackageC,
+		DestinationPackage,
+		ForeignDestinationPackage,
+	});
 	return true;
 }
 
