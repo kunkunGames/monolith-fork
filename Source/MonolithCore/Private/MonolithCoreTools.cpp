@@ -1,4 +1,4 @@
-#include "MonolithCoreTools.h"
+﻿#include "MonolithCoreTools.h"
 #include "MonolithAsyncJobRegistry.h"
 #include "MonolithParamUtils.h"
 #include "MonolithGuideTool.h"

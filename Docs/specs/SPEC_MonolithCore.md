@@ -1,4 +1,4 @@
-# Monolith — MonolithCore Module
+﻿# Monolith — MonolithCore Module
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+

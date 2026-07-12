@@ -1,4 +1,4 @@
-# Authoring or Modifying a Monolith MCP Action
+﻿# Authoring or Modifying a Monolith MCP Action
 
 **Parent:** [SPEC_MonolithCore.md](SPEC_MonolithCore.md)
 **Engine:** Unreal Engine 5.7+
