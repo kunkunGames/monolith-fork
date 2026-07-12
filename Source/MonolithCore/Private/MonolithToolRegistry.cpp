@@ -1,4 +1,4 @@
-#include "MonolithToolRegistry.h"
+﻿#include "MonolithToolRegistry.h"
 #include "../Public/MonolithFuzzyMatch.h"
 #include "MonolithFuzzyMatch.h"
 #include "MonolithHashUtils.h"
