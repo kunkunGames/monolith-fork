@@ -68,12 +68,17 @@ namespace fs = std::filesystem;
 // ============================================================================
 
 static const char* PROXY_NAME    = "monolith-proxy";
-static const char* PROXY_VERSION = "1.1.4";
+static const char* PROXY_VERSION = "1.1.6";
 
 static constexpr double TIMEOUT                  = 30.0;
 static constexpr double TOOLS_LIST_TIMEOUT       = 0.75;
 static constexpr double READ_FALLBACK_LIVE_TIMEOUT = 3.0;
-static constexpr DWORD REQUEST_HEALTH_TIMEOUT_MS = 250;
+// Both routes are served by the editor-backed HTTP stack and can queue behind
+// Unreal ticks.  Live measurements reached 2.503 seconds for /health and 2.522
+// seconds for monolith_status, so each phase gets an independent 5-second
+// absolute deadline; a shared deadline would let one phase starve the other.
+static constexpr DWORD REQUEST_HEALTH_TIMEOUT_MS   = 5000;
+static constexpr DWORD REQUEST_IDENTITY_TIMEOUT_MS = 5000;
 static constexpr double POLL_INTERVAL            = 5.0;
 static constexpr double POLL_START_DELAY         = 3.0;
 static constexpr double REPEAT_TOOL_CALL_WINDOW  = 3.0;
@@ -1000,10 +1005,12 @@ static bool listener_owned_by_health_pid(int64_t health_pid)
 
 // GET health endpoint. A 200 alone is insufficient: validate the Monolith
 // health schema, then bind the listener PID to this proxy's host project.
-static bool check_monolith_up(DWORD timeout_ms = 3000)
+static bool check_monolith_up(
+    DWORD health_timeout_ms = REQUEST_HEALTH_TIMEOUT_MS,
+    DWORD identity_timeout_ms = REQUEST_IDENTITY_TIMEOUT_MS)
 {
     const auto deadline = std::chrono::steady_clock::now()
-        + std::chrono::milliseconds(timeout_ms);
+        + std::chrono::milliseconds(health_timeout_ms);
     HINTERNET hSession = WinHttpOpen(
         L"MonolithProxy/1.0",
         WINHTTP_ACCESS_TYPE_NO_PROXY,
@@ -1144,7 +1151,11 @@ static bool check_monolith_up(DWORD timeout_ms = 3000)
             || !health["mcp_transport"].is_object()
             || health["mcp_transport"].value("primary_route", "") != "/mcp")
             return false;
-        if (!check_monolith_identity(pid, timeout_ms))
+        // Do not cache endpoint identity: validate the reported editor PID,
+        // process mode, and project root for every routing gate.  The identity
+        // action has a separate budget because it can queue behind editor work
+        // even when the lightweight /health route is immediately responsive.
+        if (!check_monolith_identity(pid, identity_timeout_ms))
             return false;
         // Bind both HTTP exchanges to the same listener owner. A process that
         // releases the port between health and status is not a valid endpoint.

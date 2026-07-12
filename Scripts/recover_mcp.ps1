@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Deterministic Monolith MCP recovery: probe /health, launch the host project's
 headless editor wrapper when the server is down, wait for the endpoint, report.
@@ -7,13 +7,16 @@ headless editor wrapper when the server is down, wait for the endpoint, report.
 Runs the documented Go-checkout recovery sequence (CLAUDE.md section 14 and
 Skills/monolith-mcp) as one deterministic entry point:
 
-  1. GET <mcp-url-with-/health> (3s timeout). The response is healthy only when
+  1. GET <mcp-url-with-/health> (HealthTimeoutSec, default 5s). The response is healthy only when
      its JSON contract is complete and its PID is an Unreal Editor process for
      this checkout's .uproject.
   2. If down, require the MCP port to have no listener before any launch. A
      non-HTTP/non-200, malformed, multi-owner, or unreadable listener is an
-     untrusted occupied endpoint and blocks recovery. In -ProbeOnly mode,
-     report the health failure reason plus local listener/editor candidates.
+     untrusted occupied endpoint and blocks recovery. A transport timeout from
+     one exclusive listener PID is classified as trusted-busy only when that
+     live PID is an eligible Unreal Editor for this exact project; recovery then
+     waits without launching or mutating. In -ProbeOnly mode, report the health
+     failure reason plus local listener/editor candidates.
   3. Resolve the host checkout root (walk up from this script until a
      *.uproject is found, or use -ProjectRoot) and require
      Build/BatchFiles/RunHeadlessEditor.bat there. No substitute editor launch
@@ -33,6 +36,9 @@ MCP endpoint (default: MONOLITH_URL env var or http://localhost:9316/mcp).
 .PARAMETER TimeoutSec
 Maximum seconds to wait for /health after the launch step (default 600).
 
+.PARAMETER HealthTimeoutSec
+Absolute timeout for each individual /health HTTP request (default 5).
+
 .PARAMETER PollIntervalSec
 Seconds between /health probes while waiting (default 5).
 
@@ -50,7 +56,8 @@ Line-oriented status ending in one RESULT= token.
 
 Exit codes:
   0  MCP endpoint is up (already up, or came up after the launch step)
-  2  endpoint down and -ProbeOnly was requested
+  2  endpoint down, or an exact project-owned editor is transiently busy, and
+     -ProbeOnly was requested
   3  blocked: no host checkout / RunHeadlessEditor.bat not found, or the MCP
      port is occupied/unreadable without a fully trusted health identity
   4  blocked: wrapper exited non-zero
@@ -61,6 +68,8 @@ Exit codes:
 param(
     [string]$McpUrl = $(if ($env:MONOLITH_URL) { $env:MONOLITH_URL } else { 'http://localhost:9316/mcp' }),
     [int]$TimeoutSec = 600,
+    [ValidateRange(1, 60)]
+    [int]$HealthTimeoutSec = 5,
     [int]$PollIntervalSec = 5,
     [switch]$ProbeOnly,
     [switch]$ForceLaunch,
@@ -77,7 +86,7 @@ function Get-MonolithHealth {
 
 function Get-MonolithHealthProbe {
     try {
-        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec $HealthTimeoutSec -UseBasicParsing -ErrorAction Stop
         if ($resp.StatusCode -eq 200) {
             $health = $null
             try {
@@ -374,6 +383,84 @@ function Get-MonolithRecoveryPortGate {
         Owners = @($summary.Owners)
         Error = $summary.Error
     }
+}
+
+function Test-MonolithTrustedBusyListener {
+    param(
+        [string]$Root,
+        $ListenerSummary,
+        $ProcessRecord
+    )
+
+    if ($null -eq $ListenerSummary -or $ListenerSummary.Count -lt 0) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $null; ErrorCode = 'listener_ownership_unavailable' }
+    }
+
+    $listenerPids = @($ListenerSummary.Pids | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    if ([int]$ListenerSummary.Count -le 0 -or $listenerPids.Count -ne 1) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $null; ErrorCode = 'listener_pid_not_exclusive' }
+    }
+
+    $listenerPid = [int]$listenerPids[0]
+    $process = $ProcessRecord
+    if (-not $PSBoundParameters.ContainsKey('ProcessRecord')) {
+        try {
+            $liveProcess = Get-Process -Id $listenerPid -ErrorAction Stop
+            if ($liveProcess.ProcessName -notin @('UnrealEditor', 'UnrealEditor-Cmd')) {
+                return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_pid_not_unreal_editor' }
+            }
+        }
+        catch {
+            return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_pid_not_found' }
+        }
+        $process = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $listenerPid) -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $process) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_process_identity_unavailable' }
+    }
+
+    $recordPid = if ($process.PSObject.Properties['ProcessId']) { [int]$process.ProcessId } elseif ($process.PSObject.Properties['Id']) { [int]$process.Id } else { $listenerPid }
+    if ($recordPid -ne $listenerPid) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_process_pid_mismatch' }
+    }
+
+    $identity = Test-MonolithHealthProcessIdentity `
+        -Health ([PSCustomObject]@{ pid = $listenerPid }) `
+        -Root $Root `
+        -ProcessRecord $process
+    if (-not $identity.Valid) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = $identity.ErrorCode }
+    }
+    return [PSCustomObject]@{ Valid = $true; Pid = $listenerPid; ErrorCode = $null }
+}
+
+function Get-MonolithUnavailableEndpointState {
+    param(
+        [string]$HealthErrorClass,
+        $HealthStatusCode,
+        [string]$Root,
+        $PortGate,
+        $ProcessRecord
+    )
+
+    $invalidHttpIdentity = $HealthStatusCode -eq 200 -and
+        $HealthErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
+    if ($invalidHttpIdentity) {
+        return [PSCustomObject]@{ State = 'blocked'; Pid = $null; ErrorCode = 'invalid_http_identity' }
+    }
+    if ($PortGate.Valid) {
+        return [PSCustomObject]@{ State = 'down'; Pid = $null; ErrorCode = $null }
+    }
+
+    if ($HealthErrorClass -in @('timeout', 'request_failed', 'connection_closed')) {
+        $trustedArgs = @{ Root = $Root; ListenerSummary = $PortGate }
+        if ($PSBoundParameters.ContainsKey('ProcessRecord')) { $trustedArgs.ProcessRecord = $ProcessRecord }
+        $trusted = Test-MonolithTrustedBusyListener @trustedArgs
+        if ($trusted.Valid) {
+            return [PSCustomObject]@{ State = 'trusted_busy'; Pid = $trusted.Pid; ErrorCode = $null }
+        }
+    }
+    return [PSCustomObject]@{ State = 'blocked'; Pid = $null; ErrorCode = $PortGate.ErrorCode }
 }
 
 # Only a real editor instance can ever bind the MCP port; -game/-server instances never will.
@@ -692,13 +779,26 @@ if ($healthProbe.Health) {
 
 $port = Get-McpHealthPort
 $portGate = Get-MonolithRecoveryPortGate -Port $port
-$invalidHttpIdentity = $healthProbe.StatusCode -eq 200 -and
-    $healthProbe.ErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
-if ($invalidHttpIdentity -or -not $portGate.Valid) {
+$endpointState = Get-MonolithUnavailableEndpointState `
+    -HealthErrorClass $healthProbe.ErrorClass `
+    -HealthStatusCode $healthProbe.StatusCode `
+    -Root $hostRoot `
+    -PortGate $portGate
+if ($endpointState.State -eq 'trusted_busy') {
+    if ($ProbeOnly) {
+        Write-Output ("RESULT=MCP_BUSY reason=trusted_editor_health_unavailable health_error={0} detail={1} url={2} listener_port={3} listener_count={4} listener_pids={5} trusted_pid={6} next_action=retry_health_no_mutation" -f `
+                (Format-RecoverResultValue $healthProbe.ErrorClass), (Format-RecoverResultValue $healthProbe.ErrorMessage), `
+                (Format-RecoverResultValue $healthUrl), $port, $portGate.Count, (Join-RecoverIds $portGate.Pids), $endpointState.Pid)
+        exit 2
+    }
+    Write-Output ("INFO trusted_editor_busy pid={0} health_error={1} skipping_launch=true action=wait_for_valid_health" -f `
+            $endpointState.Pid, (Format-RecoverResultValue $healthProbe.ErrorClass))
+}
+elseif ($endpointState.State -eq 'blocked') {
     Write-Output ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint health_error={0} detail={1} url={2} listener_port={3} listener_count={4} listener_pids={5} listener_gate={6}" -f `
             (Format-RecoverResultValue $healthProbe.ErrorClass), (Format-RecoverResultValue $healthProbe.ErrorMessage), `
             (Format-RecoverResultValue $healthUrl), $port, $portGate.Count, (Join-RecoverIds $portGate.Pids), `
-            (Format-RecoverResultValue $portGate.ErrorCode))
+            (Format-RecoverResultValue $endpointState.ErrorCode))
     exit 3
 }
 
@@ -714,7 +814,10 @@ if (-not (Test-Path $wrapper)) {
 }
 
 $editorProcs = Get-EditorServerCandidates
-if ($editorProcs.Count -gt 0 -and -not $ForceLaunch) {
+if ($endpointState.State -eq 'trusted_busy') {
+    Write-Output ("INFO trusted_editor_process pid={0} skipping_launch=true force_launch_ignored=true" -f $endpointState.Pid)
+}
+elseif ($editorProcs.Count -gt 0 -and -not $ForceLaunch) {
     Write-Output ("INFO editor_processes_detected pids={0} skipping_launch=true (boot may be in progress; use -ForceLaunch to launch anyway)" -f (($editorProcs.Id) -join ','))
 }
 else {

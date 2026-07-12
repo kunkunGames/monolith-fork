@@ -279,6 +279,11 @@ def status_response(
 class LiveErrorHandler(BaseHTTPRequestHandler):
     """Minimal live backend that returns a valid tool-level error."""
 
+    health_delay_seconds = 0.0
+    health_calls = 0
+    status_delay_seconds = 0.0
+    status_calls = 0
+
     def log_message(self, _format: str, *args: object) -> None:
         del args
 
@@ -291,12 +296,18 @@ class LiveErrorHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
+        type(self).health_calls += 1
+        if self.health_delay_seconds:
+            time.sleep(self.health_delay_seconds)
         self._write_json(health_payload(self.server.server_port))
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         request = json.loads(self.rfile.read(length).decode("utf-8"))
         if request.get("params", {}).get("name") == "monolith_status":
+            type(self).status_calls += 1
+            if self.status_delay_seconds:
+                time.sleep(self.status_delay_seconds)
             self._write_json(status_response(request.get("id")))
             return
         self._write_json(
@@ -309,6 +320,20 @@ class LiveErrorHandler(BaseHTTPRequestHandler):
                 },
             }
         )
+
+
+class DelayedIdentityHandler(LiveErrorHandler):
+    """Valid endpoint whose identity exceeds the old 250 ms request budget."""
+
+    status_delay_seconds = 0.6
+    status_calls = 0
+
+
+class DelayedHealthHandler(LiveErrorHandler):
+    """Valid endpoint whose health response exceeds the old 250 ms budget."""
+
+    health_delay_seconds = 0.6
+    health_calls = 0
 
 
 class InvalidLiveHandler(BaseHTTPRequestHandler):
@@ -412,7 +437,7 @@ class TrickleHealthHandler(LiveErrorHandler):
             for offset in range(0, len(body), 20):
                 self.wfile.write(body[offset : offset + 20])
                 self.wfile.flush()
-                time.sleep(0.15)
+                time.sleep(1.0)
         except OSError:
             pass
 
@@ -2536,9 +2561,9 @@ def main() -> int:
                     },
                 },
             )
-            assert "Offline fallback is disabled" in opt_out_initialize["result"][
+            assert "offline fallback is disabled" in opt_out_initialize["result"][
                 "instructions"
-            ]
+            ].lower()
             opt_out_tools = opt_out_session.request(102, "tools/list", {})
             opt_out_names = {
                 tool["name"] for tool in opt_out_tools["result"]["tools"]
@@ -2699,7 +2724,7 @@ def main() -> int:
                 },
             )
             trickle_health_seconds = time.monotonic() - trickle_health_start
-            assert trickle_health_seconds < 0.8, trickle_health_seconds
+            assert 4.5 <= trickle_health_seconds < 6.5, trickle_health_seconds
             assert trickle_health_result["result"]["isError"] is True
             assert "LIVE_SENTINEL" not in result_text(trickle_health_result)
         finally:
@@ -2944,6 +2969,110 @@ sys.stdin.buffer.read()
             ipv6_server.shutdown()
             ipv6_server.server_close()
             ipv6_thread.join(timeout=2)
+
+        DelayedHealthHandler.health_calls = 0
+        delayed_health_server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), DelayedHealthHandler
+        )
+        delayed_health_thread = threading.Thread(
+            target=delayed_health_server.serve_forever, daemon=True
+        )
+        delayed_health_thread.start()
+        delayed_health_env = env.copy()
+        delayed_health_env["MONOLITH_URL"] = (
+            f"http://127.0.0.1:{delayed_health_server.server_port}/mcp"
+        )
+        delayed_health_env["MONOLITH_TOOL_LOG_DIR"] = str(
+            temp_root / "delayed-health-logs"
+        )
+        delayed_health_session = launch_proxy(proxy, delayed_health_env)
+        try:
+            delayed_health_session.request(
+                275,
+                "initialize",
+                {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "delayed-health-live-smoke",
+                        "version": "1",
+                    },
+                },
+            )
+            delayed_health_start = time.monotonic()
+            delayed_health_live = call_tool(
+                delayed_health_session,
+                276,
+                "monolith_query",
+                {
+                    "namespace": "asset",
+                    "action": "save_asset",
+                    "params": {"asset_path": "/Game/Probe"},
+                },
+            )
+            delayed_health_seconds = time.monotonic() - delayed_health_start
+            assert DelayedHealthHandler.health_calls >= 1
+            assert delayed_health_seconds >= 0.5, delayed_health_seconds
+            assert result_text(delayed_health_live) == "LIVE_SENTINEL"
+            assert "offline_fallback" not in json.dumps(delayed_health_live)
+        finally:
+            delayed_health_session.close()
+            delayed_health_server.shutdown()
+            delayed_health_server.server_close()
+            delayed_health_thread.join(timeout=2)
+
+        DelayedIdentityHandler.status_calls = 0
+        delayed_identity_server = ThreadingHTTPServer(
+            ("127.0.0.1", 0), DelayedIdentityHandler
+        )
+        delayed_identity_thread = threading.Thread(
+            target=delayed_identity_server.serve_forever, daemon=True
+        )
+        delayed_identity_thread.start()
+        delayed_identity_env = env.copy()
+        delayed_identity_env["MONOLITH_URL"] = (
+            f"http://127.0.0.1:{delayed_identity_server.server_port}/mcp"
+        )
+        delayed_identity_env["MONOLITH_TOOL_LOG_DIR"] = str(
+            temp_root / "delayed-identity-logs"
+        )
+        delayed_identity_session = launch_proxy(proxy, delayed_identity_env)
+        try:
+            delayed_identity_session.request(
+                280,
+                "initialize",
+                {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "delayed-identity-live-smoke",
+                        "version": "1",
+                    },
+                },
+            )
+            delayed_identity_start = time.monotonic()
+            delayed_identity_live = call_tool(
+                delayed_identity_session,
+                281,
+                "monolith_query",
+                {
+                    "namespace": "asset",
+                    "action": "save_asset",
+                    "params": {"asset_path": "/Game/Probe"},
+                },
+            )
+            delayed_identity_seconds = (
+                time.monotonic() - delayed_identity_start
+            )
+            assert DelayedIdentityHandler.status_calls >= 1
+            assert delayed_identity_seconds >= 0.5, delayed_identity_seconds
+            assert result_text(delayed_identity_live) == "LIVE_SENTINEL"
+            assert "offline_fallback" not in json.dumps(delayed_identity_live)
+        finally:
+            delayed_identity_session.close()
+            delayed_identity_server.shutdown()
+            delayed_identity_server.server_close()
+            delayed_identity_thread.join(timeout=2)
 
         live_server = ThreadingHTTPServer(
             ("127.0.0.1", 0), LiveErrorHandler
@@ -3507,6 +3636,8 @@ sys.stdin.buffer.read()
                         "status_commandlet_identity_rejected",
                         "multi_owner_listener_pid_rejected",
                         "ipv6_loopback_listener_owner_live_route",
+                        "delayed_health_routes_live",
+                        "delayed_status_identity_routes_live",
                         "cold_live_only_generic_routes_live",
                         "live_error_wins_without_fallback",
                         "invalid_live_tools_list_uses_stable_control_plane",

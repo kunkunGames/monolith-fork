@@ -170,6 +170,11 @@ preflight and retain the normal live action timeout.
 - Health transitions are owned by the background poller. Neither
   `notifications/initialized` nor cold `tools/list` performs a synchronous
   health call on the stdio dispatch thread.
+- Every live request gate gives the editor-backed loopback `/health` request a
+  5,000-millisecond absolute deadline, then performs a fresh `monolith_status`
+  editor/project identity check with its own independent 5,000-millisecond POST
+  deadline. The live action timeout starts only after both checks succeed;
+  identity is not cached across requests.
 - Once the backend is known healthy, an offline-capable read gets a bounded
   three-second per-phase live attempt. Slow/unhealthy transport may fall back
   only because this surface is fixed read-only; editor-only calls do not use
@@ -465,7 +470,7 @@ must not be described as an isolated worker.
 |---------|-------------------|
 | Live endpoint returns a valid error | Return it unchanged; do not fallback. |
 | Live endpoint has no transport response, non-2xx status, or invalid JSON-RPC envelope | Try only the fixed offline allowlist. |
-| `/health` is 200 but its JSON contract/project identity is missing or foreign | Reject the endpoint; do not forward, build, launch, or kill on its behalf. |
+| `/health` or `monolith_status` exceeds its independent 5,000-millisecond deadline, or the health/identity JSON contract is missing or foreign | Reject the endpoint; do not forward, build, launch, or kill on its behalf. A valid health or identity response slower than 250 milliseconds but within its own deadline remains eligible for live routing. |
 | A known-up MCP request fails | Open the circuit immediately; exponential 10/20/40/60-second cooldown prevents health-only polling from reintroducing repeated tail latency. |
 | Concrete generic action is live-only, mutating, or long-running | Freshly validate project identity and use the normal live timeout; never apply the read fast-path timeout. |
 | Live `tools/list` has a valid envelope but no valid `result.tools` contract | Discard it, open the circuit, and return the stable four-tool control plane. |
@@ -509,8 +514,10 @@ on a running editor:
     string cursors, response shaping, compact discovery, caller DB/snapshot
     override rejection, indexed-only file reads, and summary-only logs.
 14. Verify a cold live-only generic action reaches a healthy correct-project
-    endpoint, while an accepted endpoint that changes project root is rejected
-    before the action POST.
+    endpoint, including independent cases where `/health` or `monolith_status`
+    takes longer than 250 milliseconds but less than 5,000 milliseconds; require
+    no offline marker. An accepted endpoint that changes project root must still
+    be rejected before the action POST.
 15. Verify a transport failure remains fast after a health-poll interval, and a
     method-invalid live `tools/list` returns the stable four tools.
 16. Rebuild both native binaries in release packaging; validate the manifest

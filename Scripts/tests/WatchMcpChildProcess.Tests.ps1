@@ -79,6 +79,263 @@ if ($RecoverParseErrors.Count -gt 0) {
     throw ($RecoverParseErrors | ForEach-Object { $_.Message } | Out-String)
 }
 
+Describe 'Monolith health request timeout contract' {
+    foreach ($case in @(
+            @{ Name = 'recover_mcp'; Ast = $RecoverAst; HealthFunction = 'Get-MonolithHealthProbe'; ScriptPath = $RecoverPath },
+            @{ Name = 'watch_mcp'; Ast = $Ast; HealthFunction = 'Get-MonolithHealth'; ScriptPath = $WatchdogPath }
+        )) {
+        Context $case.Name {
+            It 'declares a validated five-second health timeout and uses it only for the health request' {
+                $scriptText = Get-Content -LiteralPath $case.ScriptPath -Raw
+                $scriptText | Should Match '\[ValidateRange\(1,\s*60\)\]\s*\[int\]\$HealthTimeoutSec\s*=\s*5'
+                $healthFunctionText = Get-ScriptFunctionText -ScriptAst $case.Ast -Name $case.HealthFunction
+                $healthFunctionText | Should Match '-TimeoutSec\s+\$HealthTimeoutSec'
+            }
+
+            It 'accepts a valid health response delayed beyond the historical three-second timeout' {
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name $case.HealthFunction)
+
+                function Get-McpHealthPort { return 9316 }
+                function Test-MonolithHealthContract {
+                    param($Health, [int]$ExpectedPort)
+                    return [PSCustomObject]@{ Valid = ($Health.port -eq $ExpectedPort); ErrorCode = $null }
+                }
+                function Test-MonolithHealthProcessIdentity {
+                    param($Health, [string]$Root)
+                    return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+                }
+                function Test-MonolithHealthListenerIdentity {
+                    param($Health, [int]$Port, $ListenerSummary)
+                    return [PSCustomObject]@{ Valid = $true; ErrorCode = $null }
+                }
+
+                $script:capturedHealthTimeoutSec = $null
+                function Invoke-WebRequest {
+                    [CmdletBinding()]
+                    param(
+                        [string]$Uri,
+                        [string]$Method,
+                        [int]$TimeoutSec,
+                        [switch]$UseBasicParsing
+                    )
+                    $script:capturedHealthTimeoutSec = $TimeoutSec
+                    Start-Sleep -Milliseconds 3200
+                    $content = [ordered]@{
+                        status = 'ok'
+                        port = 9316
+                        pid = 1234
+                        version = '0.20.3'
+                        uptime_seconds = 1.25
+                        tools_registered = 1840
+                        mcp_transport = [ordered]@{ primary_route = '/mcp' }
+                    } | ConvertTo-Json -Compress
+                    return [PSCustomObject]@{ StatusCode = 200; Content = $content }
+                }
+
+                try {
+                    $healthUrl = 'http://localhost:9316/health'
+                    $HealthTimeoutSec = 5
+                    $script:hostRoot = $TestDrive
+                    $health = if ($case.HealthFunction -eq 'Get-MonolithHealthProbe') {
+                        (Get-MonolithHealthProbe).Health
+                    }
+                    else {
+                        Get-MonolithHealth
+                    }
+                    $script:capturedHealthTimeoutSec | Should Be 5
+                    $health.status | Should Be 'ok'
+                }
+                finally {
+                    Remove-Item Function:\Invoke-WebRequest,
+                        Function:\Get-McpHealthPort,
+                        Function:\Test-MonolithHealthContract,
+                        Function:\Test-MonolithHealthProcessIdentity,
+                        Function:\Test-MonolithHealthListenerIdentity -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+
+    It 'forwards the watchdog health timeout to the recover child' {
+        $invokeRecoverText = Get-ScriptFunctionText -ScriptAst $Ast -Name 'Invoke-Recover'
+        $invokeRecoverText | Should Match "'-HealthTimeoutSec',\s*\r?\n\s*\`$HealthTimeoutSec"
+    }
+}
+
+Describe 'Monolith trusted-busy endpoint state' {
+    foreach ($case in @(
+            @{ Name = 'recover_mcp'; Ast = $RecoverAst; ErrorClass = 'timeout' },
+            @{ Name = 'watch_mcp'; Ast = $Ast; ErrorClass = 'request_failed' }
+        )) {
+        Context $case.Name {
+            It 'accepts only one live exact-project editor listener as trusted-busy' {
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Get-ProjectFile')
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Test-MonolithEditorCommandLineForProject')
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Test-MonolithHealthProcessIdentity')
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Test-MonolithTrustedBusyListener')
+                Invoke-Expression (Get-ScriptFunctionText -ScriptAst $case.Ast -Name 'Get-MonolithUnavailableEndpointState')
+
+                $root = Join-Path $TestDrive ("trusted_busy_{0}" -f $case.Name)
+                New-Item -ItemType Directory -Path $root -Force | Out-Null
+                $projectFile = Join-Path $root 'Speed.uproject'
+                Set-Content -LiteralPath $projectFile -Value '{}'
+                $validEditor = [PSCustomObject]@{
+                    ProcessId = 1234
+                    Name = 'UnrealEditor.exe'
+                    CommandLine = ('"C:\Engine\UnrealEditor.exe" "{0}" -Unattended -NullRHI' -f $projectFile)
+                }
+                $ownedListener = [PSCustomObject]@{
+                    Valid = $false
+                    ErrorCode = 'listener_present_without_trusted_health'
+                    Count = 2
+                    Pids = @(1234)
+                }
+
+                $trusted = Get-MonolithUnavailableEndpointState `
+                    -HealthErrorClass $case.ErrorClass `
+                    -HealthStatusCode $null `
+                    -Root $root `
+                    -PortGate $ownedListener `
+                    -ProcessRecord $validEditor
+                $trusted.State | Should Be 'trusted_busy'
+                $trusted.Pid | Should Be 1234
+
+                $invalidHttp = Get-MonolithUnavailableEndpointState `
+                    -HealthErrorClass 'health_contract' `
+                    -HealthStatusCode 200 `
+                    -Root $root `
+                    -PortGate $ownedListener `
+                    -ProcessRecord $validEditor
+                $invalidHttp.State | Should Be 'blocked'
+
+                foreach ($badEditor in @(
+                        [PSCustomObject]@{ ProcessId = 1234; Name = 'python.exe'; CommandLine = $validEditor.CommandLine },
+                        [PSCustomObject]@{ ProcessId = 1234; Name = 'UnrealEditor.exe'; CommandLine = '"C:\Engine\UnrealEditor.exe" "D:\Other\Other.uproject" -NullRHI' },
+                        [PSCustomObject]@{ ProcessId = 1234; Name = 'UnrealEditor-Cmd.exe'; CommandLine = ('"C:\Engine\UnrealEditor-Cmd.exe" "{0}" -run=MonolithReindex' -f $projectFile) },
+                        [PSCustomObject]@{ ProcessId = 9999; Name = 'UnrealEditor.exe'; CommandLine = $validEditor.CommandLine },
+                        [PSCustomObject]@{ ProcessId = 1234; Name = 'UnrealEditor.exe'; CommandLine = $null }
+                    )) {
+                    $rejected = Get-MonolithUnavailableEndpointState `
+                        -HealthErrorClass $case.ErrorClass `
+                        -HealthStatusCode $null `
+                        -Root $root `
+                        -PortGate $ownedListener `
+                        -ProcessRecord $badEditor
+                    $rejected.State | Should Be 'blocked'
+                }
+
+                $multiOwner = [PSCustomObject]@{
+                    Valid = $false
+                    ErrorCode = 'listener_present_without_trusted_health'
+                    Count = 2
+                    Pids = @(1234, 5678)
+                }
+                (Get-MonolithUnavailableEndpointState `
+                        -HealthErrorClass $case.ErrorClass `
+                        -HealthStatusCode $null `
+                        -Root $root `
+                        -PortGate $multiOwner `
+                        -ProcessRecord $validEditor).State | Should Be 'blocked'
+
+                $clearPort = [PSCustomObject]@{ Valid = $true; ErrorCode = $null; Count = 0; Pids = @() }
+                (Get-MonolithUnavailableEndpointState `
+                        -HealthErrorClass $case.ErrorClass `
+                        -HealthStatusCode $null `
+                        -Root $root `
+                        -PortGate $clearPort `
+                        -ProcessRecord $validEditor).State | Should Be 'down'
+            }
+        }
+    }
+
+    It 'classifies a post-index health request that exceeds five seconds as trusted-busy' {
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Get-MonolithHealth')
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Get-ProjectFile')
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Test-MonolithEditorCommandLineForProject')
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Test-MonolithHealthProcessIdentity')
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Test-MonolithTrustedBusyListener')
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Get-MonolithUnavailableEndpointState')
+
+        $script:capturedHealthTimeoutSec = $null
+        function Invoke-WebRequest {
+            [CmdletBinding()]
+            param(
+                [string]$Uri,
+                [string]$Method,
+                [int]$TimeoutSec,
+                [switch]$UseBasicParsing
+            )
+            $script:capturedHealthTimeoutSec = $TimeoutSec
+            Start-Sleep -Milliseconds 5200
+            throw [System.TimeoutException]::new('synthetic post-index health timeout')
+        }
+
+        try {
+            $healthUrl = 'http://localhost:9316/health'
+            $HealthTimeoutSec = 5
+            $root = Join-Path $TestDrive 'post_index_timeout'
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            $projectFile = Join-Path $root 'Speed.uproject'
+            Set-Content -LiteralPath $projectFile -Value '{}'
+            $script:hostRoot = $root
+            $elapsed = [System.Diagnostics.Stopwatch]::StartNew()
+            (Get-MonolithHealth) | Should Be $null
+            $elapsed.Stop()
+            $elapsed.Elapsed.TotalSeconds -ge 5 | Should Be $true
+            $script:capturedHealthTimeoutSec | Should Be 5
+            $script:lastHealthErrorClass | Should Be 'request_failed'
+
+            $editor = [PSCustomObject]@{
+                ProcessId = 1234
+                Name = 'UnrealEditor.exe'
+                CommandLine = ('"C:\Engine\UnrealEditor.exe" "{0}" -Unattended -NullRHI' -f $projectFile)
+            }
+            $portGate = [PSCustomObject]@{
+                Valid = $false
+                ErrorCode = 'listener_present_without_trusted_health'
+                Count = 1
+                Pids = @(1234)
+            }
+            (Get-MonolithUnavailableEndpointState `
+                    -HealthErrorClass $script:lastHealthErrorClass `
+                    -HealthStatusCode $script:lastHealthStatusCode `
+                    -Root $root `
+                    -PortGate $portGate `
+                    -ProcessRecord $editor).State | Should Be 'trusted_busy'
+        }
+        finally {
+            Remove-Item Function:\Invoke-WebRequest -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'bounds trusted-busy retry backoff' {
+        Invoke-Expression (Get-ScriptFunctionText -ScriptAst $Ast -Name 'Get-TrustedBusyBackoffSeconds')
+        $PollIntervalSec = 15
+        $TrustedBusyBackoffMaxSec = 60
+        (Get-TrustedBusyBackoffSeconds -ConsecutiveCount 1) | Should Be 15
+        (Get-TrustedBusyBackoffSeconds -ConsecutiveCount 2) | Should Be 30
+        (Get-TrustedBusyBackoffSeconds -ConsecutiveCount 3) | Should Be 60
+        (Get-TrustedBusyBackoffSeconds -ConsecutiveCount 20) | Should Be 60
+    }
+
+    It 'keeps the supervisor alive without mutation and makes recovery wait without launching' {
+        $watchText = Get-Content -LiteralPath $WatchdogPath -Raw
+        $busyStart = $watchText.IndexOf("if (`$endpointState.State -eq 'trusted_busy')", [System.StringComparison]::Ordinal)
+        $blockedStart = $watchText.IndexOf("if (`$endpointState.State -eq 'blocked')", $busyStart, [System.StringComparison]::Ordinal)
+        $busyStart -ge 0 | Should Be $true
+        $blockedStart -gt $busyStart | Should Be $true
+        $watchBusyBranch = $watchText.Substring($busyStart, $blockedStart - $busyStart)
+        $watchBusyBranch | Should Match 'Start-Sleep\s+-Seconds\s+\$backoffSec'
+        $watchBusyBranch | Should Match '\bcontinue\b'
+        $watchBusyBranch | Should Not Match 'Invoke-RestartSequence|Invoke-Recover|Stop-HeadlessEditors|Invoke-EditorBuild'
+        $watchText | Should Match '(?s)if \(\$script:consecutiveTrustedBusy -gt 0\).*trusted_editor_busy_reset.*\$script:consecutiveTrustedBusy = 0'
+
+        $recoverText = Get-Content -LiteralPath $RecoverPath -Raw
+        $recoverText | Should Match '(?s)if \(\$endpointState.State -eq ''trusted_busy''\).*RESULT=MCP_BUSY.*exit 2'
+        $recoverText | Should Match '(?s)if \(\$endpointState.State -eq ''trusted_busy''\) \{\s*Write-Output \("INFO trusted_editor_process.*skipping_launch=true'
+    }
+}
+
 Describe 'Monolith recovery health contract and project identity' {
     foreach ($case in @(
             @{ Name = 'recover_mcp'; Ast = $RecoverAst },

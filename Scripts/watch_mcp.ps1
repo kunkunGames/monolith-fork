@@ -8,10 +8,13 @@ editor-hosted HTTP MCP endpoint. The script probes /health repeatedly and accept
 it only when the complete JSON contract and reported Unreal Editor PID identify
 this checkout's .uproject and exclusively own the relevant listener PID set.
 When health is not trusted, any occupied or unreadable MCP listener blocks
-before build, launch, or process-stop mutations. When the endpoint is down, the
-port is provably clear, and no current-project editor-server candidate remains,
-the watchdog runs the host project's primary editor UBT build, then delegates
-the launch/wait/reconnect sequence to Scripts/recover_mcp.ps1.
+before build, launch, or process-stop mutations. A transport timeout from one
+exclusive listener PID is classified as trusted-busy only when that live PID is
+an eligible Unreal Editor for this exact project; the supervisor remains alive,
+performs no mutation, and retries with bounded backoff. When the endpoint is
+down, the port is provably clear, and no current-project editor-server candidate
+remains, the watchdog runs the host project's primary editor UBT build, then
+delegates the launch/wait/reconnect sequence to Scripts/recover_mcp.ps1.
 
 When the endpoint is healthy, the same long-running process can perform one
 daily Monolith index maintenance pass. By default this runs at 05:00 Korea
@@ -24,6 +27,14 @@ Codex/direct-client pain point where the endpoint dies between agent calls.
 
 .PARAMETER McpUrl
 MCP endpoint (default: MONOLITH_URL env var or http://localhost:9316/mcp).
+
+.PARAMETER HealthTimeoutSec
+Absolute timeout for each individual /health HTTP request, including probes
+delegated to recover_mcp.ps1 (default 5).
+
+.PARAMETER TrustedBusyBackoffMaxSec
+Upper bound in seconds for health retries while the listener is exclusively
+owned by an exact current-project editor but /health times out. Default 60.
 
 .PARAMETER PollIntervalSec
 Seconds between healthy-state probes (default 15).
@@ -133,6 +144,10 @@ The same structured events are appended to
 Notable events:
   WatchdogStart         watchdog instance started (instance boundary marker)
   McpUp                 endpoint is reachable
+  TrustedEditorBusy     exact project/listener identity is intact but /health
+                        transport timed out; no mutation is attempted
+  TrustedEditorBusyReset
+                        a healthy probe cleared the trusted-busy retry state
   McpDown               endpoint is down in -ProbeOnly mode
   BuildFailed           UBT failed, editor was not restarted
   BlockedDllLocked      UBT link outputs are held by another process; the
@@ -155,8 +170,8 @@ Notable events:
 Exit codes:
   0  endpoint is up, or recover cycle succeeded in -Once mode, or
      -ProbeBuildLocksOnly found all link outputs free
-  2  endpoint down and -ProbeOnly was requested, or -ProbeBuildLocksOnly
-     found locked link outputs
+  2  endpoint down or trusted-busy and -ProbeOnly/-Once was requested, or
+     -ProbeBuildLocksOnly found locked link outputs
   3  blocked: host root, .uproject, resolver, UBT, recover script, or trusted
      endpoint/listener identity missing
   4  build failed before restart
@@ -171,6 +186,10 @@ Exit codes:
 [CmdletBinding()]
 param(
     [string]$McpUrl = $(if ($env:MONOLITH_URL) { $env:MONOLITH_URL } else { 'http://localhost:9316/mcp' }),
+    [ValidateRange(1, 60)]
+    [int]$HealthTimeoutSec = 5,
+    [ValidateRange(1, 3600)]
+    [int]$TrustedBusyBackoffMaxSec = 60,
     [int]$PollIntervalSec = 15,
     [int]$RecoverTimeoutSec = 600,
     [int]$RecoverPollIntervalSec = 5,
@@ -488,7 +507,7 @@ function Get-MonolithHealth {
     $script:lastHealthErrorCode = $null
     $script:lastHealthStatusCode = $null
     try {
-        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+        $resp = Invoke-WebRequest -Uri $healthUrl -Method Get -TimeoutSec $HealthTimeoutSec -UseBasicParsing -ErrorAction Stop
         $script:lastHealthStatusCode = [int]$resp.StatusCode
         if ($resp.StatusCode -eq 200) {
             try {
@@ -1064,6 +1083,84 @@ function Get-MonolithRecoveryPortGate {
     }
 }
 
+function Test-MonolithTrustedBusyListener {
+    param(
+        [string]$Root,
+        $ListenerSummary,
+        $ProcessRecord
+    )
+
+    if ($null -eq $ListenerSummary -or $ListenerSummary.Count -lt 0) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $null; ErrorCode = 'listener_ownership_unavailable' }
+    }
+
+    $listenerPids = @($ListenerSummary.Pids | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    if ([int]$ListenerSummary.Count -le 0 -or $listenerPids.Count -ne 1) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $null; ErrorCode = 'listener_pid_not_exclusive' }
+    }
+
+    $listenerPid = [int]$listenerPids[0]
+    $process = $ProcessRecord
+    if (-not $PSBoundParameters.ContainsKey('ProcessRecord')) {
+        try {
+            $liveProcess = Get-Process -Id $listenerPid -ErrorAction Stop
+            if ($liveProcess.ProcessName -notin @('UnrealEditor', 'UnrealEditor-Cmd')) {
+                return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_pid_not_unreal_editor' }
+            }
+        }
+        catch {
+            return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_pid_not_found' }
+        }
+        $process = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $listenerPid) -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $process) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_process_identity_unavailable' }
+    }
+
+    $recordPid = if ($process.PSObject.Properties['ProcessId']) { [int]$process.ProcessId } elseif ($process.PSObject.Properties['Id']) { [int]$process.Id } else { $listenerPid }
+    if ($recordPid -ne $listenerPid) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = 'listener_process_pid_mismatch' }
+    }
+
+    $identity = Test-MonolithHealthProcessIdentity `
+        -Health ([PSCustomObject]@{ pid = $listenerPid }) `
+        -Root $Root `
+        -ProcessRecord $process
+    if (-not $identity.Valid) {
+        return [PSCustomObject]@{ Valid = $false; Pid = $listenerPid; ErrorCode = $identity.ErrorCode }
+    }
+    return [PSCustomObject]@{ Valid = $true; Pid = $listenerPid; ErrorCode = $null }
+}
+
+function Get-MonolithUnavailableEndpointState {
+    param(
+        [string]$HealthErrorClass,
+        $HealthStatusCode,
+        [string]$Root,
+        $PortGate,
+        $ProcessRecord
+    )
+
+    $invalidHttpIdentity = $HealthStatusCode -eq 200 -and
+        $HealthErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
+    if ($invalidHttpIdentity) {
+        return [PSCustomObject]@{ State = 'blocked'; Pid = $null; ErrorCode = 'invalid_http_identity' }
+    }
+    if ($PortGate.Valid) {
+        return [PSCustomObject]@{ State = 'down'; Pid = $null; ErrorCode = $null }
+    }
+
+    if ($HealthErrorClass -in @('timeout', 'request_failed', 'connection_closed')) {
+        $trustedArgs = @{ Root = $Root; ListenerSummary = $PortGate }
+        if ($PSBoundParameters.ContainsKey('ProcessRecord')) { $trustedArgs.ProcessRecord = $ProcessRecord }
+        $trusted = Test-MonolithTrustedBusyListener @trustedArgs
+        if ($trusted.Valid) {
+            return [PSCustomObject]@{ State = 'trusted_busy'; Pid = $trusted.Pid; ErrorCode = $null }
+        }
+    }
+    return [PSCustomObject]@{ State = 'blocked'; Pid = $null; ErrorCode = $PortGate.ErrorCode }
+}
+
 function Get-EditorServerCandidates {
     param([string]$Root = $script:hostRoot)
 
@@ -1243,6 +1340,14 @@ function Get-BuildLockHolderPids {
 function Get-BuildFailureBackoffSeconds {
     $exponent = [Math]::Min([Math]::Max($script:consecutiveBuildFailures - 1, 0), 6)
     return [int][Math]::Min($PollIntervalSec * [Math]::Pow(2, $exponent), $BuildFailureBackoffMaxSec)
+}
+
+function Get-TrustedBusyBackoffSeconds {
+    param([int]$ConsecutiveCount = $script:consecutiveTrustedBusy)
+
+    $exponent = [Math]::Min([Math]::Max($ConsecutiveCount - 1, 0), 6)
+    $baseSec = [Math]::Max(1, [Math]::Min($PollIntervalSec, $TrustedBusyBackoffMaxSec))
+    return [int][Math]::Min($baseSec * [Math]::Pow(2, $exponent), $TrustedBusyBackoffMaxSec)
 }
 
 function Invoke-EditorBuild {
@@ -1465,6 +1570,8 @@ function Invoke-Recover {
         $recover,
         '-McpUrl',
         $McpUrl,
+        '-HealthTimeoutSec',
+        $HealthTimeoutSec,
         '-TimeoutSec',
         $RecoverTimeoutSec,
         '-PollIntervalSec',
@@ -1677,6 +1784,7 @@ if (-not $DisableDailyReindex -and -not $ProbeOnly -and -not $ProbeBuildLocksOnl
 
 $restartAttempts = 0
 $script:consecutiveBuildFailures = 0
+$script:consecutiveTrustedBusy = 0
 
 # Terminal logging guarantee: every abnormal end must leave a last line in
 # watchdog.jsonl (2026-07-03/04 incidents ended with no terminal record).
@@ -1688,8 +1796,8 @@ trap {
     exit 9
 }
 
-Write-Watchdog ("watchdog_start watchdog_pid={0} poll_interval_sec={1} max_restart_attempts={2} probe_only={3} once={4} project_root={5}" -f `
-        $PID, $PollIntervalSec, $MaxRestartAttempts, [bool]$ProbeOnly, [bool]$Once, $(if ($ProjectRoot) { $ProjectRoot } else { '-' }))
+Write-Watchdog ("watchdog_start watchdog_pid={0} poll_interval_sec={1} health_timeout_sec={2} trusted_busy_backoff_max_sec={3} max_restart_attempts={4} probe_only={5} once={6} project_root={7}" -f `
+        $PID, $PollIntervalSec, $HealthTimeoutSec, $TrustedBusyBackoffMaxSec, $MaxRestartAttempts, [bool]$ProbeOnly, [bool]$Once, $(if ($ProjectRoot) { $ProjectRoot } else { '-' }))
 
 $script:hostRoot = Resolve-HostRoot
 if (-not $script:hostRoot) {
@@ -1724,6 +1832,10 @@ while ($true) {
     if ($health) {
         Write-Watchdog ("RESULT=MCP_UP version={0} tools_registered={1} pid={2} uptime_seconds={3}" -f `
                 $health.version, $health.tools_registered, $health.pid, [int]$health.uptime_seconds)
+        if ($script:consecutiveTrustedBusy -gt 0) {
+            Write-Watchdog ("trusted_editor_busy_reset previous={0}" -f $script:consecutiveTrustedBusy)
+            $script:consecutiveTrustedBusy = 0
+        }
         if ($script:restartAttempts -ne 0) {
             # A healthy endpoint clears the restart budget; without this the
             # counter accumulates across weeks and eventually locks the
@@ -1746,12 +1858,25 @@ while ($true) {
     $editorProcs = Get-EditorServerCandidates -Root $hostRoot
     $port = Get-McpHealthPort
     $portGate = Get-MonolithRecoveryPortGate -Port $port
-    $invalidHttpIdentity = $script:lastHealthStatusCode -eq 200 -and
-        $script:lastHealthErrorClass -in @('invalid_json', 'health_contract', 'health_identity')
-    if ($invalidHttpIdentity -or -not $portGate.Valid) {
+    $endpointState = Get-MonolithUnavailableEndpointState `
+        -HealthErrorClass $script:lastHealthErrorClass `
+        -HealthStatusCode $script:lastHealthStatusCode `
+        -Root $hostRoot `
+        -PortGate $portGate
+    if ($endpointState.State -eq 'trusted_busy') {
+        $script:consecutiveTrustedBusy++
+        $backoffSec = Get-TrustedBusyBackoffSeconds
+        Write-Watchdog ("RESULT=TRUSTED_EDITOR_BUSY pid={0} reason=health_request_failed health_error={1} detail={2} url={3} listener_port={4} listener_count={5} listener_pids={6} consecutive={7} backoff_seconds={8} mutation=none" -f `
+                $endpointState.Pid, $script:lastHealthErrorClass, (Format-WatchdogValue $script:lastHealthErrorCode), `
+                $healthUrl, $port, $portGate.Count, (($portGate.Pids) -join ','), $script:consecutiveTrustedBusy, $backoffSec)
+        if ($ProbeOnly -or $Once) { exit 2 }
+        Start-Sleep -Seconds $backoffSec
+        continue
+    }
+    if ($endpointState.State -eq 'blocked') {
         Write-Watchdog ("RESULT=BLOCKED reason=foreign_or_untrusted_mcp_endpoint health_error={0} detail={1} url={2} listener_port={3} listener_count={4} listener_pids={5} listener_gate={6}" -f `
                 $script:lastHealthErrorClass, (Format-WatchdogValue $script:lastHealthErrorCode), $healthUrl, `
-                $port, $portGate.Count, (($portGate.Pids) -join ','), $portGate.ErrorCode)
+                $port, $portGate.Count, (($portGate.Pids) -join ','), $endpointState.ErrorCode)
         exit 3
     }
     if ($ProbeOnly) {

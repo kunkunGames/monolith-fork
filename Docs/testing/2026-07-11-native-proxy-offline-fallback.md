@@ -6,6 +6,7 @@
 | Final reconciliation | 2026-07-12 |
 | Submitted implementation | CL1106 (Query/Source), CL1107 (watchdog/recovery), CL1108 (native Proxy/evidence), and CL1109 (onboarding/release), with a compatibility Proxy/skill follow-up in CL1113 |
 | Evidence/follow-up only | Pending CL1114; no submit is performed by this verification pass |
+| Current proxy latency follow-up | Pending CL1135; no submit is performed; proxy v1.1.6 build, real-endpoint smoke, and 87-check fake-server regression are recorded below |
 
 The implementation changelists were submitted by an external actor while the
 final gates were running. This verification pass did not submit, merge, close,
@@ -81,10 +82,10 @@ MCP client
 The proxy manifest selects:
 
 ```text
-file        = monolith_proxy-930fceebf8593512.exe
-version     = 1.1.4
-source_hash = 930fceebf8593512
-sha256      = 187e803481e99c7f098c7ea9e4a0c1dac04bf68611113aa573632066b55534fd
+file        = monolith_proxy-9f6fd870130562cc.exe
+version     = 1.1.6
+source_hash = 9f6fd870130562cc
+sha256      = c16a4a8e474795dc1b6c972c691e8565acd4746b6389f11c6a514aa2fdf55d5c
 ```
 
 The Query bundle manifest contains exactly 11 fields and selects:
@@ -106,8 +107,11 @@ the new generation. The historical fixed proxy is compatibility-only. The fixed
 Query is a best-effort direct-CLI compatibility copy and is not the proxy or
 release authority.
 
-Codex and Claude user-level MCP configuration points at the final immutable
-proxy path. The tracked project `D:\P4\speed\.mcp.json` remains a portable HTTP
+The earlier reconciliation recorded Codex and Claude user-level MCP
+configuration at the then-current immutable image. Publishing this follow-up
+manifest does not rewrite or restart existing long-lived client processes; they
+retain their already loaded immutable image until explicitly reconfigured or
+restarted. The tracked project `D:\P4\speed\.mcp.json` remains a portable HTTP
 configuration and was not changed to a machine-local absolute executable path.
 
 ## 4. Why a New Installed-Engine Editor Binary Was Rejected
@@ -134,6 +138,9 @@ read-only Query path for the current DLL-lock and availability problem.
 |---|---|
 | Any HTTP 200 or look-alike process on 9316 could be treated as the editor by recovery automation. | Recovery scripts validate the health schema, actual IPv4/IPv6 listener ownership, OS process image and command line, exact host project, and process mode. Foreign projects and game/server/commandlet/other-editor processes are excluded from build, launch, and stop decisions. |
 | A protocol-shaped endpoint could pass proxy health without being the reported current editor. | The proxy requires exclusive listener ownership plus `monolith_status` identity for that same PID: `status=current_editor_process`, `commandlet=false`, and the expected host project root. Status-PID spoofing, commandlet status, foreign project identity, and multi-owner listeners fail closed. The proxy does not independently claim recovery's OS command-line or game/server classification. |
+| A healthy editor returned `monolith_status` in 2,072--2,522 ms and `/health` in 2,503 ms. Proxy v1.1.5 raised only the identity budget, so the 250 ms health gate still rejected the real endpoint as offline. | Proxy v1.1.6 gives `/health` and each fresh, uncached editor/project identity POST independent 5,000 ms absolute deadlines. A 3,000 ms boundary would leave at most 478 ms above the measured maximum and was rejected. Separate delayed-health and delayed-status regressions each wait 600 ms and route live; PID, commandlet, project-root, listener-owner, and project-swap rejection checks remain intact. |
+| The official recovery and watchdog scripts still hard-coded a 3-second `/health` request timeout. At 17:53:36 on 2026-07-12, the watchdog rejected the valid exclusive listener/editor PID 49268 as `Blocked reason=foreignOrUntrustedMcpEndpoint healthError=request_failed detail="The operation has timed out."` and exited, leaving no active supervisor. | Both scripts now expose validated `-HealthTimeoutSec` (default 5, range 1--60); `watch_mcp.ps1` forwards the same value to every `recover_mcp.ps1` child. It is used only for an individual `/health` request. Health schema, process/project identity, exclusive listener ownership, and every pre-build/pre-launch/pre-stop mutation gate remain fail closed. |
+| A first 5-second watchdog rollout still failed after post-recovery indexing: PID 30740 returned `McpUp` at 18:09:02, the next request timed out at 18:09:22, and the old occupied-listener branch logged `Blocked` and terminated the wrapper/watch/editor chain. Any fixed short timeout can be exceeded by loaded editor work, so raising it again would only move the failure. | A transport failure becomes `TrustedEditorBusy` only when OS state independently proves one exclusive listener PID, a live `UnrealEditor.exe` / `UnrealEditor-Cmd.exe`, a readable eligible editor-mode command line for the exact `Speed.uproject`, and a matching PID. The watchdog performs no build/recover/launch/stop mutation, retries with exponential sleep capped at the validated `-TrustedBusyBackoffMaxSec` (default 60), resets the state on valid health, and stays alive. Invalid HTTP, wrong executable/project/mode/PID, unreadable identity, and multi-owner/inconsistent listeners remain blocked. Full recovery skips launch and waits inside `-TimeoutSec`; one-shot probes return `MCP_BUSY`/exit 2. |
 | `/health` used per-phase timeouts, so a trickling body could exceed the intended total budget. | Health GET uses an absolute total deadline, a 64 KiB bound, exact `Content-Length`, and fails on read errors, early EOF, or declared-length mismatch. |
 | Live MCP responses were insufficiently bounded. | POST `/mcp` has an absolute total deadline, a 16 MiB body cap, and exact body-length validation. |
 | Every generic call could use the short read route, including live mutations. | Fast-path eligibility requires concrete namespace/action metadata proving offline availability, no live requirement, no mutation, and no long-running behavior. Unknown or live-only actions use the strong live route. |
@@ -168,12 +175,21 @@ live registry or profile membership.
   A second isolated clean-source build reproduced the same filename, size, and
   SHA-256 byte-for-byte.
 - `cmd /c Tools\MonolithProxy\build.bat`: the selected build is
-  `monolith_proxy-930fceebf8593512.exe`, SHA-256
-  `187e803481e99c7f098c7ea9e4a0c1dac04bf68611113aa573632066b55534fd`.
-  Two isolated LF builds and a shared CRLF build reproduced the same filename
-  and SHA-256 byte-for-byte.
-- `python Tools\MonolithProxy\test_offline_fallback.py`: **85/85** named
+  `monolith_proxy-9f6fd870130562cc.exe` v1.1.6, SHA-256
+  `c16a4a8e474795dc1b6c972c691e8565acd4746b6389f11c6a514aa2fdf55d5c`.
+  The source-generation helper independently returned `9f6fd870130562cc`, and
+  the manifest-selected and compatibility executables have the same SHA-256.
+- `python Tools\MonolithProxy\test_offline_fallback.py`: **87/87** named
   subprocess/socket/security/reproducibility/contract checks passed.
+- A fresh exact `monolith_proxy-9f6fd870130562cc.exe` stdio process reached the
+  real PID 60196 Unreal Editor endpoint. The read-only live-only
+  `editor.get_build_status` gate completed in 3,672 ms with no offline marker;
+  the following `monolith_status` completed direct in 515 ms with
+  `status=current_editor_process`, PID 60196, and host root `D:/P4/speed/`.
+  Proxy stderr recorded `Validated live MCP request succeeded; closing the
+  offline circuit`. A status-only cold call remained on the documented
+  offline-capable unknown-backend fast path and was not treated as timeout
+  evidence. A separate follow-up `/health` request completed in 2,441 ms.
 - `python Tools\MonolithQuery\test_publish_query_bundle.py -v`: **10/10**.
 - `python Tools\MonolithQuery\test_generate_monolith_catalog_snapshot.py -v`:
   **4/4**.
@@ -220,8 +236,19 @@ live registry or profile membership.
 
 ### Recovery, onboarding, and live routing
 
-- PowerShell 7 and Windows PowerShell 5.1:
-  `Scripts/tests/WatchMcpChildProcess.Tests.ps1` **9/9** in each shell.
+- PowerShell 7.6.3/Pester 3.4 ran
+  `Scripts/tests/WatchMcpChildProcess.Tests.ps1` **19/19** in 13.60 seconds;
+  Windows PowerShell 5.1/Pester 3.4 ran the same suite **19/19** in 13.82
+  seconds with `-ExecutionPolicy Bypass`. Both runtimes also parsed
+  `watch_mcp.ps1`, `recover_mcp.ps1`, and the test file with zero errors. The
+  added production-function regression delays valid project-bound health for
+  3,200 ms, captures `Invoke-WebRequest -TimeoutSec 5`, and pins the validated
+  default/range plus watchdog-to-recovery forwarding. A second production
+  function test simulates a 5,200 ms post-index timeout and proves the exact
+  trusted-busy identity boundary, capped 15/30/60-second retry sequence,
+  no-mutation supervisor continuation/reset path, and recover skip-launch/wait
+  path. Foreign executables/projects, commandlets, PID mismatch, unreadable
+  command lines, multi-owner listeners, and invalid HTTP remain blocked.
 - PowerShell 7 and Windows PowerShell 5.1:
   `Scripts/tests/OnboardMonolithAtomicity.Tests.ps1` **14/14** in each shell.
 - `Scripts\recover_mcp.ps1 -TimeoutSec 180` returned `RESULT=MCP_UP`, exit 0.
@@ -229,6 +256,22 @@ live registry or profile membership.
   namespaces, catalog `sha256:4af1375172e8818a`, project `Speed`, and an
   ownership-bound non-commandlet headless editor. Recorded PIDs are transient
   probe evidence, not stable identifiers.
+- A default `Scripts\recover_mcp.ps1 -ProbeOnly` accepted the real exclusive
+  listener/editor PID 49268 (`version=0.20.3`, `tools_registered=1842`) and
+  returned `RESULT=MCP_UP`. The official
+  `Binaries\monolith_watchdog.exe D:\P4\speed` wrapper then started
+  `watch_mcp.ps1` PID 23956 through wrapper PIDs 37472/56688; its first event
+  recorded `healthTimeoutSec=5`. After the due daily maintenance pass completed,
+  the retained supervisor logged consecutive `McpUp` events at 18:05:01 and
+  18:05:17 for the same PID 49268. The timeout-fix rollout did not stop that
+  editor. After this proof, the root orchestrator deliberately stopped the
+  known-stale headless editor; the still-running watchdog completed guarded
+  pre-restart source/graph maintenance and recovered a fresh project-bound
+  editor/MCP PID 30740 with `RecoverDone exitCode=0` at 18:06:53. Post-recovery
+  indexing finished and PID 30740 logged `McpUp` at 18:09:02, but the following
+  request exceeded five seconds at 18:09:22. The pre-state-fix branch logged
+  `Blocked` and the wrapper/watch/editor chain exited; this run is negative
+  evidence and is not claimed as a stable supervisor rollout.
 - Live default-bound smokes returned 100 Blueprint rows from
   `project.find_by_type` (schema default 100), 50 symbol plus 50 source-line
   rows with a cursor from `source.search_source` (default 50 per result class),
@@ -258,9 +301,10 @@ live registry or profile membership.
 - A fresh `monolith_proxy-930fceebf8593512.exe` 1.1.4 stdio process called the
   live-only `editor.get_build_status`; `isError=false`, `compiling=false`,
   `errors_since_compile=0`, and no offline fallback marker was present.
-- Transactional onboarding selected
+- The earlier transactional onboarding pass selected
   `monolith_proxy-930fceebf8593512.exe` for both Codex and Claude user scope;
-  Claude reported the stdio MCP server connected.
+  Claude reported the stdio MCP server connected. The CL1135 build does not
+  claim an active-client restart or reconfiguration.
 
 ### Repository gates
 
@@ -329,10 +373,10 @@ live registry or profile membership.
   health, SQLite integrity, and parity gates are clean. Commit-result handling,
   interruption/reopen coverage, terminal job signaling, and a typed physical-DB
   repair path remain explicit follow-up work.
-- Only the manifest-selected `930fceebf8593512` generation is shipping and
-  onboarding authority. Any older diagnostic local process or generation is
-  outside P4/release authority; no client process is killed merely to delete a
-  Windows-locked old image.
+- Only the manifest-selected `9f6fd870130562cc` generation is the current
+  shipping and onboarding authority. Any older diagnostic local process or
+  generation is outside P4/release authority; no client process is killed merely
+  to delete a Windows-locked old image.
 
 ## 8. Submitted Scope and Ownership
 
@@ -344,6 +388,7 @@ live registry or profile membership.
 | 1109 | Transactional onboarding and explicit allowlisted release staging for validated Query/Proxy generations. |
 | 1113 | Compatibility fixed-Proxy alias and skill-readme follow-up. |
 | 1114 (pending) | Final gate evidence, root-roadmap reconciliation, and the directly related CRG/native-fallback TODO; no code or public contract change. |
+| 1135 (pending) | Independent 5,000 ms Proxy health/identity budgets, delayed-health and delayed-status live-routing regressions, proxy v1.1.6 immutable/fixed artifacts and manifest, plus the matching validated 5-second recovery/watchdog health budget, exact-project trusted-busy no-mutation supervisor state, capped retry/reset semantics, cross-script forwarding, regressions, and synchronized contract/evidence docs. |
 
 CL1106--1109 and CL1113 were submitted by an external actor while
 the gates ran. This verification pass did not submit them, and no existing
