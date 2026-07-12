@@ -1,4 +1,5 @@
 #include "MonolithAIInternal.h"
+#include "MonolithAssetLifecycleActions.h"
 #include "MonolithAssetUtils.h"
 #include "MonolithPackagePathValidator.h"
 #include "Engine/Blueprint.h"
@@ -28,6 +29,41 @@ namespace MonolithAI
 UObject* ResolveAsset(UClass* ExpectedClass, const FString& Path)
 {
 	return FMonolithAssetUtils::LoadAssetByPath(ExpectedClass, Path);
+}
+
+FMonolithActionResult DeleteAssetVerified(
+	const FString& AssetPath,
+	const FString& AssetTypeLabel,
+	const FString& SuccessMessage)
+{
+	TSharedPtr<FJsonObject> DeleteParams = MakeShared<FJsonObject>();
+	TArray<TSharedPtr<FJsonValue>> AssetPaths;
+	AssetPaths.Add(MakeShared<FJsonValueString>(AssetPath));
+	DeleteParams->SetArrayField(TEXT("asset_paths"), AssetPaths);
+
+	// Restrict the generic lifecycle action to this exact package. `force` is required because the
+	// verified path also evicts loaded packages and removes residual files/source-control state.
+	TArray<TSharedPtr<FJsonValue>> AllowedPrefixes;
+	AllowedPrefixes.Add(MakeShared<FJsonValueString>(AssetPath));
+	DeleteParams->SetArrayField(TEXT("allowed_prefixes"), AllowedPrefixes);
+	DeleteParams->SetBoolField(TEXT("force"), true);
+
+	FMonolithActionResult DeleteResult = FMonolithAssetLifecycleActions::DeleteAssets(DeleteParams);
+	if (!DeleteResult.bSuccess)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to delete %s '%s': %s"),
+			*AssetTypeLabel,
+			*AssetPath,
+			*DeleteResult.ErrorMessage));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeAssetResult(AssetPath, SuccessMessage);
+	if (DeleteResult.Result.IsValid())
+	{
+		Result->SetObjectField(TEXT("delete_verification"), DeleteResult.Result);
+	}
+	return FMonolithActionResult::Success(Result);
 }
 
 UBlackboardData* LoadBlackboardFromParams(const TSharedPtr<FJsonObject>& Params, FString& OutAssetPath, FString& OutError)

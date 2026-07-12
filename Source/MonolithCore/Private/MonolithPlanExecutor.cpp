@@ -322,6 +322,7 @@ void FMonolithPlanExecutor::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true when any step is mutating (execution policy other than read_only)."), TEXT("false"))
 			.Optional(TEXT("allow_destructive"), TEXT("boolean"), TEXT("Required true when any step is annotated destructive."), TEXT("false"))
 			.Optional(TEXT("max_result_bytes_per_step"), TEXT("integer"), TEXT("Per-step result size cap in the plan response; larger results are summarized (full results still reach the invocation log). Default 16384, range 1024..262144."), TEXT("16384"))
+			.Range(TEXT("max_result_bytes_per_step"), 1024, 262144)
 			.Optional(TEXT("transaction"), TEXT("string"), TEXT("auto wraps mutating plans in one outermost editor transaction and cancels it when stop_on_error halts the plan (undoable edits roll back; saves/disk/source-control effects do not). off disables the wrapper."), TEXT("auto"))
 			.Enum(TEXT("transaction"), { TEXT("auto"), TEXT("off") })
 			.Build());

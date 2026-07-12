@@ -3,6 +3,7 @@
 | Benchmark | Primary Score | Dimensions | Script |
 | --- | --- | --- | --- |
 | [ActionGuidance](ActionGuidance/README.md) | effectiveness_score | Discovery planning, error recovery, param correction | Scripts/action_guidance_benchmark.py |
+| [AICapability](AICapability/README.md) | ai_capability_score | AI asset schemas, executable edits, negative gates, fixture-backed discovery | Scripts/ai_capability_benchmark.py |
 | [SourceIndex](SourceIndex/README.md) | source_index_score | Symbol recall, field completeness, schema adherence | Scripts/source_index_benchmark.py |
 | [SchemaCompleteness](SchemaCompleteness/README.md) | schema_completeness_score | Full catalog param types, required flags, planning signals | Scripts/schema_completeness_benchmark.py |
 | [OfflineParity](OfflineParity/README.md) | offline_parity_score | exe-vs-py result matching, version parity | Scripts/offline_parity_benchmark.py |
@@ -21,6 +22,13 @@ Benchmark `summary.json` and `partial_summary.json` files include two top-level 
 - `input_fingerprint`: a stable sha256 digest of `benchmark_inputs` for stale-baseline detection.
 
 Runner defaults are resolved relative to the Monolith plugin root, so `Benchmarks\...\tasks.jsonl` means `Plugins\Monolith\Benchmarks\...\tasks.jsonl` regardless of the current working directory. Hosted static CI validates that configured task/probe JSONL non-empty line counts match each benchmark manifest count and that runner default paths resolve to the configured files without needing a live MCP server.
+
+Hosted static CI also treats the benchmark inventory as a closed contract. Every
+`Benchmarks/*/manifest.json` must have exactly one `benchmark_definitions` entry,
+and every lightweight `Scripts/test_*.py` or `Scripts/tests/test_*.py` check must
+appear in `benchmark_contract_tests`. `Scripts/tests/test_benchmark_ci_inventory.py`
+enforces both directions so adding a corpus or regression test cannot silently
+bypass CI.
 
 ## Release Packaging
 

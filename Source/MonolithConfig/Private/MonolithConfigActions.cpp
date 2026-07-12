@@ -1,6 +1,7 @@
 #include "MonolithConfigActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithParamSchema.h"
+#include "MonolithParamUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/ConfigCacheIni.h"
@@ -31,7 +32,10 @@ void FMonolithConfigActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Get effective value of a config key across the full INI hierarchy"),
 		FMonolithActionHandler::CreateStatic(&FMonolithConfigActions::ResolveSetting),
 		FParamSchemaBuilder()
-			.Required(TEXT("file"), TEXT("string"), TEXT("Config category (e.g. Engine, Game, Input)"))
+			.Optional(TEXT("file"), TEXT("string"),
+				TEXT("Config category (e.g. Engine, Game, Input). When omitted, the section/key is "
+					 "searched across Engine, Game, Input, Editor, Scalability, and GameUserSettings; "
+					 "the response reports the matched category and the searched list."))
 			.Required(TEXT("section"), TEXT("string"), TEXT("Config section (e.g. /Script/Engine.RendererSettings)"))
 			.Required(TEXT("key"), TEXT("string"), TEXT("Config key name"))
 			.Build());
@@ -290,11 +294,15 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 		return FMonolithActionResult::Error(TEXT("resolve_setting: missing params object"), FMonolithJsonUtils::ErrInvalidParams);
 	}
 
+	// 'file' is optional: section+key uniquely identify most settings, and requiring the category
+	// rejected otherwise-valid agent calls (2026-07-10 handoff N3). A present-but-non-string value
+	// is still malformed (strict IsJsonString policy — FJsonValue::TryGetString would silently
+	// coerce numbers); an absent/empty value switches to the category search below.
 	FString Category;
-	const TSharedPtr<FJsonValue> FileField = Params->TryGetField(TEXT("file"));
-	if (!FileField.IsValid() || FileField->IsNull() || !FileField->TryGetString(Category) || Category.IsEmpty())
+	FString ParamError;
+	if (!MonolithParamUtils::GetOptionalStringParam(Params, TEXT("file"), Category, ParamError))
 	{
-		return FMonolithActionResult::Error(TEXT("Missing or invalid 'file' parameter"));
+		return FMonolithActionResult::Error(ParamError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 	if (Category.Contains(TEXT("..")))
 	{
@@ -317,10 +325,35 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 
 	// Use GConfig to get the effective (fully-resolved) value
 	FString Value;
-	bool bFound = GConfig->GetString(*Section, *Key, Value, GConfig->GetConfigFilename(*Category));
+	bool bFound = false;
+	TArray<FString> SearchedCategories;
+	if (!Category.IsEmpty())
+	{
+		bFound = GConfig->GetString(*Section, *Key, Value, GConfig->GetConfigFilename(*Category));
+	}
+	else
+	{
+		static const TCHAR* CommonCategories[] = {
+			TEXT("Engine"), TEXT("Game"), TEXT("Input"), TEXT("Editor"),
+			TEXT("Scalability"), TEXT("GameUserSettings")
+		};
+		for (const TCHAR* Candidate : CommonCategories)
+		{
+			SearchedCategories.Add(Candidate);
+			if (GConfig->GetString(*Section, *Key, Value, GConfig->GetConfigFilename(Candidate)))
+			{
+				Category = Candidate;
+				bFound = true;
+				break;
+			}
+		}
+	}
 
 	auto ResultJson = MakeShared<FJsonObject>();
-	ResultJson->SetStringField(TEXT("category"), Category);
+	if (!Category.IsEmpty())
+	{
+		ResultJson->SetStringField(TEXT("category"), Category);
+	}
 	ResultJson->SetStringField(TEXT("section"), Section);
 	ResultJson->SetStringField(TEXT("key"), Key);
 	ResultJson->SetBoolField(TEXT("found"), bFound);
@@ -328,6 +361,17 @@ FMonolithActionResult FMonolithConfigActions::ResolveSetting(const TSharedPtr<FJ
 	if (bFound)
 	{
 		ResultJson->SetStringField(TEXT("value"), Value);
+	}
+
+	if (SearchedCategories.Num() > 0)
+	{
+		TArray<TSharedPtr<FJsonValue>> SearchedArray;
+		SearchedArray.Reserve(SearchedCategories.Num());
+		for (const FString& Searched : SearchedCategories)
+		{
+			SearchedArray.Add(MakeShared<FJsonValueString>(Searched));
+		}
+		ResultJson->SetArrayField(TEXT("searched_categories"), SearchedArray);
 	}
 
 	return FMonolithActionResult::Success(ResultJson);

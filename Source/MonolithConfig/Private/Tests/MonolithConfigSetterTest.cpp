@@ -24,6 +24,7 @@
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Misc/ConfigCacheIni.h"
 #include "UObject/Class.h"
 #include "UObject/UObjectGlobals.h"
 #include "MonolithJsonUtils.h"
@@ -193,6 +194,169 @@ bool FMonolithConfigSetterMissingParamsTest::RunTest(const FString& /*Parameters
 	TestTrue(TEXT("error mentions required params"),
 		Result.ErrorMessage.Contains(TEXT("required")));
 	TestEqual(TEXT("error code is ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// resolve_setting — optional 'file' category search (2026-07-10 handoff N3).
+// The tests seed a probe key into the in-memory Engine config branch so they
+// stay deterministic and project-agnostic, and remove it afterwards.
+// ---------------------------------------------------------------------------
+
+namespace MonolithConfigResolveTestDetail
+{
+	static const TCHAR* ProbeSection = TEXT("/Script/MonolithConfigTests.ResolveProbe");
+	static const TCHAR* ProbeKey = TEXT("MonolithResolveProbeKey");
+	static const TCHAR* ProbeValue = TEXT("MonolithResolveProbeValue");
+
+	struct FScopedEngineProbeKey
+	{
+		FString EngineFile;
+
+		FScopedEngineProbeKey()
+		{
+			EngineFile = GConfig->GetConfigFilename(TEXT("Engine"));
+			GConfig->SetString(ProbeSection, ProbeKey, ProbeValue, EngineFile);
+		}
+
+		~FScopedEngineProbeKey()
+		{
+			GConfig->RemoveKey(ProbeSection, ProbeKey, EngineFile);
+		}
+	};
+
+	static TSharedPtr<FJsonObject> MakeResolveParams(const FString& Section, const FString& Key)
+	{
+		TSharedPtr<FJsonObject> P = MakeShared<FJsonObject>();
+		P->SetStringField(TEXT("section"), Section);
+		P->SetStringField(TEXT("key"), Key);
+		return P;
+	}
+}
+
+// Test 5: file omitted — the category search must find the Engine-branch probe
+// key and report the matched category plus the searched list.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithConfigResolveSettingNoFileTest,
+	"Monolith.Config.ResolveSetting.NoFileCategorySearch",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithConfigResolveSettingNoFileTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithConfigResolveTestDetail;
+
+	FScopedEngineProbeKey Probe;
+	const FMonolithActionResult Result = FMonolithConfigActions::ResolveSetting(
+		MakeResolveParams(ProbeSection, ProbeKey));
+
+	TestTrue(TEXT("action succeeded"), Result.bSuccess);
+	if (!TestTrue(TEXT("result payload present"), Result.Result.IsValid()))
+	{
+		return false;
+	}
+
+	bool bFound = false;
+	Result.Result->TryGetBoolField(TEXT("found"), bFound);
+	TestTrue(TEXT("probe key found without 'file'"), bFound);
+
+	FString Value;
+	Result.Result->TryGetStringField(TEXT("value"), Value);
+	TestEqual(TEXT("value matches seeded probe"), Value, FString(ProbeValue));
+
+	FString Category;
+	Result.Result->TryGetStringField(TEXT("category"), Category);
+	TestEqual(TEXT("matched category reported"), Category, FString(TEXT("Engine")));
+
+	const TArray<TSharedPtr<FJsonValue>>* Searched = nullptr;
+	TestTrue(TEXT("searched_categories reported"),
+		Result.Result->TryGetArrayField(TEXT("searched_categories"), Searched) && Searched != nullptr);
+	return true;
+}
+
+// Test 6: explicit file still resolves (legacy contract preserved).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithConfigResolveSettingExplicitFileTest,
+	"Monolith.Config.ResolveSetting.ExplicitFile",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithConfigResolveSettingExplicitFileTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithConfigResolveTestDetail;
+
+	FScopedEngineProbeKey Probe;
+	TSharedPtr<FJsonObject> P = MakeResolveParams(ProbeSection, ProbeKey);
+	P->SetStringField(TEXT("file"), TEXT("Engine"));
+	const FMonolithActionResult Result = FMonolithConfigActions::ResolveSetting(P);
+
+	TestTrue(TEXT("action succeeded"), Result.bSuccess);
+	if (!TestTrue(TEXT("result payload present"), Result.Result.IsValid()))
+	{
+		return false;
+	}
+
+	bool bFound = false;
+	Result.Result->TryGetBoolField(TEXT("found"), bFound);
+	TestTrue(TEXT("probe key found with explicit 'file'"), bFound);
+
+	// Explicit-category calls do not search, so no searched_categories array.
+	const TArray<TSharedPtr<FJsonValue>>* Searched = nullptr;
+	TestFalse(TEXT("no searched_categories on explicit file"),
+		Result.Result->TryGetArrayField(TEXT("searched_categories"), Searched));
+	return true;
+}
+
+// Test 7: file present but non-string — malformed, ErrInvalidParams.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithConfigResolveSettingMalformedFileTest,
+	"Monolith.Config.ResolveSetting.MalformedFile",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithConfigResolveSettingMalformedFileTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithConfigResolveTestDetail;
+
+	TSharedPtr<FJsonObject> P = MakeResolveParams(ProbeSection, ProbeKey);
+	P->SetNumberField(TEXT("file"), 42);
+	const FMonolithActionResult Result = FMonolithConfigActions::ResolveSetting(P);
+
+	TestFalse(TEXT("action failed"), Result.bSuccess);
+	TestTrue(TEXT("error names the malformed param"),
+		Result.ErrorMessage.Contains(TEXT("'file' must be a string")));
+	TestEqual(TEXT("error code is ErrInvalidParams"), Result.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	return true;
+}
+
+// Test 8: file omitted and key absent everywhere — found=false with the full
+// searched list, not an error.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithConfigResolveSettingNotFoundTest,
+	"Monolith.Config.ResolveSetting.NoFileNotFound",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithConfigResolveSettingNotFoundTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithConfigResolveTestDetail;
+
+	const FMonolithActionResult Result = FMonolithConfigActions::ResolveSetting(
+		MakeResolveParams(TEXT("/Script/MonolithConfigTests.NoSuchSection"),
+						  TEXT("MonolithNoSuchProbeKey")));
+
+	TestTrue(TEXT("action succeeded (not-found is a result, not an error)"), Result.bSuccess);
+	if (!TestTrue(TEXT("result payload present"), Result.Result.IsValid()))
+	{
+		return false;
+	}
+
+	bool bFound = true;
+	Result.Result->TryGetBoolField(TEXT("found"), bFound);
+	TestFalse(TEXT("key not found"), bFound);
+
+	const TArray<TSharedPtr<FJsonValue>>* Searched = nullptr;
+	if (TestTrue(TEXT("searched_categories reported"),
+		Result.Result->TryGetArrayField(TEXT("searched_categories"), Searched) && Searched != nullptr))
+	{
+		TestEqual(TEXT("all six categories searched"), Searched->Num(), 6);
+	}
 	return true;
 }
 

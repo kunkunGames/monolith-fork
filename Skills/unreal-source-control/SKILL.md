@@ -41,8 +41,8 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] mark_for_delete` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Explicit mark-for-delete alias of `delete`. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert files. Requires `confirm=true` unless `dry_run=true`. |
 | `[w] revert_unchanged` | `paths*` or `files*`, `confirm?=false`, `dry_run?=false` | Revert unchanged files. Requires `confirm=true` unless `dry_run=true`. |
-| `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` | Read-only `p4 -ztag opened`, optionally scoped to a changelist, with depot-to-local/package mapping. |
-| `map_depot_paths` | `paths*` or `files*` | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths to local/package rows. |
+| `list_opened` | `changelist?` `resolve_packages?=true` `limit?=200` (`1..2000`) | Read-only bounded `p4 -ztag opened -m (limit + 1)`, optionally scoped to empty/`default`/ASCII-decimal changelist, with depot-to-local/package mapping and explicit exact-vs-lower-bound count fields. |
+| `map_depot_paths` | `paths*` or `files*` (max 2,000 raw entries) | Read-only mapping for depot, client, local filesystem, `/Game` package, or object paths. Uses at most 16 commands, 128 paths and 24,000 encoded characters per command; control characters are rejected before process launch. |
 
 ## Common workflows
 
@@ -67,6 +67,13 @@ source_control_query("revert", { paths: ["/Game/Maps/Interactable/BP_Wave"], con
 source_control_query("list_opened", { changelist: "1006", resolve_packages: true })
 source_control_query("map_depot_paths", { paths: ["//depot/Game/UI/WBP_Menu.uasset", "/Game/UI/WBP_Menu"] })
 ```
+
+`list_opened.count` is the bounded observed count, not an implicit exact total. When
+`count_is_lower_bound=true`, the extra sentinel proves more rows exist; inspect
+`count_semantics`, `observed_count`, `returned_count`, `sentinel_record_count`,
+`backend_record_limit`, `has_more`, and `truncated`. Both mapping actions also expose
+`mapping_raw_count`, `mapping_requested_count`, `mapping_unique_count`,
+`mapping_resolved_count`, `mapping_failed_count`, and `mapping_command_count`.
 
 ### Recipe: prepare a file for edit, then drop no-op checkouts
 
@@ -109,7 +116,7 @@ source_control_query("get_status", { paths: ["/Game/UI/Icons/T_icon_skill", "/Ga
 
 - `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` are destructive — they require `confirm=true` unless you pass `dry_run=true`. Run a `dry_run` first to preview the affected files.
 - This skill performs the source-control verb only. Editing the file content (`.ini`, asset package) is a separate step in **unreal-config** / **unreal-asset** after checkout.
-- `list_opened` and `map_depot_paths` are read-only mapping primitives. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
+- `list_opened` and `map_depot_paths` are explicitly read-only, bounded mapping primitives. `list_opened` never performs an unbounded exact-count query; treat `count` as exact only when `count_is_lower_bound=false`. For validation workflows, prefer `editor.plan_content_validation_changeset` / `editor.validate_changeset_assets` after this layer proves the changelist or path mapping.
 - Prefer the canonical `paths` array for file lists. The schema also accepts `files` and a single path string for compatibility, and boolean options accept `true`/`false` booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`. `get_status` accepts both filesystem and `/Game` package paths; resolve `/Game` asset paths through the active provider rather than assuming a depot/disk layout.
 
 ## Notes

@@ -91,6 +91,7 @@ void FMonolithChaosFractureActions::RegisterActions(FMonolithToolRegistry& Regis
 		FParamSchemaBuilder()
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Root package path to scan (must be under /Game)"), TEXT("/Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-500)"), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Build());
 
 	Registry.RegisterAction(TEXT("chaos_fracture"), TEXT("list_geometry_collection_components"),
@@ -98,6 +99,7 @@ void FMonolithChaosFractureActions::RegisterActions(FMonolithToolRegistry& Regis
 		FMonolithActionHandler::CreateStatic(&FMonolithChaosFractureActions::ListGeometryCollectionComponents),
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum rows to return (1-500)"), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Build());
 }
 

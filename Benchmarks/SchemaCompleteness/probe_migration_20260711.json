@@ -1,0 +1,949 @@
+{
+  "mappings": [
+    {
+      "source_action_id": "source.get_callee_tree",
+      "classification": "direct",
+      "replacements": [
+        "source.find_callees"
+      ]
+    },
+    {
+      "source_action_id": "source.get_caller_tree",
+      "classification": "direct",
+      "replacements": [
+        "source.find_callers"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.get_class_hierarchy",
+      "classification": "partial",
+      "replacements": [
+        "blueprint.get_parent_class"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.find_references",
+      "classification": "partial",
+      "replacements": [
+        "project.find_references",
+        "blueprint.find_variable_references"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.list_components",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_components"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.list_functions",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_functions"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.get_event_graph",
+      "classification": "composite",
+      "replacements": [
+        "blueprint.get_graph_data",
+        "blueprint.get_execution_flow"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.list_variables",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_variables"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.get_cdo_values",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_cdo_properties"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.list_interfaces",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_interfaces"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.get_anim_graph",
+      "classification": "composite",
+      "replacements": [
+        "animation.get_graphs",
+        "animation.get_nodes"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.list_child_blueprints",
+      "classification": "partial",
+      "replacements": [
+        "project.search"
+      ]
+    },
+    {
+      "source_action_id": "blueprint.get_component_defaults",
+      "classification": "direct",
+      "replacements": [
+        "blueprint.get_component_details"
+      ]
+    },
+    {
+      "source_action_id": "gas.get_ability",
+      "classification": "direct",
+      "replacements": [
+        "gas.get_ability_info"
+      ]
+    },
+    {
+      "source_action_id": "gas.list_effects",
+      "classification": "direct",
+      "replacements": [
+        "gas.list_gameplay_effects"
+      ]
+    },
+    {
+      "source_action_id": "gas.get_effect",
+      "classification": "direct",
+      "replacements": [
+        "gas.get_gameplay_effect"
+      ]
+    },
+    {
+      "source_action_id": "gas.list_attributes",
+      "classification": "direct",
+      "replacements": [
+        "gas.get_attribute_set"
+      ]
+    },
+    {
+      "source_action_id": "gas.get_attribute",
+      "classification": "partial",
+      "replacements": [
+        "gas.get_attribute_set",
+        "gas.get_attribute_value"
+      ]
+    },
+    {
+      "source_action_id": "gas.list_cues",
+      "classification": "direct",
+      "replacements": [
+        "gas.list_gameplay_cues"
+      ]
+    },
+    {
+      "source_action_id": "gas.get_cue",
+      "classification": "direct",
+      "replacements": [
+        "gas.get_cue_info"
+      ]
+    },
+    {
+      "source_action_id": "gas.list_gameplay_tags",
+      "classification": "direct",
+      "replacements": [
+        "gas.get_tag_hierarchy"
+      ]
+    },
+    {
+      "source_action_id": "gas.find_ability_tasks",
+      "classification": "direct",
+      "replacements": [
+        "gas.list_ability_tasks"
+      ]
+    },
+    {
+      "source_action_id": "animation.list_montages",
+      "classification": "composite",
+      "replacements": [
+        "project.find_by_type",
+        "animation.get_montage_info"
+      ]
+    },
+    {
+      "source_action_id": "animation.get_anim_graph",
+      "classification": "composite",
+      "replacements": [
+        "animation.get_graphs",
+        "animation.get_nodes"
+      ]
+    },
+    {
+      "source_action_id": "animation.list_notify_states",
+      "classification": "direct",
+      "replacements": [
+        "animation.get_sequence_notifies"
+      ]
+    },
+    {
+      "source_action_id": "animation.get_state_machine",
+      "classification": "composite",
+      "replacements": [
+        "animation.get_state_machines",
+        "animation.get_state_info",
+        "animation.get_transitions"
+      ]
+    },
+    {
+      "source_action_id": "animation.list_blend_trees",
+      "classification": "composite",
+      "replacements": [
+        "project.find_by_type",
+        "animation.get_blend_nodes"
+      ]
+    },
+    {
+      "source_action_id": "animation.get_anim_bp_variables",
+      "classification": "direct",
+      "replacements": [
+        "animation.get_abp_variables"
+      ]
+    },
+    {
+      "source_action_id": "animation.list_anim_sequences",
+      "classification": "composite",
+      "replacements": [
+        "project.find_by_type",
+        "animation.get_sequence_info"
+      ]
+    },
+    {
+      "source_action_id": "animation.get_montage_sections",
+      "classification": "direct",
+      "replacements": [
+        "animation.get_montage_info"
+      ]
+    },
+    {
+      "source_action_id": "ai.get_environment_query",
+      "classification": "direct",
+      "replacements": [
+        "ai.get_eqs_query"
+      ]
+    },
+    {
+      "source_action_id": "material.get_material_info",
+      "classification": "direct",
+      "replacements": [
+        "material.get_material_properties"
+      ]
+    },
+    {
+      "source_action_id": "material.get_texture_sample",
+      "classification": "direct",
+      "replacements": [
+        "material.get_texture_properties"
+      ]
+    },
+    {
+      "source_action_id": "material.list_material_parameters",
+      "classification": "direct",
+      "replacements": [
+        "material.get_material_parameters"
+      ]
+    },
+    {
+      "source_action_id": "material.get_material_graph_summary",
+      "classification": "composite",
+      "replacements": [
+        "material.get_all_expressions",
+        "material.get_full_connection_graph"
+      ]
+    },
+    {
+      "source_action_id": "mesh.list_meshes",
+      "classification": "partial",
+      "replacements": [
+        "project.find_by_type"
+      ]
+    },
+    {
+      "source_action_id": "mesh.list_sockets",
+      "classification": "partial",
+      "replacements": [
+        "animation.get_skeleton_sockets",
+        "mesh.get_mesh_info"
+      ]
+    },
+    {
+      "source_action_id": "mesh.find_materials_on_mesh",
+      "classification": "direct",
+      "replacements": [
+        "mesh.get_mesh_materials"
+      ]
+    },
+    {
+      "source_action_id": "mesh.get_lod_info",
+      "classification": "direct",
+      "replacements": [
+        "mesh.get_mesh_lods"
+      ]
+    },
+    {
+      "source_action_id": "audio.list_sound_cues",
+      "classification": "direct",
+      "replacements": [
+        "audio.search_audio_assets"
+      ]
+    },
+    {
+      "source_action_id": "audio.get_sound_cue",
+      "classification": "direct",
+      "replacements": [
+        "audio.get_sound_cue_graph"
+      ]
+    },
+    {
+      "source_action_id": "audio.list_sound_waves",
+      "classification": "direct",
+      "replacements": [
+        "audio.search_audio_assets"
+      ]
+    },
+    {
+      "source_action_id": "audio.list_sound_classes",
+      "classification": "direct",
+      "replacements": [
+        "audio.get_sound_class_hierarchy"
+      ]
+    },
+    {
+      "source_action_id": "audio.get_sound_attenuation",
+      "classification": "direct",
+      "replacements": [
+        "audio.get_attenuation_settings"
+      ]
+    },
+    {
+      "source_action_id": "niagara.get_system_info",
+      "classification": "direct",
+      "replacements": [
+        "niagara.get_system_summary"
+      ]
+    },
+    {
+      "source_action_id": "niagara.get_emitter",
+      "classification": "direct",
+      "replacements": [
+        "niagara.get_emitter_summary"
+      ]
+    },
+    {
+      "source_action_id": "niagara.list_modules",
+      "classification": "direct",
+      "replacements": [
+        "niagara.list_module_scripts"
+      ]
+    },
+    {
+      "source_action_id": "ui.list_widgets",
+      "classification": "partial",
+      "replacements": [
+        "project.find_by_type"
+      ]
+    },
+    {
+      "source_action_id": "ui.get_widget_hierarchy",
+      "classification": "direct",
+      "replacements": [
+        "ui.get_widget_tree"
+      ]
+    },
+    {
+      "source_action_id": "ui.list_bindings",
+      "classification": "direct",
+      "replacements": [
+        "ui.get_widget_bindings"
+      ]
+    },
+    {
+      "source_action_id": "ui.get_animation",
+      "classification": "direct",
+      "replacements": [
+        "ui.get_animation_details"
+      ]
+    },
+    {
+      "source_action_id": "ui.list_widget_animations",
+      "classification": "direct",
+      "replacements": [
+        "ui.list_animations"
+      ]
+    },
+    {
+      "source_action_id": "ui.get_viewmodel_bindings",
+      "classification": "partial",
+      "replacements": [
+        "ui.get_widget_bindings"
+      ]
+    },
+    {
+      "source_action_id": "scene.list_actors",
+      "classification": "direct",
+      "replacements": [
+        "scene.get_level_actors"
+      ]
+    },
+    {
+      "source_action_id": "scene.find_actors_by_class",
+      "classification": "direct",
+      "replacements": [
+        "scene.get_level_actors"
+      ]
+    },
+    {
+      "source_action_id": "scene.list_volumes",
+      "classification": "partial",
+      "replacements": [
+        "scene.get_level_actors"
+      ]
+    },
+    {
+      "source_action_id": "scene.get_world_outliner",
+      "classification": "composite",
+      "replacements": [
+        "scene.get_level_actors",
+        "scene.manage_folders"
+      ]
+    },
+    {
+      "source_action_id": "editor.get_selection",
+      "classification": "direct",
+      "replacements": [
+        "editor.describe_current_selection"
+      ]
+    },
+    {
+      "source_action_id": "editor.get_world_settings",
+      "classification": "partial",
+      "replacements": [
+        "scene.get_world_context"
+      ]
+    },
+    {
+      "source_action_id": "editor.list_editor_subsystems",
+      "classification": "no-equivalent",
+      "replacements": []
+    },
+    {
+      "source_action_id": "editor.run_commandlet",
+      "classification": "no-equivalent",
+      "replacements": []
+    },
+    {
+      "source_action_id": "worldgen.list_generators",
+      "classification": "no-equivalent",
+      "replacements": []
+    },
+    {
+      "source_action_id": "worldgen.get_generator_config",
+      "classification": "partial",
+      "replacements": [
+        "worldgen.get_room_template",
+        "worldgen.get_building_archetype"
+      ]
+    },
+    {
+      "source_action_id": "worldgen.list_biomes",
+      "classification": "partial",
+      "replacements": [
+        "worldgen.list_genre_presets"
+      ]
+    },
+    {
+      "source_action_id": "leveldesign.list_level_instances",
+      "classification": "direct",
+      "replacements": [
+        "level_instance.list_level_instances"
+      ]
+    },
+    {
+      "source_action_id": "leveldesign.get_level_bounds",
+      "classification": "direct",
+      "replacements": [
+        "scene.get_scene_bounds"
+      ]
+    },
+    {
+      "source_action_id": "leveldesign.list_streaming_levels",
+      "classification": "direct",
+      "replacements": [
+        "scene.list_streaming_levels"
+      ]
+    },
+    {
+      "source_action_id": "config.get_config_value",
+      "classification": "direct",
+      "replacements": [
+        "config.resolve_setting"
+      ]
+    },
+    {
+      "source_action_id": "config.list_config_sections",
+      "classification": "partial",
+      "replacements": [
+        "config.search_config",
+        "config.get_section"
+      ]
+    },
+    {
+      "source_action_id": "config.set_config_value",
+      "classification": "partial",
+      "replacements": [
+        "config.set_developer_setting"
+      ]
+    },
+    {
+      "source_action_id": "collection.get_collection_contents",
+      "classification": "direct",
+      "replacements": [
+        "collection.list_assets"
+      ]
+    },
+    {
+      "source_action_id": "collection.add_to_collection",
+      "classification": "direct",
+      "replacements": [
+        "collection.add_assets"
+      ]
+    },
+    {
+      "source_action_id": "input.list_mapping_contexts",
+      "classification": "direct",
+      "replacements": [
+        "input.list_input_mapping_contexts"
+      ]
+    },
+    {
+      "source_action_id": "interchange.get_import_options",
+      "classification": "partial",
+      "replacements": [
+        "interchange.get_import_data",
+        "interchange.import_with_options"
+      ]
+    },
+    {
+      "source_action_id": "interchange.list_supported_formats",
+      "classification": "direct",
+      "replacements": [
+        "interchange.get_supported_formats"
+      ]
+    },
+    {
+      "source_action_id": "chooser.list_choosers",
+      "classification": "direct",
+      "replacements": [
+        "chooser.list_chooser_tables"
+      ]
+    },
+    {
+      "source_action_id": "level_instance.get_level_instance_info",
+      "classification": "direct",
+      "replacements": [
+        "level_instance.get_level_instance"
+      ]
+    },
+    {
+      "source_action_id": "hlod.list_hlod_clusters",
+      "classification": "direct",
+      "replacements": [
+        "hlod.list_hlod_actors"
+      ]
+    },
+    {
+      "source_action_id": "hlod.get_hlod_settings",
+      "classification": "direct",
+      "replacements": [
+        "hlod.get_hlod_layer"
+      ]
+    },
+    {
+      "source_action_id": "localization.get_localized_string",
+      "classification": "partial",
+      "replacements": [
+        "localization.get_string_table"
+      ]
+    },
+    {
+      "source_action_id": "sprite.list_sprites",
+      "classification": "direct",
+      "replacements": [
+        "paper2d.list_assets"
+      ]
+    },
+    {
+      "source_action_id": "sprite.get_sprite_info",
+      "classification": "direct",
+      "replacements": [
+        "paper2d.get_asset"
+      ]
+    },
+    {
+      "source_action_id": "asset.list_assets",
+      "classification": "direct",
+      "replacements": [
+        "asset.find_assets"
+      ]
+    },
+    {
+      "source_action_id": "asset.get_asset_metadata",
+      "classification": "direct",
+      "replacements": [
+        "asset.inspect_asset"
+      ]
+    },
+    {
+      "source_action_id": "paper2d.list_sprites",
+      "classification": "direct",
+      "replacements": [
+        "paper2d.list_assets"
+      ]
+    },
+    {
+      "source_action_id": "paper2d.get_flip_book",
+      "classification": "direct",
+      "replacements": [
+        "paper2d.get_asset"
+      ]
+    },
+    {
+      "source_action_id": "cloth.list_cloth_configs",
+      "classification": "partial",
+      "replacements": [
+        "cloth.list_clothing_assets"
+      ]
+    },
+    {
+      "source_action_id": "cloth.get_cloth_asset",
+      "classification": "partial",
+      "replacements": [
+        "asset.inspect_asset"
+      ]
+    },
+    {
+      "source_action_id": "metahuman.list_metahumans",
+      "classification": "direct",
+      "replacements": [
+        "metahuman.list_character_assets"
+      ]
+    },
+    {
+      "source_action_id": "metahuman.get_metahuman_info",
+      "classification": "partial",
+      "replacements": [
+        "asset.inspect_asset"
+      ]
+    },
+    {
+      "source_action_id": "slate.get_widget_style",
+      "classification": "partial",
+      "replacements": [
+        "slate.describe_widget"
+      ]
+    },
+    {
+      "source_action_id": "ndisplay.list_ndisplay_configs",
+      "classification": "direct",
+      "replacements": [
+        "ndisplay.list_config_assets"
+      ]
+    },
+    {
+      "source_action_id": "ndisplay.get_ndisplay_config",
+      "classification": "partial",
+      "replacements": [
+        "asset.inspect_asset"
+      ]
+    },
+    {
+      "source_action_id": "dataflow.list_dataflows",
+      "classification": "direct",
+      "replacements": [
+        "dataflow.list_assets"
+      ]
+    },
+    {
+      "source_action_id": "gamefeatures.list_game_features",
+      "classification": "direct",
+      "replacements": [
+        "gamefeatures.list_plugins"
+      ]
+    },
+    {
+      "source_action_id": "chaos_fracture.list_fracture_meshes",
+      "classification": "direct",
+      "replacements": [
+        "chaos_fracture.list_geometry_collection_assets"
+      ]
+    },
+    {
+      "source_action_id": "chaos_fracture.get_fracture_settings",
+      "classification": "partial",
+      "replacements": [
+        "asset.inspect_asset"
+      ]
+    },
+    {
+      "source_action_id": "pcg.list_pcg_graphs",
+      "classification": "direct",
+      "replacements": [
+        "pcg.list_graph_assets"
+      ]
+    },
+    {
+      "source_action_id": "pcg.get_pcg_graph",
+      "classification": "direct",
+      "replacements": [
+        "pcg.get_graph_asset"
+      ]
+    },
+    {
+      "source_action_id": "water.list_water_bodies",
+      "classification": "direct",
+      "replacements": [
+        "water.list_bodies"
+      ]
+    },
+    {
+      "source_action_id": "water.get_water_settings",
+      "classification": "partial",
+      "replacements": [
+        "water.list_bodies"
+      ]
+    },
+    {
+      "source_action_id": "level_sequence.list_sequences",
+      "classification": "partial",
+      "replacements": [
+        "project.find_by_type"
+      ]
+    },
+    {
+      "source_action_id": "level_sequence.get_sequence_info",
+      "classification": "composite",
+      "replacements": [
+        "level_sequence.list_bindings",
+        "level_sequence.get_director_info"
+      ]
+    },
+    {
+      "source_action_id": "movie_render.list_render_configs",
+      "classification": "direct",
+      "replacements": [
+        "movie_render.list_settings"
+      ]
+    },
+    {
+      "source_action_id": "movie_render.get_render_job_status",
+      "classification": "direct",
+      "replacements": [
+        "movie_render.render_progress"
+      ]
+    },
+    {
+      "source_action_id": "world_conditions.list_conditions",
+      "classification": "partial",
+      "replacements": [
+        "world_conditions.describe_condition_types",
+        "world_conditions.list_query_owners"
+      ]
+    },
+    {
+      "source_action_id": "world_conditions.get_condition_result",
+      "classification": "partial",
+      "replacements": [
+        "world_conditions.describe_query"
+      ]
+    },
+    {
+      "source_action_id": "modelgen.list_model_templates",
+      "classification": "partial",
+      "replacements": [
+        "modelgen.list_model_generation_providers"
+      ]
+    },
+    {
+      "source_action_id": "modelgen.generate_model",
+      "classification": "direct",
+      "replacements": [
+        "modelgen.submit_generated_model_job"
+      ]
+    },
+    {
+      "source_action_id": "imagegen.list_image_styles",
+      "classification": "partial",
+      "replacements": [
+        "imagegen.get_image_generation_defaults",
+        "imagegen.list_image_models"
+      ]
+    },
+    {
+      "source_action_id": "pipeline.list_pipelines",
+      "classification": "no-equivalent",
+      "replacements": []
+    },
+    {
+      "source_action_id": "pipeline.run_pipeline",
+      "classification": "partial",
+      "replacements": [
+        "interchange.import_with_options"
+      ]
+    },
+    {
+      "source_action_id": "reflect.list_reflected_classes",
+      "classification": "partial",
+      "replacements": [
+        "cppreflect.find_class_specifier",
+        "source.search_source"
+      ]
+    },
+    {
+      "source_action_id": "bulk_fill.bulk_fill_assets",
+      "classification": "direct",
+      "replacements": [
+        "bulk_fill.apply"
+      ]
+    },
+    {
+      "source_action_id": "bulk_fill.preview_bulk_fill",
+      "classification": "direct",
+      "replacements": [
+        "bulk_fill.apply"
+      ]
+    },
+    {
+      "source_action_id": "describe.describe_action",
+      "classification": "direct",
+      "replacements": [
+        "describe.action_schema"
+      ]
+    },
+    {
+      "source_action_id": "describe.describe_namespace",
+      "classification": "direct",
+      "replacements": [
+        "describe.schema"
+      ]
+    },
+    {
+      "source_action_id": "gas.get_ability_set",
+      "classification": "partial",
+      "replacements": [
+        "blueprint.get_cdo_properties"
+      ]
+    },
+    {
+      "source_action_id": "leveldesign.list_levels",
+      "classification": "composite",
+      "replacements": [
+        "scene.get_world_context",
+        "scene.list_streaming_levels"
+      ]
+    },
+    {
+      "source_action_id": "leveldesign.get_level_info",
+      "classification": "composite",
+      "replacements": [
+        "scene.get_world_context",
+        "scene.get_level_metadata"
+      ]
+    },
+    {
+      "source_action_id": "source.sync_database",
+      "classification": "direct",
+      "replacements": [
+        "source.trigger_reindex"
+      ]
+    },
+    {
+      "source_action_id": "collection.get_collection_assets",
+      "classification": "direct",
+      "replacements": [
+        "collection.list_assets"
+      ]
+    }
+  ],
+  "gated": {
+    "monolith.describe_domain": {
+      "kind": "config",
+      "id": "bEnableDeferredDomainCatalog",
+      "mode": "feature_gated"
+    },
+    "monolith.load_domain": {
+      "kind": "config",
+      "id": "bEnableDeferredDomainCatalog",
+      "mode": "feature_gated"
+    },
+    "monolith.get_tool_call_record": {
+      "kind": "config",
+      "id": "bEnableAdvancedToolCallRecords",
+      "mode": "feature_gated"
+    },
+    "ai.build_state_tree_from_spec": {
+      "kind": "compile",
+      "id": "WITH_STATETREE",
+      "mode": "feature_gated"
+    },
+    "ai.add_st_state": {
+      "kind": "compile",
+      "id": "WITH_STATETREE",
+      "mode": "feature_gated"
+    },
+    "worldgen.generate_facade": {
+      "kind": "compile",
+      "id": "WITH_GEOMETRYSCRIPT",
+      "mode": "feature_gated"
+    },
+    "worldgen.create_building_from_grid": {
+      "kind": "compile",
+      "id": "WITH_GEOMETRYSCRIPT",
+      "mode": "feature_gated"
+    },
+    "dataflow.get_dataflow_graph": {
+      "kind": "compile",
+      "id": "WITH_MONOLITH_DATAFLOW",
+      "mode": "feature_gated"
+    },
+    "gamefeatures.list_plugins": {
+      "kind": "config",
+      "id": "bEnableGameFeatureActions",
+      "mode": "feature_gated"
+    },
+    "slate.describe_widget": {
+      "kind": "config",
+      "id": "bEnableSlateInspectorActions",
+      "mode": "feature_gated"
+    },
+    "worldgen.get_building_archetype": {
+      "kind": "config",
+      "id": "bEnableProceduralTownGen",
+      "mode": "feature_gated"
+    },
+    "combograph.add_combo_node": {
+      "kind": "optional_namespace",
+      "id": "bEnableComboGraph",
+      "mode": "optional"
+    },
+    "combograph.scaffold_combo_from_montages": {
+      "kind": "optional_namespace",
+      "id": "bEnableComboGraph",
+      "mode": "optional"
+    },
+    "logicdriver.build_sm_from_spec": {
+      "kind": "optional_namespace",
+      "id": "bEnableLogicDriver",
+      "mode": "optional"
+    },
+    "logicdriver.scaffold_quest_sm": {
+      "kind": "optional_namespace",
+      "id": "bEnableLogicDriver",
+      "mode": "optional"
+    }
+  }
+}

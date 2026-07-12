@@ -28,6 +28,7 @@ public:
 	static FMonolithActionResult DescribeCharacterPartGraph(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ValidateCharacterPartAssets(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetExperienceDefaults(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult AddExperienceComponentEntry(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult RemoveExperienceComponentEntry(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult SetUserFacingExperience(const TSharedPtr<FJsonObject>& Params);
 };

@@ -83,6 +83,8 @@ ai_query("runtime_get_bt_state", { actor: "BP_GuardAI_C_0" })
 ## Gotchas / Rules
 
 - Behavior Tree / StateTree edits operate on the **asset**; `compile_state_tree` is MANDATORY after any StateTree edit, and BTs save/recompile as the schema specifies.
+- `add_bt_node` and the specialized BT task adders fail if the Behavior Tree schema rejects the parent-child edge; a success response guarantees that the new graph node is actually connected, not orphaned.
+- `delete_blackboard`, `delete_behavior_tree`, and `delete_eqs_query` use verified asset lifecycle deletion. Success means the package, registry row, package files, and source-control cleanup all reached the absent state; inspect `delete_verification` when auditing destructive work.
 - Navigation / path queries need a built navmesh — build it first (use `unreal-scene` `scene.build_navmesh` for one-off queries on the live level).
 - `runtime_*` actions require a PIE/game session; authoring and scaffold actions work in-editor.
 - Mass/ZoneGraph mutation actions (spawn/despawn/set_*) currently report availability and are guarded until editor-vs-PIE world tests exist — they do not mutate runtime state.

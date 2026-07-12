@@ -16,6 +16,7 @@ public class MonolithPCG : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
+			"PCG",
 			"UnrealEd",
 			"AssetRegistry",
 			"Json",

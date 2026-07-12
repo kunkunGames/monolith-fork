@@ -273,6 +273,212 @@ bool FMonolithParamSchemaTypedValidationTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaValueDomainMetadataTest,
+	"Monolith.ParamSchema.ValueDomainMetadata",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithParamSchemaValueDomainMetadataTest::RunTest(const FString& Parameters)
+{
+	TSharedPtr<FJsonObject> Schema = FParamSchemaBuilder()
+		.Optional(TEXT("minimum_only"), TEXT("number"), TEXT("Accepted lower bound"))
+		.Minimum(TEXT("minimum_only"), 0.0)
+		.Optional(TEXT("maximum_only"), TEXT("number"), TEXT("Accepted upper bound"))
+		.Maximum(TEXT("maximum_only"), 1.0)
+		.Optional(TEXT("legacy_range"), TEXT("integer"), TEXT("Accepted two-sided range"))
+		.Range(TEXT("legacy_range"), 1.0, 100.0)
+		.Optional(TEXT("scalar"), TEXT("number"), TEXT("Arbitrary material scalar"))
+		.UnboundedDomain(TEXT("scalar"), TEXT("Material scalar parameters have no universal static bounds."))
+		.Optional(TEXT("child_index"), TEXT("integer"), TEXT("Runtime collection index"))
+		.DynamicDomain(
+			TEXT("child_index"),
+			TEXT("Behavior Tree child collection"),
+			TEXT("The valid upper bound is the current child count."))
+		.Sentinel(TEXT("child_index"), -1.0, TEXT("Append after the current children."))
+		.Sentinel(TEXT("child_index"), -2.0, TEXT("Insert before the current children."))
+		.Optional(TEXT("delay_max"), TEXT("number"), TEXT("Maximum delay"))
+		.CrossFieldDomain(
+			TEXT("delay_max"),
+			TEXT("delay_max must be greater than or equal to delay_min."),
+			{ TEXT("delay_min") })
+		.Optional(TEXT("resolution"), TEXT("array|string|object|number"), TEXT("Composite resolution"))
+		.CompositeDomain(
+			TEXT("resolution"),
+			TEXT("Every representation resolves to width and height before pixel-budget validation."),
+			{ TEXT("array"), TEXT("string"), TEXT("object"), TEXT("number") })
+		.Optional(TEXT("limit"), TEXT("integer"), TEXT("Clamped result limit"))
+		.NormalizedDomain(
+			TEXT("limit"),
+			1.0,
+			1000.0,
+			TEXT("The handler clamps oversized result requests to its resource ceiling."))
+		.Build();
+
+	auto FindParam = [this, &Schema](const TCHAR* Name) -> TSharedPtr<FJsonObject>
+	{
+		const TSharedPtr<FJsonObject>* Param = nullptr;
+		TestTrue(
+			*FString::Printf(TEXT("%s param exists"), Name),
+			Schema->TryGetObjectField(Name, Param) && Param && Param->IsValid());
+		return Param && Param->IsValid() ? *Param : nullptr;
+	};
+
+	const TSharedPtr<FJsonObject> MinimumOnly = FindParam(TEXT("minimum_only"));
+	const TSharedPtr<FJsonObject> MaximumOnly = FindParam(TEXT("maximum_only"));
+	const TSharedPtr<FJsonObject> LegacyRange = FindParam(TEXT("legacy_range"));
+	double Bound = 0.0;
+	TestTrue(TEXT("Minimum emits top-level minimum"),
+		MinimumOnly.IsValid() && MinimumOnly->TryGetNumberField(TEXT("minimum"), Bound));
+	TestEqual(TEXT("Minimum wire value"), Bound, 0.0);
+	TestFalse(TEXT("Minimum does not invent maximum"), MinimumOnly.IsValid() && MinimumOnly->HasField(TEXT("maximum")));
+	TestTrue(TEXT("Maximum emits top-level maximum"),
+		MaximumOnly.IsValid() && MaximumOnly->TryGetNumberField(TEXT("maximum"), Bound));
+	TestEqual(TEXT("Maximum wire value"), Bound, 1.0);
+	TestFalse(TEXT("Maximum does not invent minimum"), MaximumOnly.IsValid() && MaximumOnly->HasField(TEXT("minimum")));
+
+	double LegacyMinimum = 0.0;
+	double LegacyMaximum = 0.0;
+	TestTrue(TEXT("Existing Range still emits minimum"),
+		LegacyRange.IsValid() && LegacyRange->TryGetNumberField(TEXT("minimum"), LegacyMinimum));
+	TestTrue(TEXT("Existing Range still emits maximum"),
+		LegacyRange.IsValid() && LegacyRange->TryGetNumberField(TEXT("maximum"), LegacyMaximum));
+	TestEqual(TEXT("Existing Range minimum unchanged"), LegacyMinimum, 1.0);
+	TestEqual(TEXT("Existing Range maximum unchanged"), LegacyMaximum, 100.0);
+	TestFalse(TEXT("Existing Range does not emit descriptive domain metadata"),
+		LegacyRange.IsValid() && LegacyRange->HasField(TEXT("domain")));
+
+	const TSharedPtr<FJsonObject> Scalar = FindParam(TEXT("scalar"));
+	const TSharedPtr<FJsonObject>* ScalarDomain = nullptr;
+	TestTrue(TEXT("Unbounded domain object exists"),
+		Scalar.IsValid() && Scalar->TryGetObjectField(TEXT("domain"), ScalarDomain)
+			&& ScalarDomain && ScalarDomain->IsValid());
+	if (ScalarDomain && ScalarDomain->IsValid())
+	{
+		TestEqual(TEXT("Unbounded domain kind"),
+			(*ScalarDomain)->GetStringField(TEXT("kind")), FString(TEXT("unbounded")));
+		TestTrue(TEXT("Unbounded rationale is non-empty"),
+			!(*ScalarDomain)->GetStringField(TEXT("rationale")).IsEmpty());
+	}
+
+	const TSharedPtr<FJsonObject> ChildIndex = FindParam(TEXT("child_index"));
+	const TSharedPtr<FJsonObject>* DynamicDomain = nullptr;
+	TestTrue(TEXT("Dynamic domain object exists"),
+		ChildIndex.IsValid() && ChildIndex->TryGetObjectField(TEXT("domain"), DynamicDomain)
+			&& DynamicDomain && DynamicDomain->IsValid());
+	if (DynamicDomain && DynamicDomain->IsValid())
+	{
+		TestEqual(TEXT("Dynamic domain kind"),
+			(*DynamicDomain)->GetStringField(TEXT("kind")), FString(TEXT("dynamic")));
+		TestTrue(TEXT("Dynamic source is non-empty"),
+			!(*DynamicDomain)->GetStringField(TEXT("source")).IsEmpty());
+		const TArray<TSharedPtr<FJsonValue>>* Sentinels = nullptr;
+		TestTrue(TEXT("Sentinel metadata is an array"),
+			(*DynamicDomain)->TryGetArrayField(TEXT("sentinels"), Sentinels) && Sentinels);
+		if (Sentinels)
+		{
+			TestEqual(TEXT("Sentinels compose without replacement"), Sentinels->Num(), 2);
+			for (const TSharedPtr<FJsonValue>& SentinelValue : *Sentinels)
+			{
+				const TSharedPtr<FJsonObject> SentinelObject = SentinelValue.IsValid() ? SentinelValue->AsObject() : nullptr;
+				TestTrue(TEXT("Sentinel entry is an object"), SentinelObject.IsValid());
+				TestTrue(TEXT("Sentinel meaning is non-empty"),
+					SentinelObject.IsValid()
+						&& !SentinelObject->GetStringField(TEXT("meaning")).IsEmpty());
+			}
+		}
+	}
+
+	const TSharedPtr<FJsonObject> DelayMax = FindParam(TEXT("delay_max"));
+	const TSharedPtr<FJsonObject>* CrossFieldDomain = nullptr;
+	TestTrue(TEXT("Cross-field domain object exists"),
+		DelayMax.IsValid() && DelayMax->TryGetObjectField(TEXT("domain"), CrossFieldDomain)
+			&& CrossFieldDomain && CrossFieldDomain->IsValid());
+	if (CrossFieldDomain && CrossFieldDomain->IsValid())
+	{
+		TestEqual(TEXT("Cross-field domain kind"),
+			(*CrossFieldDomain)->GetStringField(TEXT("kind")), FString(TEXT("cross_field")));
+		const TArray<TSharedPtr<FJsonValue>>* Dependencies = nullptr;
+		TestTrue(TEXT("Cross-field dependencies are declared"),
+			(*CrossFieldDomain)->TryGetArrayField(TEXT("depends_on"), Dependencies)
+				&& Dependencies && Dependencies->Num() == 1);
+	}
+
+	const TSharedPtr<FJsonObject> Resolution = FindParam(TEXT("resolution"));
+	const TSharedPtr<FJsonObject>* CompositeDomain = nullptr;
+	TestTrue(TEXT("Composite domain object exists"),
+		Resolution.IsValid() && Resolution->TryGetObjectField(TEXT("domain"), CompositeDomain)
+			&& CompositeDomain && CompositeDomain->IsValid());
+	if (CompositeDomain && CompositeDomain->IsValid())
+	{
+		TestEqual(TEXT("Composite domain kind"),
+			(*CompositeDomain)->GetStringField(TEXT("kind")), FString(TEXT("composite")));
+		const TArray<TSharedPtr<FJsonValue>>* Variants = nullptr;
+		TestTrue(TEXT("Composite variants are declared"),
+			(*CompositeDomain)->TryGetArrayField(TEXT("variants"), Variants)
+				&& Variants && Variants->Num() == 4);
+	}
+
+	const TSharedPtr<FJsonObject> Limit = FindParam(TEXT("limit"));
+	const TSharedPtr<FJsonObject>* NormalizedDomain = nullptr;
+	TestTrue(TEXT("Normalized domain object exists"),
+		Limit.IsValid() && Limit->TryGetObjectField(TEXT("domain"), NormalizedDomain)
+			&& NormalizedDomain && NormalizedDomain->IsValid());
+	if (NormalizedDomain && NormalizedDomain->IsValid())
+	{
+		TestEqual(TEXT("Normalized domain kind"),
+			(*NormalizedDomain)->GetStringField(TEXT("kind")), FString(TEXT("normalized")));
+		TestEqual(TEXT("Normalized mode is clamp"),
+			(*NormalizedDomain)->GetStringField(TEXT("mode")), FString(TEXT("clamp")));
+		double NormalizedMinimum = 0.0;
+		double NormalizedMaximum = 0.0;
+		TestTrue(TEXT("Normalized minimum exists"),
+			(*NormalizedDomain)->TryGetNumberField(TEXT("minimum"), NormalizedMinimum));
+		TestTrue(TEXT("Normalized maximum exists"),
+			(*NormalizedDomain)->TryGetNumberField(TEXT("maximum"), NormalizedMaximum));
+		TestEqual(TEXT("Normalized minimum value"), NormalizedMinimum, 1.0);
+		TestEqual(TEXT("Normalized maximum value"), NormalizedMaximum, 1000.0);
+	}
+	TestFalse(TEXT("Normalized metadata does not emit enforcing top-level minimum"),
+		Limit.IsValid() && Limit->HasField(TEXT("minimum")));
+	TestFalse(TEXT("Normalized metadata does not emit enforcing top-level maximum"),
+		Limit.IsValid() && Limit->HasField(TEXT("maximum")));
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("minimum_only"), -1.0);
+		Params->SetNumberField(TEXT("maximum_only"), 2.0);
+		Params->SetNumberField(TEXT("legacy_range"), 0.0);
+		TArray<FString> Errors;
+		TestFalse(TEXT("One-sided and legacy Range fields remain enforcing"),
+			FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors));
+		TestEqual(TEXT("All three accepted-bound violations are reported"), Errors.Num(), 3);
+	}
+
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetNumberField(TEXT("limit"), 5000.0);
+		TArray<FString> Errors;
+		TestTrue(TEXT("Normalized domain metadata is non-enforcing"),
+			FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors));
+		TestEqual(TEXT("Normalized metadata produces no validation errors"), Errors.Num(), 0);
+	}
+
+	if (MinimumOnly.IsValid())
+	{
+		const TSharedPtr<FJsonObject> MinimumProperty = MonolithMcpSchemaUtils::BuildJsonSchemaProperty(MinimumOnly);
+		TestTrue(TEXT("One-sided minimum is exported to MCP JSON Schema"), MinimumProperty->HasField(TEXT("minimum")));
+	}
+	if (Limit.IsValid())
+	{
+		const TSharedPtr<FJsonObject> NormalizedProperty = MonolithMcpSchemaUtils::BuildJsonSchemaProperty(Limit);
+		TestFalse(TEXT("Descriptive domain metadata is not exported as enforcing JSON Schema"),
+			NormalizedProperty->HasField(TEXT("domain")));
+		TestFalse(TEXT("Nested normalized minimum is not promoted to accepted minimum"),
+			NormalizedProperty->HasField(TEXT("minimum")));
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamSchemaMcpJsonSchemaPropertyTest,
 	"Monolith.ParamSchema.McpJsonSchemaProperty",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

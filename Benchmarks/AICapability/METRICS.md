@@ -27,14 +27,21 @@ cap the composite while the sum-to-1.0 assert still passes.
 
 | Category | Tasks | Weight |
 | --- | ---: | ---: |
-| `edit_execute` | 9 | 0.34 |
+| `edit_execute` | 10 | 0.34 |
 | `error_path` | 8 | 0.16 |
 | `compile_gate` | 2 | 0.12 |
 | `duplicate_reject` | 4 | 0.10 |
 | `edit_schema` | 28 | 0.10 |
 | `discovery` | 6 | 0.10 |
 | `read_schema` | 16 | 0.08 |
-| **Total** | **73** | **1.00** |
+| **Total** | **74** | **1.00** |
+
+The tenth `edit_execute` task is the composite-scaffold guard added 2026-07-11:
+`create_bt_from_template(patrol)` against `BT_BenchTemplateScratch` with delete-first resets of both
+scaffold outputs, read back through `get_behavior_tree` for the internal `set_bt_blackboard`
+Blackboard linkage (2026-07-10 handoff N3 cross-action param-drift class), then both the BT and its
+derived Blackboard are deleted and independently read back as explicit `not found`. A create-based
+`edit_execute` task without cleanup actions and meaningful cleanup assertions fails corpus integrity.
 
 `edit_schema` subsystems: blackboard 8, behavior_tree 12, state_tree 1, eqs 7.
 
@@ -67,6 +74,9 @@ capturing returned ids into `${label}`, then a **follow-up read must observe the
   satisfiable by a same-typed leftover). Composite+task variant captures the parent and reads both.
 - `set_bt_blackboard` → `get_behavior_tree` must `contain` the linked Blackboard name.
 - `add_eqs_generator` → `get_eqs_query` must `contain` the generator class.
+- `create_bt_from_template` → `get_behavior_tree` must contain the derived Blackboard linkage, then
+  `delete_behavior_tree` and `delete_blackboard` must succeed and both public reads must report the
+  exact scratch path as absent.
 
 A non-error envelope is **necessary but not sufficient** — the read-back gates correctness, so a
 silent no-op edit scores 0. (`integrity` enforces every `edit_execute` verify carries a real
@@ -108,7 +118,7 @@ StateTree lint is unavailable on `WITH_STATETREE=0` (the `lint_state_tree` actio
 returns `isError`), so this gate is built entirely from the real `validate_behavior_tree` quality
 action. Two complementary probes, each on its own isolated scratch Behavior Tree:
 
-- **negative — `validate_invalid`:** create `BT_BenchEmptyScratch` via `create_behavior_tree` with
+- **negative — `validate_invalid`:** reset and create `BT_BenchNegativeGateScratch` via `create_behavior_tree` with
   **no nodes**. Its root has no children, so `validate_behavior_tree` emits an `error`-severity issue
   "Root has no children — empty Behavior Tree" and sets `valid == false`
   (`MonolithAIBehaviorTreeActions.cpp:4097`, severity gate at `:4149`). VERIFIED LIVE: an empty BT
@@ -116,7 +126,7 @@ action. Two complementary probes, each on its own isolated scratch Behavior Tree
   `valid == False` **and** an `error`-severity issue is present — requiring the error issue (not just
   the false verdict) is the anti-reject-everything guard. A stub that always reports `valid == true`
   **fails**.
-- **positive — `validate_valid`:** build `BT_BenchValidateScratch` with a `BTComposite_Selector` root
+- **positive — `validate_valid`:** reset and build `BT_BenchPositiveGateScratch` with a `BTComposite_Selector` root
   child and a linked Blackboard. `validate_behavior_tree` sets `valid == false` only when an
   `error`-severity issue exists (`MonolithAIBehaviorTreeActions.cpp:4149`); a Selector-rooted BT with
   a Blackboard has none. VERIFIED LIVE: a clean Selector-rooted BT returns
@@ -127,15 +137,20 @@ Verified shape for both: `{asset_path, valid:bool, issue_count:int, issues:[...]
 (`MonolithAIBehaviorTreeActions.cpp:4164`). `_validate_is_valid` returns `None` (not pass) when the
 gate call errors at the transport / parse / `isError` level — the asset failed to **load**, not to
 produce a verdict — which is the anti-reject-everything guard: a server that simply errors on
-everything cannot pass either probe. The scratch assets are isolated and harmless, so no cleanup is
-required.
+everything cannot pass either probe. Each gate deletes its task-owned package afterwards and then
+calls `get_behavior_tree`; the row passes only when that public read returns an input-specific
+`not found` error echoing the scratch path. Create, edit, delete, or cleanup-readback failure scores
+the gate as failed, and no passing run leaves a generated package behind.
 
 ### `duplicate_reject` — weight 0.10
 
-The create action is called **twice**. The first must be a clean create (a leading `setup_arguments`
-delete resets a prior run's leftover, so a reject-everything server fails `first_ok`). The **second**
-identical call must return a duplicate-specific `isError` (message contains one of
-`already / exist / duplicate / in use / taken`). Verified duplicate wording:
+The create action is called **twice** against a benchmark-owned scratch path or key. The first must
+be a clean create. A leading reset accepts only a clean success or an explicit `not found` result;
+generic delete failures skip both creates and fail the row. The **second** identical call must return
+a duplicate-specific `isError` (message contains one of `already / exist / duplicate / in use /
+taken`). Cleanup must then succeed, and a public read must prove the asset path is not found or the
+Blackboard key is exactly absent. A delete response that leaves a reloadable `.uasset` cannot pass.
+Verified duplicate wording:
 
 | Action | Verified duplicate error (file:line) |
 | --- | --- |
@@ -164,6 +179,30 @@ is portable — a capable server scores 1.0 in any project, not only where AI as
 `get_ai_overview` accepts 0 results (broad recall). There is no `list_state_trees` discovery probe —
 the `ai` namespace exposes no such action.
 
+## Run-integrity fields and gates
+
+Run integrity is separate from the weighted capability score. Only a complete run with
+`run_valid=true`, `metrics_valid=true`, `metrics_scope=complete_run`, and
+`completion_status=completed` may be used as a baseline.
+
+| Field | Meaning |
+| --- | --- |
+| `transport_error` | True when any MCP call belonging to the task failed before a tool result |
+| `transport_status` | Last HTTP status for that task's transport failures, or `null` |
+| `transport_error_raw` | Bounded raw diagnostic from the last task transport failure |
+| `transport_failure_call_count` | Number of transport-failed MCP calls within the task |
+| `last_transport_tool` / `last_transport_action` | Exact last failed call, including setup/readback/cleanup |
+| `protocol_error` / `protocol_error_raw` | Malformed JSON/MCP/JSON-RPC response; invalidates the run and is never scored as a domain failure |
+| `transport_failure_count` | Number of task rows with at least one transport-failed call |
+| `transport_failed_fraction` | `transport_failure_count / attempted_task_count` |
+| `last_transport_item_id` | Last task that actually had a transport failure, even if a later success triggers the fraction gate |
+
+Three consecutive transport-failed task rows abort immediately. Once 20 tasks have been attempted,
+a fraction strictly above `0.05` aborts immediately; exactly `0.05` is allowed. `finalize()` applies
+the same fraction rule to shorter completed corpora. Status transport/protocol failures, task protocol
+failures, and runner exceptions produce `run_failure.json` without `summary.json`; diagnostic
+`partial_summary.json` and `per_task.jsonl` are retained only when task execution had started.
+
 ## Anti-gaming properties (mirrors AssetEditing)
 
 - **No green-on-empty:** discovery requires ≥1 result for the fixture-targeted queries.
@@ -179,7 +218,7 @@ the `ai` namespace exposes no such action.
 
 ```powershell
 python Scripts/ai_capability_benchmark.py generate          # rebuilds tasks.jsonl + manifest.json
-python Scripts/test_ai_capability_benchmark.py              # 14 scoring-branch asserts, no editor
+python Scripts/test_ai_capability_benchmark.py              # 30 scorer + run-integrity asserts, no editor
 ```
 
 The self-test fabricates MCP envelopes

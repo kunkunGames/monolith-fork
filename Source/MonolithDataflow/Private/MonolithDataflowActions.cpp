@@ -528,6 +528,7 @@ void FMonolithDataflowActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content package path under /Game"), TEXT("/Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum assets to return, clamped to 1..500"), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Build());
 
 #if WITH_MONOLITH_DATAFLOW
@@ -549,6 +550,7 @@ void FMonolithDataflowActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("filter"), TEXT("string"), TEXT("Substring filter across type, display name, category, and tags"))
 			.Optional(TEXT("common_only"), TEXT("boolean"), TEXT("Exclude deprecated and experimental node types"), TEXT("true"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum type rows to return, clamped to 1..1000"), TEXT("200"))
+			.Range(TEXT("limit"), 1, 1000)
 			.Optional(TEXT("include_pins"), TEXT("boolean"), TEXT("Include default input/output pins for each returned type"), TEXT("false"))
 			.Build(),
 		TEXT("Dataflow"));

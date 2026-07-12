@@ -63,7 +63,7 @@ public class MonolithAI : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"MonolithCore", "MonolithBlueprint", "MonolithIndex",
+			"MonolithCore", "MonolithAsset", "MonolithBlueprint", "MonolithIndex",
 			"UnrealEd", "BlueprintGraph", "AIGraph",
 			"BehaviorTreeEditor", "EnvironmentQueryEditor",
 			"Projects",  // IPluginManager (Phase D2)

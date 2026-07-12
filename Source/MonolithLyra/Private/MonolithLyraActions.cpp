@@ -25,6 +25,7 @@
 #include "UObject/SavePackage.h"
 #include "UObject/SoftObjectPath.h"
 #include "UObject/TopLevelAssetPath.h"
+#include "UObject/UObjectGlobals.h"
 #include "UObject/UObjectIterator.h"
 #include "UObject/UnrealType.h"
 
@@ -48,8 +49,10 @@ namespace MonolithLyra
 	static const TCHAR* LyraPawnCharacterPartsClassPath = TEXT("/Script/LyraGame.LyraPawnComponent_CharacterParts");
 	static const TCHAR* LyraCosmeticDeveloperSettingsClassPath = TEXT("/Script/LyraGame.LyraCosmeticDeveloperSettings");
 	static const TCHAR* EngineActorClassPath = TEXT("/Script/Engine.Actor");
+	static const TCHAR* EngineActorComponentClassPath = TEXT("/Script/Engine.ActorComponent");
 	static const TCHAR* EnginePawnClassPath = TEXT("/Script/Engine.Pawn");
 	static const TCHAR* GameFeatureActionClassPath = TEXT("/Script/GameFeatures.GameFeatureAction");
+	static const TCHAR* GameFeatureActionAddComponentsClassPath = TEXT("/Script/GameFeatures.GameFeatureAction_AddComponents");
 
 	struct FResolvedLyraObject
 	{
@@ -82,6 +85,22 @@ namespace MonolithLyra
 		FString ActionPath;
 		FString ActorClass;
 		FString ComponentClass;
+	};
+
+	struct FComponentEntryMutationPlan
+	{
+		FArrayProperty* ComponentListProperty = nullptr;
+		FStructProperty* EntryStructProperty = nullptr;
+		FSoftClassProperty* ActorClassProperty = nullptr;
+		FSoftClassProperty* ComponentClassProperty = nullptr;
+		FBoolProperty* ClientProperty = nullptr;
+		FBoolProperty* ServerProperty = nullptr;
+		FNumericProperty* AdditionFlagsProperty = nullptr;
+		int32 ComponentIndex = INDEX_NONE;
+		int32 ComponentsBefore = 0;
+		int32 ComponentsAfter = 0;
+		bool bAdd = false;
+		bool bUpdate = false;
 	};
 
 	struct FPhaseAbilitySummary
@@ -1917,6 +1936,275 @@ namespace MonolithLyra
 		return true;
 	}
 
+	static UClass* LoadSubclassForParam(
+		const FString& ClassPath,
+		const TCHAR* ParamName,
+		const TCHAR* ExpectedBaseClassPath,
+		FString& OutError)
+	{
+		UClass* ExpectedBaseClass = LoadExpectedClass(ExpectedBaseClassPath);
+		if (!ExpectedBaseClass)
+		{
+			OutError = FString::Printf(TEXT("Required base class '%s' is unavailable"), ExpectedBaseClassPath);
+			return nullptr;
+		}
+
+		UClass* LoadedClass = LoadClassPathWithGeneratedFallback(ClassPath);
+		if (!LoadedClass)
+		{
+			OutError = FString::Printf(TEXT("Could not load class '%s' for param '%s'"), *ClassPath, ParamName);
+			return nullptr;
+		}
+		if (!LoadedClass->IsChildOf(ExpectedBaseClass))
+		{
+			OutError = FString::Printf(
+				TEXT("Class '%s' for param '%s' is not a child of '%s'"),
+				*LoadedClass->GetPathName(),
+				ParamName,
+				*ExpectedBaseClass->GetPathName());
+			return nullptr;
+		}
+		return LoadedClass;
+	}
+
+	static UObject* FindAddComponentsAction(
+		FScriptArrayHelper& ActionsHelper,
+		const FObjectPropertyBase* ActionsObjectProperty,
+		UClass* AddComponentsActionClass,
+		const FString& RequestedActionName,
+		int32& OutActionIndex,
+		int32& OutAddComponentsActionCount,
+		FString& OutError)
+	{
+		OutActionIndex = INDEX_NONE;
+		OutAddComponentsActionCount = 0;
+		UObject* FirstCompatibleAction = nullptr;
+		int32 FirstCompatibleIndex = INDEX_NONE;
+		UObject* RequestedAction = nullptr;
+		int32 RequestedActionIndex = INDEX_NONE;
+
+		for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
+		{
+			UObject* Action = ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index));
+			if (!Action)
+			{
+				continue;
+			}
+
+			if (Action->IsA(AddComponentsActionClass))
+			{
+				++OutAddComponentsActionCount;
+				if (!FirstCompatibleAction)
+				{
+					FirstCompatibleAction = Action;
+					FirstCompatibleIndex = Index;
+				}
+			}
+
+			if (!RequestedActionName.IsEmpty() && Action->GetName().Equals(RequestedActionName, ESearchCase::IgnoreCase))
+			{
+				if (!Action->IsA(AddComponentsActionClass))
+				{
+					OutError = FString::Printf(
+						TEXT("Action '%s' exists at index %d but is '%s', not '%s'"),
+						*RequestedActionName,
+						Index,
+						*Action->GetClass()->GetPathName(),
+						*AddComponentsActionClass->GetPathName());
+					return nullptr;
+				}
+				RequestedAction = Action;
+				RequestedActionIndex = Index;
+			}
+		}
+
+		if (!RequestedActionName.IsEmpty())
+		{
+			OutActionIndex = RequestedActionIndex;
+			return RequestedAction;
+		}
+		if (RequestedActionName.IsEmpty())
+		{
+			OutActionIndex = FirstCompatibleIndex;
+			return FirstCompatibleAction;
+		}
+		return nullptr;
+	}
+
+	static bool BuildComponentEntryMutationPlan(
+		UObject* Action,
+		UClass* AddComponentsActionClass,
+		UClass* ActorClass,
+		UClass* ComponentClass,
+		bool bClientComponent,
+		bool bServerComponent,
+		int32 AdditionFlags,
+		FComponentEntryMutationPlan& OutPlan,
+		FString& OutError)
+	{
+		OutPlan = FComponentEntryMutationPlan();
+		if (!AddComponentsActionClass || !ActorClass || !ComponentClass)
+		{
+			OutError = TEXT("AddComponents action, actor, and component classes are required");
+			return false;
+		}
+
+		OutPlan.ComponentListProperty = FindFProperty<FArrayProperty>(AddComponentsActionClass, TEXT("ComponentList"));
+		OutPlan.EntryStructProperty = OutPlan.ComponentListProperty
+			? CastField<FStructProperty>(OutPlan.ComponentListProperty->Inner)
+			: nullptr;
+		if (!OutPlan.ComponentListProperty || !OutPlan.EntryStructProperty || !OutPlan.EntryStructProperty->Struct)
+		{
+			OutError = FString::Printf(
+				TEXT("Action class '%s' must expose ComponentList as a struct array"),
+				*AddComponentsActionClass->GetPathName());
+			return false;
+		}
+
+		UScriptStruct* EntryStruct = OutPlan.EntryStructProperty->Struct;
+		OutPlan.ActorClassProperty = FindFProperty<FSoftClassProperty>(EntryStruct, TEXT("ActorClass"));
+		OutPlan.ComponentClassProperty = FindFProperty<FSoftClassProperty>(EntryStruct, TEXT("ComponentClass"));
+		OutPlan.ClientProperty = FindFProperty<FBoolProperty>(EntryStruct, TEXT("bClientComponent"));
+		OutPlan.ServerProperty = FindFProperty<FBoolProperty>(EntryStruct, TEXT("bServerComponent"));
+		OutPlan.AdditionFlagsProperty = FindFProperty<FNumericProperty>(EntryStruct, TEXT("AdditionFlags"));
+		if (!OutPlan.ActorClassProperty
+			|| !OutPlan.ComponentClassProperty
+			|| !OutPlan.ClientProperty
+			|| !OutPlan.ServerProperty
+			|| !OutPlan.AdditionFlagsProperty
+			|| !OutPlan.AdditionFlagsProperty->IsInteger())
+		{
+			OutError = FString::Printf(
+				TEXT("ComponentList entry struct '%s' must expose ActorClass, ComponentClass, bClientComponent, bServerComponent, and integer AdditionFlags fields"),
+				*EntryStruct->GetName());
+			return false;
+		}
+
+		if ((OutPlan.ActorClassProperty->MetaClass && !ActorClass->IsChildOf(OutPlan.ActorClassProperty->MetaClass))
+			|| (OutPlan.ComponentClassProperty->MetaClass && !ComponentClass->IsChildOf(OutPlan.ComponentClassProperty->MetaClass)))
+		{
+			OutError = TEXT("Actor or component class is incompatible with the reflected ComponentList field contract");
+			return false;
+		}
+
+		if (!Action)
+		{
+			OutPlan.bAdd = true;
+			OutPlan.ComponentsAfter = 1;
+			OutPlan.ComponentIndex = 0;
+			return true;
+		}
+
+		FScriptArrayHelper ComponentHelper(
+			OutPlan.ComponentListProperty,
+			OutPlan.ComponentListProperty->ContainerPtrToValuePtr<void>(Action));
+		OutPlan.ComponentsBefore = ComponentHelper.Num();
+		OutPlan.ComponentsAfter = ComponentHelper.Num();
+		int32 MatchingEntryCount = 0;
+		for (int32 Index = 0; Index < ComponentHelper.Num(); ++Index)
+		{
+			void* EntryPtr = ComponentHelper.GetRawPtr(Index);
+			const FSoftObjectPtr ExistingActorClass = OutPlan.ActorClassProperty->GetPropertyValue(
+				OutPlan.ActorClassProperty->ContainerPtrToValuePtr<void>(EntryPtr));
+			const FSoftObjectPtr ExistingComponentClass = OutPlan.ComponentClassProperty->GetPropertyValue(
+				OutPlan.ComponentClassProperty->ContainerPtrToValuePtr<void>(EntryPtr));
+			const bool bSameActor = NormalizeReferenceForCompare(ExistingActorClass.ToSoftObjectPath().ToString()).Equals(
+				NormalizeReferenceForCompare(ActorClass->GetPathName()),
+				ESearchCase::IgnoreCase);
+			const bool bSameComponent = NormalizeReferenceForCompare(ExistingComponentClass.ToSoftObjectPath().ToString()).Equals(
+				NormalizeReferenceForCompare(ComponentClass->GetPathName()),
+				ESearchCase::IgnoreCase);
+			if (!bSameActor || !bSameComponent)
+			{
+				continue;
+			}
+
+			++MatchingEntryCount;
+			OutPlan.ComponentIndex = Index;
+			const bool bCurrentClient = OutPlan.ClientProperty->GetPropertyValue(
+				OutPlan.ClientProperty->ContainerPtrToValuePtr<void>(EntryPtr));
+			const bool bCurrentServer = OutPlan.ServerProperty->GetPropertyValue(
+				OutPlan.ServerProperty->ContainerPtrToValuePtr<void>(EntryPtr));
+			const int64 CurrentFlags = FCString::Atoi64(*OutPlan.AdditionFlagsProperty->GetNumericPropertyValueToString(
+				OutPlan.AdditionFlagsProperty->ContainerPtrToValuePtr<void>(EntryPtr)));
+			OutPlan.bUpdate = bCurrentClient != bClientComponent
+				|| bCurrentServer != bServerComponent
+				|| CurrentFlags != AdditionFlags;
+		}
+
+		if (MatchingEntryCount > 1)
+		{
+			OutError = FString::Printf(
+				TEXT("ComponentList contains %d duplicate entries for actor '%s' and component '%s'; remove duplicates before updating"),
+				MatchingEntryCount,
+				*ActorClass->GetPathName(),
+				*ComponentClass->GetPathName());
+			return false;
+		}
+		if (MatchingEntryCount == 0)
+		{
+			OutPlan.bAdd = true;
+			OutPlan.ComponentIndex = ComponentHelper.Num();
+			OutPlan.ComponentsAfter = ComponentHelper.Num() + 1;
+		}
+		return true;
+	}
+
+	static bool ApplyComponentEntryMutation(
+		UObject* Action,
+		UClass* ActorClass,
+		UClass* ComponentClass,
+		bool bClientComponent,
+		bool bServerComponent,
+		int32 AdditionFlags,
+		FComponentEntryMutationPlan& Plan,
+		FString& OutError)
+	{
+		if (!Action || !Plan.ComponentListProperty || !Plan.EntryStructProperty)
+		{
+			OutError = TEXT("Component entry mutation plan is incomplete");
+			return false;
+		}
+
+		FScriptArrayHelper ComponentHelper(
+			Plan.ComponentListProperty,
+			Plan.ComponentListProperty->ContainerPtrToValuePtr<void>(Action));
+		if (Plan.bAdd)
+		{
+			Plan.ComponentIndex = ComponentHelper.AddValue();
+		}
+		if (!ComponentHelper.IsValidIndex(Plan.ComponentIndex))
+		{
+			OutError = FString::Printf(TEXT("ComponentList index %d is invalid during mutation"), Plan.ComponentIndex);
+			return false;
+		}
+
+		void* EntryPtr = ComponentHelper.GetRawPtr(Plan.ComponentIndex);
+		if (Plan.bAdd)
+		{
+			Plan.ActorClassProperty->SetPropertyValue(
+				Plan.ActorClassProperty->ContainerPtrToValuePtr<void>(EntryPtr),
+				FSoftObjectPtr(FSoftObjectPath(ActorClass->GetPathName())));
+			Plan.ComponentClassProperty->SetPropertyValue(
+				Plan.ComponentClassProperty->ContainerPtrToValuePtr<void>(EntryPtr),
+				FSoftObjectPtr(FSoftObjectPath(ComponentClass->GetPathName())));
+		}
+		if (Plan.bAdd || Plan.bUpdate)
+		{
+			Plan.ClientProperty->SetPropertyValue(
+				Plan.ClientProperty->ContainerPtrToValuePtr<void>(EntryPtr),
+				bClientComponent);
+			Plan.ServerProperty->SetPropertyValue(
+				Plan.ServerProperty->ContainerPtrToValuePtr<void>(EntryPtr),
+				bServerComponent);
+			Plan.AdditionFlagsProperty->SetIntPropertyValue(
+				Plan.AdditionFlagsProperty->ContainerPtrToValuePtr<void>(EntryPtr),
+				static_cast<uint64>(AdditionFlags));
+		}
+		Plan.ComponentsAfter = ComponentHelper.Num();
+		return true;
+	}
+
 	static bool MatchesOptionalPathSelector(const FString& ActualPath, const FString& ExpectedPath)
 	{
 		return ExpectedPath.IsEmpty()
@@ -2209,6 +2497,24 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Optional(TEXT("strict"), TEXT("boolean"), TEXT("Treat unknown or rejected reflected fields as apply-blocking errors"), TEXT("true"))
 			.Build());
 
+	Registry.RegisterAction(TEXT("lyra"), TEXT("add_experience_component_entry"),
+		TEXT("Idempotently add or update one GameFeatureAction_AddComponents ComponentList entry on a Lyra Experience or explicit ExperienceActionSet. Requires dry_run=true or confirm=true."),
+		FMonolithActionHandler::CreateStatic(&FMonolithLyraActions::AddExperienceComponentEntry),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.Optional(TEXT("experience_path"), TEXT("string"), TEXT("Lyra Experience package/object path; mutually exclusive with action_set_path"))
+			.Optional(TEXT("action_set_path"), TEXT("string"), TEXT("Explicit Lyra ExperienceActionSet package/object path; mutually exclusive with experience_path"))
+			.Required(TEXT("actor_class"), TEXT("string"), TEXT("Actor subclass that should receive the component"))
+			.Required(TEXT("component_class"), TEXT("string"), TEXT("ActorComponent subclass to add through ModularGameplay"))
+			.Optional(TEXT("action_name"), TEXT("string"), TEXT("Exact instanced AddComponents action object name to reuse or create"))
+			.Optional(TEXT("client_component"), TEXT("boolean"), TEXT("Request the component on clients"), TEXT("true"))
+			.Optional(TEXT("server_component"), TEXT("boolean"), TEXT("Request the component on servers"), TEXT("true"))
+			.Optional(TEXT("addition_flags"), TEXT("integer"), TEXT("EGameFrameworkAddComponentFlags bitmask in the uint8 range"), TEXT("0"))
+			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview action creation and ComponentList add/update without mutation"), TEXT("false"))
+			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required true for mutation when dry_run=false"), TEXT("false"))
+			.Optional(TEXT("save"), TEXT("boolean"), TEXT("Save the owner package after a confirmed change"), TEXT("false"))
+			.Build());
+
 	Registry.RegisterAction(TEXT("lyra"), TEXT("remove_experience_component_entry"),
 		TEXT("Remove reflected GameFeatureAction_AddComponents ComponentList entries from a Lyra Experience or ActionSet. Requires dry_run=true or confirm=true."),
 		FMonolithActionHandler::CreateStatic(&FMonolithLyraActions::RemoveExperienceComponentEntry),
@@ -2318,6 +2624,10 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("Lyra Experience write"), TEXT("DefaultPawnData"), TEXT("ActionSets"), TEXT("GameFeaturesToEnable") },
 		{ TEXT("set experience defaults"), TEXT("write Lyra experience") },
 		{ TEXT("set DefaultPawnData and ActionSets on a Lyra Experience with dry_run first") });
+	Registry.SetActionSearchMetadata(TEXT("lyra"), TEXT("add_experience_component_entry"),
+		{ TEXT("Lyra Experience component authoring"), TEXT("GameFeatureAction_AddComponents"), TEXT("ComponentList"), TEXT("ExperienceActionSet") },
+		{ TEXT("add experience component entry"), TEXT("attach component to LyraGameState") },
+		{ TEXT("add or update an ActorClass and ComponentClass pair on a Lyra Experience ActionSet with dry_run first") });
 	Registry.SetActionSearchMetadata(TEXT("lyra"), TEXT("remove_experience_component_entry"),
 		{ TEXT("Lyra Experience cleanup"), TEXT("GameFeatureAction_AddComponents"), TEXT("ComponentList") },
 		{ TEXT("remove component entry"), TEXT("cleanup add components action") },
@@ -2412,6 +2722,11 @@ void FMonolithLyraActions::RegisterActions(FMonolithToolRegistry& Registry)
 		{ TEXT("dry_run=true or confirm=true is required"), TEXT("A Lyra Experience path is required") },
 		{ TEXT("bulk-fill field writes, current graph, write plan, and save status") },
 		{ TEXT("lyra.validate_experience_bundle"), TEXT("gamefeatures.describe_action_set") });
+	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("add_experience_component_entry"),
+		TEXT("unreal-lyra"),
+		{ TEXT("dry_run=true or confirm=true is required"), TEXT("Exactly one of experience_path or action_set_path is required"), TEXT("actor_class and component_class must be loadable subclasses") },
+		{ TEXT("action create/reuse plan, component add/update plan, indices, counts, and save status") },
+		{ TEXT("lyra.validate_experience_bundle"), TEXT("gamefeatures.describe_action_set"), TEXT("lyra.remove_experience_component_entry") });
 	Registry.SetActionPlanningMetadata(TEXT("lyra"), TEXT("remove_experience_component_entry"),
 		TEXT("unreal-lyra"),
 		{ TEXT("dry_run=true or confirm=true is required"), TEXT("At least one selector must identify ComponentList entries") },
@@ -2478,6 +2793,7 @@ FMonolithActionResult FMonolithLyraActions::GetStatus(const TSharedPtr<FJsonObje
 		TEXT("lyra.describe_character_part_graph"),
 		TEXT("lyra.validate_character_part_assets"),
 		TEXT("lyra.set_experience_defaults"),
+		TEXT("lyra.add_experience_component_entry"),
 		TEXT("lyra.remove_experience_component_entry"),
 		TEXT("lyra.set_user_facing_experience")
 	}));
@@ -3729,6 +4045,358 @@ FMonolithActionResult FMonolithLyraActions::SetExperienceDefaults(const TSharedP
 	Result->SetObjectField(TEXT("current_experience_graph"), MonolithLyra::BuildExperienceGraph(Resolved));
 	Result->SetObjectField(TEXT("requested_tree"), Tree);
 	Result->SetBoolField(TEXT("would_change"), MonolithLyra::WouldChangeFromReport(Report));
+	return FMonolithActionResult::Success(Result);
+}
+
+FMonolithActionResult FMonolithLyraActions::AddExperienceComponentEntry(const TSharedPtr<FJsonObject>& Params)
+{
+	FString Error;
+	MonolithLyra::FLyraMutationOptions Options;
+	if (!MonolithLyra::TryReadMutationOptions(Params, Options, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	FString ExperiencePath;
+	FString ActionSetPath;
+	FString ActorClassPath;
+	FString ComponentClassPath;
+	FString ActionName;
+	bool bClientComponent = true;
+	bool bServerComponent = true;
+	int32 AdditionFlags = 0;
+	if (!MonolithLyra::TryGetOptionalStringParam(Params, TEXT("experience_path"), ExperiencePath, Error)
+		|| !MonolithLyra::TryGetOptionalStringParam(Params, TEXT("action_set_path"), ActionSetPath, Error)
+		|| !MonolithLyra::TryGetRequiredStringParam(Params, TEXT("actor_class"), ActorClassPath, Error)
+		|| !MonolithLyra::TryGetRequiredStringParam(Params, TEXT("component_class"), ComponentClassPath, Error)
+		|| !MonolithLyra::TryGetOptionalStringParam(Params, TEXT("action_name"), ActionName, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("client_component"), bClientComponent, Error)
+		|| !MonolithLyra::TryReadBoolParam(Params, TEXT("server_component"), bServerComponent, Error)
+		|| !MonolithLyra::TryReadIntParam(Params, TEXT("addition_flags"), AdditionFlags, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	const bool bHasExperiencePath = !ExperiencePath.IsEmpty();
+	const bool bHasActionSetPath = !ActionSetPath.IsEmpty();
+	if (bHasExperiencePath == bHasActionSetPath)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Exactly one of 'experience_path' or 'action_set_path' is required"),
+			MonolithLyra::ErrInvalidParams);
+	}
+	if (!ActionName.IsEmpty() && !FName(*ActionName).IsValidXName())
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(TEXT("Param 'action_name' is not a valid UObject name: '%s'"), *ActionName),
+			MonolithLyra::ErrInvalidParams);
+	}
+	if (AdditionFlags < 0 || AdditionFlags > MAX_uint8)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Param 'addition_flags' must be between 0 and 255"),
+			MonolithLyra::ErrInvalidParams);
+	}
+	if (!bClientComponent && !bServerComponent)
+	{
+		return FMonolithActionResult::Error(
+			TEXT("At least one of 'client_component' or 'server_component' must be true"),
+			MonolithLyra::ErrInvalidParams);
+	}
+
+	UClass* ActorClass = MonolithLyra::LoadSubclassForParam(
+		ActorClassPath,
+		TEXT("actor_class"),
+		MonolithLyra::EngineActorClassPath,
+		Error);
+	if (!ActorClass)
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+	UClass* ComponentClass = MonolithLyra::LoadSubclassForParam(
+		ComponentClassPath,
+		TEXT("component_class"),
+		MonolithLyra::EngineActorComponentClassPath,
+		Error);
+	if (!ComponentClass)
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	UClass* AddComponentsActionClass = MonolithLyra::LoadExpectedClass(MonolithLyra::GameFeatureActionAddComponentsClassPath);
+	UClass* GameFeatureActionBaseClass = MonolithLyra::LoadExpectedClass(MonolithLyra::GameFeatureActionClassPath);
+	if (!AddComponentsActionClass
+		|| !GameFeatureActionBaseClass
+		|| !AddComponentsActionClass->IsChildOf(GameFeatureActionBaseClass)
+		|| AddComponentsActionClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		return FMonolithActionResult::Error(
+			TEXT("Concrete GameFeatureAction_AddComponents reflected class is unavailable"),
+			MonolithLyra::ErrInvalidParams);
+	}
+
+	MonolithLyra::FResolvedLyraObject Resolved;
+	const FString& TargetInputPath = bHasExperiencePath ? ExperiencePath : ActionSetPath;
+	const TCHAR* ExpectedTargetClassPath = bHasExperiencePath
+		? MonolithLyra::LyraExperienceDefinitionClassPath
+		: MonolithLyra::LyraExperienceActionSetClassPath;
+	if (!MonolithLyra::TryResolveLyraObject(TargetInputPath, ExpectedTargetClassPath, Resolved, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	FArrayProperty* ActionsProperty = nullptr;
+	FObjectPropertyBase* ActionsObjectProperty = nullptr;
+	if (!MonolithLyra::TryGetActionsArray(Resolved.Object, ActionsProperty, ActionsObjectProperty, Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+	if (ActionsObjectProperty->PropertyClass && !AddComponentsActionClass->IsChildOf(ActionsObjectProperty->PropertyClass))
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("AddComponents action class '%s' is incompatible with Actions element class '%s'"),
+				*AddComponentsActionClass->GetPathName(),
+				*ActionsObjectProperty->PropertyClass->GetPathName()),
+			MonolithLyra::ErrInvalidParams);
+	}
+
+	FScriptArrayHelper ActionsHelper(ActionsProperty, ActionsProperty->ContainerPtrToValuePtr<void>(Resolved.Object));
+	const int32 ActionsBefore = ActionsHelper.Num();
+	int32 ActionIndex = INDEX_NONE;
+	int32 ExistingAddComponentsActionCount = 0;
+	UObject* Action = MonolithLyra::FindAddComponentsAction(
+		ActionsHelper,
+		ActionsObjectProperty,
+		AddComponentsActionClass,
+		ActionName,
+		ActionIndex,
+		ExistingAddComponentsActionCount,
+		Error);
+	if (!Error.IsEmpty())
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	const FName RequestedActionObjectName = ActionName.IsEmpty() ? NAME_None : FName(*ActionName);
+	if (!RequestedActionObjectName.IsNone())
+	{
+		UObject* DirectChildWithRequestedName = StaticFindObjectFast(
+			UObject::StaticClass(),
+			Resolved.Object,
+			RequestedActionObjectName);
+		if (DirectChildWithRequestedName && DirectChildWithRequestedName != Action)
+		{
+			const bool bCompatibleOrphan = DirectChildWithRequestedName->IsA(AddComponentsActionClass);
+			return FMonolithActionResult::Error(
+				bCompatibleOrphan
+					? FString::Printf(
+						TEXT("Owner '%s' already has direct child '%s' of AddComponents class '%s', but that object is not the requested entry in its Actions array; repair or rename the orphan before using action_name"),
+						*Resolved.Object->GetPathName(),
+						*RequestedActionObjectName.ToString(),
+						*DirectChildWithRequestedName->GetClass()->GetPathName())
+					: FString::Printf(
+						TEXT("Owner '%s' already has direct child '%s' with incompatible class '%s'; expected '%s' for action_name"),
+						*Resolved.Object->GetPathName(),
+						*RequestedActionObjectName.ToString(),
+						*DirectChildWithRequestedName->GetClass()->GetPathName(),
+						*AddComponentsActionClass->GetPathName()),
+				MonolithLyra::ErrInvalidParams);
+		}
+	}
+
+	MonolithLyra::FComponentEntryMutationPlan EntryPlan;
+	UObject* PairOwningAction = nullptr;
+	int32 PairOwningActionIndex = INDEX_NONE;
+	MonolithLyra::FComponentEntryMutationPlan PairOwningPlan;
+	int32 PairOwningActionCount = 0;
+	for (int32 Index = 0; Index < ActionsHelper.Num(); ++Index)
+	{
+		UObject* CandidateAction = ActionsObjectProperty->GetObjectPropertyValue(ActionsHelper.GetRawPtr(Index));
+		if (!CandidateAction || !CandidateAction->IsA(AddComponentsActionClass))
+		{
+			continue;
+		}
+
+		MonolithLyra::FComponentEntryMutationPlan CandidatePlan;
+		if (!MonolithLyra::BuildComponentEntryMutationPlan(
+			CandidateAction,
+			AddComponentsActionClass,
+			ActorClass,
+			ComponentClass,
+			bClientComponent,
+			bServerComponent,
+			AdditionFlags,
+			CandidatePlan,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+		}
+		if (!CandidatePlan.bAdd)
+		{
+			++PairOwningActionCount;
+			PairOwningAction = CandidateAction;
+			PairOwningActionIndex = Index;
+			PairOwningPlan = CandidatePlan;
+		}
+	}
+	if (PairOwningActionCount > 1)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Actor/component pair exists in %d AddComponents actions; remove duplicate entries before updating"),
+				PairOwningActionCount),
+			MonolithLyra::ErrInvalidParams);
+	}
+	if (PairOwningAction && !ActionName.IsEmpty() && PairOwningAction != Action)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("Actor/component pair already belongs to action '%s' at index %d, not requested action '%s'"),
+				*PairOwningAction->GetName(),
+				PairOwningActionIndex,
+				*ActionName),
+			MonolithLyra::ErrInvalidParams);
+	}
+	if (PairOwningAction)
+	{
+		Action = PairOwningAction;
+		ActionIndex = PairOwningActionIndex;
+		EntryPlan = PairOwningPlan;
+	}
+	else if (!MonolithLyra::BuildComponentEntryMutationPlan(
+		Action,
+		AddComponentsActionClass,
+		ActorClass,
+		ComponentClass,
+		bClientComponent,
+		bServerComponent,
+		AdditionFlags,
+		EntryPlan,
+		Error))
+	{
+		return FMonolithActionResult::Error(Error, MonolithLyra::ErrInvalidParams);
+	}
+
+	const bool bWouldCreateAction = Action == nullptr;
+	const bool bWouldChange = bWouldCreateAction || EntryPlan.bAdd || EntryPlan.bUpdate;
+	bool bCreatedAction = false;
+	bool bAddedComponent = false;
+	bool bUpdatedComponent = false;
+	if (!Options.bDryRun && bWouldChange)
+	{
+		FScopedTransaction Transaction(NSLOCTEXT("MonolithLyra", "AddExperienceComponentEntry", "Monolith Lyra Add Experience Component Entry"));
+		Resolved.Object->Modify();
+		if (!Action)
+		{
+			const FName NewActionObjectName = ActionName.IsEmpty()
+				? MakeUniqueObjectName(Resolved.Object, AddComponentsActionClass, AddComponentsActionClass->GetFName())
+				: RequestedActionObjectName;
+			Action = NewObject<UObject>(Resolved.Object, AddComponentsActionClass, NewActionObjectName, RF_Transactional);
+			if (!Action)
+			{
+				return FMonolithActionResult::Error(TEXT("Failed to create instanced GameFeatureAction_AddComponents object"));
+			}
+			Action->Modify();
+			ActionIndex = ActionsHelper.AddValue();
+			ActionsObjectProperty->SetObjectPropertyValue(ActionsHelper.GetRawPtr(ActionIndex), Action);
+			bCreatedAction = true;
+		}
+		else
+		{
+			Action->Modify();
+		}
+
+		if (!MonolithLyra::ApplyComponentEntryMutation(
+			Action,
+			ActorClass,
+			ComponentClass,
+			bClientComponent,
+			bServerComponent,
+			AdditionFlags,
+			EntryPlan,
+			Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+
+		bAddedComponent = EntryPlan.bAdd;
+		bUpdatedComponent = EntryPlan.bUpdate;
+		Action->MarkPackageDirty();
+		if (Resolved.AssetForSave)
+		{
+			Resolved.AssetForSave->MarkPackageDirty();
+		}
+	}
+
+	const int32 ActionsAfter = Options.bDryRun
+		? ActionsBefore + (bWouldCreateAction ? 1 : 0)
+		: ActionsHelper.Num();
+	const bool bChanged = bCreatedAction || bAddedComponent || bUpdatedComponent;
+	bool bSaved = false;
+	FString SavedPath;
+	if (!Options.bDryRun && Options.bSave && bChanged)
+	{
+		UObject* SaveTarget = Resolved.AssetForSave ? Resolved.AssetForSave : Resolved.Object;
+		if (!MonolithLyra::SaveAssetIfRequested(SaveTarget, true, bSaved, SavedPath, Error))
+		{
+			return FMonolithActionResult::Error(Error);
+		}
+	}
+
+	TArray<TSharedPtr<FJsonValue>> Warnings;
+	if (ActionName.IsEmpty() && ExistingAddComponentsActionCount > 1)
+	{
+		Warnings.Add(MakeShared<FJsonValueString>(FString::Printf(
+			TEXT("Target contains %d AddComponents actions; selected index %d by preferring the existing actor/component pair, otherwise the first compatible action"),
+			ExistingAddComponentsActionCount,
+			ActionIndex)));
+	}
+
+	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
+	Result->SetStringField(TEXT("namespace"), TEXT("lyra"));
+	Result->SetStringField(TEXT("action"), TEXT("add_experience_component_entry"));
+	Result->SetStringField(TEXT("target_kind"), bHasExperiencePath ? TEXT("experience") : TEXT("action_set"));
+	Result->SetStringField(TEXT("target_input_path"), TargetInputPath);
+	Result->SetStringField(TEXT("target_object_path"), Resolved.ResolvedPath);
+	Result->SetStringField(TEXT("actor_class"), ActorClass->GetPathName());
+	Result->SetStringField(TEXT("component_class"), ComponentClass->GetPathName());
+	Result->SetStringField(TEXT("requested_action_name"), ActionName);
+	Result->SetStringField(TEXT("action_class"), AddComponentsActionClass->GetPathName());
+	Result->SetBoolField(TEXT("client_component"), bClientComponent);
+	Result->SetBoolField(TEXT("server_component"), bServerComponent);
+	Result->SetNumberField(TEXT("addition_flags"), AdditionFlags);
+	Result->SetBoolField(TEXT("dry_run"), Options.bDryRun);
+	Result->SetBoolField(TEXT("confirm_received"), Options.bConfirm);
+	Result->SetBoolField(TEXT("save_requested"), Options.bSave);
+	Result->SetBoolField(TEXT("would_create_action"), bWouldCreateAction);
+	Result->SetBoolField(TEXT("would_add_component"), EntryPlan.bAdd);
+	Result->SetBoolField(TEXT("would_update_component"), EntryPlan.bUpdate);
+	Result->SetBoolField(TEXT("would_change"), bWouldChange);
+	Result->SetBoolField(TEXT("created_action"), bCreatedAction);
+	Result->SetBoolField(TEXT("reused_action"), !bWouldCreateAction);
+	Result->SetBoolField(TEXT("added_component"), bAddedComponent);
+	Result->SetBoolField(TEXT("updated_component"), bUpdatedComponent);
+	Result->SetBoolField(TEXT("changed"), bChanged);
+	Result->SetBoolField(TEXT("saved"), bSaved);
+	Result->SetStringField(TEXT("saved_path"), SavedPath);
+	Result->SetNumberField(TEXT("existing_add_components_action_count"), ExistingAddComponentsActionCount);
+	Result->SetNumberField(TEXT("actions_before"), ActionsBefore);
+	Result->SetNumberField(TEXT("actions_after"), ActionsAfter);
+	Result->SetNumberField(TEXT("action_index"), ActionIndex == INDEX_NONE ? ActionsBefore : ActionIndex);
+	Result->SetNumberField(TEXT("components_before"), EntryPlan.ComponentsBefore);
+	Result->SetNumberField(TEXT("components_after"), EntryPlan.ComponentsAfter);
+	Result->SetNumberField(TEXT("component_index"), EntryPlan.ComponentIndex);
+	Result->SetArrayField(TEXT("warnings"), Warnings);
+	if (Action)
+	{
+		Result->SetStringField(TEXT("action_object_path"), Action->GetPathName());
+		Result->SetStringField(TEXT("action_object_name"), Action->GetName());
+	}
+	else
+	{
+		Result->SetStringField(TEXT("planned_action_name"), ActionName.IsEmpty() ? AddComponentsActionClass->GetName() : ActionName);
+	}
 	return FMonolithActionResult::Success(Result);
 }
 

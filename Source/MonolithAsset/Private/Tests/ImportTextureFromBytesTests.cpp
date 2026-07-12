@@ -4,20 +4,33 @@
 // Core / test
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
+#include "Misc/PackagePath.h"
+#include "Misc/PackageSegment.h"
 #include "Modules/ModuleManager.h"
 
 // JSON / registry
 #include "Dom/JsonObject.h"
 #include "MonolithToolRegistry.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 
 // Image fixture generation
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
 
 // Texture verification
 #include "Engine/Texture2D.h"
 #include "Engine/TextureDefines.h"
+#include "EditorAssetLibrary.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
+#include "RenderingThread.h"
+#include "TextureResource.h"
+#include "UObject/GarbageCollection.h"
+#include "UObject/Linker.h"
 #include "UObject/Package.h"
 #include "UObject/UObjectGlobals.h"
 
@@ -55,11 +68,19 @@ namespace
         return FBase64::Encode(PngBytes);
     }
 
-    FString MakeSolidPngB64(const FColor& Color)
+    FString MakeSolidPngB64(const FColor& Color, int32 Width = 2, int32 Height = 2)
     {
         TArray<FColor> Pixels;
-        Pixels.Init(Color, 4);
-        return EncodePngB64(2, 2, Pixels);
+        Pixels.Init(Color, Width * Height);
+        return EncodePngB64(Width, Height, Pixels);
+    }
+
+    FString MakeUniqueTestAssetPath(const TCHAR* Prefix)
+    {
+        return FString::Printf(
+            TEXT("/Game/Tests/Monolith/Asset/Textures/%s_%s_Asset"),
+            Prefix,
+            *FGuid::NewGuid().ToString(EGuidFormats::Digits));
     }
 
     FString MakeTransparentEdgePngB64()
@@ -130,6 +151,74 @@ namespace
         const FString AssetName = FPackageName::GetLongPackageAssetName(AssetPath);
         return FindObject<UTexture2D>(nullptr, *(AssetPath + TEXT(".") + AssetName));
     }
+
+    TArray<FString> GetTexturePackageFilenames(const FString& AssetPath)
+    {
+        TArray<FString> Result;
+        auto AddCandidate = [&Result](FString Filename)
+        {
+            if (!Filename.IsEmpty())
+            {
+                Filename = FPaths::ConvertRelativePathToFull(Filename);
+                FPaths::NormalizeFilename(Filename);
+                Result.AddUnique(Filename);
+            }
+        };
+
+        FString HeaderFilename;
+        if (FPackageName::TryConvertLongPackageNameToFilename(
+                AssetPath,
+                HeaderFilename,
+                FPackageName::GetAssetPackageExtension()))
+        {
+            AddCandidate(MoveTemp(HeaderFilename));
+        }
+        FPackagePath PackagePath;
+        if (FPackagePath::TryFromPackageName(AssetPath, PackagePath))
+        {
+            const EPackageSegment SidecarSegments[] = {
+                EPackageSegment::Exports,
+                EPackageSegment::BulkDataDefault,
+                EPackageSegment::BulkDataOptional,
+                EPackageSegment::BulkDataMemoryMapped,
+                EPackageSegment::PayloadSidecar,
+            };
+            for (const EPackageSegment Segment : SidecarSegments)
+            {
+                AddCandidate(PackagePath.GetLocalFullPath(Segment));
+            }
+        }
+        return Result;
+    }
+
+    void CleanupSavedTextureAtPackagePath(const FString& AssetPath)
+    {
+        FString Filename = FPackageName::LongPackageNameToFilename(
+            AssetPath,
+            FPackageName::GetAssetPackageExtension());
+        Filename = FPaths::ConvertRelativePathToFull(Filename);
+        FPlatformFileManager::Get().GetPlatformFile().SetReadOnly(*Filename, false);
+
+        if (UEditorAssetLibrary::DoesAssetExist(AssetPath))
+        {
+            UEditorAssetLibrary::DeleteAsset(AssetPath);
+        }
+        if (UPackage* Package = FindPackage(nullptr, *AssetPath))
+        {
+            ResetLoaders(Package);
+            Package->SetDirtyFlag(false);
+            Package->MarkAsGarbage();
+        }
+        CollectGarbage(RF_NoFlags);
+        for (const FString& PackageFilename : GetTexturePackageFilenames(AssetPath))
+        {
+            IFileManager::Get().Delete(
+                *PackageFilename,
+                /*RequireExists=*/false,
+                /*EvenReadOnly=*/true,
+                /*Quiet=*/true);
+        }
+    }
 }
 
 /**
@@ -163,6 +252,7 @@ bool FMonolithAssetImportTextureFromBytesBasicTest::RunTest(const FString& Param
         TEXT("/Game/Tests/Monolith/Asset/Textures/T_ImportBytesTest"));
     Params->SetStringField(TEXT("bytes_b64"), RedPngB64);
     Params->SetStringField(TEXT("format_hint"), TEXT("png"));
+    Params->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
     Params->SetBoolField(TEXT("save"), false);
 
     const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
@@ -250,6 +340,7 @@ bool FMonolithAssetImportTextureFromBytesTextureRoleNormalTest::RunTest(const FS
     Params->SetStringField(TEXT("bytes_b64"), RedPngB64);
     Params->SetStringField(TEXT("format_hint"), TEXT("png"));
     Params->SetStringField(TEXT("texture_role"), TEXT("normal"));
+    Params->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
     Params->SetBoolField(TEXT("save"), false);
 
     const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
@@ -330,6 +421,7 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
         Params->SetStringField(TEXT("bytes_b64"), SolidPngB64);
         Params->SetStringField(TEXT("format_hint"), TEXT("png"));
         Params->SetStringField(TEXT("texture_role"), Role.Role);
+        Params->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
         Params->SetBoolField(TEXT("save"), false);
 
         const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
@@ -386,6 +478,7 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
     AlphaParams->SetStringField(TEXT("bytes_b64"), TransparentPngB64);
     AlphaParams->SetStringField(TEXT("format_hint"), TEXT("png"));
     AlphaParams->SetStringField(TEXT("texture_role"), TEXT("ui_icon"));
+    AlphaParams->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
     AlphaParams->SetBoolField(TEXT("save"), false);
 
     const FMonolithActionResult AlphaResult = FMonolithToolRegistry::Get().ExecuteAction(
@@ -421,6 +514,7 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
         EdgeAlphaParams->SetStringField(TEXT("bytes_b64"), EdgeBackgroundIconPngB64);
         EdgeAlphaParams->SetStringField(TEXT("format_hint"), TEXT("png"));
         EdgeAlphaParams->SetStringField(TEXT("texture_role"), TEXT("ui_icon"));
+        EdgeAlphaParams->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
         EdgeAlphaParams->SetBoolField(TEXT("save"), false);
         EdgeAlphaParams->SetBoolField(TEXT("return_processed_png"), true);
 
@@ -476,6 +570,7 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
         TileParams->SetStringField(TEXT("bytes_b64"), MismatchedTilePngB64);
         TileParams->SetStringField(TEXT("format_hint"), TEXT("png"));
         TileParams->SetStringField(TEXT("texture_role"), TEXT("world_tile"));
+        TileParams->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
         TileParams->SetBoolField(TEXT("save"), false);
 
         const FMonolithActionResult TileResult = FMonolithToolRegistry::Get().ExecuteAction(
@@ -509,6 +604,849 @@ bool FMonolithAssetImportTextureFromBytesTextureRolePresetMatrixTest::RunTest(co
         }
     }
 
+    return true;
+}
+
+/**
+ * The default fail policy must preserve the requested path contract: the first
+ * import creates that exact asset and a second import fails without creating a
+ * silently suffixed texture.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureConflictPolicyFailTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.FailPreservesExactPath",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureConflictPolicyFailTest::RunTest(const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictFail"));
+    const FString PngB64 = MakeSolidPngB64(FColor::Red);
+    TestFalse(TEXT("fail policy PNG fixture encoded"), PngB64.IsEmpty());
+    if (PngB64.IsEmpty())
+    {
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> ImportParams = MakeShared<FJsonObject>();
+    ImportParams->SetStringField(TEXT("destination"), RequestedPath);
+    ImportParams->SetStringField(TEXT("bytes_b64"), PngB64);
+    ImportParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    ImportParams->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult FirstResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ImportParams);
+    TestTrue(TEXT("default fail policy creates an unused exact path"), FirstResult.bSuccess);
+    if (!FirstResult.bSuccess || !FirstResult.Result.IsValid())
+    {
+        AddError(FString::Printf(TEXT("First import error: %s (code %d)"),
+            *FirstResult.ErrorMessage, FirstResult.ErrorCode));
+        return false;
+    }
+
+    FString ReturnedRequestedPath;
+    FString ReturnedAssetPath;
+    FString ReturnedPolicy;
+    bool bCreated = false;
+    bool bReplaced = true;
+    TestTrue(TEXT("requested_asset_path returned"),
+        FirstResult.Result->TryGetStringField(TEXT("requested_asset_path"), ReturnedRequestedPath));
+    TestTrue(TEXT("asset_path returned"),
+        FirstResult.Result->TryGetStringField(TEXT("asset_path"), ReturnedAssetPath));
+    TestTrue(TEXT("conflict_policy returned"),
+        FirstResult.Result->TryGetStringField(TEXT("conflict_policy"), ReturnedPolicy));
+    TestTrue(TEXT("created returned"), FirstResult.Result->TryGetBoolField(TEXT("created"), bCreated));
+    TestTrue(TEXT("replaced returned"), FirstResult.Result->TryGetBoolField(TEXT("replaced"), bReplaced));
+    TestEqual(TEXT("default fail requested path is exact"), ReturnedRequestedPath, RequestedPath);
+    TestEqual(TEXT("default fail output path is exact"), ReturnedAssetPath, RequestedPath);
+    TestEqual(TEXT("default policy reports fail"), ReturnedPolicy, FString(TEXT("fail")));
+    TestTrue(TEXT("first exact import reports created"), bCreated);
+    TestFalse(TEXT("first exact import does not report replaced"), bReplaced);
+
+    UTexture2D* OriginalTexture = FindTextureAtPackagePath(RequestedPath);
+    TestNotNull(TEXT("exact-path texture exists"), OriginalTexture);
+
+    FString WouldBeUniquePackage;
+    FString WouldBeUniqueAsset;
+    FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"))
+        .Get()
+        .CreateUniqueAssetName(RequestedPath, FString(), WouldBeUniquePackage, WouldBeUniqueAsset);
+    TestNotEqual(TEXT("unique naming would select a suffix after the first import"),
+        WouldBeUniquePackage, RequestedPath);
+
+    const FMonolithActionResult SecondResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ImportParams);
+    TestFalse(TEXT("default fail policy rejects the existing path"), SecondResult.bSuccess);
+    TestEqual(TEXT("existing-path failure is invalid params"), SecondResult.ErrorCode, -32602);
+    TestTrue(TEXT("existing exact texture identity is unchanged"),
+        FindTextureAtPackagePath(RequestedPath) == OriginalTexture);
+    TestNull(TEXT("fail policy did not create the available suffixed texture"),
+        FindTextureAtPackagePath(WouldBeUniquePackage));
+
+    return true;
+}
+
+/** Only the explicit unique policy may select and create a suffixed asset. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureConflictPolicyUniqueTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.UniqueCreatesSuffix",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureConflictPolicyUniqueTest::RunTest(const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictUnique"));
+    const FString PngB64 = MakeSolidPngB64(FColor::Green);
+    TestFalse(TEXT("unique policy PNG fixture encoded"), PngB64.IsEmpty());
+    if (PngB64.IsEmpty())
+    {
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> FirstParams = MakeShared<FJsonObject>();
+    FirstParams->SetStringField(TEXT("destination"), RequestedPath);
+    FirstParams->SetStringField(TEXT("bytes_b64"), PngB64);
+    FirstParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    FirstParams->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult FirstResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), FirstParams);
+    TestTrue(TEXT("unique policy fixture creates exact base asset"), FirstResult.bSuccess);
+    if (!FirstResult.bSuccess)
+    {
+        AddError(FString::Printf(TEXT("Base import error: %s (code %d)"),
+            *FirstResult.ErrorMessage, FirstResult.ErrorCode));
+        return false;
+    }
+
+    UTexture2D* BaseTexture = FindTextureAtPackagePath(RequestedPath);
+    TestNotNull(TEXT("base texture exists"), BaseTexture);
+
+    TSharedPtr<FJsonObject> UniqueParams = MakeShared<FJsonObject>();
+    UniqueParams->SetStringField(TEXT("destination"), RequestedPath);
+    UniqueParams->SetStringField(TEXT("bytes_b64"), PngB64);
+    UniqueParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    UniqueParams->SetStringField(TEXT("conflict_policy"), TEXT("unique"));
+    UniqueParams->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult UniqueResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), UniqueParams);
+    TestTrue(TEXT("explicit unique policy succeeds"), UniqueResult.bSuccess);
+    if (!UniqueResult.bSuccess || !UniqueResult.Result.IsValid())
+    {
+        AddError(FString::Printf(TEXT("Unique import error: %s (code %d)"),
+            *UniqueResult.ErrorMessage, UniqueResult.ErrorCode));
+        return false;
+    }
+
+    FString ReturnedRequestedPath;
+    FString ReturnedAssetPath;
+    FString ReturnedPolicy;
+    bool bCreated = false;
+    bool bReplaced = true;
+    UniqueResult.Result->TryGetStringField(TEXT("requested_asset_path"), ReturnedRequestedPath);
+    UniqueResult.Result->TryGetStringField(TEXT("asset_path"), ReturnedAssetPath);
+    UniqueResult.Result->TryGetStringField(TEXT("conflict_policy"), ReturnedPolicy);
+    UniqueResult.Result->TryGetBoolField(TEXT("created"), bCreated);
+    UniqueResult.Result->TryGetBoolField(TEXT("replaced"), bReplaced);
+    TestEqual(TEXT("unique preserves requested_asset_path"), ReturnedRequestedPath, RequestedPath);
+    TestNotEqual(TEXT("unique selects a different output path"), ReturnedAssetPath, RequestedPath);
+    TestTrue(TEXT("unique output is derived from the requested path"), ReturnedAssetPath.StartsWith(RequestedPath));
+    TestEqual(TEXT("unique reports policy"), ReturnedPolicy, FString(TEXT("unique")));
+    TestTrue(TEXT("unique reports created"), bCreated);
+    TestFalse(TEXT("unique does not report replaced"), bReplaced);
+
+    UTexture2D* UniqueTexture = FindTextureAtPackagePath(ReturnedAssetPath);
+    TestNotNull(TEXT("unique texture exists at returned path"), UniqueTexture);
+    TestTrue(TEXT("unique texture has distinct object identity"), UniqueTexture != BaseTexture);
+    TestTrue(TEXT("base texture identity remains intact"), FindTextureAtPackagePath(RequestedPath) == BaseTexture);
+
+    return true;
+}
+
+/** Replace updates data and settings while preserving the existing asset identity. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureConflictPolicyReplaceTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.ReplacePreservesIdentity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureConflictPolicyReplaceTest::RunTest(const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictReplace"));
+    const FString InitialPngB64 = MakeSolidPngB64(FColor::Red, 2, 2);
+    const FString ReplacementPngB64 = MakeSolidPngB64(FColor::Blue, 4, 4);
+    TestFalse(TEXT("replace initial PNG fixture encoded"), InitialPngB64.IsEmpty());
+    TestFalse(TEXT("replace updated PNG fixture encoded"), ReplacementPngB64.IsEmpty());
+    if (InitialPngB64.IsEmpty() || ReplacementPngB64.IsEmpty())
+    {
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> InitialSettings = MakeShared<FJsonObject>();
+    InitialSettings->SetStringField(TEXT("compression_settings"), TEXT("TC_Default"));
+    InitialSettings->SetBoolField(TEXT("srgb"), true);
+    InitialSettings->SetStringField(TEXT("mip_gen_settings"), TEXT("TMGS_NoMipmaps"));
+    InitialSettings->SetStringField(TEXT("lod_group"), TEXT("TEXTUREGROUP_World"));
+    InitialSettings->SetStringField(TEXT("address_x"), TEXT("TA_Clamp"));
+    InitialSettings->SetStringField(TEXT("address_y"), TEXT("TA_Clamp"));
+
+    TSharedPtr<FJsonObject> InitialParams = MakeShared<FJsonObject>();
+    InitialParams->SetStringField(TEXT("destination"), RequestedPath);
+    InitialParams->SetStringField(TEXT("bytes_b64"), InitialPngB64);
+    InitialParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    InitialParams->SetObjectField(TEXT("settings"), InitialSettings);
+    InitialParams->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult InitialResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), InitialParams);
+    TestTrue(TEXT("replace fixture creates initial exact asset"), InitialResult.bSuccess);
+    if (!InitialResult.bSuccess)
+    {
+        AddError(FString::Printf(TEXT("Initial import error: %s (code %d)"),
+            *InitialResult.ErrorMessage, InitialResult.ErrorCode));
+        return false;
+    }
+
+    UTexture2D* OriginalTexture = FindTextureAtPackagePath(RequestedPath);
+    TestNotNull(TEXT("initial texture exists"), OriginalTexture);
+    if (!OriginalTexture)
+    {
+        return false;
+    }
+    UPackage* OriginalPackage = OriginalTexture->GetOutermost();
+    OriginalPackage->SetDirtyFlag(false);
+    TestFalse(TEXT("replace fixture package starts clean"), OriginalPackage->IsDirty());
+
+    TSharedPtr<FJsonObject> ReplacementSettings = MakeShared<FJsonObject>();
+    ReplacementSettings->SetStringField(TEXT("compression_settings"), TEXT("TC_Masks"));
+    ReplacementSettings->SetBoolField(TEXT("srgb"), false);
+    ReplacementSettings->SetStringField(TEXT("mip_gen_settings"), TEXT("TMGS_NoMipmaps"));
+    ReplacementSettings->SetStringField(TEXT("lod_group"), TEXT("TEXTUREGROUP_WorldSpecular"));
+    ReplacementSettings->SetStringField(TEXT("address_x"), TEXT("TA_Wrap"));
+    ReplacementSettings->SetStringField(TEXT("address_y"), TEXT("TA_Mirror"));
+
+    TSharedPtr<FJsonObject> ReplacementParams = MakeShared<FJsonObject>();
+    ReplacementParams->SetStringField(TEXT("destination"), RequestedPath);
+    ReplacementParams->SetStringField(TEXT("bytes_b64"), ReplacementPngB64);
+    ReplacementParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    ReplacementParams->SetStringField(TEXT("conflict_policy"), TEXT("replace"));
+    ReplacementParams->SetObjectField(TEXT("settings"), ReplacementSettings);
+    ReplacementParams->SetBoolField(TEXT("save"), false);
+
+    const FMonolithActionResult ReplacementResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ReplacementParams);
+    TestTrue(TEXT("replace policy succeeds"), ReplacementResult.bSuccess);
+    if (!ReplacementResult.bSuccess || !ReplacementResult.Result.IsValid())
+    {
+        AddError(FString::Printf(TEXT("Replacement import error: %s (code %d)"),
+            *ReplacementResult.ErrorMessage, ReplacementResult.ErrorCode));
+        return false;
+    }
+
+    FString ReturnedRequestedPath;
+    FString ReturnedAssetPath;
+    FString ReturnedPolicy;
+    bool bCreated = true;
+    bool bReplaced = false;
+    ReplacementResult.Result->TryGetStringField(TEXT("requested_asset_path"), ReturnedRequestedPath);
+    ReplacementResult.Result->TryGetStringField(TEXT("asset_path"), ReturnedAssetPath);
+    ReplacementResult.Result->TryGetStringField(TEXT("conflict_policy"), ReturnedPolicy);
+    ReplacementResult.Result->TryGetBoolField(TEXT("created"), bCreated);
+    ReplacementResult.Result->TryGetBoolField(TEXT("replaced"), bReplaced);
+    TestEqual(TEXT("replace requested path remains exact"), ReturnedRequestedPath, RequestedPath);
+    TestEqual(TEXT("replace output path remains exact"), ReturnedAssetPath, RequestedPath);
+    TestEqual(TEXT("replace reports policy"), ReturnedPolicy, FString(TEXT("replace")));
+    TestFalse(TEXT("replace does not report created"), bCreated);
+    TestTrue(TEXT("replace reports replaced"), bReplaced);
+
+    UTexture2D* ReplacedTexture = FindTextureAtPackagePath(RequestedPath);
+    TestTrue(TEXT("replace preserves UTexture2D object identity"), ReplacedTexture == OriginalTexture);
+    TestTrue(TEXT("replace preserves package identity"),
+        ReplacedTexture && ReplacedTexture->GetOutermost() == OriginalPackage);
+    if (!ReplacedTexture)
+    {
+        return false;
+    }
+
+#if WITH_EDITOR
+    TestEqual(TEXT("replace updates source width"), ReplacedTexture->Source.GetSizeX(), (int64)4);
+    TestEqual(TEXT("replace updates source height"), ReplacedTexture->Source.GetSizeY(), (int64)4);
+    TArray64<uint8> SourceMipData;
+    TestTrue(TEXT("replace source mip can be read"), ReplacedTexture->Source.GetMipData(SourceMipData, 0));
+    TestEqual(TEXT("replace source mip byte count"), SourceMipData.Num(), (int64)(4 * 4 * 4));
+    if (SourceMipData.Num() >= 4)
+    {
+        TestEqual(TEXT("replace source first pixel blue channel"), SourceMipData[0], (uint8)255);
+        TestEqual(TEXT("replace source first pixel green channel"), SourceMipData[1], (uint8)0);
+        TestEqual(TEXT("replace source first pixel red channel"), SourceMipData[2], (uint8)0);
+        TestEqual(TEXT("replace source first pixel alpha channel"), SourceMipData[3], (uint8)255);
+    }
+#endif
+
+    const FTexturePlatformData* PlatformData = ReplacedTexture->GetPlatformData();
+    TestNotNull(TEXT("replace installs platform data"), PlatformData);
+    if (PlatformData)
+    {
+        TestEqual(TEXT("replace platform width"), PlatformData->SizeX, 4);
+        TestEqual(TEXT("replace platform height"), PlatformData->SizeY, 4);
+        TestTrue(TEXT("replace platform mip data exists"), PlatformData->Mips.Num() > 0);
+    }
+    TestEqual(TEXT("replace updates compression"), ReplacedTexture->CompressionSettings, TC_Masks);
+    TestFalse(TEXT("replace updates sRGB"), ReplacedTexture->SRGB != 0);
+    TestEqual(TEXT("replace updates mip generation"), ReplacedTexture->MipGenSettings, TMGS_NoMipmaps);
+    TestEqual(TEXT("replace updates LOD group"), ReplacedTexture->LODGroup, TEXTUREGROUP_WorldSpecular);
+    TestEqual(TEXT("replace updates AddressX"), ReplacedTexture->AddressX, TA_Wrap);
+    TestEqual(TEXT("replace updates AddressY"), ReplacedTexture->AddressY, TA_Mirror);
+    TestTrue(TEXT("replace marks package dirty"), OriginalPackage->IsDirty());
+
+    return true;
+}
+
+/** A failed first save must remove the created UObject, registry entry, and every package segment. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureCreateSaveFailureCleanupTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.CreateSaveFailureCleansAllSegments",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureCreateSaveFailureCleanupTest::RunTest(const FString& Parameters)
+{
+    const FString FixtureFolder = FString::Printf(
+        TEXT("/Game/Tests/Monolith/Asset/Textures/CreateRollback_%s"),
+        *FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    const FString RequestedPath = FixtureFolder + TEXT("/T_CreateRollback");
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+
+    FString HeaderFilename = FPackageName::LongPackageNameToFilename(
+        RequestedPath,
+        FPackageName::GetAssetPackageExtension());
+    HeaderFilename = FPaths::ConvertRelativePathToFull(HeaderFilename);
+    const FString BlockingParentFilename = FPaths::GetPath(HeaderFilename);
+    IFileManager::Get().MakeDirectory(
+        *FPaths::GetPath(BlockingParentFilename),
+        /*Tree=*/true);
+    if (!TestTrue(
+            TEXT("save-failure fixture creates a file where the package directory must be"),
+            FFileHelper::SaveStringToFile(TEXT("block package directory creation"), *BlockingParentFilename)))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+    Params->SetStringField(TEXT("destination"), RequestedPath);
+    Params->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Yellow, 2, 2));
+    Params->SetStringField(TEXT("format_hint"), TEXT("png"));
+    Params->SetBoolField(TEXT("save"), true);
+    AddExpectedError(
+        TEXT("Error moving file"),
+        EAutomationExpectedErrorFlags::Contains,
+        /*ExpectedNumberOfOccurrences=*/1);
+    const FMonolithActionResult Result = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), Params);
+
+    IFileManager::Get().Delete(
+        *BlockingParentFilename,
+        /*RequireExists=*/false,
+        /*EvenReadOnly=*/true,
+        /*Quiet=*/true);
+
+    TestFalse(TEXT("blocked first save fails"), Result.bSuccess);
+    TestTrue(TEXT("blocked first save reports SavePackage"), Result.ErrorMessage.Contains(TEXT("SavePackage failed")));
+    TestNull(TEXT("failed first save removes exact texture object"), FindTextureAtPackagePath(RequestedPath));
+    TestNull(TEXT("failed first save unloads exact package"), FindPackage(nullptr, *RequestedPath));
+    TestFalse(TEXT("failed first save leaves no editor asset"), UEditorAssetLibrary::DoesAssetExist(RequestedPath));
+
+    TArray<FAssetData> RegisteredAssets;
+    FAssetRegistryModule& AssetRegistryModule =
+        FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+    AssetRegistryModule.Get().GetAssetsByPackageName(
+        FName(*RequestedPath),
+        RegisteredAssets,
+        /*bIncludeOnlyOnDiskAssets=*/false);
+    TestEqual(TEXT("failed first save leaves no registry entry"), RegisteredAssets.Num(), 0);
+
+    for (const FString& PackageFilename : GetTexturePackageFilenames(RequestedPath))
+    {
+        TestFalse(
+            *FString::Printf(TEXT("failed first save leaves no package file: %s"), *PackageFilename),
+            IFileManager::Get().FileExists(*PackageFilename));
+    }
+
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+    return true;
+}
+
+/** A failed replacement save must restore both UObject state and the persisted file. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureReplaceSaveFailureRollbackTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.ReplaceSaveFailureRollsBack",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureReplaceSaveFailureRollbackTest::RunTest(const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictReplaceRollback"));
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+
+    TSharedPtr<FJsonObject> InitialSettings = MakeShared<FJsonObject>();
+    InitialSettings->SetStringField(TEXT("compression_settings"), TEXT("TC_Default"));
+    InitialSettings->SetBoolField(TEXT("srgb"), true);
+    InitialSettings->SetStringField(TEXT("mip_gen_settings"), TEXT("TMGS_NoMipmaps"));
+    InitialSettings->SetStringField(TEXT("lod_group"), TEXT("TEXTUREGROUP_World"));
+    InitialSettings->SetStringField(TEXT("address_x"), TEXT("TA_Clamp"));
+    InitialSettings->SetStringField(TEXT("address_y"), TEXT("TA_Clamp"));
+
+    TSharedPtr<FJsonObject> InitialParams = MakeShared<FJsonObject>();
+    InitialParams->SetStringField(TEXT("destination"), RequestedPath);
+    InitialParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Red, 2, 2));
+    InitialParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    InitialParams->SetObjectField(TEXT("settings"), InitialSettings);
+    InitialParams->SetBoolField(TEXT("save"), true);
+    const FMonolithActionResult InitialResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), InitialParams);
+    if (!TestTrue(TEXT("rollback fixture initial save succeeds"), InitialResult.bSuccess))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    UTexture2D* OriginalTexture = FindTextureAtPackagePath(RequestedPath);
+    if (!TestNotNull(TEXT("rollback fixture texture exists"), OriginalTexture))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+    UPackage* OriginalPackage = OriginalTexture->GetOutermost();
+    TestFalse(TEXT("rollback fixture starts clean"), OriginalPackage->IsDirty());
+    const TextureFilter OriginalFilter = TF_Nearest;
+    const ETexturePowerOfTwoSetting::Type OriginalPowerOfTwoMode =
+        ETexturePowerOfTwoSetting::ResizeToSpecificResolution;
+    const int32 OriginalResizeX = 2;
+    const int32 OriginalResizeY = 2;
+    const int32 OriginalMaxTextureSize = 64;
+    const int32 OriginalCinematicMipLevels = 1;
+    const FGuid OriginalLightingGuid(0x12345678, 0x23456789, 0x3456789A, 0x456789AB);
+    UTexture2D* OriginalCPUCopyTexture = NewObject<UTexture2D>(
+        GetTransientPackage(),
+        NAME_None,
+        RF_Transient);
+    OriginalTexture->Filter = OriginalFilter;
+    OriginalTexture->bUseLegacyGamma = true;
+    OriginalTexture->PowerOfTwoMode = OriginalPowerOfTwoMode;
+    OriginalTexture->ResizeDuringBuildX = OriginalResizeX;
+    OriginalTexture->ResizeDuringBuildY = OriginalResizeY;
+    OriginalTexture->MaxTextureSize = OriginalMaxTextureSize;
+    OriginalTexture->NumCinematicMipLevels = OriginalCinematicMipLevels;
+    OriginalTexture->DeferCompression = true;
+    OriginalTexture->SetLightingGuid(OriginalLightingGuid);
+    OriginalTexture->CPUCopyTexture = OriginalCPUCopyTexture;
+#if WITH_EDITOR
+    const FGuid OriginalSourcePersistentId = OriginalTexture->Source.GetPersistentId();
+    const FString OriginalSourceIdString = OriginalTexture->Source.GetIdString();
+    const ETextureSourceCompressionFormat OriginalSourceCompression =
+        OriginalTexture->Source.GetSourceCompression();
+#endif
+    OriginalTexture->FinishCachePlatformData();
+    FTexturePlatformData* OriginalPlatformData = OriginalTexture->GetPlatformData();
+    if (!TestNotNull(TEXT("rollback fixture platform data exists"), OriginalPlatformData))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+    if (!TestTrue(
+            TEXT("rollback fixture platform mips inline"),
+            OriginalPlatformData->TryInlineMipData(/*FirstMipToLoad=*/0, OriginalTexture->GetPathName())))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+    const EPixelFormat OriginalPlatformFormat = OriginalPlatformData->PixelFormat;
+    OriginalPlatformData->PreEncodeMipsHash = 0x123456789ABCDEF0ull;
+    OriginalPlatformData->DerivedDataKey.Emplace<FString>(TEXT("MonolithRollbackDerivedData"));
+    OriginalPlatformData->FetchOrBuildDerivedDataKey.Emplace<FString>(TEXT("MonolithRollbackFetchOrBuild"));
+    OriginalPlatformData->FetchFirstDerivedDataKey.Emplace<FString>(TEXT("MonolithRollbackFetchFirst"));
+    OriginalPlatformData->ResultMetadata.Encoder = TEXT("MonolithRollbackEncoder");
+    OriginalPlatformData->ResultMetadata.EncodedFormat = OriginalPlatformFormat;
+    OriginalPlatformData->ResultMetadata.bIsValid = true;
+    FTexture2DMipMap* OriginalPlatformMipAddress =
+        OriginalPlatformData->Mips.Num() > 0 ? &OriginalPlatformData->Mips[0] : nullptr;
+    const FString CookedFixtureKey(TEXT("MonolithRollbackCooked"));
+    FTexturePlatformData* CookedFixturePlatformData = new FTexturePlatformData();
+    CookedFixturePlatformData->SizeX = 7;
+    CookedFixturePlatformData->SizeY = 9;
+    OriginalTexture->CookedPlatformData.Add(CookedFixtureKey, CookedFixturePlatformData);
+    OriginalPackage->SetDirtyFlag(false);
+    TArray64<uint8> OriginalPlatformMipBytes;
+    if (OriginalPlatformData->Mips.Num() > 0)
+    {
+        FTexture2DMipMap& OriginalMip = OriginalPlatformData->Mips[0];
+        const int64 OriginalMipSize = OriginalMip.BulkData.GetBulkDataSize();
+        OriginalPlatformMipBytes.SetNumUninitialized(OriginalMipSize);
+        if (OriginalMipSize > 0)
+        {
+            const void* OriginalMipData = OriginalMip.BulkData.LockReadOnly();
+            if (!TestNotNull(TEXT("rollback fixture platform mip is readable"), OriginalMipData))
+            {
+                OriginalMip.BulkData.Unlock();
+                CleanupSavedTextureAtPackagePath(RequestedPath);
+                return false;
+            }
+            FMemory::Memcpy(
+                OriginalPlatformMipBytes.GetData(),
+                OriginalMipData,
+                static_cast<SIZE_T>(OriginalMipSize));
+            OriginalMip.BulkData.Unlock();
+        }
+    }
+
+    FString Filename = FPackageName::LongPackageNameToFilename(
+        RequestedPath,
+        FPackageName::GetAssetPackageExtension());
+    Filename = FPaths::ConvertRelativePathToFull(Filename);
+    TArray<uint8> PersistedBefore;
+    if (!TestTrue(TEXT("rollback fixture file can be read"), FFileHelper::LoadFileToArray(PersistedBefore, *Filename)))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!TestTrue(TEXT("rollback fixture file was made read-only"), PlatformFile.SetReadOnly(*Filename, true)))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> ReplacementSettings = MakeShared<FJsonObject>();
+    ReplacementSettings->SetStringField(TEXT("compression_settings"), TEXT("TC_Masks"));
+    ReplacementSettings->SetBoolField(TEXT("srgb"), false);
+    ReplacementSettings->SetStringField(TEXT("mip_gen_settings"), TEXT("TMGS_NoMipmaps"));
+    ReplacementSettings->SetStringField(TEXT("lod_group"), TEXT("TEXTUREGROUP_WorldSpecular"));
+    ReplacementSettings->SetStringField(TEXT("address_x"), TEXT("TA_Wrap"));
+    ReplacementSettings->SetStringField(TEXT("address_y"), TEXT("TA_Mirror"));
+
+    TSharedPtr<FJsonObject> ReplacementParams = MakeShared<FJsonObject>();
+    ReplacementParams->SetStringField(TEXT("destination"), RequestedPath);
+    ReplacementParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Blue, 4, 4));
+    ReplacementParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    ReplacementParams->SetStringField(TEXT("conflict_policy"), TEXT("replace"));
+    ReplacementParams->SetObjectField(TEXT("settings"), ReplacementSettings);
+    ReplacementParams->SetBoolField(TEXT("save"), true);
+    AddExpectedError(
+        TEXT("Cannot remove"),
+        EAutomationExpectedErrorFlags::Contains,
+        /*ExpectedNumberOfOccurrences=*/1);
+    const FMonolithActionResult ReplacementResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ReplacementParams);
+    PlatformFile.SetReadOnly(*Filename, false);
+
+    TestFalse(TEXT("read-only replacement save fails"), ReplacementResult.bSuccess);
+    TestTrue(TEXT("save failure is reported"), ReplacementResult.ErrorMessage.Contains(TEXT("SavePackage failed")));
+    UTexture2D* RestoredTexture = FindTextureAtPackagePath(RequestedPath);
+    TestTrue(TEXT("failed replace preserves UObject identity"), RestoredTexture == OriginalTexture);
+    if (RestoredTexture)
+    {
+#if WITH_EDITOR
+        TestEqual(TEXT("failed replace restores source width"), RestoredTexture->Source.GetSizeX(), (int64)2);
+        TestEqual(TEXT("failed replace restores source height"), RestoredTexture->Source.GetSizeY(), (int64)2);
+        TestEqual(
+            TEXT("failed replace preserves source persistent identity"),
+            RestoredTexture->Source.GetPersistentId(),
+            OriginalSourcePersistentId);
+        TestEqual(
+            TEXT("failed replace preserves source DDC identity"),
+            RestoredTexture->Source.GetIdString(),
+            OriginalSourceIdString);
+        TestEqual(
+            TEXT("failed replace preserves source compression"),
+            RestoredTexture->Source.GetSourceCompression(),
+            OriginalSourceCompression);
+        TArray64<uint8> RestoredPixels;
+        TestTrue(TEXT("failed replace restores readable source"), RestoredTexture->Source.GetMipData(RestoredPixels, 0));
+        if (RestoredPixels.Num() >= 4)
+        {
+            TestEqual(TEXT("failed replace restores red pixel blue channel"), RestoredPixels[0], (uint8)0);
+            TestEqual(TEXT("failed replace restores red pixel red channel"), RestoredPixels[2], (uint8)255);
+        }
+#endif
+        FTexturePlatformData* RestoredPlatformData = RestoredTexture->GetPlatformData();
+        TestNotNull(TEXT("failed replace restores platform data"), RestoredPlatformData);
+        if (RestoredPlatformData)
+        {
+            TestTrue(
+                TEXT("failed replace preserves top-level platform-data ownership"),
+                RestoredPlatformData == OriginalPlatformData);
+            TestEqual(TEXT("failed replace restores platform width"), RestoredPlatformData->SizeX, 2);
+            TestEqual(TEXT("failed replace restores platform height"), RestoredPlatformData->SizeY, 2);
+            TestEqual(
+                TEXT("failed replace restores platform format"),
+                RestoredPlatformData->PixelFormat,
+                OriginalPlatformFormat);
+            if (RestoredPlatformData->Mips.Num() > 0)
+            {
+                FTexture2DMipMap& RestoredMip = RestoredPlatformData->Mips[0];
+                TestTrue(
+                    TEXT("failed replace restores exact platform mip ownership"),
+                    &RestoredMip == OriginalPlatformMipAddress);
+                const int64 RestoredMipSize = RestoredMip.BulkData.GetBulkDataSize();
+                TestEqual(
+                    TEXT("failed replace restores platform mip byte count"),
+                    RestoredMipSize,
+                    OriginalPlatformMipBytes.Num());
+                if (RestoredMipSize > 0)
+                {
+                    const uint8* RestoredMipBytes = static_cast<const uint8*>(RestoredMip.BulkData.LockReadOnly());
+                    TestNotNull(TEXT("failed replace restores readable platform mip"), RestoredMipBytes);
+                    if (RestoredMipBytes)
+                    {
+                        TestTrue(
+                            TEXT("failed replace restores exact platform mip bytes"),
+                            RestoredMipSize == OriginalPlatformMipBytes.Num()
+                                && FMemory::Memcmp(
+                                    RestoredMipBytes,
+                                    OriginalPlatformMipBytes.GetData(),
+                                    static_cast<SIZE_T>(RestoredMipSize)) == 0);
+                    }
+                    RestoredMip.BulkData.Unlock();
+                }
+            }
+            TestEqual(
+                TEXT("failed replace restores platform pre-encode hash"),
+                RestoredPlatformData->PreEncodeMipsHash,
+                (uint64)0x123456789ABCDEF0ull);
+            TestTrue(
+                TEXT("failed replace restores platform derived-data key"),
+                RestoredPlatformData->DerivedDataKey.IsType<FString>()
+                    && RestoredPlatformData->DerivedDataKey.Get<FString>()
+                        == TEXT("MonolithRollbackDerivedData"));
+            TestTrue(
+                TEXT("failed replace restores platform fetch-or-build key"),
+                RestoredPlatformData->FetchOrBuildDerivedDataKey.IsType<FString>()
+                    && RestoredPlatformData->FetchOrBuildDerivedDataKey.Get<FString>()
+                        == TEXT("MonolithRollbackFetchOrBuild"));
+            TestTrue(
+                TEXT("failed replace restores platform fetch-first key"),
+                RestoredPlatformData->FetchFirstDerivedDataKey.IsType<FString>()
+                    && RestoredPlatformData->FetchFirstDerivedDataKey.Get<FString>()
+                        == TEXT("MonolithRollbackFetchFirst"));
+        }
+        FTexturePlatformData* const* RestoredCookedPlatformData =
+            RestoredTexture->CookedPlatformData.Find(CookedFixtureKey);
+        TestTrue(
+            TEXT("failed replace restores exact cooked platform-data ownership"),
+            RestoredCookedPlatformData && *RestoredCookedPlatformData == CookedFixturePlatformData);
+        TestEqual(TEXT("failed replace restores compression"), RestoredTexture->CompressionSettings, TC_Default);
+        TestTrue(TEXT("failed replace restores sRGB"), RestoredTexture->SRGB != 0);
+        TestEqual(TEXT("failed replace restores LOD group"), RestoredTexture->LODGroup, TEXTUREGROUP_World);
+        TestEqual(TEXT("failed replace restores AddressX"), RestoredTexture->AddressX, TA_Clamp);
+        TestEqual(TEXT("failed replace restores AddressY"), RestoredTexture->AddressY, TA_Clamp);
+        TestEqual(TEXT("failed replace restores filter"), RestoredTexture->Filter, OriginalFilter);
+        TestTrue(TEXT("failed replace restores legacy gamma"), RestoredTexture->bUseLegacyGamma != 0);
+        TestEqual(
+            TEXT("failed replace restores power-of-two mode"),
+            RestoredTexture->PowerOfTwoMode,
+            OriginalPowerOfTwoMode);
+        TestEqual(TEXT("failed replace restores resize X"), RestoredTexture->ResizeDuringBuildX, OriginalResizeX);
+        TestEqual(TEXT("failed replace restores resize Y"), RestoredTexture->ResizeDuringBuildY, OriginalResizeY);
+        TestEqual(
+            TEXT("failed replace restores max texture size"),
+            RestoredTexture->MaxTextureSize,
+            OriginalMaxTextureSize);
+        TestEqual(
+            TEXT("failed replace restores cinematic mip count"),
+            RestoredTexture->NumCinematicMipLevels,
+            OriginalCinematicMipLevels);
+        TestTrue(TEXT("failed replace restores defer-compression flag"), RestoredTexture->DeferCompression != 0);
+        TestEqual(
+            TEXT("failed replace restores lighting GUID"),
+            RestoredTexture->GetLightingGuid(),
+            OriginalLightingGuid);
+        TestTrue(
+            TEXT("failed replace restores CPU-copy texture identity"),
+            RestoredTexture->CPUCopyTexture.Get() == OriginalCPUCopyTexture);
+        TestFalse(TEXT("failed replace restores package dirty state"), RestoredTexture->GetOutermost()->IsDirty());
+    }
+
+    TArray<uint8> PersistedAfter;
+    TestTrue(TEXT("persisted file remains readable after failed replace"), FFileHelper::LoadFileToArray(PersistedAfter, *Filename));
+    TestTrue(TEXT("failed replace leaves persisted bytes unchanged"), PersistedAfter == PersistedBefore);
+
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+    return true;
+}
+
+/** Invalid shared ownership between running and cooked platform data must fail before mutation. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureReplaceAliasedCookedDataRejectTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.ReplaceRejectsAliasedCookedData",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureReplaceAliasedCookedDataRejectTest::RunTest(
+    const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictReplaceAliasedCooked"));
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+
+    TSharedPtr<FJsonObject> InitialParams = MakeShared<FJsonObject>();
+    InitialParams->SetStringField(TEXT("destination"), RequestedPath);
+    InitialParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Red, 2, 2));
+    InitialParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    InitialParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult InitialResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), InitialParams);
+    if (!TestTrue(TEXT("aliased-cooked fixture creation succeeds"), InitialResult.bSuccess))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    UTexture2D* OriginalTexture = FindTextureAtPackagePath(RequestedPath);
+    FTexturePlatformData* OriginalPlatformData = OriginalTexture ? OriginalTexture->GetPlatformData() : nullptr;
+    if (!TestNotNull(TEXT("aliased-cooked fixture texture exists"), OriginalTexture)
+        || !TestNotNull(TEXT("aliased-cooked fixture platform data exists"), OriginalPlatformData))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    const FString AliasKey(TEXT("MonolithRunningDataAlias"));
+    OriginalTexture->CookedPlatformData.Add(AliasKey, OriginalPlatformData);
+
+    TSharedPtr<FJsonObject> ReplacementParams = MakeShared<FJsonObject>();
+    ReplacementParams->SetStringField(TEXT("destination"), RequestedPath);
+    ReplacementParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Blue, 4, 4));
+    ReplacementParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    ReplacementParams->SetStringField(TEXT("conflict_policy"), TEXT("replace"));
+    ReplacementParams->SetBoolField(TEXT("save"), false);
+    const FMonolithActionResult ReplacementResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ReplacementParams);
+
+    TestFalse(TEXT("aliased cooked ownership is rejected"), ReplacementResult.bSuccess);
+    TestTrue(
+        TEXT("aliased cooked rejection is diagnostic"),
+        ReplacementResult.ErrorMessage.Contains(TEXT("aliased cooked platform data")));
+    TestTrue(
+        TEXT("aliased cooked rejection preserves UObject identity"),
+        FindTextureAtPackagePath(RequestedPath) == OriginalTexture);
+    TestTrue(
+        TEXT("aliased cooked rejection preserves running platform identity"),
+        OriginalTexture->GetPlatformData() == OriginalPlatformData);
+    TestEqual(TEXT("aliased cooked rejection preserves source width"), OriginalTexture->Source.GetSizeX(), (int64)2);
+    TestEqual(TEXT("aliased cooked rejection preserves source height"), OriginalTexture->Source.GetSizeY(), (int64)2);
+
+    // Remove only the deliberately invalid second owner before normal fixture cleanup.
+    OriginalTexture->CookedPlatformData.Remove(AliasKey);
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+    return true;
+}
+
+/** A texture that had no running platform data must return to that exact state. */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FMonolithAssetImportTextureReplaceNullPlatformSaveFailureRollbackTest,
+    "MonolithAsset.ImportTextureFromBytes.ConflictPolicy.ReplaceNullPlatformSaveFailureRollsBack",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithAssetImportTextureReplaceNullPlatformSaveFailureRollbackTest::RunTest(
+    const FString& Parameters)
+{
+    const FString RequestedPath = MakeUniqueTestAssetPath(TEXT("T_ConflictReplaceNullPlatformRollback"));
+    CleanupSavedTextureAtPackagePath(RequestedPath);
+
+    TSharedPtr<FJsonObject> InitialParams = MakeShared<FJsonObject>();
+    InitialParams->SetStringField(TEXT("destination"), RequestedPath);
+    InitialParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Red, 2, 2));
+    InitialParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    InitialParams->SetBoolField(TEXT("save"), true);
+    const FMonolithActionResult InitialResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), InitialParams);
+    if (!TestTrue(TEXT("null-platform fixture initial save succeeds"), InitialResult.bSuccess))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    UTexture2D* OriginalTexture = FindTextureAtPackagePath(RequestedPath);
+    if (!TestNotNull(TEXT("null-platform fixture texture exists"), OriginalTexture))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    // Deliberately construct a valid editor UObject state with neither source
+    // art nor running platform data. Atomic replace must support this state,
+    // not reject it or synthesize data during rollback.
+    OriginalTexture->PreEditChange(nullptr);
+    OriginalTexture->Source.Reset();
+    OriginalTexture->PostEditChange();
+    OriginalTexture->BlockOnAnyAsyncBuild();
+    OriginalTexture->WaitForPendingInitOrStreaming();
+    OriginalTexture->FinishCachePlatformData();
+    OriginalTexture->ReleaseResource();
+    FlushRenderingCommands();
+    OriginalTexture->SetPlatformData(nullptr);
+    OriginalTexture->GetOutermost()->SetDirtyFlag(false);
+    TestFalse(TEXT("null-platform fixture source is invalid"), OriginalTexture->Source.IsValid());
+    TestNull(TEXT("null-platform fixture has no running platform data"), OriginalTexture->GetPlatformData());
+
+    FString Filename = FPackageName::LongPackageNameToFilename(
+        RequestedPath,
+        FPackageName::GetAssetPackageExtension());
+    Filename = FPaths::ConvertRelativePathToFull(Filename);
+    TArray<uint8> PersistedBefore;
+    if (!TestTrue(
+            TEXT("null-platform fixture file can be read"),
+            FFileHelper::LoadFileToArray(PersistedBefore, *Filename)))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+    if (!TestTrue(
+            TEXT("null-platform fixture file was made read-only"),
+            PlatformFile.SetReadOnly(*Filename, true)))
+    {
+        CleanupSavedTextureAtPackagePath(RequestedPath);
+        return false;
+    }
+
+    TSharedPtr<FJsonObject> ReplacementParams = MakeShared<FJsonObject>();
+    ReplacementParams->SetStringField(TEXT("destination"), RequestedPath);
+    ReplacementParams->SetStringField(TEXT("bytes_b64"), MakeSolidPngB64(FColor::Blue, 4, 4));
+    ReplacementParams->SetStringField(TEXT("format_hint"), TEXT("png"));
+    ReplacementParams->SetStringField(TEXT("conflict_policy"), TEXT("replace"));
+    ReplacementParams->SetBoolField(TEXT("save"), true);
+    AddExpectedError(
+        TEXT("Cannot remove"),
+        EAutomationExpectedErrorFlags::Contains,
+        /*ExpectedNumberOfOccurrences=*/1);
+    const FMonolithActionResult ReplacementResult = FMonolithToolRegistry::Get().ExecuteAction(
+        TEXT("asset"), TEXT("import_texture_from_bytes"), ReplacementParams);
+    PlatformFile.SetReadOnly(*Filename, false);
+
+    TestFalse(TEXT("null-platform read-only replacement save fails"), ReplacementResult.bSuccess);
+    TestTrue(
+        TEXT("null-platform save failure is reported"),
+        ReplacementResult.ErrorMessage.Contains(TEXT("SavePackage failed")));
+    UTexture2D* RestoredTexture = FindTextureAtPackagePath(RequestedPath);
+    TestTrue(TEXT("null-platform rollback preserves UObject identity"), RestoredTexture == OriginalTexture);
+    if (RestoredTexture)
+    {
+        TestFalse(TEXT("null-platform rollback restores invalid source"), RestoredTexture->Source.IsValid());
+        TestNull(
+            TEXT("null-platform rollback restores absent running platform data"),
+            RestoredTexture->GetPlatformData());
+        TestFalse(
+            TEXT("null-platform rollback restores clean package state"),
+            RestoredTexture->GetOutermost()->IsDirty());
+    }
+
+    TArray<uint8> PersistedAfter;
+    TestTrue(
+        TEXT("null-platform persisted file remains readable"),
+        FFileHelper::LoadFileToArray(PersistedAfter, *Filename));
+    TestTrue(
+        TEXT("null-platform failed replace leaves persisted bytes unchanged"),
+        PersistedAfter == PersistedBefore);
+
+    CleanupSavedTextureAtPackagePath(RequestedPath);
     return true;
 }
 

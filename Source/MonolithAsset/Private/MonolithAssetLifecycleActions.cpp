@@ -18,12 +18,15 @@
 #include "Editor.h"
 #include "EditorAssetLibrary.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
 #include "HAL/PlatformFileManager.h"
 #include "IAssetTools.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableRegistry.h"
 #include "Misc/Guid.h"
 #include "Misc/PackageName.h"
+#include "Misc/PackagePath.h"
+#include "Misc/PackageSegment.h"
 #include "Misc/Paths.h"
 #include "Modules/ModuleManager.h"
 #include "ObjectTools.h"
@@ -38,6 +41,7 @@
 #include "UObject/GarbageCollection.h"
 #include "UObject/Linker.h"
 #include "UObject/Package.h"
+#include "UObject/SoftObjectPath.h"
 #include "UObject/UObjectGlobals.h"
 
 namespace
@@ -236,19 +240,39 @@ namespace
 		return true;
 	}
 
-	TArray<FString> ReadStringArray(const TArray<TSharedPtr<FJsonValue>>& Values)
+	bool ReadStrictStringArray(
+		const TArray<TSharedPtr<FJsonValue>>& Values,
+		const TCHAR* FieldName,
+		TArray<FString>& OutValues,
+		FString& OutError)
 	{
-		TArray<FString> Result;
-		Result.Reserve(Values.Num());
-		for (const TSharedPtr<FJsonValue>& Value : Values)
+		OutValues.Reset();
+		OutValues.Reserve(Values.Num());
+		for (int32 Index = 0; Index < Values.Num(); ++Index)
 		{
+			const TSharedPtr<FJsonValue>& Value = Values[Index];
 			FString StringValue;
-			if (Value.IsValid() && Value->TryGetString(StringValue) && !StringValue.IsEmpty())
+			if (!Value.IsValid() || !Value->TryGetString(StringValue))
 			{
-				Result.Add(StringValue);
+				OutError = FString::Printf(
+					TEXT("%s[%d] must be a non-empty string"),
+					FieldName,
+					Index);
+				return false;
 			}
+
+			StringValue.TrimStartAndEndInline();
+			if (StringValue.IsEmpty())
+			{
+				OutError = FString::Printf(
+					TEXT("%s[%d] must be a non-empty string"),
+					FieldName,
+					Index);
+				return false;
+			}
+			OutValues.Add(StringValue);
 		}
-		return Result;
+		return true;
 	}
 
 	bool TryNormalizeAssetPackageName(const FString& AssetPath, FString& OutPackageName, FString& OutError)
@@ -264,6 +288,157 @@ namespace
 		}
 		return true;
 	}
+
+	FString MakeCanonicalAssetObjectPath(const FString& RequestedPath, const FString& PackageName)
+	{
+		FString ObjectPath = FMonolithAssetUtils::ResolveAssetPath(RequestedPath);
+		if (!ObjectPath.Contains(TEXT(".")))
+		{
+			ObjectPath = PackageName
+				+ TEXT(".")
+				+ FPackageName::GetLongPackageAssetName(PackageName);
+		}
+		return ObjectPath;
+	}
+
+	bool TryNormalizeAllowedPackagePrefix(const FString& Prefix, FString& OutPrefix, FString& OutError)
+	{
+		OutPrefix = Prefix;
+		OutPrefix.TrimStartAndEndInline();
+		while (OutPrefix.Len() > 1 && OutPrefix.EndsWith(TEXT("/")))
+		{
+			OutPrefix.LeftChopInline(1);
+		}
+
+		const FString PrefixToNormalize = OutPrefix;
+		return TryNormalizeAssetPackageName(PrefixToNormalize, OutPrefix, OutError);
+	}
+
+	bool IsPackageWithinAllowedPrefix(const FString& PackageName, const FString& AllowedPrefix)
+	{
+		if (PackageName.Equals(AllowedPrefix, ESearchCase::IgnoreCase))
+		{
+			return true;
+		}
+
+		return PackageName.Len() > AllowedPrefix.Len()
+			&& PackageName.StartsWith(AllowedPrefix, ESearchCase::IgnoreCase)
+			&& PackageName[AllowedPrefix.Len()] == TEXT('/');
+	}
+
+	void AddPackageFilenameCandidate(
+		const FString& PackageName,
+		const FString& Extension,
+		TArray<FString>& OutFilenames)
+	{
+		FString Filename;
+		if (!FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename, Extension))
+		{
+			return;
+		}
+
+		Filename = FPaths::ConvertRelativePathToFull(Filename);
+		FPaths::NormalizeFilename(Filename);
+		OutFilenames.AddUnique(Filename);
+	}
+
+	TArray<FString> GetPackageHeaderFilenameCandidates(const FString& PackageName)
+	{
+		TArray<FString> Result;
+
+		FString ExistingFilename;
+		if (FPackageName::DoesPackageExist(PackageName, &ExistingFilename))
+		{
+			ExistingFilename = FPaths::ConvertRelativePathToFull(ExistingFilename);
+			FPaths::NormalizeFilename(ExistingFilename);
+			Result.AddUnique(ExistingFilename);
+		}
+
+		AddPackageFilenameCandidate(PackageName, FPackageName::GetAssetPackageExtension(), Result);
+		AddPackageFilenameCandidate(PackageName, FPackageName::GetMapPackageExtension(), Result);
+		AddPackageFilenameCandidate(PackageName, FPackageName::GetTextAssetPackageExtension(), Result);
+		AddPackageFilenameCandidate(PackageName, FPackageName::GetTextMapPackageExtension(), Result);
+		return Result;
+	}
+
+	TArray<FString> GetPackageSidecarFilenameCandidates(const FString& PackageName)
+	{
+		TArray<FString> Result;
+		FPackagePath PackagePath;
+		if (!FPackagePath::TryFromPackageName(PackageName, PackagePath))
+		{
+			return Result;
+		}
+
+		const EPackageSegment SidecarSegments[] = {
+			EPackageSegment::Exports,
+			EPackageSegment::BulkDataDefault,
+			EPackageSegment::BulkDataOptional,
+			EPackageSegment::BulkDataMemoryMapped,
+			EPackageSegment::PayloadSidecar,
+		};
+		for (const EPackageSegment Segment : SidecarSegments)
+		{
+			FString Filename = PackagePath.GetLocalFullPath(Segment);
+			if (Filename.IsEmpty())
+			{
+				continue;
+			}
+			Filename = FPaths::ConvertRelativePathToFull(Filename);
+			FPaths::NormalizeFilename(Filename);
+			Result.AddUnique(Filename);
+		}
+		return Result;
+	}
+
+	TArray<FString> GetPackageFilenameCandidates(const FString& PackageName)
+	{
+		TArray<FString> Result = GetPackageHeaderFilenameCandidates(PackageName);
+		Result.Append(GetPackageSidecarFilenameCandidates(PackageName));
+		return Result;
+	}
+
+	TArray<FString> FindExistingPackageFiles(const FString& PackageName)
+	{
+		TArray<FString> Result;
+		for (const FString& Filename : GetPackageFilenameCandidates(PackageName))
+		{
+			if (IFileManager::Get().FileExists(*Filename))
+			{
+				Result.Add(Filename);
+			}
+		}
+		return Result;
+	}
+
+	bool HasRegisteredAssetsForPackage(IAssetRegistry& AssetRegistry, const FString& PackageName)
+	{
+		TArray<FAssetData> PackageAssets;
+		AssetRegistry.GetAssetsByPackageName(
+			FName(*PackageName),
+			PackageAssets,
+			/*bIncludeOnlyOnDiskAssets=*/false);
+		return PackageAssets.Num() > 0;
+	}
+
+	struct FDeleteAssetTarget
+	{
+		FString RequestedPath;
+		FString PackageName;
+		TArray<FString> NotFoundRequestedPaths;
+		TArray<FString> InitialPackageFiles;
+		TArray<FString> FinalPackageFiles;
+		bool bHadRegisteredAsset = false;
+		bool bHadLoadedPackage = false;
+		bool bFoundObject = false;
+		bool bResidualRemoved = false;
+		bool bSourceControlFailure = false;
+		bool bFinalRegisteredAsset = false;
+		bool bFinalLoadedPackage = false;
+		bool bSucceeded = false;
+		FString Status;
+		FString FailureReason;
+	};
 
 	TArray<TSharedPtr<FJsonValue>> ToJsonStringArray(const TArray<FString>& Values)
 	{
@@ -290,7 +465,9 @@ namespace
 		TArray<UPackage*> PackagesToUnload;
 		PackagesToUnload.Add(ExistingPackage);
 		UPackageTools::UnloadPackages(PackagesToUnload);
-		CollectGarbage(RF_NoFlags);
+		// Preserve unrelated editor assets carrying RF_Standalone. RF_NoFlags can collect a dirty,
+		// unsaved asset from another Monolith workflow while this delete evicts only PackageName.
+		CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 
 		ExistingPackage = FindPackage(nullptr, *PackageName);
 		if (!ExistingPackage)
@@ -314,7 +491,7 @@ namespace
 		{
 			ExistingPackage->MarkAsGarbage();
 			OutEvictedPackages.Add(FString::Printf(TEXT("%s -> %s"), *PackageName, *TrashPackageName));
-			CollectGarbage(RF_NoFlags);
+			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 			if (FindPackage(nullptr, *PackageName) == nullptr)
 			{
 				return true;
@@ -370,7 +547,7 @@ namespace
 		return false;
 	}
 
-	bool RemoveResidualPackageFileForDelete(
+	void RemoveResidualPackageFilesForDelete(
 		const FString& PackageName,
 		TArray<FString>& OutDeletedFiles,
 		TArray<FString>& OutResidualFiles,
@@ -379,79 +556,173 @@ namespace
 		TArray<FString>& OutFilesToRescan,
 		TArray<FString>& OutPathsToRescan)
 	{
-		FString PackageFilename = FPackageName::LongPackageNameToFilename(
-			PackageName,
-			FPackageName::GetAssetPackageExtension());
-		PackageFilename = FPaths::ConvertRelativePathToFull(PackageFilename);
-		FPaths::NormalizeFilename(PackageFilename);
-
-		OutFilesToRescan.AddUnique(PackageFilename);
 		OutPathsToRescan.AddUnique(FPackageName::GetLongPackagePath(PackageName));
 
-		if (!IFileManager::Get().FileExists(*PackageFilename))
+		for (const FString& HeaderFilename : GetPackageHeaderFilenameCandidates(PackageName))
 		{
-			return true;
+			OutFilesToRescan.AddUnique(HeaderFilename);
 		}
 
-		bool bSourceControlOperationSucceeded = false;
-		bool bSourceControlledBlockingState = false;
-
-		ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
-		if (SourceControlModule.IsEnabled())
+		for (const FString& PackageFilename : GetPackageFilenameCandidates(PackageName))
 		{
-			ISourceControlProvider& Provider = SourceControlModule.GetProvider();
-			if (Provider.IsEnabled() && Provider.IsAvailable())
+			if (!IFileManager::Get().FileExists(*PackageFilename))
 			{
-				const FSourceControlStatePtr State = Provider.GetState(PackageFilename, EStateCacheUsage::ForceUpdate);
-				if (State.IsValid())
+				continue;
+			}
+
+			bool bCanDirectDelete = false;
+			bool bCanDeleteReadOnly = false;
+			bool bSourceControlBlocked = false;
+
+			ISourceControlModule& SourceControlModule = ISourceControlModule::Get();
+			if (SourceControlModule.IsEnabled())
+			{
+				ISourceControlProvider& Provider = SourceControlModule.GetProvider();
+				if (!Provider.IsEnabled() || !Provider.IsAvailable())
 				{
-					if (State->IsAdded() && State->CanRevert())
+					OutSourceControlFailures.AddUnique(FString::Printf(
+						TEXT("provider_unavailable:%s"),
+						*PackageFilename));
+					bSourceControlBlocked = true;
+				}
+				else
+				{
+					FSourceControlStatePtr State = Provider.GetState(PackageFilename, EStateCacheUsage::ForceUpdate);
+					if (!State.IsValid())
 					{
-						bSourceControlOperationSucceeded = ExecuteResidualSourceControlOperation(
-							Provider,
-							PackageFilename,
-							TEXT("revert_added"),
-							ISourceControlOperation::Create<FRevert>(),
-							OutSourceControlOperations,
-							OutSourceControlFailures);
+						OutSourceControlFailures.AddUnique(FString::Printf(
+							TEXT("state_unavailable:%s"),
+							*PackageFilename));
+						bSourceControlBlocked = true;
 					}
-					else if (!State->IsDeleted() && State->CanDelete())
+					else if (State->IsAdded())
 					{
-						bSourceControlOperationSucceeded = ExecuteResidualSourceControlOperation(
-							Provider,
-							PackageFilename,
-							TEXT("delete"),
-							ISourceControlOperation::Create<FDelete>(),
-							OutSourceControlOperations,
-							OutSourceControlFailures);
+						if (State->CanRevert()
+							&& ExecuteResidualSourceControlOperation(
+								Provider,
+								PackageFilename,
+								TEXT("revert_added"),
+								ISourceControlOperation::Create<FRevert>(),
+								OutSourceControlOperations,
+								OutSourceControlFailures))
+						{
+							bCanDirectDelete = true;
+							bCanDeleteReadOnly = true;
+						}
+						else
+						{
+							if (!State->CanRevert())
+							{
+								OutSourceControlFailures.AddUnique(FString::Printf(
+									TEXT("cannot_revert_added:%s"),
+									*PackageFilename));
+							}
+							bSourceControlBlocked = true;
+						}
 					}
 					else
 					{
-						bSourceControlledBlockingState = State->IsSourceControlled()
-							&& !State->IsAdded()
-							&& !State->IsDeleted();
+						if (State->IsCheckedOut())
+						{
+							if (!State->CanRevert()
+								|| !ExecuteResidualSourceControlOperation(
+									Provider,
+									PackageFilename,
+									TEXT("revert_checked_out"),
+									ISourceControlOperation::Create<FRevert>(),
+									OutSourceControlOperations,
+									OutSourceControlFailures))
+							{
+								if (!State->CanRevert())
+								{
+									OutSourceControlFailures.AddUnique(FString::Printf(
+										TEXT("cannot_revert_checked_out:%s"),
+										*PackageFilename));
+								}
+								bSourceControlBlocked = true;
+							}
+							else
+							{
+								State = Provider.GetState(PackageFilename, EStateCacheUsage::ForceUpdate);
+								if (!State.IsValid())
+								{
+									OutSourceControlFailures.AddUnique(FString::Printf(
+										TEXT("state_unavailable_after_revert:%s"),
+										*PackageFilename));
+									bSourceControlBlocked = true;
+								}
+							}
+						}
+
+						if (!bSourceControlBlocked && State.IsValid())
+						{
+							if (State->IsDeleted())
+							{
+								OutSourceControlOperations.AddUnique(FString::Printf(
+									TEXT("already_deleted:%s"),
+									*PackageFilename));
+								bCanDirectDelete = true;
+								bCanDeleteReadOnly = true;
+							}
+							else if (State->IsSourceControlled())
+							{
+								if (State->CanDelete()
+									&& ExecuteResidualSourceControlOperation(
+										Provider,
+										PackageFilename,
+										TEXT("delete"),
+										ISourceControlOperation::Create<FDelete>(),
+										OutSourceControlOperations,
+										OutSourceControlFailures))
+								{
+									bCanDirectDelete = true;
+									bCanDeleteReadOnly = true;
+								}
+								else
+								{
+									if (!State->CanDelete())
+									{
+										OutSourceControlFailures.AddUnique(FString::Printf(
+											TEXT("cannot_mark_for_delete:%s"),
+											*PackageFilename));
+									}
+									bSourceControlBlocked = true;
+								}
+							}
+							else
+							{
+								// A valid provider state proved that the file is untracked.
+								bCanDirectDelete = !IFileManager::Get().IsReadOnly(*PackageFilename);
+							}
+						}
 					}
 				}
 			}
-		}
+			else
+			{
+				bCanDirectDelete = !IFileManager::Get().IsReadOnly(*PackageFilename);
+			}
 
-		if (!IFileManager::Get().FileExists(*PackageFilename))
-		{
-			OutDeletedFiles.Add(PackageFilename);
-			return true;
-		}
+			if (!IFileManager::Get().FileExists(*PackageFilename))
+			{
+				OutDeletedFiles.AddUnique(PackageFilename);
+				continue;
+			}
 
-		const bool bCanDirectDeleteResidual = bSourceControlOperationSucceeded
-			|| (!bSourceControlledBlockingState && !IFileManager::Get().IsReadOnly(*PackageFilename));
-		if (bCanDirectDeleteResidual
-			&& IFileManager::Get().Delete(*PackageFilename, /*RequireExists=*/false, /*EvenReadOnly=*/bSourceControlOperationSucceeded, /*Quiet=*/true))
-		{
-			OutDeletedFiles.Add(PackageFilename);
-			return true;
-		}
+			if (!bSourceControlBlocked
+				&& bCanDirectDelete
+				&& IFileManager::Get().Delete(
+					*PackageFilename,
+					/*RequireExists=*/false,
+					/*EvenReadOnly=*/bCanDeleteReadOnly,
+					/*Quiet=*/true))
+			{
+				OutDeletedFiles.AddUnique(PackageFilename);
+				continue;
+			}
 
-		OutResidualFiles.Add(PackageFilename);
-		return false;
+			OutResidualFiles.AddUnique(PackageFilename);
+		}
 	}
 }
 
@@ -472,10 +743,11 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("save_asset"),
-		TEXT("Save a loaded asset package to disk."),
+		TEXT("Save a loaded asset package to disk, with optional non-interactive package reload verification."),
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetLifecycleActions::SaveAsset),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Asset path to save"))
+			.Optional(TEXT("verify_reload"), TEXT("bool"), TEXT("Reload the clean package non-interactively and resolve the asset again to prove persistence"), TEXT("false"))
 			.Build());
 
 	Registry.RegisterAction(TEXT("asset"), TEXT("delete_assets"),
@@ -483,7 +755,7 @@ void FMonolithAssetLifecycleActions::RegisterActions(FMonolithToolRegistry& Regi
 		FMonolithActionHandler::CreateStatic(&FMonolithAssetLifecycleActions::DeleteAssets),
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_paths"), TEXT("array"), TEXT("Array of UE asset paths to delete"))
-			.Optional(TEXT("allowed_prefixes"), TEXT("array"), TEXT("Only paths starting with these prefixes may be deleted"))
+			.Optional(TEXT("allowed_prefixes"), TEXT("array"), TEXT("Only packages equal to or under these package-path prefixes may be deleted"))
 			.Optional(TEXT("dry_run"), TEXT("bool"), TEXT("Validate and report targets without deleting"), TEXT("false"))
 			.Optional(TEXT("force"), TEXT("bool"), TEXT("Force-delete referenced assets after closing open editors. Default false"), TEXT("false"))
 			.Build());
@@ -699,6 +971,11 @@ FMonolithActionResult FMonolithAssetLifecycleActions::SaveAsset(const TSharedPtr
 	{
 		return FMonolithActionResult::Error(TEXT("Missing required parameter: asset_path"));
 	}
+	bool bVerifyReload = false;
+	if (Params->HasField(TEXT("verify_reload")) && !Params->TryGetBoolField(TEXT("verify_reload"), bVerifyReload))
+	{
+		return FMonolithActionResult::Error(TEXT("verify_reload must be a boolean"), FMonolithJsonUtils::ErrInvalidParams);
+	}
 
 	UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(AssetPath);
 	if (!Asset)
@@ -706,17 +983,109 @@ FMonolithActionResult FMonolithAssetLifecycleActions::SaveAsset(const TSharedPtr
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
-	const bool bWasDirty = Asset->GetOutermost()->IsDirty();
+	UPackage* Package = Asset->GetOutermost();
+	if (!Package)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset has no package: %s"), *AssetPath));
+	}
+
+	const FString CanonicalAssetPath = Asset->GetPathName();
+	const FString PackageName = Package->GetName();
+	const FString ClassPath = Asset->GetClass()->GetClassPathName().ToString();
+	if (bVerifyReload)
+	{
+		if (Asset->IsA<UWorld>() || Package->ContainsMap())
+		{
+			return FMonolithActionResult::Error(
+				TEXT("verify_reload is not allowed for map packages; reloading the current or referenced map is unsafe"));
+		}
+		if (GEditor)
+		{
+			if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+			{
+				if (AssetEditorSubsystem->FindEditorForAsset(Asset, /*bFocusIfOpen=*/false))
+				{
+					return FMonolithActionResult::Error(
+						FString::Printf(TEXT("Close the asset editor before verify_reload: %s"), *CanonicalAssetPath));
+				}
+			}
+		}
+	}
+
+	const bool bWasDirty = Package->IsDirty();
 	const bool bSaved = UEditorAssetLibrary::SaveLoadedAsset(Asset, false);
 	if (!bSaved)
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to save asset: %s"), *AssetPath));
 	}
 
+	const bool bDirtyAfterSave = Package->IsDirty();
+	FString PackageFilename;
+	const bool bExistsOnDisk = FPackageName::DoesPackageExist(PackageName, &PackageFilename);
+	const int64 FileSize = bExistsOnDisk ? IFileManager::Get().FileSize(*PackageFilename) : INDEX_NONE;
+	if (bDirtyAfterSave || !bExistsOnDisk || FileSize <= 0)
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Save postcondition failed for '%s' (dirty=%s, exists_on_disk=%s, file_size=%lld)"),
+			*CanonicalAssetPath,
+			bDirtyAfterSave ? TEXT("true") : TEXT("false"),
+			bExistsOnDisk ? TEXT("true") : TEXT("false"),
+			FileSize));
+	}
+
+	bool bReloaded = false;
+	FString ReloadedClassPath;
+	if (bVerifyReload)
+	{
+		FText ReloadError;
+		TArray<UPackage*> PackagesToReload = { Package };
+		bReloaded = UPackageTools::ReloadPackages(
+			PackagesToReload,
+			ReloadError,
+			EReloadPackagesInteractionMode::AssumeNegative);
+		if (!bReloaded)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Saved '%s' but package reload verification failed: %s"),
+				*CanonicalAssetPath,
+				*ReloadError.ToString()));
+		}
+
+		UObject* ReloadedAsset = FMonolithAssetUtils::LoadAssetByPath(CanonicalAssetPath);
+		if (!ReloadedAsset)
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Package reloaded but asset could not be resolved again: %s"),
+				*CanonicalAssetPath));
+		}
+		ReloadedClassPath = ReloadedAsset->GetClass()->GetClassPathName().ToString();
+		if (ReloadedClassPath != ClassPath || ReloadedAsset->GetOutermost()->IsDirty())
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Reloaded asset postcondition failed for '%s' (class='%s', dirty=%s)"),
+				*CanonicalAssetPath,
+				*ReloadedClassPath,
+				ReloadedAsset->GetOutermost()->IsDirty() ? TEXT("true") : TEXT("false")));
+		}
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("asset_path"), AssetPath);
+	Result->SetBoolField(TEXT("success"), true);
+	Result->SetStringField(TEXT("asset_path"), CanonicalAssetPath);
+	Result->SetStringField(TEXT("package_name"), PackageName);
+	Result->SetStringField(TEXT("class"), ClassPath);
 	Result->SetBoolField(TEXT("saved"), true);
 	Result->SetBoolField(TEXT("was_dirty"), bWasDirty);
+	Result->SetBoolField(TEXT("dirty_after_save"), false);
+	Result->SetBoolField(TEXT("exists_on_disk"), true);
+	Result->SetStringField(TEXT("filename"), PackageFilename);
+	Result->SetNumberField(TEXT("file_size"), FileSize);
+	Result->SetBoolField(TEXT("verify_reload"), bVerifyReload);
+	Result->SetBoolField(TEXT("reloaded"), bReloaded);
+	if (bVerifyReload)
+	{
+		Result->SetStringField(TEXT("reloaded_class"), ReloadedClassPath);
+	}
 	return FMonolithActionResult::Success(Result);
 }
 
@@ -733,14 +1102,24 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		return FMonolithActionResult::Error(TEXT("asset_paths array exceeds maximum allowed size (200)"));
 	}
 
-	const TArray<FString> AssetPaths = ReadStringArray(*AssetPathsArray);
-	if (AssetPaths.Num() == 0)
+	TArray<FString> AssetPaths;
+	FString ArrayError;
+	if (!ReadStrictStringArray(*AssetPathsArray, TEXT("asset_paths"), AssetPaths, ArrayError))
 	{
-		return FMonolithActionResult::Error(TEXT("No valid paths in asset_paths"));
+		return FMonolithActionResult::Error(ArrayError, FMonolithJsonUtils::ErrInvalidParams);
 	}
 
-	TArray<FString> RequestedPackageNames;
-	RequestedPackageNames.Reserve(AssetPaths.Num());
+	bool bDryRun = false;
+	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
+
+	bool bForce = false;
+	Params->TryGetBoolField(TEXT("force"), bForce);
+
+	TArray<FDeleteAssetTarget> Targets;
+	Targets.Reserve(AssetPaths.Num());
+	TMap<FName, int32> TargetIndexByPackage;
+	TArray<int32> AssetPathTargetIndices;
+	AssetPathTargetIndices.Reserve(AssetPaths.Num());
 	for (const FString& Path : AssetPaths)
 	{
 		FString PackageName;
@@ -752,24 +1131,62 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 				*Path,
 				*PathError));
 		}
-		RequestedPackageNames.AddUnique(PackageName);
+
+		const FName PackageKey(*PackageName);
+		if (const int32* ExistingIndex = TargetIndexByPackage.Find(PackageKey))
+		{
+			AssetPathTargetIndices.Add(*ExistingIndex);
+			continue;
+		}
+
+		FDeleteAssetTarget& Target = Targets.AddDefaulted_GetRef();
+		Target.RequestedPath = Path;
+		Target.PackageName = PackageName;
+		const int32 TargetIndex = Targets.Num() - 1;
+		TargetIndexByPackage.Add(PackageKey, TargetIndex);
+		AssetPathTargetIndices.Add(TargetIndex);
 	}
 
 	TArray<FString> AllowedPrefixes;
 	const TArray<TSharedPtr<FJsonValue>>* PrefixArray = nullptr;
-	if (Params->TryGetArrayField(TEXT("allowed_prefixes"), PrefixArray) && PrefixArray)
+	if (Params->HasField(TEXT("allowed_prefixes")))
 	{
-		AllowedPrefixes = ReadStringArray(*PrefixArray);
+		if (!Params->TryGetArrayField(TEXT("allowed_prefixes"), PrefixArray) || !PrefixArray || PrefixArray->Num() == 0)
+		{
+			return FMonolithActionResult::Error(
+				TEXT("allowed_prefixes must be a non-empty array when provided"),
+				FMonolithJsonUtils::ErrInvalidParams);
+		}
+		if (!ReadStrictStringArray(*PrefixArray, TEXT("allowed_prefixes"), AllowedPrefixes, ArrayError))
+		{
+			return FMonolithActionResult::Error(ArrayError, FMonolithJsonUtils::ErrInvalidParams);
+		}
 	}
 
-	if (AllowedPrefixes.Num() > 0)
+	TArray<FString> NormalizedAllowedPrefixes;
+	NormalizedAllowedPrefixes.Reserve(AllowedPrefixes.Num());
+	for (const FString& Prefix : AllowedPrefixes)
 	{
-		for (const FString& Path : AssetPaths)
+		FString NormalizedPrefix;
+		FString PrefixError;
+		if (!TryNormalizeAllowedPackagePrefix(Prefix, NormalizedPrefix, PrefixError))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid allowed_prefixes entry '%s': %s"),
+				*Prefix,
+				*PrefixError));
+		}
+		NormalizedAllowedPrefixes.AddUnique(NormalizedPrefix);
+	}
+
+	if (NormalizedAllowedPrefixes.Num() > 0)
+	{
+		for (const FDeleteAssetTarget& Target : Targets)
 		{
 			bool bAllowed = false;
-			for (const FString& Prefix : AllowedPrefixes)
+			for (const FString& Prefix : NormalizedAllowedPrefixes)
 			{
-				if (Path.StartsWith(Prefix))
+				if (IsPackageWithinAllowedPrefix(Target.PackageName, Prefix))
 				{
 					bAllowed = true;
 					break;
@@ -779,41 +1196,59 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 			{
 				return FMonolithActionResult::Error(FString::Printf(
 					TEXT("Refusing to delete '%s' because it is not under any allowed_prefixes entry: %s"),
-					*Path,
+					*Target.RequestedPath,
 					*FString::Join(AllowedPrefixes, TEXT(", "))));
 			}
 		}
 	}
 
+	FAssetRegistryModule& AssetRegistryModule =
+		FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+	for (FDeleteAssetTarget& Target : Targets)
+	{
+		Target.bHadRegisteredAsset = HasRegisteredAssetsForPackage(AssetRegistry, Target.PackageName);
+		Target.bHadLoadedPackage = FindPackage(nullptr, *Target.PackageName) != nullptr;
+		Target.InitialPackageFiles = FindExistingPackageFiles(Target.PackageName);
+	}
+
 	TArray<UObject*> ObjectsToDelete;
 	TArray<FString> NotFound;
-	TArray<FString> NotFoundPackageNames;
-	for (const FString& Path : AssetPaths)
+	for (int32 PathIndex = 0; PathIndex < AssetPaths.Num(); ++PathIndex)
 	{
-		if (UObject* Asset = FMonolithAssetUtils::LoadAssetByPath(Path))
+		const FString& Path = AssetPaths[PathIndex];
+		FDeleteAssetTarget& Target = Targets[AssetPathTargetIndices[PathIndex]];
+		const FString ObjectPath = MakeCanonicalAssetObjectPath(Path, Target.PackageName);
+		UObject* Asset = FindObject<UObject>(nullptr, *ObjectPath);
+		const FAssetData RegisteredAsset = AssetRegistry.GetAssetByObjectPath(
+			FSoftObjectPath(ObjectPath),
+			/*bIncludeOnlyOnDiskAssets=*/false,
+			/*bSkipARFilteredAssets=*/true);
+		const bool bRegisteredExact = RegisteredAsset.IsValid()
+			&& RegisteredAsset.GetSoftObjectPath().ToString().Equals(
+				ObjectPath,
+				ESearchCase::IgnoreCase);
+		const bool bExactAssetExists = Asset != nullptr || bRegisteredExact;
+		if (!bDryRun && !Asset && bRegisteredExact)
 		{
-			ObjectsToDelete.Add(Asset);
+			Asset = FMonolithAssetUtils::LoadAssetByPath(ObjectPath);
+		}
+
+		if (bExactAssetExists && (bDryRun || Asset))
+		{
+			if (Asset)
+			{
+				ObjectsToDelete.AddUnique(Asset);
+			}
+			Target.bFoundObject = true;
 		}
 		else
 		{
 			NotFound.Add(Path);
-			FString PackageName;
-			FString PathError;
-			if (TryNormalizeAssetPackageName(Path, PackageName, PathError))
-			{
-				NotFoundPackageNames.AddUnique(PackageName);
-			}
+			Target.NotFoundRequestedPaths.Add(Path);
 		}
 	}
 
-	bool bDryRun = false;
-	Params->TryGetBoolField(TEXT("dry_run"), bDryRun);
-
-	bool bForce = false;
-	Params->TryGetBoolField(TEXT("force"), bForce);
-
-	TArray<FString> AttemptedPaths;
-	AttemptedPaths.Reserve(ObjectsToDelete.Num());
 	TArray<FString> UnregisteredStringTables;
 	for (UObject* Asset : ObjectsToDelete)
 	{
@@ -822,21 +1257,19 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 			continue;
 		}
 
-		AttemptedPaths.Add(Asset->GetPathName());
-
-		if (UPackage* Package = Asset->GetOutermost())
-		{
-			Package->SetDirtyFlag(false);
-		}
-		if (GEditor)
-		{
-			if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
-			{
-				AssetEditorSubsystem->CloseAllEditorsForAsset(Asset);
-			}
-		}
 		if (!bDryRun)
 		{
+			if (UPackage* Package = Asset->GetOutermost())
+			{
+				Package->SetDirtyFlag(false);
+			}
+			if (GEditor)
+			{
+				if (UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>())
+				{
+					AssetEditorSubsystem->CloseAllEditorsForAsset(Asset);
+				}
+			}
 			if (UStringTable* StringTable = Cast<UStringTable>(Asset))
 			{
 				const FName TableId = StringTable->GetStringTableId();
@@ -851,11 +1284,11 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		}
 	}
 
-	int32 NumDeleted = 0;
+	int32 NumObjectDeletesReported = 0;
 	if (!bDryRun && ObjectsToDelete.Num() > 0)
 	{
 		TGuardValue<bool> UnattendedGuard(GIsRunningUnattendedScript, true);
-		NumDeleted = ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
+		NumObjectDeletesReported = ObjectTools::DeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
 	}
 
 	TArray<FString> EvictedPackages;
@@ -868,46 +1301,51 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	TArray<FString> AssetRegistryPathsToRescan;
 	if (!bDryRun)
 	{
-		const bool bUsePackageFileDelete = bForce && (NumDeleted < ObjectsToDelete.Num());
-		const TArray<FString>& PackageNamesToEvict = bForce
-			? RequestedPackageNames
-			: NotFoundPackageNames;
-
-		CollectGarbage(RF_NoFlags);
-		for (const FString& PackageName : PackageNamesToEvict)
+		if (ObjectsToDelete.Num() > 0)
 		{
-			const int32 StaleBefore = StalePackages.Num();
-			const bool bEvicted = EvictLoadedPackageForDelete(PackageName, EvictedPackages, StalePackages);
-			bool bResidualRemoved = true;
-			if (bUsePackageFileDelete)
+			// Match the editor's asset-delete GC policy: deleted targets have already lost their keep
+			// flags, while unrelated RF_Standalone assets must survive concurrent workflow cleanup.
+			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
+		}
+		for (FDeleteAssetTarget& Target : Targets)
+		{
+			const bool bShouldEvict = bForce || Target.bFoundObject;
+			if (bShouldEvict)
 			{
-				bResidualRemoved = RemoveResidualPackageFileForDelete(
-					PackageName,
+				EvictLoadedPackageForDelete(Target.PackageName, EvictedPackages, StalePackages);
+			}
+
+			if (bForce)
+			{
+				const int32 DeletedResidualFilesBefore = DeletedResidualFiles.Num();
+				const int32 SourceControlFailuresBefore = SourceControlFailures.Num();
+				RemoveResidualPackageFilesForDelete(
+					Target.PackageName,
 					DeletedResidualFiles,
 					ResidualFiles,
 					SourceControlOperations,
 					SourceControlFailures,
 					AssetRegistryFilesToRescan,
 					AssetRegistryPathsToRescan);
-			}
-			if (bUsePackageFileDelete && bEvicted && bResidualRemoved && StalePackages.Num() == StaleBefore)
-			{
-				++NumDeleted;
+				Target.bResidualRemoved = DeletedResidualFiles.Num() > DeletedResidualFilesBefore;
+				Target.bSourceControlFailure = SourceControlFailures.Num() > SourceControlFailuresBefore;
 			}
 		}
 
 		if (AssetRegistryFilesToRescan.Num() > 0 || AssetRegistryPathsToRescan.Num() > 0)
 		{
-			FAssetRegistryModule& AssetRegistryModule =
-				FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 			if (AssetRegistryFilesToRescan.Num() > 0)
 			{
-				AssetRegistryModule.Get().ScanModifiedAssetFiles(AssetRegistryFilesToRescan);
+				AssetRegistry.ScanModifiedAssetFiles(AssetRegistryFilesToRescan);
 			}
 			if (AssetRegistryPathsToRescan.Num() > 0)
 			{
-				AssetRegistryModule.Get().ScanPathsSynchronous(AssetRegistryPathsToRescan, /*bForceRescan=*/true);
+				AssetRegistry.ScanPathsSynchronous(AssetRegistryPathsToRescan, /*bForceRescan=*/true);
 			}
+		}
+		if (ObjectsToDelete.Num() > 0 || bForce)
+		{
+			CollectGarbage(GARBAGE_COLLECTION_KEEPFLAGS);
 		}
 	}
 
@@ -917,22 +1355,175 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 		NotFoundArray.Add(MakeShared<FJsonValueString>(Path));
 	}
 
+	bool bSuccess = true;
+	int32 NumDeletedTargets = 0;
+	TArray<TSharedPtr<FJsonValue>> TargetResults;
+	TArray<TSharedPtr<FJsonValue>> FailedArray;
+	if (!bDryRun)
+	{
+		StalePackages.Reset();
+		ResidualFiles.Reset();
+	}
+	TargetResults.Reserve(Targets.Num());
+	for (FDeleteAssetTarget& Target : Targets)
+	{
+		if (bDryRun)
+		{
+			const bool bHasDeletableState = Target.bFoundObject
+				|| Target.bHadRegisteredAsset
+				|| Target.bHadLoadedPackage
+				|| Target.InitialPackageFiles.Num() > 0;
+			if (bForce)
+			{
+				Target.bSucceeded = true;
+				if (Target.bFoundObject || Target.bHadRegisteredAsset || Target.bHadLoadedPackage)
+				{
+					Target.Status = TEXT("would_delete");
+				}
+				else if (Target.InitialPackageFiles.Num() > 0)
+				{
+					Target.Status = TEXT("would_remove_residual");
+				}
+				else
+				{
+					Target.Status = TEXT("already_absent");
+				}
+			}
+			else if (bHasDeletableState && Target.bFoundObject && Target.NotFoundRequestedPaths.Num() == 0)
+			{
+				Target.bSucceeded = true;
+				Target.Status = TEXT("would_delete");
+			}
+			else
+			{
+				Target.bSucceeded = false;
+				Target.Status = TEXT("not_found");
+				Target.FailureReason = TEXT("asset_not_found");
+			}
+		}
+		else
+		{
+			Target.bFinalLoadedPackage = FindPackage(nullptr, *Target.PackageName) != nullptr;
+			Target.bFinalRegisteredAsset = HasRegisteredAssetsForPackage(AssetRegistry, Target.PackageName);
+			Target.FinalPackageFiles = FindExistingPackageFiles(Target.PackageName);
+			const bool bFinalAbsent = !Target.bFinalLoadedPackage
+				&& !Target.bFinalRegisteredAsset
+				&& Target.FinalPackageFiles.Num() == 0;
+			if (Target.bFinalLoadedPackage)
+			{
+				StalePackages.Add(Target.PackageName);
+			}
+			for (const FString& FinalPackageFile : Target.FinalPackageFiles)
+			{
+				ResidualFiles.AddUnique(FinalPackageFile);
+			}
+
+			if (bForce)
+			{
+				Target.bSucceeded = bFinalAbsent && !Target.bSourceControlFailure;
+				if (!Target.bSucceeded)
+				{
+					Target.Status = TEXT("failed");
+				}
+				else if (Target.bFoundObject || Target.bHadRegisteredAsset || Target.bHadLoadedPackage)
+				{
+					Target.Status = TEXT("deleted");
+				}
+				else if (Target.InitialPackageFiles.Num() > 0)
+				{
+					Target.Status = TEXT("residual_removed");
+				}
+				else
+				{
+					Target.Status = TEXT("already_absent");
+				}
+			}
+			else
+			{
+				Target.bSucceeded = bFinalAbsent
+					&& Target.bFoundObject
+					&& Target.NotFoundRequestedPaths.Num() == 0;
+				Target.Status = Target.bSucceeded ? TEXT("deleted") : TEXT("failed");
+			}
+
+			if (!Target.bSucceeded)
+			{
+				TArray<FString> FailureReasons;
+				if (!bForce && (!Target.bFoundObject || Target.NotFoundRequestedPaths.Num() > 0))
+				{
+					FailureReasons.Add(TEXT("asset_not_found"));
+				}
+				if (Target.bFinalLoadedPackage)
+				{
+					FailureReasons.Add(TEXT("loaded_package_remaining"));
+				}
+				if (Target.bFinalRegisteredAsset)
+				{
+					FailureReasons.Add(TEXT("asset_registry_entry_remaining"));
+				}
+				if (Target.FinalPackageFiles.Num() > 0)
+				{
+					FailureReasons.Add(TEXT("package_file_remaining"));
+				}
+				if (Target.bSourceControlFailure)
+				{
+					FailureReasons.Add(TEXT("source_control_operation_failed"));
+				}
+				Target.FailureReason = FString::Join(FailureReasons, TEXT(","));
+				FailedArray.Add(MakeShared<FJsonValueString>(Target.RequestedPath));
+			}
+		}
+
+		bSuccess = bSuccess && Target.bSucceeded;
+		if (Target.Status == TEXT("deleted") || Target.Status == TEXT("residual_removed"))
+		{
+			++NumDeletedTargets;
+		}
+
+		TSharedPtr<FJsonObject> TargetResult = MakeShared<FJsonObject>();
+		TargetResult->SetStringField(TEXT("requested_path"), Target.RequestedPath);
+		TargetResult->SetStringField(TEXT("package_name"), Target.PackageName);
+		TargetResult->SetStringField(TEXT("status"), Target.Status);
+		TargetResult->SetBoolField(TEXT("success"), Target.bSucceeded);
+		TargetResult->SetBoolField(TEXT("asset_found"), Target.bFoundObject);
+		TargetResult->SetBoolField(TEXT("asset_registry_found_before"), Target.bHadRegisteredAsset);
+		TargetResult->SetBoolField(TEXT("loaded_package_found_before"), Target.bHadLoadedPackage);
+		TargetResult->SetBoolField(TEXT("package_file_found_before"), Target.InitialPackageFiles.Num() > 0);
+		TargetResult->SetBoolField(TEXT("residual_removed"), Target.bResidualRemoved);
+		TargetResult->SetBoolField(TEXT("source_control_failure"), Target.bSourceControlFailure);
+		if (Target.NotFoundRequestedPaths.Num() > 0)
+		{
+			TargetResult->SetArrayField(TEXT("not_found_paths"), ToJsonStringArray(Target.NotFoundRequestedPaths));
+		}
+		if (!bDryRun)
+		{
+			TargetResult->SetBoolField(TEXT("postcondition_met"), Target.bSucceeded);
+			TargetResult->SetBoolField(TEXT("loaded_package_remaining"), Target.bFinalLoadedPackage);
+			TargetResult->SetBoolField(TEXT("asset_registry_entry_remaining"), Target.bFinalRegisteredAsset);
+			TargetResult->SetArrayField(TEXT("residual_files"), ToJsonStringArray(Target.FinalPackageFiles));
+		}
+		if (!Target.FailureReason.IsEmpty())
+		{
+			TargetResult->SetStringField(TEXT("failure_reason"), Target.FailureReason);
+		}
+		TargetResults.Add(MakeShared<FJsonValueObject>(TargetResult));
+	}
+
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	const bool bSuccess = bDryRun
-		? NotFound.Num() == 0
-		: (bForce
-			? (StalePackages.Num() == 0 && ResidualFiles.Num() == 0)
-			: (NumDeleted == ObjectsToDelete.Num()
-				&& NotFound.Num() == 0
-				&& StalePackages.Num() == 0
-				&& ResidualFiles.Num() == 0));
 	Result->SetBoolField(TEXT("success"), bSuccess);
 	Result->SetBoolField(TEXT("dry_run"), bDryRun);
 	Result->SetBoolField(TEXT("force"), bForce);
-	Result->SetNumberField(TEXT("deleted"), NumDeleted);
+	Result->SetNumberField(TEXT("deleted"), NumDeletedTargets);
+	Result->SetNumberField(TEXT("object_delete_reported"), NumObjectDeletesReported);
 	Result->SetNumberField(TEXT("requested"), AssetPaths.Num());
-	Result->SetNumberField(TEXT("found"), ObjectsToDelete.Num());
+	int32 FoundTargetCount = 0;
+	for (const FDeleteAssetTarget& Target : Targets)
+	{
+		FoundTargetCount += Target.bFoundObject ? 1 : 0;
+	}
+	Result->SetNumberField(TEXT("found"), FoundTargetCount);
 	Result->SetArrayField(TEXT("not_found"), NotFoundArray);
+	Result->SetArrayField(TEXT("targets"), TargetResults);
 	if (!bDryRun && EvictedPackages.Num() > 0)
 	{
 		Result->SetArrayField(TEXT("evicted_packages"), ToJsonStringArray(EvictedPackages));
@@ -961,13 +1552,8 @@ FMonolithActionResult FMonolithAssetLifecycleActions::DeleteAssets(const TShared
 	{
 		Result->SetArrayField(TEXT("unregistered_string_tables"), ToJsonStringArray(UnregisteredStringTables));
 	}
-	if (!bDryRun && NumDeleted < ObjectsToDelete.Num())
+	if (!bDryRun && FailedArray.Num() > 0)
 	{
-		TArray<TSharedPtr<FJsonValue>> FailedArray;
-		for (const FString& Path : AttemptedPaths)
-		{
-			FailedArray.Add(MakeShared<FJsonValueString>(Path));
-		}
 		Result->SetArrayField(TEXT("failed_to_delete"), FailedArray);
 	}
 	return FMonolithActionResult::Success(Result);

@@ -2117,6 +2117,7 @@ namespace MonolithImageGen::ImageGenerationInternal
 		ImportParams->SetStringField(TEXT("destination"), Destination);
 		ImportParams->SetStringField(TEXT("bytes_b64"), BytesB64);
 		ImportParams->SetStringField(TEXT("format_hint"), FormatHint);
+		ImportParams->SetStringField(TEXT("conflict_policy"), OverwritePolicy);
 		bool bSave = true;
 		Params->TryGetBoolField(TEXT("save"), bSave);
 		ImportParams->SetBoolField(TEXT("save"), bSave);

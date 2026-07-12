@@ -11,7 +11,7 @@
 
 ## 1. Purpose
 
-`MonolithLyra` owns reusable Lyra semantic inspection, validation, and guarded authoring that is higher level than raw `gamefeatures`, `ui`, `asset`, or `editor` primitives. The current implementation slice covers Lyra Experience and UserFacingExperience contracts that were previously handled by project commandlets, read-only map `ALyraWorldSettings.DefaultGameplayExperience` and playlist-to-map reachability validation, read-only deep Experience bundle validation, read-only Lyra GamePhase tag/domain validation, and read-only P2 inspectors for PawnData, inventory/equipment/weapon definitions, team setup, and cosmetic character parts.
+`MonolithLyra` owns reusable Lyra semantic inspection, validation, and guarded authoring that is higher level than raw `gamefeatures`, `ui`, `asset`, or `editor` primitives. The current implementation slice covers Lyra Experience and UserFacingExperience contracts that were previously handled by project commandlets, guarded idempotent `GameFeatureAction_AddComponents.ComponentList` authoring and cleanup on Experiences/ExperienceActionSets, read-only map `ALyraWorldSettings.DefaultGameplayExperience` and playlist-to-map reachability validation, read-only deep Experience bundle validation, read-only Lyra GamePhase tag/domain validation, and read-only P2 inspectors for PawnData, inventory/equipment/weapon definitions, team setup, and cosmetic character parts.
 
 The module does not include Lyra headers and does not hard-link `LyraGame`. It resolves `/Script/LyraGame.*` types reflectively, so non-Lyra projects can still load Monolith and receive explicit unavailable-class diagnostics when calling `lyra` actions.
 
@@ -22,7 +22,7 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | Class | Responsibility |
 | --- | --- |
 | `FMonolithLyraModule` | Registers and unregisters the `lyra` namespace. |
-| `FMonolithLyraActions` | Implements status, Experience graph inspection/validation, map default Experience validation, UserFacingExperience map reachability validation, guarded Experience default writes, guarded component-entry removal, UserFacingExperience inspection/validation, read-only GamePhase tag/domain validation, read-only PawnData/inventory/equipment/weapon/team/cosmetic inspectors, and guarded UserFacingExperience writes. |
+| `FMonolithLyraActions` | Implements status, Experience graph inspection/validation, map default Experience validation, UserFacingExperience map reachability validation, guarded Experience default writes, guarded idempotent component-entry add/update and removal, UserFacingExperience inspection/validation, read-only GamePhase tag/domain validation, read-only PawnData/inventory/equipment/weapon/team/cosmetic inspectors, and guarded UserFacingExperience writes. |
 
 | Dependency | Purpose |
 | --- | --- |
@@ -57,6 +57,7 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | `lyra.describe_character_part_graph` | optional `part_classes` | Describes Lyra character-part component/settings reflected classes and optional character-part actor class paths without spawning cosmetics. |
 | `lyra.validate_character_part_assets` | optional `part_classes`, `require_non_empty` | Validates supplied character-part actor class paths as loadable, concrete `AActor` classes. |
 | `lyra.set_experience_defaults` | `experience_path`, optional `default_pawn_data`, `action_sets`, `game_features_to_enable`, `dry_run`, `confirm`, `save`, `strict` | Guarded reflected write for `DefaultPawnData`, replacement `ActionSets`, and replacement `GameFeaturesToEnable`; routes mutation through the registered `blueprint` bulk-fill adapter. |
+| `lyra.add_experience_component_entry` | exactly one of `experience_path` or `action_set_path`; required `actor_class`, `component_class`; optional `action_name`, `client_component`, `server_component`, `addition_flags`, `dry_run`, `confirm`, `save` | Guarded idempotent authoring for one `GameFeatureAction_AddComponents.ComponentList` actor/component pair. Reuses an existing compatible action (preferring the action that already owns the pair), creates one when absent, adds a missing pair, or updates only client/server/addition flags for an existing pair. A supplied `action_name` is the exact instanced-object `FName`; automatic unique naming is used only when the parameter is omitted. |
 | `lyra.remove_experience_component_entry` | optional `experience_path`, `action_set_path`, `action_index`, `action_name`, `actor_class`, `component_class`, `component_index`, plus `dry_run`, `confirm`, `save` | Guarded reflected removal for `GameFeatureAction_AddComponents.ComponentList` entries on an Experience or composed ActionSet. Requires at least one component selector. |
 | `lyra.set_user_facing_experience` | `user_facing_experience_path`, optional `map_id`, `experience_id`, `extra_args`, tile fields, loading widget, session flags, `dry_run`, `confirm`, `save`, `strict` | Guarded reflected write for UserFacingExperience hosting/session/UI fields; validates `MapID` and `ExperienceID` primary asset types before dispatch. |
 
@@ -69,12 +70,14 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 | Monolith-only scope | No runtime `CommonGame`, `PrimaryGameLayout`, or Speed gameplay code changes are required. |
 | Optional dependency | No `LyraGame` include or Build.cs dependency. Lyra types are resolved by `/Script/LyraGame.*` class path. |
 | Write gate | Mutating actions require `dry_run=true` or `confirm=true`. Without either flag the action fails before asset load or package creation. |
-| Dry-run behavior | `dry_run=true` dispatches inspection/planning only and reports field writes/candidates without changing CDOs, DataAssets, arrays, dirty state, or packages. |
+| AddComponents authoring | `add_experience_component_entry` requires exactly one owner target, validates `actor_class` as an `AActor` subclass and `component_class` as a `UActorComponent` subclass, requires at least one of client/server, and bounds `addition_flags` to `uint8`. Duplicate matching pairs are explicit errors instead of creating another entry. |
+| Explicit action naming | When `action_name` is supplied, the action reuses or creates that exact `FName` without adding a numeric suffix. A same-name direct child that is incompatible or orphaned from the owner's `Actions` array is an explicit `-32602` error during dry-run and commit. `MakeUniqueObjectName` is used only when `action_name` is omitted. |
+| Dry-run behavior | `dry_run=true` dispatches inspection/planning only and reports action create/reuse plus component add/update intent without changing CDOs, DataAssets, arrays, dirty state, or packages. |
 | GamePhase diagnostics | `describe_gameplay_tag_domain` and `validate_game_phase_flow` are read-only and only inspect registered tags, loaded native classes, explicit class/asset paths, and Blueprint CDOs under caller-provided `path_filter`. |
 | Map/playlist diagnostics | `validate_map_default_experience` and `validate_user_facing_map_reachability` are read-only. They load map assets and DataAssets for inspection only, do not save or dirty packages, and do not treat map default Experience mismatch as a playlist-hosting blocker unless the caller sets `require_matching_map_default_experience=true`. |
 | Deep Experience diagnostics | `validate_experience_bundle` can inspect referenced PawnData and ActionSets through reflected object/default data, count null action entries, validate action classes against `UGameFeatureAction`, and optionally report GameFeature plugin descriptor presence/enabled state. It does not activate GameFeatures or mutate packages. |
 | P2 Lyra inspectors | `describe_team_setup`, `describe_inventory_item`, `describe_equipment_definition`, `describe_weapon_definition`, `describe_pawn_initialization_graph`, `validate_pawn_data_contract`, `describe_character_part_graph`, and `validate_character_part_assets` are read-only. They inspect class default objects, reflected UPROPERTY values, and caller-supplied class paths; they do not spawn actors, create teams, equip items, initialize pawns, or apply cosmetics. |
-| Save behavior | `save=true` only saves after `dry_run=false`, `confirm=true`, and a clean committed report or removal. |
+| Save behavior | `save=true` only saves after `dry_run=false`, `confirm=true`, and a clean committed report, add/update, or removal. No-op idempotent calls do not dirty or save packages. |
 | Secret handling | UserFacingExperience validation does not inspect or print EOS credentials. |
 | Error quality | Missing assets/properties are returned as explicit errors or check rows; no silent fallback asset or default value is invented. |
 
@@ -84,8 +87,9 @@ The module does not include Lyra headers and does not hard-link `LyraGame`. It r
 
 | Gate | Evidence |
 | --- | --- |
-| Registration | `Monolith.Lyra.RegistryContract` verifies all twenty actions register. |
-| Parameter guards | The registry contract test verifies missing required parameters return `-32602`, deep Experience bundle validation returns structured check rows and flag echoes, map/default-experience validators return structured bad-path payloads, GamePhase and character-part validators reject malformed params, read-only inspectors return structured payloads, and guarded write actions reject mutation without `dry_run=true` or `confirm=true`. |
+| Registration | `Monolith.Lyra.RegistryContract` verifies all twenty-one actions register. |
+| Parameter guards | The registry contract test verifies missing required parameters return `-32602`, deep Experience bundle validation returns structured check rows and flag echoes, map/default-experience validators return structured bad-path payloads, GamePhase and character-part validators reject malformed params, read-only inspectors return structured payloads, guarded write actions reject mutation without `dry_run=true` or `confirm=true`, and component-entry authoring rejects ambiguous targets, invalid network-side/flag values, and incompatible actor/component classes before loading the target asset. |
+| Action-name contract | `Monolith.Lyra.AddExperienceComponentEntry.ActionNameContract` executes the registered action against a transient ExperienceActionSet and verifies exact-name creation without a suffix, identical-request no-op reuse, and dry-run rejection of an incompatible same-name direct-child orphan. |
 | Build | `SpeedEditor Win64 Development` UBT build must succeed with engine root resolved from `Speed.uproject`. |
 | Runtime code scope | No files under `Source/LyraGame`, `Source/LyraEditor`, or `Plugins/CommonGame` are changed by this module. |
 

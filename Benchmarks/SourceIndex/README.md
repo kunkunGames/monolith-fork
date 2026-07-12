@@ -13,7 +13,7 @@ graphs, and plan C++ changes.
 | File | Purpose |
 | --- | --- |
 | `tasks.jsonl` | Static seed fixture set covering all six task categories. |
-| `manifest.json` | Catalog metadata, golden symbols, and score formula. |
+| `manifest.json` | Catalog metadata, golden symbols, score formula, and run-integrity gates. |
 | `METRICS.md` | Metric definitions, score formula, and interpretation. |
 | `RESULTS.md` | Latest checked-in benchmark result summary. |
 | `Plugins/Monolith/Scripts/source_index_benchmark.py` | Generator, runner, and comparison tool. |
@@ -65,12 +65,39 @@ python Plugins\Monolith\Scripts\source_index_benchmark.py run `
   --request-timeout-s 12
 ```
 
-Each run writes `summary.json`, `per_task.json`, incremental `per_task.jsonl`,
-and `partial_summary.json`.  Progress is printed as:
+A valid completed run writes `summary.json`, `per_task.json`, and incremental
+`per_task.jsonl`. Progress is printed as:
 
 ```
 [N/total] task_id success=True direct=True
 ```
+
+### Run-integrity contract
+
+`run` strictly validates `monolith_status` before the first task. Invalid JSON, a non-object JSON
+envelope, a top-level JSON-RPC error, a missing MCP result, `isError` status, or a payload that does
+not declare `server_running=true` writes `run_failure.json`, writes no `summary.json`, and exits
+non-zero. Known run outputs are removed first so an invalid rerun cannot expose a stale success.
+
+Each task row distinguishes a transport failure (`transport_error`, HTTP status, bounded raw text)
+from an invalid MCP/JSON-RPC envelope (`protocol_error`). A valid semantic `result.isError=true`
+remains scoreable for `negative_recovery`; protocol failures are never allowed through the
+empty-result or plain-text success branches and invalidate the run.
+
+The shared transport gate aborts after three consecutive transport-failed tasks or when failures
+exceed 5% after 20 attempted tasks. Exactly 5% is allowed. `finalize()` applies the same fraction
+budget to a completed corpus shorter than 20 tasks.
+
+| Output | Contract |
+| --- | --- |
+| `summary.json` | Valid complete run only; includes `run_valid=true`, `metrics_valid=true`, completion status, and transport counters |
+| `per_task.json` | Valid complete run only |
+| `per_task.jsonl` | Incremental task diagnostics, including the triggering invalid row |
+| `partial_summary.json` | In-progress or invalid-run diagnostics; removed after valid completion |
+| `run_failure.json` | Invalid status, protocol, transport-budget, or runner-exception record; mutually exclusive with `summary.json` |
+
+Offline contract verification is `python Scripts/test_source_index_benchmark.py` (23 scorer and
+run-integrity test functions; no editor or live MCP endpoint).
 
 ## Compare
 

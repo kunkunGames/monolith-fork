@@ -10,10 +10,18 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/Base64.h"                        // FBase64::Decode
+#include "Misc/Guid.h"
 #include "Misc/PackageName.h"                   // FPackageName::GetLongPackagePath / LongPackageNameToFilename / GetAssetPackageExtension
+#include "Misc/PackagePath.h"
+#include "Misc/PackageSegment.h"
 #include "Misc/SecureHash.h"                    // FMD5
+#include "HAL/FileManager.h"
 #include "UObject/Package.h"                    // UPackage, SavePackage
 #include "UObject/SavePackage.h"                // FSavePackageArgs
+#include "UObject/GarbageCollection.h"
+#include "UObject/Linker.h"
+#include "UObject/StrongObjectPtr.h"
+#include "UObject/UnrealType.h"
 #include "UObject/UObjectGlobals.h"             // CreatePackage, NewObject
 #include "HAL/UnrealMemory.h"                   // FMemory::Memcpy
 
@@ -28,14 +36,22 @@
 #include "Engine/TextureDefines.h"              // TEXTUREGROUP_UI, TEXTUREGROUP_World, etc.
 #include "TextureResource.h"                    // FTexturePlatformData, FTexture2DMipMap
 #include "PixelFormat.h"                        // PF_B8G8R8A8
+#include "RenderingThread.h"                    // FlushRenderingCommands
 
-// Asset registry + asset tools (unique naming)
+// Asset registry + asset tools
 #include "AssetRegistry/AssetRegistryModule.h"  // FAssetRegistryModule::AssetCreated
 #include "AssetToolsModule.h"                   // FAssetToolsModule
 #include "IAssetTools.h"                        // IAssetTools::CreateUniqueAssetName
 
 namespace MonolithAsset::TextureIngestInternal
 {
+    enum class ETextureConflictPolicy : uint8
+    {
+        Fail,
+        Replace,
+        Unique,
+    };
+
     struct FTextureRolePreset
     {
         FString Role;
@@ -53,6 +69,1018 @@ namespace MonolithAsset::TextureIngestInternal
         bool bValidateMask = false;
         bool bExpectPowerOfTwo = false;
     };
+
+    static bool ParseConflictPolicy(
+        const TSharedPtr<FJsonObject>& Params,
+        ETextureConflictPolicy& OutPolicy,
+        FString& OutPolicyName,
+        FString& OutError)
+    {
+        OutPolicyName = TEXT("fail");
+        if (Params->HasField(TEXT("conflict_policy"))
+            && !Params->TryGetStringField(TEXT("conflict_policy"), OutPolicyName))
+        {
+            OutError = TEXT("conflict_policy must be a string");
+            return false;
+        }
+        OutPolicyName.TrimStartAndEndInline();
+        OutPolicyName.ToLowerInline();
+
+        if (OutPolicyName == TEXT("fail"))
+        {
+            OutPolicy = ETextureConflictPolicy::Fail;
+            return true;
+        }
+        if (OutPolicyName == TEXT("replace"))
+        {
+            OutPolicy = ETextureConflictPolicy::Replace;
+            return true;
+        }
+        if (OutPolicyName == TEXT("unique"))
+        {
+            OutPolicy = ETextureConflictPolicy::Unique;
+            return true;
+        }
+
+        OutError = FString::Printf(
+            TEXT("Invalid conflict_policy '%s' (expected fail, replace, or unique)"),
+            *OutPolicyName);
+        return false;
+    }
+
+    static FString MakeAssetObjectPath(const FString& PackageName)
+    {
+        return PackageName + TEXT(".") + FPackageName::GetLongPackageAssetName(PackageName);
+    }
+
+    static UObject* FindOrLoadAssetAtPackagePath(const FString& PackageName, bool bPackageExistsOnDisk)
+    {
+        const FString AssetName = FPackageName::GetLongPackageAssetName(PackageName);
+        if (UPackage* LoadedPackage = FindPackage(nullptr, *PackageName))
+        {
+            if (UObject* ExistingObject = FindObject<UObject>(LoadedPackage, *AssetName))
+            {
+                return ExistingObject;
+            }
+        }
+
+        return bPackageExistsOnDisk
+            ? LoadObject<UObject>(nullptr, *MakeAssetObjectPath(PackageName))
+            : nullptr;
+    }
+
+    static TArray<FString> GetTexturePackageFilenameCandidates(const FString& PackageName)
+    {
+        TArray<FString> Result;
+        auto AddCandidate = [&Result](FString Filename)
+        {
+            if (!Filename.IsEmpty())
+            {
+                Filename = FPaths::ConvertRelativePathToFull(Filename);
+                FPaths::NormalizeFilename(Filename);
+                Result.AddUnique(Filename);
+            }
+        };
+
+        FString HeaderFilename;
+        if (FPackageName::TryConvertLongPackageNameToFilename(
+                PackageName,
+                HeaderFilename,
+                FPackageName::GetAssetPackageExtension()))
+        {
+            AddCandidate(MoveTemp(HeaderFilename));
+        }
+
+        FPackagePath PackagePath;
+        if (FPackagePath::TryFromPackageName(PackageName, PackagePath))
+        {
+            const EPackageSegment SidecarSegments[] = {
+                EPackageSegment::Exports,
+                EPackageSegment::BulkDataDefault,
+                EPackageSegment::BulkDataOptional,
+                EPackageSegment::BulkDataMemoryMapped,
+                EPackageSegment::PayloadSidecar,
+            };
+            for (const EPackageSegment Segment : SidecarSegments)
+            {
+                AddCandidate(PackagePath.GetLocalFullPath(Segment));
+            }
+        }
+        return Result;
+    }
+
+    static FProperty* GetTexturePropertyChecked(FName PropertyName)
+    {
+        FProperty* Property = FindFProperty<FProperty>(UTexture2D::StaticClass(), PropertyName);
+        checkf(Property, TEXT("Expected reflected UTexture2D property '%s'"), *PropertyName.ToString());
+        return Property;
+    }
+
+    template <typename TValue, typename TSetter>
+    static void ApplyTexturePropertyChange(
+        UTexture2D* Texture,
+        FName PropertyName,
+        const TValue& CurrentValue,
+        const TValue& NewValue,
+        TSetter&& Setter)
+    {
+        if (CurrentValue == NewValue)
+        {
+            return;
+        }
+
+        FProperty* EditProperty = GetTexturePropertyChecked(PropertyName);
+        Texture->PreEditChange(EditProperty);
+        Setter();
+        FPropertyChangedEvent PropertyEvent(
+            EditProperty,
+            EPropertyChangeType::ValueSet);
+        Texture->PostEditChangeProperty(PropertyEvent);
+    }
+
+    static void ApplyTextureSettings(
+        UTexture2D* Texture,
+        TextureCompressionSettings Compression,
+        bool bSRGB,
+        TextureMipGenSettings MipGen,
+        TextureGroup LODGroup,
+        TextureAddress AddressX,
+        TextureAddress AddressY)
+    {
+        // LOD-group validation can update other texture settings, so dispatch it
+        // first and then apply the caller's explicit values property-by-property.
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture, LODGroup),
+            static_cast<TextureGroup>(Texture->LODGroup),
+            LODGroup,
+            [Texture, LODGroup]() { Texture->LODGroup = LODGroup; });
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture, CompressionSettings),
+            static_cast<TextureCompressionSettings>(Texture->CompressionSettings),
+            Compression,
+            [Texture, Compression]() { Texture->CompressionSettings = Compression; });
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture, SRGB),
+            Texture->SRGB != 0,
+            bSRGB,
+            [Texture, bSRGB]() { Texture->SRGB = bSRGB; });
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture, MipGenSettings),
+            static_cast<TextureMipGenSettings>(Texture->MipGenSettings),
+            MipGen,
+            [Texture, MipGen]() { Texture->MipGenSettings = MipGen; });
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture2D, AddressX),
+            static_cast<TextureAddress>(Texture->AddressX),
+            AddressX,
+            [Texture, AddressX]() { Texture->AddressX = AddressX; });
+        ApplyTexturePropertyChange(
+            Texture,
+            GET_MEMBER_NAME_CHECKED(UTexture2D, AddressY),
+            static_cast<TextureAddress>(Texture->AddressY),
+            AddressY,
+            [Texture, AddressY]() { Texture->AddressY = AddressY; });
+    }
+
+    struct FTextureSideEffectSnapshot
+    {
+        void Capture(UTexture2D* Texture)
+        {
+            Filter = Texture->Filter;
+            bUseLegacyGamma = Texture->bUseLegacyGamma;
+            PowerOfTwoMode = Texture->PowerOfTwoMode;
+            ResizeDuringBuildX = Texture->ResizeDuringBuildX;
+            ResizeDuringBuildY = Texture->ResizeDuringBuildY;
+            bVirtualTextureStreaming = Texture->VirtualTextureStreaming;
+            MaxTextureSize = Texture->MaxTextureSize;
+            NumCinematicMipLevels = Texture->NumCinematicMipLevels;
+            LightingGuid = Texture->GetLightingGuid();
+            bDeferCompression = Texture->DeferCompression;
+            bTemporarilyDisableStreaming = GetTemporaryDisableStreamingProperty()
+                ->GetPropertyValue_InContainer(Texture);
+        }
+
+        void Restore(UTexture2D* Texture) const
+        {
+            Texture->Filter = Filter;
+            Texture->bUseLegacyGamma = bUseLegacyGamma;
+            Texture->PowerOfTwoMode = PowerOfTwoMode;
+            Texture->ResizeDuringBuildX = ResizeDuringBuildX;
+            Texture->ResizeDuringBuildY = ResizeDuringBuildY;
+            Texture->VirtualTextureStreaming = bVirtualTextureStreaming;
+            Texture->MaxTextureSize = MaxTextureSize;
+            Texture->NumCinematicMipLevels = NumCinematicMipLevels;
+            Texture->DeferCompression = bDeferCompression;
+            GetTemporaryDisableStreamingProperty()
+                ->SetPropertyValue_InContainer(Texture, bTemporarilyDisableStreaming);
+        }
+
+        void RestoreWithCallbacks(UTexture2D* Texture) const
+        {
+            ApplyTexturePropertyChange(
+                Texture,
+                GET_MEMBER_NAME_CHECKED(UTexture, Filter),
+                static_cast<TextureFilter>(Texture->Filter),
+                Filter,
+                [Texture, Filter = Filter]() { Texture->Filter = Filter; });
+            ApplyTexturePropertyChange(
+                Texture,
+                GET_MEMBER_NAME_CHECKED(UTexture, VirtualTextureStreaming),
+                Texture->VirtualTextureStreaming != 0,
+                bVirtualTextureStreaming,
+                [Texture, bVirtualTextureStreaming = bVirtualTextureStreaming]()
+                {
+                    Texture->VirtualTextureStreaming = bVirtualTextureStreaming;
+                });
+
+            // The remaining fields are validation/save side effects rather than
+            // values this action explicitly edits. Restore them exactly after
+            // the two material/resource-sensitive callbacks above.
+            Restore(Texture);
+        }
+
+        void RestoreLightingGuid(UTexture2D* Texture) const
+        {
+            Texture->SetLightingGuid(LightingGuid);
+        }
+
+        bool Matches(UTexture2D* Texture) const
+        {
+            return Texture->Filter == Filter
+                && (Texture->bUseLegacyGamma != 0) == bUseLegacyGamma
+                && Texture->PowerOfTwoMode == PowerOfTwoMode
+                && Texture->ResizeDuringBuildX == ResizeDuringBuildX
+                && Texture->ResizeDuringBuildY == ResizeDuringBuildY
+                && (Texture->VirtualTextureStreaming != 0) == bVirtualTextureStreaming
+                && Texture->MaxTextureSize == MaxTextureSize
+                && Texture->NumCinematicMipLevels == NumCinematicMipLevels
+                && Texture->GetLightingGuid() == LightingGuid
+                && (Texture->DeferCompression != 0) == bDeferCompression
+                && GetTemporaryDisableStreamingProperty()->GetPropertyValue_InContainer(Texture)
+                    == bTemporarilyDisableStreaming;
+        }
+
+    private:
+        static FBoolProperty* GetTemporaryDisableStreamingProperty()
+        {
+            FBoolProperty* Property = FindFProperty<FBoolProperty>(
+                UTexture2D::StaticClass(),
+                TEXT("bTemporarilyDisableStreaming"));
+            check(Property);
+            return Property;
+        }
+
+        TextureFilter Filter = TF_Default;
+        bool bUseLegacyGamma = false;
+        ETexturePowerOfTwoSetting::Type PowerOfTwoMode = ETexturePowerOfTwoSetting::None;
+        int32 ResizeDuringBuildX = 0;
+        int32 ResizeDuringBuildY = 0;
+        bool bVirtualTextureStreaming = false;
+        int32 MaxTextureSize = 0;
+        int32 NumCinematicMipLevels = 0;
+        FGuid LightingGuid;
+        bool bDeferCompression = false;
+        bool bTemporarilyDisableStreaming = false;
+    };
+
+    static void SwapTexturePlatformData(
+        FTexturePlatformData& Left,
+        FTexturePlatformData& Right)
+    {
+        Swap(Left.SizeX, Right.SizeX);
+        Swap(Left.SizeY, Right.SizeY);
+        Swap(Left.PackedData, Right.PackedData);
+        Swap(Left.PixelFormat, Right.PixelFormat);
+        Swap(Left.OptData, Right.OptData);
+        Swap(Left.Mips, Right.Mips);
+        Swap(Left.VTData, Right.VTData);
+        Swap(Left.CPUCopy, Right.CPUCopy);
+#if WITH_EDITORONLY_DATA
+        check(Left.AsyncTask == nullptr && Right.AsyncTask == nullptr);
+        Swap(Left.PreEncodeMipsHash, Right.PreEncodeMipsHash);
+        Swap(Left.DerivedDataKey, Right.DerivedDataKey);
+        Swap(Left.ResultMetadata, Right.ResultMetadata);
+        Swap(Left.FetchOrBuildDerivedDataKey, Right.FetchOrBuildDerivedDataKey);
+        Swap(Left.FetchFirstDerivedDataKey, Right.FetchFirstDerivedDataKey);
+        Swap(Left.AsyncTask, Right.AsyncTask);
+#endif
+    }
+
+    static void DestroyOwnedPlatformDataMap(
+        TMap<FString, FTexturePlatformData*>& PlatformDataMap,
+        std::initializer_list<FTexturePlatformData*> PreservedPlatformData)
+    {
+        TSet<FTexturePlatformData*> Preserved;
+        for (FTexturePlatformData* PlatformData : PreservedPlatformData)
+        {
+            if (PlatformData)
+            {
+                Preserved.Add(PlatformData);
+            }
+        }
+
+        TSet<FTexturePlatformData*> Deleted;
+        for (const TPair<FString, FTexturePlatformData*>& Pair : PlatformDataMap)
+        {
+            FTexturePlatformData* PlatformData = Pair.Value;
+            if (PlatformData && !Preserved.Contains(PlatformData) && !Deleted.Contains(PlatformData))
+            {
+                Deleted.Add(PlatformData);
+                delete PlatformData;
+            }
+        }
+        PlatformDataMap.Reset();
+    }
+
+    struct FTexturePlatformIdentity
+    {
+        void Capture(FTexturePlatformData* PlatformData)
+        {
+            check(PlatformData);
+            PlatformDataAddress = PlatformData;
+            SizeX = PlatformData->SizeX;
+            SizeY = PlatformData->SizeY;
+            PackedData = PlatformData->PackedData;
+            PixelFormat = PlatformData->PixelFormat;
+            OptData = PlatformData->OptData;
+            VTDataAddress = PlatformData->VTData;
+            CPUCopyAddress = PlatformData->CPUCopy.GetReference();
+            MipAddresses.Reserve(PlatformData->Mips.Num());
+            for (FTexture2DMipMap& Mip : PlatformData->Mips)
+            {
+                MipAddresses.Add(&Mip);
+            }
+#if WITH_EDITORONLY_DATA
+            PreEncodeMipsHash = PlatformData->PreEncodeMipsHash;
+            DerivedDataKey = PlatformData->DerivedDataKey;
+            ResultMetadata = PlatformData->ResultMetadata;
+            FetchOrBuildDerivedDataKey = PlatformData->FetchOrBuildDerivedDataKey;
+            FetchFirstDerivedDataKey = PlatformData->FetchFirstDerivedDataKey;
+#endif
+        }
+
+        void SetExpectedPlatformDataAddress(FTexturePlatformData* PlatformData)
+        {
+            PlatformDataAddress = PlatformData;
+        }
+
+        bool Matches(FTexturePlatformData* PlatformData) const
+        {
+            if (!PlatformData
+                || PlatformData != PlatformDataAddress
+                || PlatformData->SizeX != SizeX
+                || PlatformData->SizeY != SizeY
+                || PlatformData->PackedData != PackedData
+                || PlatformData->PixelFormat != PixelFormat
+                || PlatformData->OptData != OptData
+                || PlatformData->VTData != VTDataAddress
+                || PlatformData->CPUCopy.GetReference() != CPUCopyAddress
+                || PlatformData->Mips.Num() != MipAddresses.Num())
+            {
+                return false;
+            }
+            for (int32 MipIndex = 0; MipIndex < MipAddresses.Num(); ++MipIndex)
+            {
+                if (&PlatformData->Mips[MipIndex] != MipAddresses[MipIndex])
+                {
+                    return false;
+                }
+            }
+#if WITH_EDITORONLY_DATA
+            if (PlatformData->AsyncTask != nullptr
+                || PlatformData->PreEncodeMipsHash != PreEncodeMipsHash
+                || !DerivedDataKeyMatches(PlatformData->DerivedDataKey, DerivedDataKey)
+                || !ResultMetadataMatches(PlatformData->ResultMetadata, ResultMetadata)
+                || !FetchKeyMatches(
+                    PlatformData->FetchOrBuildDerivedDataKey,
+                    FetchOrBuildDerivedDataKey)
+                || !FetchKeyMatches(
+                    PlatformData->FetchFirstDerivedDataKey,
+                    FetchFirstDerivedDataKey))
+            {
+                return false;
+            }
+#endif
+            return true;
+        }
+
+    private:
+#if WITH_EDITORONLY_DATA
+        static bool DerivedDataKeyMatches(
+            const decltype(FTexturePlatformData::DerivedDataKey)& Left,
+            const decltype(FTexturePlatformData::DerivedDataKey)& Right)
+        {
+            if (Left.GetIndex() != Right.GetIndex())
+            {
+                return false;
+            }
+            if (Left.IsType<FString>())
+            {
+                return Left.Get<FString>() == Right.Get<FString>();
+            }
+
+            // FCacheKeyProxy is not a byte-comparable POD value. The original
+            // variant object is moved out and then moved back during rollback,
+            // so matching the active alternative is the strongest safe public
+            // check available without depending on private DDC internals.
+            return Left.IsType<UE::DerivedData::FCacheKeyProxy>()
+                && Right.IsType<UE::DerivedData::FCacheKeyProxy>();
+        }
+
+        static bool FetchKeyMatches(
+            const decltype(FTexturePlatformData::FetchOrBuildDerivedDataKey)& Left,
+            const decltype(FTexturePlatformData::FetchOrBuildDerivedDataKey)& Right)
+        {
+            if (Left.GetIndex() != Right.GetIndex())
+            {
+                return false;
+            }
+            if (Left.IsType<FString>())
+            {
+                return Left.Get<FString>() == Right.Get<FString>();
+            }
+            return Left.Get<FTexturePlatformData::FStructuredDerivedDataKey>()
+                == Right.Get<FTexturePlatformData::FStructuredDerivedDataKey>();
+        }
+
+        static bool ResultMetadataMatches(
+            const FTexturePlatformData::FTextureEncodeResultMetadata& Left,
+            const FTexturePlatformData::FTextureEncodeResultMetadata& Right)
+        {
+            return Left.Encoder == Right.Encoder
+                && Left.EncodedFormat == Right.EncodedFormat
+                && Left.bIsValid == Right.bIsValid
+                && Left.bSupportsEncodeSpeed == Right.bSupportsEncodeSpeed
+                && Left.bWasEditorCustomEncoding == Right.bWasEditorCustomEncoding
+                && Left.RDOSource == Right.RDOSource
+                && Left.OodleRDO == Right.OodleRDO
+                && Left.OodleEncodeEffort == Right.OodleEncodeEffort
+                && Left.OodleUniversalTiling == Right.OodleUniversalTiling
+                && Left.EncodeSpeed == Right.EncodeSpeed;
+        }
+#endif
+
+        FTexturePlatformData* PlatformDataAddress = nullptr;
+        int32 SizeX = 0;
+        int32 SizeY = 0;
+        uint32 PackedData = 0;
+        EPixelFormat PixelFormat = PF_Unknown;
+        FOptTexturePlatformData OptData;
+        FVirtualTextureBuiltData* VTDataAddress = nullptr;
+        const FSharedImage* CPUCopyAddress = nullptr;
+        TArray<FTexture2DMipMap*> MipAddresses;
+#if WITH_EDITORONLY_DATA
+        uint64 PreEncodeMipsHash = 0;
+        decltype(FTexturePlatformData::DerivedDataKey) DerivedDataKey;
+        FTexturePlatformData::FTextureEncodeResultMetadata ResultMetadata;
+        decltype(FTexturePlatformData::FetchOrBuildDerivedDataKey) FetchOrBuildDerivedDataKey;
+        decltype(FTexturePlatformData::FetchFirstDerivedDataKey) FetchFirstDerivedDataKey;
+#endif
+    };
+
+    class FTextureReplacementSnapshot
+    {
+    public:
+        ~FTextureReplacementSnapshot()
+        {
+            if (bCaptured)
+            {
+                FString IgnoredError;
+                Restore(IgnoredError);
+            }
+        }
+
+        bool Capture(UTexture2D* InTexture, FString& OutError)
+        {
+            if (!InTexture || !InTexture->GetOutermost())
+            {
+                OutError = TEXT("Cannot snapshot a null or unowned replacement texture");
+                return false;
+            }
+
+            Texture = InTexture;
+            Texture->BlockOnAnyAsyncBuild();
+            Texture->WaitForPendingInitOrStreaming();
+            Texture->FinishCachePlatformData();
+
+            FTexturePlatformData* RunningPlatformData = Texture->GetPlatformData();
+
+            if (Texture->ResourceMem != nullptr)
+            {
+                OutError = TEXT("Atomic replacement does not support textures with active ResourceMem");
+                return false;
+            }
+
+            for (const TPair<FString, FTexturePlatformData*>& Pair : Texture->CookedPlatformData)
+            {
+                if (Pair.Value && Pair.Value->AsyncTask != nullptr)
+                {
+                    OutError = FString::Printf(
+                        TEXT("Cannot replace texture while cooked platform data '%s' is still building"),
+                        *Pair.Key);
+                    return false;
+                }
+            }
+
+            TSet<FTexturePlatformData*> UniqueCookedPlatformData;
+            for (const TPair<FString, FTexturePlatformData*>& Pair : Texture->CookedPlatformData)
+            {
+                if (!Pair.Value)
+                {
+                    continue;
+                }
+                if (Pair.Value == RunningPlatformData || UniqueCookedPlatformData.Contains(Pair.Value))
+                {
+                    OutError = FString::Printf(
+                        TEXT("Cannot atomically replace texture with aliased cooked platform data '%s'"),
+                        *Pair.Key);
+                    return false;
+                }
+                UniqueCookedPlatformData.Add(Pair.Value);
+            }
+
+            bPackageWasDirty = Texture->GetOutermost()->IsDirty();
+            bSourceWasValid = Texture->Source.IsValid();
+            if (bSourceWasValid)
+            {
+                SourcePersistentId = Texture->Source.GetPersistentId();
+                SourceIdString = Texture->Source.GetIdString();
+                SourceCompression = Texture->Source.GetSourceCompression();
+                bSourceWasLongLat = Texture->Source.IsLongLatCubemap();
+                SourcePayloadSize = Texture->Source.GetSizeOnDisk();
+                SourceStoredPayload = Texture->Source.GetBulkDataPayload();
+                Texture->Source.GetLayerColorInfo(SourceLayerColorInfo);
+                SourceBlocks.SetNum(Texture->Source.GetNumBlocks());
+                for (int32 BlockIndex = 0; BlockIndex < SourceBlocks.Num(); ++BlockIndex)
+                {
+                    Texture->Source.GetBlock(BlockIndex, SourceBlocks[BlockIndex]);
+                }
+                SourceLayerFormats.Reserve(Texture->Source.GetNumLayers());
+                for (int32 LayerIndex = 0; LayerIndex < Texture->Source.GetNumLayers(); ++LayerIndex)
+                {
+                    SourceLayerFormats.Add(Texture->Source.GetFormat(LayerIndex));
+                }
+            }
+            Compression = Texture->CompressionSettings;
+            bSRGB = Texture->SRGB;
+            MipGen = Texture->MipGenSettings;
+            LODGroup = Texture->LODGroup;
+            AddressX = Texture->AddressX;
+            AddressY = Texture->AddressY;
+            SideEffects.Capture(Texture);
+            CPUCopyTextureSnapshot.Reset(Texture->CPUCopyTexture.Get());
+
+            bHadRunningPlatformData = RunningPlatformData != nullptr;
+            if (RunningPlatformData && RunningPlatformData->AsyncTask != nullptr)
+            {
+                OutError = TEXT("Cannot replace texture while running platform data is still building");
+                return false;
+            }
+
+            // Capture the transaction before either exact ownership swap. A
+            // failed preflight therefore does not modify transaction state,
+            // while undo still records the complete original texture.
+            Texture->Modify(/*bAlwaysMarkDirty=*/false);
+            Swap(Texture->Source, SourceSnapshot);
+            Texture->Source.SetOwner(Texture);
+
+            Texture->ReleaseResource();
+            FlushRenderingCommands();
+            if (RunningPlatformData)
+            {
+                AttachedPlatformData = RunningPlatformData;
+                PlatformDataSnapshot = MakeUnique<FTexturePlatformData>();
+                SwapTexturePlatformData(*RunningPlatformData, *PlatformDataSnapshot);
+                PlatformIdentity.Capture(PlatformDataSnapshot.Get());
+                PlatformIdentity.SetExpectedPlatformDataAddress(AttachedPlatformData);
+            }
+
+            ExpectedCookedPlatformData = Texture->CookedPlatformData;
+            Swap(Texture->CookedPlatformData, CookedPlatformDataSnapshot);
+            bCaptured = true;
+            return true;
+        }
+
+        void InstallReplacementPlatformData(TUniquePtr<FTexturePlatformData>& PreparedPlatformData)
+        {
+            check(bCaptured && PreparedPlatformData);
+            if (bHadRunningPlatformData)
+            {
+                check(AttachedPlatformData);
+                SwapTexturePlatformData(*AttachedPlatformData, *PreparedPlatformData);
+                PreparedPlatformData.Reset();
+            }
+            else
+            {
+                check(!AttachedPlatformData && !PlatformDataSnapshot);
+                Texture->SetPlatformData(PreparedPlatformData.Release());
+            }
+        }
+
+        bool Restore(FString& OutError)
+        {
+            if (!bCaptured || !Texture)
+            {
+                return true;
+            }
+
+            Texture->BlockOnAnyAsyncBuild();
+            Texture->WaitForPendingInitOrStreaming();
+            Texture->FinishCachePlatformData();
+            Texture->ReleaseResource();
+            FlushRenderingCommands();
+
+            Texture->PreEditChange(nullptr);
+            Swap(Texture->Source, SourceSnapshot);
+            Texture->Source.SetOwner(Texture);
+            Texture->PostEditChange();
+
+            // The source callback above is generic. Replay the settings as
+            // actual replacement-to-original property changes so UTexture's
+            // property-specific resource and material invalidation runs too.
+            RestoreTextureSettingsWithCallbacks();
+            RestoreTextureSettings();
+            SideEffects.RestoreLightingGuid(Texture);
+
+            Texture->BlockOnAnyAsyncBuild();
+            Texture->WaitForPendingInitOrStreaming();
+            Texture->FinishCachePlatformData();
+            Texture->ReleaseResource();
+            FlushRenderingCommands();
+
+            FTexturePlatformData* CurrentPlatformData = Texture->GetPlatformData();
+            // UTexture::ClearAllCachedCookedPlatformData deletes every map
+            // value without guarding duplicate or running-data aliases. Clear
+            // the replacement map ourselves so an anomalous cache entry can
+            // never delete the allocation still owned by UTexture2D.
+            DestroyOwnedPlatformDataMap(
+                Texture->CookedPlatformData,
+                {CurrentPlatformData, PlatformDataSnapshot.Get()});
+            if (bHadRunningPlatformData)
+            {
+                if (CurrentPlatformData == AttachedPlatformData)
+                {
+                    // One swap restores every original owned field into the
+                    // original top-level allocation; resetting the snapshot
+                    // then destroys the replacement fields exactly once.
+                    SwapTexturePlatformData(*AttachedPlatformData, *PlatformDataSnapshot);
+                    PlatformDataSnapshot.Reset();
+                }
+                else
+                {
+                    // Do not turn an engine-side allocation change into an
+                    // editor-fatal assertion. Reinstall the exact saved object
+                    // and report the lost top-level identity as a recoverable
+                    // rollback postcondition failure.
+                    FTexturePlatformData* RestoredPlatformData = PlatformDataSnapshot.Get();
+                    Texture->SetPlatformData(PlatformDataSnapshot.Release());
+                    PlatformIdentity.SetExpectedPlatformDataAddress(RestoredPlatformData);
+                    bPlatformAllocationChangedDuringRollback = true;
+                }
+            }
+            else
+            {
+                Texture->SetPlatformData(nullptr);
+            }
+
+            Swap(Texture->CookedPlatformData, CookedPlatformDataSnapshot);
+            Texture->UTexture::UpdateResourceWithParams(UTexture::EUpdateResourceFlags::Synchronous);
+            Texture->BlockOnAnyAsyncBuild();
+            Texture->WaitForPendingInitOrStreaming();
+            Texture->FinishCachePlatformData();
+
+            RestoreTextureSettings();
+            SideEffects.RestoreLightingGuid(Texture);
+            Texture->CPUCopyTexture = CPUCopyTextureSnapshot.Get();
+            Texture->GetOutermost()->SetDirtyFlag(bPackageWasDirty);
+            bCaptured = false;
+
+            TArray<FString> Mismatches;
+            if (!SourceMatches())
+            {
+                Mismatches.Add(TEXT("source"));
+            }
+            if (!PlatformDataMatches())
+            {
+                Mismatches.Add(TEXT("platform_data"));
+            }
+            if (bPlatformAllocationChangedDuringRollback)
+            {
+                Mismatches.Add(TEXT("platform_data_allocation"));
+            }
+            if (!TextureSettingsMatch())
+            {
+                Mismatches.Add(TEXT("settings"));
+            }
+            if (!CookedPlatformDataMatches())
+            {
+                Mismatches.Add(TEXT("cooked_platform_data"));
+            }
+            if (Texture->CPUCopyTexture.Get() != CPUCopyTextureSnapshot.Get())
+            {
+                Mismatches.Add(TEXT("cpu_copy_texture"));
+            }
+            if (Texture->GetOutermost()->IsDirty() != bPackageWasDirty)
+            {
+                Mismatches.Add(TEXT("dirty_state"));
+            }
+
+            if (Mismatches.Num() > 0)
+            {
+                OutError = FString::Printf(
+                    TEXT("Texture replacement rollback postcondition failed: %s"),
+                    *FString::Join(Mismatches, TEXT(", ")));
+                return false;
+            }
+            return true;
+        }
+
+        void Commit()
+        {
+            DeleteSavedCookedPlatformData();
+            PlatformDataSnapshot.Reset();
+            CPUCopyTextureSnapshot.Reset();
+            bCaptured = false;
+        }
+
+    private:
+        void RestoreTextureSettingsWithCallbacks() const
+        {
+            ApplyTextureSettings(
+                Texture,
+                Compression,
+                bSRGB,
+                MipGen,
+                LODGroup,
+                AddressX,
+                AddressY);
+            SideEffects.RestoreWithCallbacks(Texture);
+        }
+
+        void RestoreTextureSettings() const
+        {
+            Texture->CompressionSettings = Compression;
+            Texture->SRGB = bSRGB;
+            Texture->MipGenSettings = MipGen;
+            Texture->LODGroup = LODGroup;
+            Texture->AddressX = AddressX;
+            Texture->AddressY = AddressY;
+            SideEffects.Restore(Texture);
+        }
+
+        bool TextureSettingsMatch() const
+        {
+            return Texture
+                && Texture->CompressionSettings == Compression
+                && (Texture->SRGB != 0) == bSRGB
+                && Texture->MipGenSettings == MipGen
+                && Texture->LODGroup == LODGroup
+                && Texture->AddressX == AddressX
+                && Texture->AddressY == AddressY
+                && SideEffects.Matches(Texture);
+        }
+
+        bool CookedPlatformDataMatches() const
+        {
+            if (!Texture || Texture->CookedPlatformData.Num() != ExpectedCookedPlatformData.Num())
+            {
+                return false;
+            }
+            for (const TPair<FString, FTexturePlatformData*>& Pair : ExpectedCookedPlatformData)
+            {
+                FTexturePlatformData* const* Restored = Texture->CookedPlatformData.Find(Pair.Key);
+                if (!Restored || *Restored != Pair.Value)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        void DeleteSavedCookedPlatformData()
+        {
+            DestroyOwnedPlatformDataMap(
+                CookedPlatformDataSnapshot,
+                {AttachedPlatformData, Texture ? Texture->GetPlatformData() : nullptr, PlatformDataSnapshot.Get()});
+            ExpectedCookedPlatformData.Reset();
+        }
+
+        bool SourceMatches() const
+        {
+            if (!Texture || Texture->Source.IsValid() != bSourceWasValid)
+            {
+                return false;
+            }
+            if (!bSourceWasValid)
+            {
+                return true;
+            }
+            if (Texture->Source.GetPersistentId() != SourcePersistentId
+                || Texture->Source.GetIdString() != SourceIdString
+                || Texture->Source.GetSourceCompression() != SourceCompression
+                || Texture->Source.IsLongLatCubemap() != bSourceWasLongLat
+                || Texture->Source.GetSizeOnDisk() != SourcePayloadSize)
+            {
+                return false;
+            }
+            if (Texture->Source.GetNumBlocks() != SourceBlocks.Num()
+                || Texture->Source.GetNumLayers() != SourceLayerFormats.Num())
+            {
+                return false;
+            }
+            for (int32 LayerIndex = 0; LayerIndex < SourceLayerFormats.Num(); ++LayerIndex)
+            {
+                if (Texture->Source.GetFormat(LayerIndex) != SourceLayerFormats[LayerIndex])
+                {
+                    return false;
+                }
+            }
+            TArray<FTextureSourceLayerColorInfo> RestoredLayerColorInfo;
+            Texture->Source.GetLayerColorInfo(RestoredLayerColorInfo);
+            if (RestoredLayerColorInfo.Num() != SourceLayerColorInfo.Num())
+            {
+                return false;
+            }
+            for (int32 LayerIndex = 0; LayerIndex < SourceLayerColorInfo.Num(); ++LayerIndex)
+            {
+                if (RestoredLayerColorInfo[LayerIndex].ColorMin
+                        != SourceLayerColorInfo[LayerIndex].ColorMin
+                    || RestoredLayerColorInfo[LayerIndex].ColorMax
+                        != SourceLayerColorInfo[LayerIndex].ColorMax)
+                {
+                    return false;
+                }
+            }
+            for (int32 BlockIndex = 0; BlockIndex < SourceBlocks.Num(); ++BlockIndex)
+            {
+                FTextureSourceBlock RestoredBlock;
+                Texture->Source.GetBlock(BlockIndex, RestoredBlock);
+                const FTextureSourceBlock& OriginalBlock = SourceBlocks[BlockIndex];
+                if (RestoredBlock.BlockX != OriginalBlock.BlockX
+                    || RestoredBlock.BlockY != OriginalBlock.BlockY
+                    || RestoredBlock.SizeX != OriginalBlock.SizeX
+                    || RestoredBlock.SizeY != OriginalBlock.SizeY
+                    || RestoredBlock.NumSlices != OriginalBlock.NumSlices
+                    || RestoredBlock.NumMips != OriginalBlock.NumMips)
+                {
+                    return false;
+                }
+            }
+
+            const FSharedBuffer RestoredStoredPayload = Texture->Source.GetBulkDataPayload();
+            if (RestoredStoredPayload.IsNull() != SourceStoredPayload.IsNull()
+                || RestoredStoredPayload.GetSize() != SourceStoredPayload.GetSize())
+            {
+                return false;
+            }
+            return RestoredStoredPayload.GetSize() == 0
+                || FMemory::Memcmp(
+                    RestoredStoredPayload.GetData(),
+                    SourceStoredPayload.GetData(),
+                    static_cast<SIZE_T>(RestoredStoredPayload.GetSize())) == 0;
+        }
+
+        bool PlatformDataMatches() const
+        {
+            return Texture
+                && (bHadRunningPlatformData
+                    ? PlatformIdentity.Matches(Texture->GetPlatformData())
+                    : Texture->GetPlatformData() == nullptr);
+        }
+
+        UTexture2D* Texture = nullptr;
+        FTextureSource SourceSnapshot;
+        TArray<FTextureSourceBlock> SourceBlocks;
+        TArray<ETextureSourceFormat> SourceLayerFormats;
+        TArray<FTextureSourceLayerColorInfo> SourceLayerColorInfo;
+        FSharedBuffer SourceStoredPayload;
+        FGuid SourcePersistentId;
+        FString SourceIdString;
+        ETextureSourceCompressionFormat SourceCompression = TSCF_None;
+        int64 SourcePayloadSize = 0;
+        TUniquePtr<FTexturePlatformData> PlatformDataSnapshot;
+        FTexturePlatformData* AttachedPlatformData = nullptr;
+        FTexturePlatformIdentity PlatformIdentity;
+        TMap<FString, FTexturePlatformData*> CookedPlatformDataSnapshot;
+        TMap<FString, FTexturePlatformData*> ExpectedCookedPlatformData;
+        FTextureSideEffectSnapshot SideEffects;
+        TStrongObjectPtr<UTexture2D> CPUCopyTextureSnapshot;
+        TextureCompressionSettings Compression = TC_Default;
+        bool bSRGB = true;
+        TextureMipGenSettings MipGen = TMGS_NoMipmaps;
+        TextureGroup LODGroup = TEXTUREGROUP_UI;
+        TextureAddress AddressX = TA_Clamp;
+        TextureAddress AddressY = TA_Clamp;
+        bool bPackageWasDirty = false;
+        bool bSourceWasValid = false;
+        bool bSourceWasLongLat = false;
+        bool bHadRunningPlatformData = false;
+        bool bPlatformAllocationChangedDuringRollback = false;
+        bool bCaptured = false;
+    };
+
+    static bool RollbackCreatedTexture(
+        UTexture2D* Texture,
+        const FString& PackageName,
+        FString& OutError)
+    {
+        OutError.Reset();
+        if (!Texture)
+        {
+            OutError = TEXT("Cannot roll back a null created texture");
+            return false;
+        }
+
+        UPackage* Package = Texture->GetOutermost();
+        FAssetRegistryModule::AssetDeleted(Texture);
+        Texture->ClearFlags(RF_Public | RF_Standalone);
+        const bool bTextureRenamed = Texture->Rename(
+            *FString::Printf(TEXT("__monolith_failed_texture_%s"), *FGuid::NewGuid().ToString(EGuidFormats::Short)),
+            GetTransientPackage(),
+            REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+        Texture->MarkAsGarbage();
+
+        if (Package)
+        {
+            Package->SetDirtyFlag(false);
+            ResetLoaders(Package);
+            const bool bPackageRenamed = Package->Rename(
+                *FString::Printf(
+                    TEXT("/Temp/__monolith_failed_texture_package_%s"),
+                    *FGuid::NewGuid().ToString(EGuidFormats::Short)),
+                nullptr,
+                REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+            if (!bPackageRenamed)
+            {
+                OutError = TEXT("Failed to detach the created texture package during rollback");
+            }
+            Package->MarkAsGarbage();
+        }
+        CollectGarbage(RF_NoFlags);
+
+        TArray<FString> ResidualFiles;
+        for (const FString& PackageFilename : GetTexturePackageFilenameCandidates(PackageName))
+        {
+            if (IFileManager::Get().FileExists(*PackageFilename)
+                && !IFileManager::Get().Delete(
+                    *PackageFilename,
+                    /*RequireExists=*/false,
+                    /*EvenReadOnly=*/true,
+                    /*Quiet=*/true))
+            {
+                ResidualFiles.Add(PackageFilename);
+            }
+            else if (IFileManager::Get().FileExists(*PackageFilename))
+            {
+                ResidualFiles.Add(PackageFilename);
+            }
+        }
+
+        if (!bTextureRenamed)
+        {
+            OutError = TEXT("Failed to detach the created texture object during rollback");
+        }
+        TArray<FAssetData> RegisteredAssets;
+        FAssetRegistryModule& AssetRegistryModule =
+            FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+        AssetRegistryModule.Get().GetAssetsByPackageName(
+            FName(*PackageName),
+            RegisteredAssets,
+            /*bIncludeOnlyOnDiskAssets=*/false);
+        const bool bPackageStillLoaded = FindPackage(nullptr, *PackageName) != nullptr;
+        if (bPackageStillLoaded
+            || RegisteredAssets.Num() > 0
+            || ResidualFiles.Num() > 0
+            || !OutError.IsEmpty())
+        {
+            const FString ResidualSuffix = ResidualFiles.Num() > 0
+                ? FString::Printf(TEXT("; residual package files: %s"), *FString::Join(ResidualFiles, TEXT(", ")))
+                : FString();
+            if (OutError.IsEmpty())
+            {
+                if (bPackageStillLoaded)
+                {
+                    OutError = TEXT("Created texture package remained loaded after rollback");
+                }
+                else if (RegisteredAssets.Num() > 0)
+                {
+                    OutError = TEXT("Created texture remained registered after rollback");
+                }
+                else
+                {
+                    OutError = TEXT("Created texture rollback left package-file residuals");
+                }
+            }
+            OutError += ResidualSuffix;
+            return false;
+        }
+        return true;
+    }
 
     // Map a "png" / "jpg" / "jpeg" / "bmp" / "exr" / "tga" hint to an EImageFormat.
     // NOTE: UE 5.7 EImageFormat has NO WebP member (checked against IImageWrapper.h:26-69).
@@ -929,6 +1957,77 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         Destination = Destination.LeftChop(7);
     }
 
+    const FString RequestedAssetPath = Destination;
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(RequestedAssetPath); !ValidationError.IsEmpty())
+    {
+        return FMonolithActionResult::Error(ValidationError, -32602);
+    }
+
+    const FString RequestedAssetName = FPackageName::GetLongPackageAssetName(RequestedAssetPath);
+    if (RequestedAssetName.IsEmpty())
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(TEXT("destination must include an asset name (got '%s')"), *RequestedAssetPath),
+            -32602);
+    }
+
+    ETextureConflictPolicy ConflictPolicy = ETextureConflictPolicy::Fail;
+    FString ConflictPolicyName;
+    FString ConflictPolicyError;
+    if (!ParseConflictPolicy(Params, ConflictPolicy, ConflictPolicyName, ConflictPolicyError))
+    {
+        return FMonolithActionResult::Error(ConflictPolicyError, -32602);
+    }
+
+    const bool bRequestedPackageExistsOnDisk = FPackageName::DoesPackageExist(RequestedAssetPath);
+    const bool bRequestedPackageIsLoaded = FindPackage(nullptr, *RequestedAssetPath) != nullptr;
+    const bool bRequestedPackageExists = bRequestedPackageExistsOnDisk || bRequestedPackageIsLoaded;
+
+    UTexture2D* ExistingTexture = nullptr;
+    if (ConflictPolicy == ETextureConflictPolicy::Fail && bRequestedPackageExists)
+    {
+        return FMonolithActionResult::Error(
+            FString::Printf(
+                TEXT("Asset package '%s' already exists; conflict_policy=fail never changes the requested path"),
+                *RequestedAssetPath),
+            -32602);
+    }
+
+    if (ConflictPolicy == ETextureConflictPolicy::Replace && bRequestedPackageExists)
+    {
+        UObject* ExistingObject = FindOrLoadAssetAtPackagePath(RequestedAssetPath, bRequestedPackageExistsOnDisk);
+        if (!ExistingObject)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Cannot replace '%s': the package exists but its exact top-level asset could not be loaded"),
+                    *RequestedAssetPath),
+                -32602);
+        }
+
+        ExistingTexture = Cast<UTexture2D>(ExistingObject);
+        if (!ExistingTexture)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Cannot replace '%s': existing object is '%s', not UTexture2D"),
+                    *RequestedAssetPath,
+                    *ExistingObject->GetClass()->GetName()),
+                -32602);
+        }
+
+        if (ExistingTexture->GetOutermost()->GetName() != RequestedAssetPath
+            || ExistingTexture->GetName() != RequestedAssetName)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Cannot replace '%s': loading resolved to '%s' instead of the exact requested asset identity"),
+                    *RequestedAssetPath,
+                    *ExistingTexture->GetPathName()),
+                -32602);
+        }
+    }
+
     FString BytesB64;
     if (!Params->TryGetStringField(TEXT("bytes_b64"), BytesB64) || BytesB64.IsEmpty())
     {
@@ -1105,40 +2204,39 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     TSharedPtr<FJsonObject> Validation = BuildTextureValidationJson(
         TextureRole, RawBgra, W, H, RolePreset, AlphaFromBackgroundPixels, AlphaBleedPixels, TileSeamPixels);
 
-    // --- Resolve a unique package + asset name ---
-    FAssetToolsModule& AssetToolsModule =
-        FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+    // Every operation that can fail independently of UObject mutation is completed
+    // before touching an existing texture. This keeps replace atomic even when the
+    // caller requests the processed PNG payload.
+    TArray<uint8> ProcessedPngBytes;
+    if (bReturnProcessedPng && !EncodeRawBgraAsPng(RawBgra, W, H, ProcessedPngBytes))
+    {
+        return FMonolithActionResult::Error(TEXT("Failed to encode postprocessed texture pixels as PNG"), -32603);
+    }
 
-    FString UniquePackageName;
-    FString UniqueAssetName;
-    AssetToolsModule.Get().CreateUniqueAssetName(
-        Destination, /*Suffix=*/FString(),
-        /*out*/ UniquePackageName, /*out*/ UniqueAssetName);
+    // Resolve the output name. Only the explicit unique policy is allowed to
+    // change the caller's requested package path.
+    FString ResolvedPackageName = RequestedAssetPath;
+    FString ResolvedAssetName = RequestedAssetName;
+    if (ConflictPolicy == ETextureConflictPolicy::Unique)
+    {
+        FAssetToolsModule& AssetToolsModule =
+            FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+        AssetToolsModule.Get().CreateUniqueAssetName(
+            RequestedAssetPath,
+            /*Suffix=*/FString(),
+            /*out*/ ResolvedPackageName,
+            /*out*/ ResolvedAssetName);
+    }
 
-    // --- Create package + texture ---
-    if (const FString ValidationError = MonolithCore::ValidatePackagePath(UniquePackageName); !ValidationError.IsEmpty())
+    if (const FString ValidationError = MonolithCore::ValidatePackagePath(ResolvedPackageName); !ValidationError.IsEmpty())
     {
         return FMonolithActionResult::Error(ValidationError, -32603);
     }
 
-    UPackage* Package = CreatePackage(*UniquePackageName);
-    if (!Package)
-    {
-        return FMonolithActionResult::Error(
-            FString::Printf(TEXT("Failed to create package '%s'"), *UniquePackageName),
-            -32603);
-    }
-    Package->FullyLoad();
-
-    UTexture2D* Texture = NewObject<UTexture2D>(
-        Package, FName(*UniqueAssetName), RF_Public | RF_Standalone);
-    if (!Texture)
-    {
-        return FMonolithActionResult::Error(TEXT("Failed to create UTexture2D object"), -32603);
-    }
-
-    // --- Platform data (runtime GPU side) ---
-    FTexturePlatformData* PlatformData = new FTexturePlatformData();
+    // Build replacement platform data completely before mutating an existing
+    // texture. SetPlatformData owns the released allocation and deletes the old
+    // platform data when replacing in place in both UE 5.7 and UE 5.8.
+    TUniquePtr<FTexturePlatformData> PlatformData = MakeUnique<FTexturePlatformData>();
     PlatformData->SizeX = W;
     PlatformData->SizeY = H;
     PlatformData->PixelFormat = PF_B8G8R8A8;
@@ -1154,41 +2252,94 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
     FMemory::Memcpy(MipData, RawBgra.GetData(), ExpectedBytes);
     Mip->BulkData.Unlock();
 
-    Texture->SetPlatformData(PlatformData);
+    const bool bReplacing = ExistingTexture != nullptr;
+    const bool bCreated = !bReplacing;
+
+    UPackage* Package = nullptr;
+    UTexture2D* Texture = ExistingTexture;
+    TUniquePtr<FTextureReplacementSnapshot> ReplacementSnapshot;
+    if (bReplacing)
+    {
+        Package = ExistingTexture->GetOutermost();
+        Package->FullyLoad();
+        ReplacementSnapshot = MakeUnique<FTextureReplacementSnapshot>();
+        FString SnapshotError;
+        if (!ReplacementSnapshot->Capture(Texture, SnapshotError))
+        {
+            return FMonolithActionResult::Error(SnapshotError, -32603);
+        }
+    }
+    else
+    {
+        Package = CreatePackage(*ResolvedPackageName);
+        if (!Package)
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(TEXT("Failed to create package '%s'"), *ResolvedPackageName),
+                -32603);
+        }
+        Package->FullyLoad();
+
+        if (UObject* ConflictingObject = FindObject<UObject>(Package, *ResolvedAssetName))
+        {
+            return FMonolithActionResult::Error(
+                FString::Printf(
+                    TEXT("Asset '%s' appeared while resolving conflict_policy=%s"),
+                    *ConflictingObject->GetPathName(),
+                    *ConflictPolicyName),
+                -32603);
+        }
+
+        Texture = NewObject<UTexture2D>(
+            Package,
+            FName(*ResolvedAssetName),
+            RF_Public | RF_Standalone | RF_Transactional);
+        if (!Texture)
+        {
+            return FMonolithActionResult::Error(TEXT("Failed to create UTexture2D object"), -32603);
+        }
+    }
+
+    Texture->PreEditChange(nullptr);
+    if (ReplacementSnapshot.IsValid())
+    {
+        ReplacementSnapshot->InstallReplacementPlatformData(PlatformData);
+    }
+    else
+    {
+        Texture->SetPlatformData(PlatformData.Release());
+    }
 
     // --- Source data (editor side -- required for save-to-disk) ---
 #if WITH_EDITOR
-    Texture->Source.Init(W, H, /*NumSlices=*/1, /*NumMips=*/1, TSF_BGRA8, /*NewData=*/nullptr);
-    {
-        uint8* SourceData = Texture->Source.LockMip(0);
-        if (SourceData)
-        {
-            FMemory::Memcpy(SourceData, RawBgra.GetData(), ExpectedBytes);
-            Texture->Source.UnlockMip(0);
-        }
-        else
-        {
-            return FMonolithActionResult::Error(
-                TEXT("UTexture2D::Source::LockMip(0) returned null after Init"), -32603);
-        }
-    }
+    Texture->Source.Init(
+        W,
+        H,
+        /*NumSlices=*/1,
+        /*NumMips=*/1,
+        TSF_BGRA8,
+        RawBgra.GetData());
 #endif // WITH_EDITOR
-
-    // --- Apply settings ---
-    Texture->CompressionSettings = Compression;
-    Texture->SRGB = bSRGB;
-    Texture->MipGenSettings = MipGen;
-    Texture->LODGroup = LODGroup;
-    Texture->AddressX = AddressX;
-    Texture->AddressY = AddressY;
-
-    // --- Finalise ---
-    Texture->UpdateResource();
     Texture->PostEditChange();
 
-    FAssetRegistryModule::AssetCreated(Texture);
+    // Dispatch each reflected setting as its own edit. UTexture and UTexture2D
+    // have property-specific material/resource invalidation paths that a single
+    // generic callback does not faithfully exercise.
+    ApplyTextureSettings(
+        Texture,
+        Compression,
+        bSRGB,
+        MipGen,
+        LODGroup,
+        AddressX,
+        AddressY);
 
-    Package->MarkPackageDirty();
+    if (bCreated)
+    {
+        FAssetRegistryModule::AssetCreated(Texture);
+    }
+
+    Texture->MarkPackageDirty();
 
     if (bSave)
     {
@@ -1201,29 +2352,54 @@ FMonolithActionResult MonolithAsset::FTextureIngestActions::HandleImportTextureF
         const bool bSaved = UPackage::SavePackage(Package, Texture, *PackageFilename, SaveArgs);
         if (!bSaved)
         {
+            FString RollbackError;
+            if (ReplacementSnapshot.IsValid())
+            {
+                ReplacementSnapshot->Restore(RollbackError);
+            }
+            else
+            {
+                RollbackCreatedTexture(Texture, ResolvedPackageName, RollbackError);
+            }
+            const FString RollbackSuffix = RollbackError.IsEmpty()
+                ? FString()
+                : FString::Printf(TEXT("; %s"), *RollbackError);
             return FMonolithActionResult::Error(
-                FString::Printf(TEXT("UPackage::SavePackage failed for '%s'"), *PackageFilename),
+                FString::Printf(
+                    TEXT("UPackage::SavePackage failed for '%s'%s"),
+                    *PackageFilename,
+                    *RollbackSuffix),
                 -32603);
         }
     }
 
-    const FString ResultAssetPath = UniquePackageName;
+    if (ReplacementSnapshot.IsValid())
+    {
+        ReplacementSnapshot->Commit();
+    }
 
     TSharedPtr<FJsonObject> ResultObj = MakeShared<FJsonObject>();
-    ResultObj->SetStringField(TEXT("asset_path"), ResultAssetPath);
+    ResultObj->SetStringField(TEXT("requested_asset_path"), RequestedAssetPath);
+    ResultObj->SetStringField(TEXT("asset_path"), ResolvedPackageName);
+    ResultObj->SetBoolField(TEXT("created"), bCreated);
+    ResultObj->SetBoolField(TEXT("replaced"), bReplacing);
+    ResultObj->SetStringField(TEXT("conflict_policy"), ConflictPolicyName);
     ResultObj->SetNumberField(TEXT("width"), (double)W);
     ResultObj->SetNumberField(TEXT("height"), (double)H);
     ResultObj->SetNumberField(TEXT("size_bytes"), (double)ExpectedBytes);
     ResultObj->SetStringField(TEXT("texture_role"), TextureRole.IsEmpty() ? TEXT("default") : TextureRole);
-    ResultObj->SetObjectField(TEXT("settings_applied"), BuildAppliedSettingsJson(Compression, bSRGB, MipGen, LODGroup, AddressX, AddressY));
+    ResultObj->SetObjectField(
+        TEXT("settings_applied"),
+        BuildAppliedSettingsJson(
+            Texture->CompressionSettings,
+            Texture->SRGB,
+            Texture->MipGenSettings,
+            Texture->LODGroup,
+            Texture->AddressX,
+            Texture->AddressY));
     ResultObj->SetObjectField(TEXT("validation"), Validation);
     if (bReturnProcessedPng)
     {
-        TArray<uint8> ProcessedPngBytes;
-        if (!EncodeRawBgraAsPng(RawBgra, W, H, ProcessedPngBytes))
-        {
-            return FMonolithActionResult::Error(TEXT("Failed to encode postprocessed texture pixels as PNG"), -32603);
-        }
         ResultObj->SetStringField(TEXT("processed_png_b64"), FBase64::Encode(ProcessedPngBytes));
         ResultObj->SetNumberField(TEXT("processed_png_bytes"), ProcessedPngBytes.Num());
         ResultObj->SetStringField(TEXT("processed_png_hash"), HashBytes(ProcessedPngBytes));
@@ -1242,6 +2418,7 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
              "format_hint (string, required, one of png|jpg|jpeg|bmp|exr|tga|hdr|tif|tiff|dds), "
              "texture_role (string, optional: ui_icon|sprite|decal|basecolor|world_tile|normal|orm_mask|height|emissive), "
              "settings (object, optional: compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize), "
+             "conflict_policy (string, optional: fail|replace|unique, default fail), "
              "save (bool, optional, default true), return_processed_png (bool, optional)."),
         FMonolithActionHandler::CreateStatic(&MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes),
         FParamSchemaBuilder()
@@ -1250,6 +2427,8 @@ void MonolithAsset::FTextureIngestActions::Register(FMonolithToolRegistry& Regis
             .Required(TEXT("format_hint"), TEXT("string"), TEXT("png, jpg, jpeg, bmp, exr, tga, hdr, tif, tiff, or dds"))
             .Optional(TEXT("texture_role"), TEXT("string"), TEXT("Unreal texture role preset: ui_icon, sprite, decal, basecolor, world_tile, normal, orm_mask, height, or emissive"))
             .Optional(TEXT("settings"), TEXT("object"), TEXT("Texture settings such as compression_settings, srgb, mip_gen_settings, lod_group, address_x, address_y, alpha_bleed, alpha_from_edge_background, tile_seam_harmonize"))
+            .Optional(TEXT("conflict_policy"), TEXT("string"), TEXT("Existing destination handling: fail, replace, or unique"), TEXT("fail"))
+            .Enum(TEXT("conflict_policy"), { TEXT("fail"), TEXT("replace"), TEXT("unique") })
             .Optional(TEXT("save"), TEXT("bool"), TEXT("Save the texture asset"), TEXT("true"))
             .Optional(TEXT("return_processed_png"), TEXT("bool"), TEXT("Return postprocessed imported pixels re-encoded as PNG"), TEXT("false"))
             .Build());

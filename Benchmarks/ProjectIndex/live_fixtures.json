@@ -1,0 +1,177 @@
+{
+  "schema_version": 2,
+  "benchmark": "ProjectIndex",
+  "project_name": "Speed",
+  "catalog_version": "sha256:ef52979d7e00a249",
+  "generated_at": "2026-07-11T08:34:24.443132+00:00",
+  "seed_prefixes": [
+    "DA_",
+    "DT_",
+    "BP_",
+    "WBP_",
+    "IA_",
+    "IMC_",
+    "L_",
+    "BT_",
+    "BB_",
+    "SM_",
+    "M_",
+    "T_"
+  ],
+  "stability_policy": {
+    "selection": "deterministic_prefix_round_robin",
+    "excluded_path_prefixes": [
+      "/Game/Benchmarks/"
+    ],
+    "requires_saved_asset_state": true,
+    "requires_source_control": true
+  },
+  "schema_actions": [
+    "search",
+    "find_references",
+    "find_by_type",
+    "get_stats",
+    "get_asset_details",
+    "refresh_assets",
+    "get_saved_asset_state",
+    "cleanup_generated_assets",
+    "list_gameplay_tags",
+    "search_gameplay_tags",
+    "export_asset_text",
+    "impact_radius",
+    "health",
+    "repair_fts",
+    "repair_crg_cache",
+    "risk_score",
+    "detect_changes",
+    "find_unused",
+    "pre_merge_check",
+    "snapshot",
+    "diff_snapshots",
+    "review_hotspots",
+    "review_context",
+    "audit_orphan_assets"
+  ],
+  "known_answers": [
+    {
+      "query": "DA_ExamplePlaylist",
+      "expected_object_path": "/Game/System/Playlists/DA_ExamplePlaylist"
+    },
+    {
+      "query": "DT_AnimEffectTags",
+      "expected_object_path": "/Game/ContextEffects/DT_AnimEffectTags"
+    },
+    {
+      "query": "BP_GameplayEffectPad",
+      "expected_object_path": "/Game/Environments/Gameplay/BP_GameplayEffectPad"
+    },
+    {
+      "query": "WBP_BeaconGauge",
+      "expected_object_path": "/SpeedCore/TagChase/UI/WBP_BeaconGauge"
+    },
+    {
+      "query": "IA_Ability_Dash",
+      "expected_object_path": "/Game/Input/Actions/IA_Ability_Dash"
+    },
+    {
+      "query": "IMC_Default",
+      "expected_object_path": "/Game/Input/Mappings/IMC_Default"
+    },
+    {
+      "query": "SM_Battery",
+      "expected_object_path": "/SpeedCore/TagChase/Objects/Battery/SM_Battery"
+    },
+    {
+      "query": "M_UI_AngledBox_Base",
+      "expected_object_path": "/Game/UI/Foundation/Materials/M_UI_AngledBox_Base"
+    },
+    {
+      "query": "T_Glass_Normal_Tiling",
+      "expected_object_path": "/LyraExampleContent/Materials/Textures/GlassPattern/T_Glass_Normal_Tiling"
+    },
+    {
+      "query": "DA_Frontend",
+      "expected_object_path": "/Game/System/Playlists/DA_Frontend"
+    },
+    {
+      "query": "DT_SaveActions",
+      "expected_object_path": "/Game/UI/Settings/DT_SaveActions"
+    },
+    {
+      "query": "BP_TagChaseBatteryItem",
+      "expected_object_path": "/SpeedCore/TagChase/Objects/BP_TagChaseBatteryItem"
+    },
+    {
+      "query": "WBP_ExperienceTileButton",
+      "expected_object_path": "/SpeedCore/UI/Menu/WBP_ExperienceTileButton"
+    },
+    {
+      "query": "IA_Ability_Heal",
+      "expected_object_path": "/Game/Input/Actions/IA_Ability_Heal"
+    },
+    {
+      "query": "IMC_Default_Gamepad",
+      "expected_object_path": "/Game/Input/Mappings/IMC_Default_Gamepad"
+    },
+    {
+      "query": "SM_Beacon",
+      "expected_object_path": "/SpeedCore/TagChase/Objects/Beacon/SM_Beacon"
+    },
+    {
+      "query": "M_UI_Throbber_Base",
+      "expected_object_path": "/Game/UI/Foundation/Materials/M_UI_Throbber_Base"
+    },
+    {
+      "query": "T_Glass_Opacity_Tiled",
+      "expected_object_path": "/LyraExampleContent/Materials/Textures/GlassPattern/T_Glass_Opacity_Tiled"
+    },
+    {
+      "query": "DA_SpeedDefault",
+      "expected_object_path": "/SpeedMaps/System/Playlists/DA_SpeedDefault"
+    },
+    {
+      "query": "DT_SurfaceTypes",
+      "expected_object_path": "/Game/ContextEffects/DT_SurfaceTypes"
+    },
+    {
+      "query": "BP_TagChaseBeaconObjective",
+      "expected_object_path": "/SpeedCore/TagChase/Objects/BP_TagChaseBeaconObjective"
+    },
+    {
+      "query": "WBP_FrontEnd",
+      "expected_object_path": "/SpeedCore/UI/Menu/WBP_FrontEnd"
+    },
+    {
+      "query": "IA_AutoRun",
+      "expected_object_path": "/Game/Input/Actions/IA_AutoRun"
+    },
+    {
+      "query": "IMC_TagChase",
+      "expected_object_path": "/SpeedCore/TagChase/Input/IMC_TagChase"
+    },
+    {
+      "query": "SM_grenade",
+      "expected_object_path": "/Game/Weapons/Grenade/Mesh/SM_grenade"
+    },
+    {
+      "query": "T_Inky_Smoke_Tile",
+      "expected_object_path": "/Game/Effects/Textures/General/T_Inky_Smoke_Tile"
+    },
+    {
+      "query": "DA_SpeedLobbyBackground",
+      "expected_object_path": "/SpeedMaps/System/FrontEnd/Backgrounds/DA_SpeedLobbyBackground"
+    },
+    {
+      "query": "DT_UniversalActions",
+      "expected_object_path": "/Game/UI/DT_UniversalActions"
+    },
+    {
+      "query": "WBP_GameHUD",
+      "expected_object_path": "/SpeedCore/UI/HUD/WBP_GameHUD"
+    },
+    {
+      "query": "IA_Crouch",
+      "expected_object_path": "/Game/Input/Actions/IA_Crouch"
+    }
+  ]
+}

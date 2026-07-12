@@ -1,6 +1,6 @@
 ---
 name: unreal-lyra
-description: Use when inspecting, validating, or guarded-authoring Lyra framework assets via Monolith MCP (lyra namespace) - Lyra Experience graphs, map DefaultGameplayExperience, Experience defaults, component-entry cleanup, PawnData/ActionSet composition, inventory/equipment/weapon definitions, team setup, cosmetics character parts, UserFacingExperience hosting/session metadata/map reachability, and GamePhase tag-domain validation. For raw GameFeatureData action authoring use unreal-gamefeatures; for UMG/CommonUI widgets use unreal-ui; for generic asset copy/remap use unreal-asset.
+description: Use when inspecting, validating, or guarded-authoring Lyra framework assets via Monolith MCP (lyra namespace) - Lyra Experience graphs, map DefaultGameplayExperience, Experience defaults, idempotent Experience/ActionSet component-entry authoring and cleanup, PawnData/ActionSet composition, inventory/equipment/weapon definitions, team setup, cosmetics character parts, UserFacingExperience hosting/session metadata/map reachability, and GamePhase tag-domain validation. For raw GameFeatureData action authoring use unreal-gamefeatures; for UMG/CommonUI widgets use unreal-ui; for generic asset copy/remap use unreal-asset.
 ---
 
 # unreal-lyra
@@ -22,7 +22,7 @@ Use this skill when the target is a Lyra-level contract rather than one raw asse
 
 - Experience graph inspection: `DefaultPawnData`, `GameFeaturesToEnable`, instanced `Actions`, and composed `ActionSets`.
 - Experience bundle validation before replacing a project commandlet, including optional PawnData, ActionSet, and GameFeature plugin contract checks.
-- Guarded Experience writes: `DefaultPawnData`, replacement `ActionSets`, replacement `GameFeaturesToEnable`, and reflected `GameFeatureAction_AddComponents.ComponentList` cleanup.
+- Guarded Experience writes: `DefaultPawnData`, replacement `ActionSets`, replacement `GameFeaturesToEnable`, and idempotent reflected `GameFeatureAction_AddComponents.ComponentList` add/update or cleanup on an Experience/ExperienceActionSet.
 - UserFacingExperience validation before hosting through Lyra/CommonSession front-end flows.
 - Map `ALyraWorldSettings.DefaultGameplayExperience` validation before relying on map-only fallback travel.
 - UserFacingExperience `MapID` reachability validation and optional map-default Experience comparison; note that playlist hosting passes `ExperienceID` through URL options, so map default mismatches are only strict blockers when requested.
@@ -61,6 +61,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default. Confirm 
 | `describe_character_part_graph` | `part_classes?` | Describe Lyra character-part component/settings reflected classes and optional actor part classes. |
 | `validate_character_part_assets` | `part_classes?`, `require_non_empty?=true` | Validate supplied character-part actor classes as loadable, concrete `AActor` classes. |
 | `set_experience_defaults` | `experience_path*`, `default_pawn_data?`, `action_sets?`, `game_features_to_enable?`, `dry_run?=false`, `confirm?=false`, `save?=false`, `strict?=true` | Guarded reflected write for Lyra Experience defaults. |
+| `add_experience_component_entry` | exactly one of `experience_path?` or `action_set_path?`, `actor_class*`, `component_class*`, `action_name?`, `client_component?=true`, `server_component?=true`, `addition_flags?=0`, `dry_run?=false`, `confirm?=false`, `save?=false` | Idempotently create/reuse an AddComponents action, add a missing actor/component pair, or update its client/server/flags fields. A supplied `action_name` is exact; unique naming occurs only when it is omitted. |
 | `remove_experience_component_entry` | `experience_path?`, `action_set_path?`, `action_index?`, `action_name?`, `actor_class?`, `component_class?`, `component_index?`, `dry_run?=false`, `confirm?=false`, `save?=false` | Guarded removal of `GameFeatureAction_AddComponents.ComponentList` entries. |
 | `set_user_facing_experience` | `user_facing_experience_path*`, `map_id?`, `experience_id?`, `extra_args?`, `tile_title?`, `tile_subtitle?`, `tile_description?`, `tile_icon?`, `loading_screen_widget?`, `is_default_experience?`, `show_in_front_end?`, `record_replay?`, `max_player_count?`, `session_mode?`, `use_lobbies?`, `use_lobbies_voice_chat?`, `use_presence?`, `dry_run?=false`, `confirm?=false`, `save?=false`, `strict?=true` | Guarded reflected write for UserFacingExperience hosting/session/UI fields. |
 
@@ -172,6 +173,22 @@ lyra_query("set_experience_defaults", {
 })
 ```
 
+### Preview an ExperienceActionSet component entry
+
+Use `server_component=true` and `client_component=false` for a server-authoritative spawning manager. The dry-run reports whether the action would be created/reused and whether the pair would be added, updated, or already be a no-op.
+
+```text
+lyra_query("add_experience_component_entry", {
+  "action_set_path": "/SpeedCore/TagChase/ActionSets/LAS_TagChase_Gameplay",
+  "actor_class": "/Script/LyraGame.LyraGameState",
+  "component_class": "/Script/SpeedCoreRuntime.SPDTagChasePlayerSpawningManagerComponent",
+  "client_component": false,
+  "server_component": true,
+  "addition_flags": 0,
+  "dry_run": true
+})
+```
+
 ### Preview a UserFacingExperience hosting update
 
 ```text
@@ -189,6 +206,8 @@ lyra_query("set_user_facing_experience", {
 ## Rules
 
 - Write actions must be run with `dry_run=true` first. Mutating calls require `confirm=true`; package persistence additionally requires `save=true`.
+- `add_experience_component_entry` requires exactly one of `experience_path` or `action_set_path`. It treats actor/component class paths as one idempotency key and fails explicitly when duplicate matching pairs make ownership ambiguous.
+- A supplied `action_name` is an exact instanced-object `FName`: the action never appends `_0` or another suffix. Dry-run and commit both fail when the owner already has an incompatible same-name direct child or a same-name AddComponents orphan outside its `Actions` array. Omit `action_name` when automatic `MakeUniqueObjectName` behavior is desired.
 - Do not patch runtime CommonGame, PrimaryGameLayout, or project commandlets to compensate for missing Lyra actions. Extend `Plugins/Monolith` instead.
 - Missing or invalid data should produce explicit checks/errors. Do not mask it with fallback assets.
 - GamePhase diagnostics are read-only. They may report duplicate exact phase tags as warnings unless `disallow_duplicate_tags=true`; Lyra runtime permits shared exact phase tags.

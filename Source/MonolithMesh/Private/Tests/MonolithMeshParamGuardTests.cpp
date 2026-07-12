@@ -3,6 +3,8 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithMeshInspectionActions.h"
 #include "MonolithMeshTechArtActions.h"
+#include "MonolithParamSchema.h"
+#include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
@@ -11,6 +13,41 @@
 #if WITH_GEOMETRYSCRIPT
 #include "MonolithMeshOperationActions.h"
 #include "MonolithMeshProceduralActions.h"
+#endif
+
+#if WITH_GEOMETRYSCRIPT
+namespace
+{
+	TSharedPtr<FJsonObject> FindMeshOperationSchema(const FString& ActionName)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("mesh"), ActionName))
+		{
+			FMonolithMeshOperationActions::RegisterActions(Registry);
+		}
+
+		for (const FMonolithActionInfo& Info : Registry.GetActions(TEXT("mesh")))
+		{
+			if (Info.Action == ActionName)
+			{
+				return Info.ParamSchema;
+			}
+		}
+		return nullptr;
+	}
+
+	TSharedPtr<FJsonObject> FindMeshOperationParam(
+		const TSharedPtr<FJsonObject>& Schema,
+		const FString& ParamName)
+	{
+		const TSharedPtr<FJsonObject>* Param = nullptr;
+		return Schema.IsValid()
+			&& Schema->TryGetObjectField(ParamName, Param)
+			&& Param
+			? *Param
+			: nullptr;
+	}
+}
 #endif
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithParamGuardMeshInspectionMalformedParamsTest, "Monolith.ParamGuard.MonolithMesh.InspectionRejectsMalformedParams", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -61,6 +98,75 @@ bool FMonolithParamGuardMeshOperationMalformedParamsTest::RunTest(const FString&
     }
 
     return true;
+}
+#endif
+
+#if WITH_GEOMETRYSCRIPT
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FMonolithMeshOperationRangeContractTest,
+	"Monolith.Registry.Mesh.OperationRangeContracts",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithMeshOperationRangeContractTest::RunTest(const FString& Parameters)
+{
+	const TSharedPtr<FJsonObject> CollisionSchema = FindMeshOperationSchema(TEXT("generate_collision"));
+	const TSharedPtr<FJsonObject> LodsSchema = FindMeshOperationSchema(TEXT("generate_lods"));
+	TestNotNull(TEXT("generate_collision schema exists"), CollisionSchema.Get());
+	TestNotNull(TEXT("generate_lods schema exists"), LodsSchema.Get());
+
+	const TSharedPtr<FJsonObject> MaxHulls = FindMeshOperationParam(CollisionSchema, TEXT("max_hulls"));
+	const TSharedPtr<FJsonObject> LodCount = FindMeshOperationParam(LodsSchema, TEXT("lod_count"));
+	const TSharedPtr<FJsonObject> Reduction = FindMeshOperationParam(LodsSchema, TEXT("reduction_per_lod"));
+	TestNotNull(TEXT("generate_collision.max_hulls schema exists"), MaxHulls.Get());
+	TestNotNull(TEXT("generate_lods.lod_count schema exists"), LodCount.Get());
+	TestNotNull(TEXT("generate_lods.reduction_per_lod schema exists"), Reduction.Get());
+
+	if (MaxHulls.IsValid())
+	{
+		TestEqual(TEXT("max_hulls minimum"), MaxHulls->GetNumberField(TEXT("minimum")), 1.0);
+		TestEqual(TEXT("max_hulls maximum"), MaxHulls->GetNumberField(TEXT("maximum")), 256.0);
+	}
+	if (LodCount.IsValid())
+	{
+		TestEqual(TEXT("lod_count minimum"), LodCount->GetNumberField(TEXT("minimum")), 1.0);
+		TestEqual(TEXT("lod_count maximum"), LodCount->GetNumberField(TEXT("maximum")), 8.0);
+	}
+	if (Reduction.IsValid())
+	{
+		TestEqual(TEXT("reduction_per_lod minimum"), Reduction->GetNumberField(TEXT("minimum")), 0.1);
+		TestEqual(TEXT("reduction_per_lod maximum"), Reduction->GetNumberField(TEXT("maximum")), 0.9);
+	}
+
+	auto ValidateCollisionMaxHulls = [&](double Value)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("handle"), TEXT("range_contract_handle"));
+		Params->SetNumberField(TEXT("max_hulls"), Value);
+		TArray<FString> Errors;
+		return FMonolithParamSchema::ValidateTypedParams(CollisionSchema, Params, Errors);
+	};
+	TestTrue(TEXT("max_hulls accepts lower boundary"), ValidateCollisionMaxHulls(1.0));
+	TestTrue(TEXT("max_hulls accepts upper boundary"), ValidateCollisionMaxHulls(256.0));
+	TestFalse(TEXT("max_hulls rejects below lower boundary"), ValidateCollisionMaxHulls(0.0));
+	TestFalse(TEXT("max_hulls rejects above upper boundary"), ValidateCollisionMaxHulls(257.0));
+
+	auto ValidateLodParams = [&](double Count, double ReductionValue)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("handle"), TEXT("range_contract_handle"));
+		Params->SetNumberField(TEXT("lod_count"), Count);
+		Params->SetNumberField(TEXT("reduction_per_lod"), ReductionValue);
+		TArray<FString> Errors;
+		return FMonolithParamSchema::ValidateTypedParams(LodsSchema, Params, Errors);
+	};
+	TestTrue(TEXT("generate_lods accepts both lower boundaries"), ValidateLodParams(1.0, 0.1));
+	TestTrue(TEXT("generate_lods accepts both upper boundaries"), ValidateLodParams(8.0, 0.9));
+	TestFalse(TEXT("lod_count rejects below lower boundary"), ValidateLodParams(0.0, 0.5));
+	TestFalse(TEXT("lod_count rejects above upper boundary"), ValidateLodParams(9.0, 0.5));
+	TestFalse(TEXT("reduction_per_lod rejects below lower boundary"), ValidateLodParams(1.0, 0.099));
+	TestFalse(TEXT("reduction_per_lod rejects above upper boundary"), ValidateLodParams(1.0, 0.901));
+
+	return true;
 }
 #endif
 

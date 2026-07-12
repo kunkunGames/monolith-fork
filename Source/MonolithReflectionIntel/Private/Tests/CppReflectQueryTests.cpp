@@ -17,12 +17,11 @@
 // they never touch the real EngineSource.db. Test fixture lives at
 // `Source/MonolithReflectionIntel/Private/Tests/Fixtures/CppReflectCorpus/`.
 
-#include "MonolithToolRegistry.h"
-#include "CppReflect/FCppReflectQueryAdapter.h"
 #include "Misc/AutomationTest.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "CppReflect/FCppReflectQueryAdapter.h"
 #include "CppReflect/FUHTArtefactReader.h"
 
 #include "HAL/FileManager.h"
@@ -31,6 +30,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
+#include "MonolithParamSchema.h"
+#include "MonolithToolRegistry.h"
 #include "SQLiteDatabase.h"
 
 namespace MonolithCppReflectTestDetail
@@ -78,6 +79,24 @@ namespace MonolithCppReflectTestDetail
 		}
 		Stmt.SetBindingValueByIndex(1, FString(Table));
 		return Stmt.Step() == ESQLitePreparedStatementStepResult::Row;
+	}
+
+	static TSharedPtr<FJsonObject> FindCppReflectActionSchema(const FString& ActionName)
+	{
+		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+		if (!Registry.HasAction(TEXT("cppreflect"), ActionName))
+		{
+			FCppReflectQueryAdapter::RegisterActions(Registry);
+		}
+
+		for (const FMonolithActionInfo& Info : Registry.GetActions(TEXT("cppreflect")))
+		{
+			if (Info.Action == ActionName)
+			{
+				return Info.ParamSchema;
+			}
+		}
+		return nullptr;
 	}
 
 	/**
@@ -433,7 +452,6 @@ bool FCppReflectFindSpecifierTest::RunTest(const FString& /*Parameters*/)
 	return true;
 }
 
-
 // ---------------------------------------------------------------------------
 // Test 5: ParamGuard - HandleFindClassSpecifier with wrong type
 // ---------------------------------------------------------------------------
@@ -475,6 +493,47 @@ bool FCppReflectFindClassSpecifierParamGuardTest::RunTest(const FString& /*Param
 			TestTrue(TEXT("Error should mention limit"), Result.ErrorMessage.Contains(TEXT("limit")));
 		}
 	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCppReflectFindSpecifierRangeContractTest,
+	"Monolith.ReflectionIntel.CppReflect.FindSpecifierRangeContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCppReflectFindSpecifierRangeContractTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithCppReflectTestDetail;
+
+	const TSharedPtr<FJsonObject> Schema = FindCppReflectActionSchema(TEXT("find_class_specifier"));
+	TestNotNull(TEXT("find_class_specifier schema exists"), Schema.Get());
+
+	const TSharedPtr<FJsonObject>* LimitParam = nullptr;
+	TestTrue(
+		TEXT("find_class_specifier limit schema exists"),
+		Schema.IsValid()
+			&& Schema->TryGetObjectField(TEXT("limit"), LimitParam)
+			&& LimitParam
+			&& LimitParam->IsValid());
+	if (LimitParam && LimitParam->IsValid())
+	{
+		TestEqual(TEXT("find_class_specifier limit minimum"), (*LimitParam)->GetNumberField(TEXT("minimum")), 1.0);
+		TestEqual(TEXT("find_class_specifier limit maximum"), (*LimitParam)->GetNumberField(TEXT("maximum")), 200.0);
+	}
+
+	auto SchemaAcceptsLimit = [&](double Limit)
+	{
+		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
+		Params->SetStringField(TEXT("specifier_name"), TEXT("Abstract"));
+		Params->SetNumberField(TEXT("limit"), Limit);
+		TArray<FString> Errors;
+		return FMonolithParamSchema::ValidateTypedParams(Schema, Params, Errors);
+	};
+	TestTrue(TEXT("find_class_specifier accepts lower limit boundary"), SchemaAcceptsLimit(1.0));
+	TestTrue(TEXT("find_class_specifier accepts upper limit boundary"), SchemaAcceptsLimit(200.0));
+	TestFalse(TEXT("find_class_specifier rejects below lower limit"), SchemaAcceptsLimit(0.0));
+	TestFalse(TEXT("find_class_specifier rejects above upper limit"), SchemaAcceptsLimit(201.0));
 
 	return true;
 }

@@ -1,10 +1,12 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "CoreMinimal.h"
+#include "Curves/CurveFloat.h"
 #include "Misc/AutomationTest.h"
 #include "MonolithLyraActions.h"
 #include "MonolithToolRegistry.h"
 #include "Dom/JsonObject.h"
+#include "UObject/UObjectGlobals.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLyraRegistryContractTest,
 	"Monolith.Lyra.RegistryContract",
@@ -36,6 +38,7 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("lyra.describe_character_part_graph action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("describe_character_part_graph")));
 	TestTrue(TEXT("lyra.validate_character_part_assets action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("validate_character_part_assets")));
 	TestTrue(TEXT("lyra.set_experience_defaults action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("set_experience_defaults")));
+	TestTrue(TEXT("lyra.add_experience_component_entry action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("add_experience_component_entry")));
 	TestTrue(TEXT("lyra.remove_experience_component_entry action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("remove_experience_component_entry")));
 	TestTrue(TEXT("lyra.set_user_facing_experience action is registered"), Registry.HasAction(TEXT("lyra"), TEXT("set_user_facing_experience")));
 
@@ -45,7 +48,34 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	if (Status.Result.IsValid())
 	{
 		TestEqual(TEXT("status namespace"), Status.Result->GetStringField(TEXT("namespace")), FString(TEXT("lyra")));
+		const TArray<TSharedPtr<FJsonValue>>* CurrentActions = nullptr;
+		TestTrue(TEXT("status has current_actions"), Status.Result->TryGetArrayField(TEXT("current_actions"), CurrentActions) && CurrentActions);
+		bool bStatusHasAddComponentAction = false;
+		if (CurrentActions)
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *CurrentActions)
+			{
+				FString ActionId;
+				if (Value.IsValid() && Value->TryGetString(ActionId) && ActionId == TEXT("lyra.add_experience_component_entry"))
+				{
+					bStatusHasAddComponentAction = true;
+					break;
+				}
+			}
+		}
+		TestTrue(TEXT("status lists add_experience_component_entry"), bStatusHasAddComponentAction);
 	}
+
+	TSharedPtr<FJsonObject> AddComponentSchemaMissingActor = MakeShared<FJsonObject>();
+	AddComponentSchemaMissingActor->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentSchemaMissingActor->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentSchemaMissingActor->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult AddComponentRequiredActor = Registry.ExecuteAction(
+		TEXT("lyra"),
+		TEXT("add_experience_component_entry"),
+		AddComponentSchemaMissingActor);
+	TestFalse(TEXT("add_experience_component_entry schema requires actor_class"), AddComponentRequiredActor.bSuccess);
+	TestEqual(TEXT("add_experience_component_entry missing actor schema code"), AddComponentRequiredActor.ErrorCode, -32602);
 
 	FMonolithActionResult TagDomain = FMonolithLyraActions::DescribeGameplayTagDomain(MakeShared<FJsonObject>());
 	TestTrue(TEXT("describe_gameplay_tag_domain succeeds with defaults"), TagDomain.bSuccess);
@@ -206,6 +236,71 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("set_experience_defaults rejects mutation without dry_run or confirm"), SetExperienceGate.bSuccess);
 	TestTrue(TEXT("set_experience_defaults gate mentions dry_run or confirm"), SetExperienceGate.ErrorMessage.Contains(TEXT("dry_run=true or confirm=true")));
 
+	TSharedPtr<FJsonObject> AddComponentWithoutGate = MakeShared<FJsonObject>();
+	AddComponentWithoutGate->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentWithoutGate->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentWithoutGate->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	FMonolithActionResult AddComponentGate = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentWithoutGate);
+	TestFalse(TEXT("add_experience_component_entry rejects mutation without dry_run or confirm"), AddComponentGate.bSuccess);
+	TestTrue(TEXT("add_experience_component_entry gate mentions dry_run or confirm"), AddComponentGate.ErrorMessage.Contains(TEXT("dry_run=true or confirm=true")));
+
+	TSharedPtr<FJsonObject> AddComponentMissingTarget = MakeShared<FJsonObject>();
+	AddComponentMissingTarget->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentMissingTarget->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentMissingTarget->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult MissingAddComponentTarget = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentMissingTarget);
+	TestFalse(TEXT("add_experience_component_entry rejects a missing owner target"), MissingAddComponentTarget.bSuccess);
+	TestEqual(TEXT("add_experience_component_entry missing owner invalid param code"), MissingAddComponentTarget.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> AddComponentAmbiguousTarget = MakeShared<FJsonObject>();
+	AddComponentAmbiguousTarget->SetStringField(TEXT("experience_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingExperience.MissingExperience"));
+	AddComponentAmbiguousTarget->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentAmbiguousTarget->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentAmbiguousTarget->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentAmbiguousTarget->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult AmbiguousAddComponentTarget = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentAmbiguousTarget);
+	TestFalse(TEXT("add_experience_component_entry rejects two owner targets"), AmbiguousAddComponentTarget.bSuccess);
+	TestEqual(TEXT("add_experience_component_entry ambiguous owner invalid param code"), AmbiguousAddComponentTarget.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> AddComponentBadFlags = MakeShared<FJsonObject>();
+	AddComponentBadFlags->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentBadFlags->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentBadFlags->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentBadFlags->SetNumberField(TEXT("addition_flags"), 256);
+	AddComponentBadFlags->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult BadAddComponentFlags = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentBadFlags);
+	TestFalse(TEXT("add_experience_component_entry rejects addition_flags outside uint8"), BadAddComponentFlags.bSuccess);
+	TestEqual(TEXT("add_experience_component_entry flags invalid param code"), BadAddComponentFlags.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> AddComponentNoNetworkSide = MakeShared<FJsonObject>();
+	AddComponentNoNetworkSide->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentNoNetworkSide->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentNoNetworkSide->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentNoNetworkSide->SetBoolField(TEXT("client_component"), false);
+	AddComponentNoNetworkSide->SetBoolField(TEXT("server_component"), false);
+	AddComponentNoNetworkSide->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult NoNetworkSideAddComponent = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentNoNetworkSide);
+	TestFalse(TEXT("add_experience_component_entry requires a client or server side"), NoNetworkSideAddComponent.bSuccess);
+	TestEqual(TEXT("add_experience_component_entry network side invalid param code"), NoNetworkSideAddComponent.ErrorCode, -32602);
+
+	TSharedPtr<FJsonObject> AddComponentBadActorClass = MakeShared<FJsonObject>();
+	AddComponentBadActorClass->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentBadActorClass->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentBadActorClass->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	AddComponentBadActorClass->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult BadAddComponentActorClass = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentBadActorClass);
+	TestFalse(TEXT("add_experience_component_entry validates actor_class derivation"), BadAddComponentActorClass.bSuccess);
+	TestTrue(TEXT("add_experience_component_entry actor class error names Actor"), BadAddComponentActorClass.ErrorMessage.Contains(TEXT("Actor")));
+
+	TSharedPtr<FJsonObject> AddComponentBadComponentClass = MakeShared<FJsonObject>();
+	AddComponentBadComponentClass->SetStringField(TEXT("action_set_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingActionSet.MissingActionSet"));
+	AddComponentBadComponentClass->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentBadComponentClass->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.Actor"));
+	AddComponentBadComponentClass->SetBoolField(TEXT("dry_run"), true);
+	FMonolithActionResult BadAddComponentComponentClass = FMonolithLyraActions::AddExperienceComponentEntry(AddComponentBadComponentClass);
+	TestFalse(TEXT("add_experience_component_entry validates component_class derivation"), BadAddComponentComponentClass.bSuccess);
+	TestTrue(TEXT("add_experience_component_entry component class error names ActorComponent"), BadAddComponentComponentClass.ErrorMessage.Contains(TEXT("ActorComponent")));
+
 	TSharedPtr<FJsonObject> RemoveComponentWithoutGate = MakeShared<FJsonObject>();
 	RemoveComponentWithoutGate->SetStringField(TEXT("experience_path"), TEXT("/Game/Tests/Monolith/Lyra/MissingExperience.MissingExperience"));
 	RemoveComponentWithoutGate->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
@@ -219,6 +314,127 @@ bool FMonolithLyraRegistryContractTest::RunTest(const FString& Parameters)
 	FMonolithActionResult SetUserFacingGate = FMonolithLyraActions::SetUserFacingExperience(SetUserFacingWithoutGate);
 	TestFalse(TEXT("set_user_facing_experience rejects mutation without dry_run or confirm"), SetUserFacingGate.bSuccess);
 	TestTrue(TEXT("set_user_facing_experience gate mentions dry_run or confirm"), SetUserFacingGate.ErrorMessage.Contains(TEXT("dry_run=true or confirm=true")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithLyraAddExperienceComponentEntryActionNameContractTest,
+	"Monolith.Lyra.AddExperienceComponentEntry.ActionNameContract",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FMonolithLyraAddExperienceComponentEntryActionNameContractTest::RunTest(const FString& Parameters)
+{
+	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	if (!Registry.HasAction(TEXT("lyra"), TEXT("add_experience_component_entry")))
+	{
+		FMonolithLyraActions::RegisterActions(Registry);
+	}
+
+	UClass* ActionSetClass = StaticLoadClass(
+		UObject::StaticClass(),
+		nullptr,
+		TEXT("/Script/LyraGame.LyraExperienceActionSet"));
+	UClass* AddComponentsActionClass = StaticLoadClass(
+		UObject::StaticClass(),
+		nullptr,
+		TEXT("/Script/GameFeatures.GameFeatureAction_AddComponents"));
+	TestNotNull(TEXT("Lyra ExperienceActionSet class is available"), ActionSetClass);
+	TestNotNull(TEXT("GameFeatureAction_AddComponents class is available"), AddComponentsActionClass);
+	if (!ActionSetClass || !AddComponentsActionClass)
+	{
+		return false;
+	}
+
+	const FName OwnerName = MakeUniqueObjectName(
+		GetTransientPackage(),
+		ActionSetClass,
+		TEXT("MonolithLyraActionNameContractOwner"));
+	UObject* ActionSet = NewObject<UObject>(
+		GetTransientPackage(),
+		ActionSetClass,
+		OwnerName,
+		RF_Transient);
+	TestNotNull(TEXT("Transient ExperienceActionSet owner was created"), ActionSet);
+	if (!ActionSet)
+	{
+		return false;
+	}
+
+	const FString ExactActionName = TEXT("ExactNamedAddComponentsAction");
+	TSharedPtr<FJsonObject> CreateParams = MakeShared<FJsonObject>();
+	CreateParams->SetStringField(TEXT("action_set_path"), ActionSet->GetPathName());
+	CreateParams->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.Actor"));
+	CreateParams->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.ActorComponent"));
+	CreateParams->SetStringField(TEXT("action_name"), ExactActionName);
+	CreateParams->SetBoolField(TEXT("confirm"), true);
+
+	FMonolithActionResult CreateResult = Registry.ExecuteAction(
+		TEXT("lyra"),
+		TEXT("add_experience_component_entry"),
+		CreateParams);
+	TestTrue(TEXT("explicit action_name creation succeeds through registry action path"), CreateResult.bSuccess);
+	TestTrue(TEXT("explicit action_name creation returns json"), CreateResult.Result.IsValid());
+	if (CreateResult.Result.IsValid())
+	{
+		TestTrue(TEXT("explicit action_name creates an action"), CreateResult.Result->GetBoolField(TEXT("created_action")));
+		TestTrue(TEXT("explicit action_name adds the component pair"), CreateResult.Result->GetBoolField(TEXT("added_component")));
+		TestEqual(
+			TEXT("reported action object name is the exact requested FName"),
+			CreateResult.Result->GetStringField(TEXT("action_object_name")),
+			ExactActionName);
+	}
+
+	UObject* ExactNamedAction = StaticFindObjectFast(
+		UObject::StaticClass(),
+		ActionSet,
+		FName(*ExactActionName));
+	TestNotNull(TEXT("exact requested action exists as an owner direct child"), ExactNamedAction);
+	if (ExactNamedAction)
+	{
+		TestEqual(TEXT("created action did not gain a numeric suffix"), ExactNamedAction->GetName(), ExactActionName);
+		TestTrue(TEXT("exact named child has AddComponents class"), ExactNamedAction->IsA(AddComponentsActionClass));
+	}
+
+	FMonolithActionResult RepeatResult = Registry.ExecuteAction(
+		TEXT("lyra"),
+		TEXT("add_experience_component_entry"),
+		CreateParams);
+	TestTrue(TEXT("same explicit request succeeds as an idempotent no-op"), RepeatResult.bSuccess);
+	TestTrue(TEXT("same explicit request returns json"), RepeatResult.Result.IsValid());
+	if (RepeatResult.Result.IsValid())
+	{
+		TestFalse(TEXT("same explicit request does not create another action"), RepeatResult.Result->GetBoolField(TEXT("would_create_action")));
+		TestFalse(TEXT("same explicit request reports no planned change"), RepeatResult.Result->GetBoolField(TEXT("would_change")));
+		TestFalse(TEXT("same explicit request performs no mutation"), RepeatResult.Result->GetBoolField(TEXT("changed")));
+		TestTrue(TEXT("same explicit request reuses the exact action"), RepeatResult.Result->GetBoolField(TEXT("reused_action")));
+		TestEqual(
+			TEXT("idempotent response preserves exact action name"),
+			RepeatResult.Result->GetStringField(TEXT("action_object_name")),
+			ExactActionName);
+	}
+
+	const FString OrphanActionName = TEXT("OrphanActionNameCollision");
+	UCurveFloat* IncompatibleOrphan = NewObject<UCurveFloat>(
+		ActionSet,
+		FName(*OrphanActionName),
+		RF_Transient);
+	TestNotNull(TEXT("incompatible direct-child collision fixture was created"), IncompatibleOrphan);
+
+	TSharedPtr<FJsonObject> CollisionParams = MakeShared<FJsonObject>();
+	CollisionParams->SetStringField(TEXT("action_set_path"), ActionSet->GetPathName());
+	CollisionParams->SetStringField(TEXT("actor_class"), TEXT("/Script/Engine.GameStateBase"));
+	CollisionParams->SetStringField(TEXT("component_class"), TEXT("/Script/Engine.SceneComponent"));
+	CollisionParams->SetStringField(TEXT("action_name"), OrphanActionName);
+	CollisionParams->SetBoolField(TEXT("dry_run"), true);
+
+	FMonolithActionResult CollisionResult = Registry.ExecuteAction(
+		TEXT("lyra"),
+		TEXT("add_experience_component_entry"),
+		CollisionParams);
+	TestFalse(TEXT("dry-run fails on an incompatible owner direct-child name collision"), CollisionResult.bSuccess);
+	TestEqual(TEXT("direct-child collision is an invalid-param error"), CollisionResult.ErrorCode, -32602);
+	TestTrue(TEXT("collision error identifies the owner direct child"), CollisionResult.ErrorMessage.Contains(TEXT("direct child")));
+	TestTrue(TEXT("collision error identifies the incompatible class contract"), CollisionResult.ErrorMessage.Contains(TEXT("incompatible class")));
 
 	return true;
 }

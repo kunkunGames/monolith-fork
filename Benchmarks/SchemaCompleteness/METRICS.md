@@ -16,6 +16,14 @@
 | `param_bearing_action_count` | Informational | Number of scanned actions that declare at least one parameter (the denominator for the three param-gated rates). |
 | `param_less_action_count` | Informational | Number of scanned actions that declare no parameters (N/A on the three param-gated dimensions). |
 | `scanned_action_count` | Informational | Total actions scored in this run (may be less than `total_expected_action_count` when `--max-actions` is used). |
+| `declared_probe_count` | Informational | Valid unique rows declared by `probe_set.jsonl` and matched by `manifest.json`. |
+| `catalog_present_probe_count` | Informational | Declared probes present in the complete live catalog and therefore eligible for schema scoring. |
+| `skipped_probe_count` | Informational | Explicit optional/feature-gated probes absent from the complete live catalog; reported but excluded from score and fetch-failure denominators. |
+| `stale_probe_count` | Lower is better; hard gate | Required probes absent from the complete live catalog. Any nonzero value aborts before schema fetch and prevents a baseline summary. |
+| `transport_failure_count` | Lower is better; hard gate | Schema requests that failed at HTTP/SSE transport before a Monolith tool result. Three consecutive failures, or more than 5% after 20 requests, abort immediately. |
+| `transport_failed_fraction` | Lower is better; hard gate | `transport_failure_count / completed_action_count`; separate from semantic `schema_not_returned` failures. |
+| `last_transport_item_id` | Diagnostic | The action that produced the most recent transport failure. It remains paired with `last_transport_status` / `last_transport_error_raw` even when a later successful request triggers the cumulative-fraction gate. |
+| `run_valid` | Must be `true` for a baseline | Present and true only in a valid `summary.json`; invalid runs are written to `run_failure.json` and never emit a normal summary. |
 
 ## N/A Semantics (param-gated dimensions)
 
@@ -45,6 +53,10 @@ A `monolith_discover` fetch failure (no schema returned) is a **hard fail**
 | `output_contract_declared` | boolean | `"output_contract_status"` is `"declared"` or `"not_declared"` |
 | `schema_score` | float | Mean of the applicable (non-N/A) boolean flags (0.0–1.0, unweighted) |
 | `error` | string | Empty string on success; error message if schema fetch failed |
+| `failure_kind` | string | `ok`, `transport_error`, `protocol_error`, `schema_not_returned`, or `runner_exception` |
+| `transport_error` | boolean | True only when the HTTP/SSE request failed before a tool result was returned |
+| `transport_status` | integer/null | HTTP status when available for a transport failure |
+| `transport_error_raw` | string | Bounded raw transport diagnostic; empty for semantic schema failures and successes |
 
 ## Score Formula
 
@@ -67,12 +79,24 @@ Weights reflect the relative importance of each dimension for agent reliability:
 - **skill_routing (0.10)**: Routes agents to the correct skill SKILL.md documentation.
 - **output_contract (0.10)**: Explicit output contract status prevents agents from guessing response shape.
 
+## Namespace-Score Renormalization (2026-07-11)
+
+The per-namespace `schema_completeness_score` in `namespace_breakdown` excludes
+dimensions that are N/A for every action in the namespace and renormalizes the
+remaining weights. Before this, a namespace of only param-less actions folded
+the three param-gated dimensions in as `0.0` and capped at `0.35` even when
+every applicable dimension passed (observed on `slate`/`reflect` in
+baseline-20260711). Each namespace row now carries `param_gated_applicable`;
+when it is `false` the three param-gated `*_rate` fields are vacuous `0.0`
+placeholders excluded from the score. The TOP-LEVEL aggregate formula is
+unchanged (every dimension has applicable rows over the full catalog).
+
 ## Relationship to ActionGuidance Benchmark
 
 | Property | ActionGuidance | SchemaCompleteness |
 | --- | --- | --- |
-| Scope | 263 sampled tasks | All live catalog actions, plus 385 targeted probes |
-| Namespaces | All 51 (1 representative action each) | All 51 (every action) |
+| Scope | 289 sampled tasks | All live catalog actions, plus 330 targeted probes |
+| Namespaces | All 61 (at least 1 representative action each) | All 61 live namespaces (every action) |
 | Measures | Agent task success, recovery, param correction | Schema structural quality + value-domain documentation |
 | Primary metric | `effectiveness_score` | `schema_completeness_score` |
 | LLM calls | None | None |

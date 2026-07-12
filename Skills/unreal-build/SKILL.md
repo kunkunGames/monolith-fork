@@ -45,8 +45,8 @@ These actions are guarded operational helpers. They do not replace the repo's pr
 |---|---|---|
 | `build.resolve_unreal_engine` | Report the loaded project's engine root plus `RunUAT`/`UBT` paths from the current editor context. | Read-only. |
 | `build.run_buildcookrun` | Build a structured UAT `BuildCookRun` command, including optional `-CustomConfig`. | `dry_run=true` default; external UAT launch requires `dry_run=false` and `confirm=true`. |
-| `artifact.package_build_outputs` | Scan an archive/build output directory and produce a JSON manifest; optionally write `manifest.json`. | Manifest write requires `dry_run=false`, `write_manifest=true`, and `confirm=true`. |
-| `artifact.mirror_screenshot_evidence` | Copy explicit screenshot files or scanned evidence images into an evidence directory. | File copy requires `dry_run=false` and `confirm=true`. |
+| `artifact.package_build_outputs` | Scan an archive/build output directory and produce a JSON manifest; optionally write `manifest.json`. `limit` defaults to 5,000 and must be an integer in `1..50,000`. | Invalid limit types/fractions/ranges fail; manifest write requires `dry_run=false`, `write_manifest=true`, and `confirm=true`. |
+| `artifact.mirror_screenshot_evidence` | Copy explicit screenshot files or scanned evidence images into an evidence directory. `limit` defaults to 200 and must be an integer in `1..10,000`. | Invalid limit types/fractions/ranges fail; file copy requires `dry_run=false` and `confirm=true`. |
 | `notify.discord_screenshot_evidence` | Build a redacted text-only Discord screenshot evidence payload; webhook is read only from `webhook_env`. | Send requires `send=true`, `dry_run=false`, `confirm=true`, and an environment variable; webhook URLs are never action params. |
 
 ## When to use this skill

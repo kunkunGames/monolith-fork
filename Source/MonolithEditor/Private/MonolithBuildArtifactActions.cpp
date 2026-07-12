@@ -54,14 +54,49 @@ namespace MonolithBuildArtifact
 		return Params.IsValid() && Params->TryGetBoolField(FieldName, Value) ? Value : DefaultValue;
 	}
 
-	static int32 ReadInt(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName, int32 DefaultValue, int32 MinValue, int32 MaxValue)
+	static bool TryReadBoundedInt(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		int32 DefaultValue,
+		int32 MinValue,
+		int32 MaxValue,
+		int32& OutValue,
+		FString& OutError)
 	{
-		double Number = 0.0;
-		if (Params.IsValid() && Params->TryGetNumberField(FieldName, Number))
+		OutValue = DefaultValue;
+		OutError.Reset();
+		if (!Params.IsValid())
 		{
-			return FMath::Clamp(FMath::RoundToInt(Number), MinValue, MaxValue);
+			return true;
 		}
-		return FMath::Clamp(DefaultValue, MinValue, MaxValue);
+
+		const TSharedPtr<FJsonValue>* RawValue = Params->Values.Find(FieldName);
+		if (!RawValue)
+		{
+			return true;
+		}
+		if (!RawValue->IsValid() || (*RawValue)->Type != EJson::Number)
+		{
+			OutError = FString::Printf(TEXT("%s must be a JSON number."), FieldName);
+			return false;
+		}
+
+		const double Number = (*RawValue)->AsNumber();
+		if (!FMath::IsFinite(Number)
+			|| Number != FMath::TruncToDouble(Number)
+			|| Number < static_cast<double>(MinValue)
+			|| Number > static_cast<double>(MaxValue))
+		{
+			OutError = FString::Printf(
+				TEXT("%s must be an integer between %d and %d."),
+				FieldName,
+				MinValue,
+				MaxValue);
+			return false;
+		}
+
+		OutValue = static_cast<int32>(Number);
+		return true;
 	}
 
 	static TArray<FString> ReadStringArray(const TSharedPtr<FJsonObject>& Params, const TCHAR* FieldName)
@@ -379,7 +414,8 @@ void FMonolithBuildArtifactActions::RegisterActions(FMonolithToolRegistry& Regis
 			.RequiredDiskPath(TEXT("archive_dir"), TEXT("Build/archive directory to scan."))
 			.OptionalDiskPath(TEXT("manifest_path"), TEXT("Manifest output path. Defaults to <archive_dir>/manifest.json."))
 			.Optional(TEXT("recursive"), TEXT("boolean"), TEXT("Scan recursively."), TEXT("true"))
-			.Optional(TEXT("limit"), TEXT("number"), TEXT("Maximum files to include."), TEXT("5000"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum files to include. Must be an integer in 1..50000."), TEXT("5000"))
+			.Range(TEXT("limit"), 1, 50000)
 			.Optional(TEXT("write_manifest"), TEXT("boolean"), TEXT("Write the manifest file when dry_run=false and confirm=true."), TEXT("false"))
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview manifest without writing."), TEXT("true"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required with dry_run=false and write_manifest=true."), TEXT("false"))
@@ -395,7 +431,8 @@ void FMonolithBuildArtifactActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Optional(TEXT("files"), TEXT("array"), TEXT("Explicit screenshot file paths."))
 			.OptionalDiskPath(TEXT("source_dir"), TEXT("Optional directory to scan for png/jpg/jpeg/gif files when files is omitted."))
 			.RequiredDiskPath(TEXT("dest_dir"), TEXT("Destination directory for mirrored files."))
-			.Optional(TEXT("limit"), TEXT("number"), TEXT("Maximum files to mirror."), TEXT("200"))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum files to mirror. Must be an integer in 1..10000."), TEXT("200"))
+			.Range(TEXT("limit"), 1, 10000)
 			.Optional(TEXT("dry_run"), TEXT("boolean"), TEXT("Preview copy rows without writing."), TEXT("true"))
 			.Optional(TEXT("confirm"), TEXT("boolean"), TEXT("Required with dry_run=false to copy files."), TEXT("false"))
 			.Build(),
@@ -651,7 +688,13 @@ FMonolithActionResult FMonolithBuildArtifactActions::PackageBuildOutputs(const T
 	}
 
 	const bool bRecursive = ReadBool(Params, TEXT("recursive"), true);
-	const int32 Limit = ReadInt(Params, TEXT("limit"), 5000, 1, 50000);
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadBoundedInt(Params, TEXT("limit"), 5000, 1, 50000, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("limit_invalid"), LimitError));
+	}
 	FString ManifestPath = NormalizeDiskPath(ReadString(Params, TEXT("manifest_path")));
 	if (ManifestPath.IsEmpty())
 	{
@@ -725,7 +768,13 @@ FMonolithActionResult FMonolithBuildArtifactActions::MirrorScreenshotEvidence(co
 			.WithErrorData(ErrorData(TEXT("dest_dir_missing"), TEXT("No destination directory was supplied.")));
 	}
 
-	const int32 Limit = ReadInt(Params, TEXT("limit"), 200, 1, 10000);
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadBoundedInt(Params, TEXT("limit"), 200, 1, 10000, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, ErrInvalidParams)
+			.WithErrorData(ErrorData(TEXT("limit_invalid"), LimitError));
+	}
 	const TArray<FString> Files = ScreenshotFilesFromParams(Params, Limit);
 
 	TArray<TSharedPtr<FJsonValue>> Rows;

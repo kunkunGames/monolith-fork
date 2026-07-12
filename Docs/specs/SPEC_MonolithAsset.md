@@ -19,7 +19,7 @@ This module keeps asset-level actions out of `MonolithUI`, `MonolithMesh`, and `
 
 `FMonolithAssetModule` registers all `asset` actions with owner `MonolithAsset` and unregisters them through owner-scoped cleanup during shutdown. The module is gated by `UMonolithSettings::bEnableAsset`.
 
-`MonolithImageGen` depends on `MonolithAsset` for `MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes`, so generated-image imports and direct texture-byte imports share one Texture2D creation path. `MonolithBlueprint` depends on `MonolithAsset` for the shared save-asset helper used by its internal batch edit op.
+`MonolithImageGen` depends on `MonolithAsset` for `MonolithAsset::FTextureIngestActions::HandleImportTextureFromBytes`, so generated-image imports and direct texture-byte imports share one Texture2D creation path. `MonolithBlueprint` depends on `MonolithAsset` for the shared save-asset helper used by its internal batch edit op. `MonolithAI` depends on `MonolithAsset` so Blackboard, Behavior Tree, and EQS delete actions reuse the verified `delete_assets(force=true)` package/registry/file/source-control postconditions instead of reporting success from object-count deletion alone.
 
 No compatibility aliases are registered for the move from the old `ui` ingest actions or the generic lifecycle actions formerly registered under `editor`/`blueprint`. Callers should use `asset.import_texture_from_bytes`, `asset.import_font_family`, `asset.import_texture_from_file`, `asset.save_asset`, and `asset.delete_assets`.
 
@@ -27,11 +27,11 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Action | Owner class | Purpose |
 |--------|-------------|---------|
-| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create a `UTexture2D` under `/Game/...`; optional `texture_role` applies Unreal texture-role import presets, role post-processing, validation metadata, and optional postprocessed PNG return. |
+| `import_texture_from_bytes` | `MonolithAsset::FTextureIngestActions` | Decode base64 compressed image bytes and create or replace a `UTexture2D` under `/Game/...`; `conflict_policy=fail|replace|unique` defaults to exact-path `fail`, while optional `texture_role` applies Unreal texture-role import presets, role post-processing, validation metadata, and optional postprocessed PNG return. |
 | `import_font_family` | `MonolithAsset::FFontIngestActions` | Import one or more TTF files as a composite `UFont` plus `UFontFace` assets. Headless-safe: `PostEditChange()` on the face/family assets is skipped when `FSlateApplication::IsInitialized()` is false (the call only flushes live Slate font caches and asserts in commandlets without a Slate application); asset data, registry notification, and save behavior are unchanged. |
 | `import_texture_from_file` | `FMonolithAssetLifecycleActions` | Import an external image file as a `UTexture2D` with optional compression, sRGB, tiling, max-size, and LOD-group settings. Accepts `source_file`/`file_path`/`path` aliases for `source_path`, `destination_path`/`dest_path` aliases for `destination`, optional `asset_name` when the destination is a folder, `overwrite_policy=overwrite|replace` as a compatibility alias for `replace_existing=true`, and UI compression aliases such as `UserInterface2D`. |
-| `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk. |
-| `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with optional prefix guard, dry-run validation, non-interactive editor closing, and optional force deletion. |
+| `save_asset` | `FMonolithAssetLifecycleActions` | Save any loaded asset package to disk, enforce clean/on-disk/non-empty-file postconditions, and optionally prove persistence through a non-interactive package reload. |
+| `delete_assets` | `FMonolithAssetLifecycleActions` | Delete assets by path with segment-bounded prefix guards, per-target postconditions, dry-run validation, non-interactive editor closing, and optional source-control-aware disk-residual removal. |
 | `validate_naming_conventions` | `FMonolithAssetHygieneActions` | Scan assets under a content path and report prefix-rule violations. |
 | `list_supported_asset_enrichers` | `FMonolithAssetInspectionActions` | List typed read-only enrichers supported by `inspect_asset`. |
 | `inspect_asset` | `FMonolithAssetInspectionActions` | Inspect one asset with typed enrichment and optional reflected references. |
@@ -53,9 +53,41 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 | Public | `Core`, `CoreUObject`, `Engine`, `MonolithCore` |
 | Private | `UnrealEd`, `Json`, `JsonUtilities`, `AssetRegistry`, `AssetTools`, `EditorScriptingUtilities`, `ImageWrapper`, `ImageCore`, `Projects`, `RenderCore`, `RHI`, `SourceControl`, `Slate`, `SlateCore` |
 
-## 5. Lifecycle Delete Contract
+## 5. Asset Persistence and Delete Contracts
 
-`asset.delete_assets` runs non-interactively. For each loaded target it clears the package dirty flag and closes open asset editors before deleting under an unattended-script guard. `force=false` uses `ObjectTools::DeleteObjects`; `force=true` uses `ObjectTools::ForceDeleteObjects` for referenced assets. Failed deletion attempts are reported in `failed_to_delete[]` without aborting the response.
+### 5.1 Texture-byte collision policy
+
+`asset.import_texture_from_bytes` accepts `conflict_policy=fail|replace|unique`, defaulting to `fail`:
+
+| Policy | Contract |
+|--------|----------|
+| `fail` | The requested package path is exact. If that package already exists on disk or in memory, the action returns an invalid-params error and never creates a suffixed asset. |
+| `unique` | The only policy allowed to call `IAssetTools::CreateUniqueAssetName`; `asset_path` may differ from `requested_asset_path`. |
+| `replace` | If the exact package exists, it must resolve to the exact top-level `UTexture2D`. The action updates that same `UTexture2D` and `UPackage` identity in place; redirect resolution, a missing top-level asset, or another asset class is rejected. If no package exists, the exact requested path is created. |
+
+In-place replacement completes independently fallible image processing (including optional processed-PNG encoding) and builds the new platform data before touching the existing texture. Before mutation it moves the complete original `FTextureSource` object into an armed RAII snapshot, preserving its editor bulk-data payload and identifiers, package/virtualization attachment, compression form, long-lat flag, and blocked/layered topology without reconstruction. It also snapshots package dirty state, the six caller-facing settings (`CompressionSettings`, `SRGB`, `MipGenSettings`, `LODGroup`, `AddressX`, `AddressY`), and the additional values that Unreal can normalize or regenerate during `PostEditChange`/save, then transfers ownership of the complete running and cooked `FTexturePlatformData` state. The platform transfer preserves mip bulk/derived-data handles, VT data, CPU copies, encoder metadata, hashes, and DDC/fetch keys instead of reconstructing only pixel bytes. Source/platform replacement uses the normal texture edit notification, while each caller-facing setting is dispatched through its own property-specific `PreEditChange` / `PostEditChangeProperty` pair so Unreal's per-property invalidation paths run.
+
+The replacement snapshot remains armed until the operation succeeds. A save failure or later early return restores the same texture/package identity, exact source object state, complete running/cooked platform ownership, texture/editor side-effect values, CPU-copy helper identity, settings, material notifications, and dirty state, then verifies those rollback postconditions; an incomplete rollback is surfaced in the error. A texture whose original running platform data is null is restored to null rather than rejected or synthesized. Replacement is rejected before mutation only when ownership cannot be transferred safely: an active running/cooked platform-data build, non-null `ResourceMem`, or aliased/duplicate cooked platform-data ownership. Replacement-created cooked data is unique-deleted while preserving a running allocation even if an anomalous alias appears. Failure after creating a new texture unregisters and detaches the object/package and removes the header plus package sidecars. `AssetCreated` is called only for a newly created asset. The response reports `requested_asset_path`, resolved `asset_path`, `created`, `replaced`, and normalized `conflict_policy` in addition to the image/settings/validation fields.
+
+### 5.2 Save postconditions and reload verification
+
+`asset.save_asset` always verifies that the package is clean after save, that its package file exists, and that the file size is greater than zero. The response reports the canonical `asset_path`, `package_name`, `class`, `saved`, `was_dirty`, `dirty_after_save`, `exists_on_disk`, `filename`, and `file_size`.
+
+`verify_reload=true` adds a non-interactive `UPackageTools::ReloadPackages` proof after the save. The action re-resolves the canonical asset path and requires the class to match and the reloaded package to remain clean; it reports `verify_reload`, `reloaded`, and `reloaded_class`. Reload verification rejects both `UWorld` objects and every package for which `UPackage::ContainsMap()` is true, as well as assets with an open editor, because unloading or replacing those live objects is unsafe.
+
+### 5.3 Delete target and residual postconditions
+
+`asset.delete_assets` requires `asset_paths` to be a non-empty array of non-empty strings. When `allowed_prefixes` is present, it must also be a non-empty array whose every entry is a non-empty string; malformed members fail the whole request instead of silently disabling the guard.
+
+Committed deletion runs non-interactively. For each loaded target it clears the package dirty flag and closes open asset editors before deleting under an unattended-script guard. Garbage collection uses Unreal's editor `GARBAGE_COLLECTION_KEEPFLAGS`, not `RF_NoFlags`: deleted targets have already been detached or marked as garbage, while unrelated `RF_Standalone` assets and their unsaved edits remain alive across the target eviction. `force=false` performs the normal object deletion path. `force=true` also handles packages that have no loaded object or AssetRegistry row, including disk-only package files. `dry_run=true` is observational: it does not clear dirty state, close editors, unregister string tables, modify packages, invoke object deletion, issue source-control operations, delete files, or rescan the registry.
+
+`allowed_prefixes` is a package-segment guard, not a raw string prefix: a target must equal an allowed package prefix or begin with `prefix + "/"`. For example, `/Game/Foo` permits `/Game/Foo/Asset` but rejects `/Game/FooSibling/Asset`. Trailing slashes and object-path forms are normalized before comparison.
+
+The force path checks binary asset/map and text asset/map headers (`.uasset`, `.umap`, `.utxt`, `.utxtmap`) plus Unreal package segments for exports and bulk/payload data (`.uexp`, `.ubulk`, `.uptnl`, `.m.ubulk`, `.upayload`). Added or checked-out files are reverted as required, tracked files are marked for delete, and only source-control-module-disabled writable files or provider-confirmed untracked writable files may be deleted directly. If source control is enabled, provider/state unavailability or a failed/unsupported revert/delete operation blocks direct deletion, sets that target's `source_control_failure`, and makes the target fail even if the filesystem otherwise appears clean.
+
+Each non-dry-run target succeeds only when all three final postconditions hold: no loaded package, no AssetRegistry entries for the package, and no header or sidecar package files on disk. Force mode additionally requires no source-control failure.
+
+The response includes `targets[]` rows with `requested_path`, normalized `package_name`, `status`, `success`, discovery state, residual-removal state, `source_control_failure`, and final postcondition diagnostics. Commit statuses are `deleted`, `residual_removed`, `already_absent`, or `failed`; dry-run statuses are `would_delete`, `would_remove_residual`, `already_absent` (force mode), or `not_found`. Top-level `success` is the conjunction of the per-target results, while legacy summary fields such as `deleted`, `requested`, `found`, `not_found`, `failed_to_delete`, and residual/source-control arrays remain available.
 
 ## 6. Settings
 
@@ -67,7 +99,7 @@ No compatibility aliases are registered for the move from the old `ui` ingest ac
 
 | Group | Files | Notes |
 |-------|-------|-------|
-| Texture ingest | `Public/MonolithAssetTextureIngestActions.h`, `Private/MonolithAssetTextureIngestActions.cpp` | Public helper reused by `MonolithImageGen`; supports PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, and DDS through `IImageWrapper`. Optional `texture_role` values are `ui_icon`, `sprite`, `decal`, `basecolor`, `world_tile`, `normal`, `orm_mask`, `height`, and `emissive`. |
+| Texture ingest | `Public/MonolithAssetTextureIngestActions.h`, `Private/MonolithAssetTextureIngestActions.cpp` | Public helper reused by `MonolithImageGen`; supports PNG, JPEG, BMP, EXR, TGA, HDR, TIFF, and DDS through `IImageWrapper`, with explicit `fail`, `replace`, and `unique` collision policies. Optional `texture_role` values are `ui_icon`, `sprite`, `decal`, `basecolor`, `world_tile`, `normal`, `orm_mask`, `height`, and `emissive`. |
 | Font ingest | `Public/MonolithAssetFontIngestActions.h`, `Private/MonolithAssetFontIngestActions.cpp` | Uses UE 5.7-safe `UFont::GetMutableInternalCompositeFont()` for composite-font writes. |
 | Lifecycle | `Public/MonolithAssetLifecycleActions.h`, `Private/MonolithAssetLifecycleActions.cpp` | Owns generic file texture import, asset save, and guarded delete operations previously scattered under editor/blueprint. |
 | Hygiene | `Public/MonolithAssetHygieneActions.h`, `Private/MonolithAssetHygieneActions.cpp` | Owns naming convention validation and batch rename fixup. |

@@ -33,7 +33,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 
 | Action | Purpose | Params (req* opt? =default) |
 |--------|---------|------------------------------|
-| `resolve_setting` | Get effective value of a config key across the full INI hierarchy | `file*` `section*` `key*` |
+| `resolve_setting` | Get the effective value of a config key. With `file` omitted, search the canonical Engine/Game/Input/Editor/EditorPerProjectUser/GameUserSettings categories and report the resolved category plus searched categories. | `file?` `section*` `key*` |
 | `explain_setting` | Show where a config value comes from across Base->Default->User layers | `file?` `section?` `key?` `setting?` (setting = convenience: search key across common categories) |
 | `diff_from_default` | Show project config overrides vs engine defaults for a category | `file*` `section?` |
 | `search_config` | Full-text search across all config files | `query*` `category?` |
@@ -50,7 +50,7 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 |--------|---------|------------------------------|
 | `set_developer_setting` `[w]` | DEV-ONLY: set a property on a `UDeveloperSettings` CDO at runtime. Resolves class by short-name or full path, parses `value` via `UProperty::ImportText_Direct`, optionally persists to INI. `#if WITH_EDITOR`-gated. | `class*` `property*` `value*` `save_config=false` |
 
-`file`/`category` take a config category name (e.g. `Engine`, `Game`, `Input`); `section` is the INI section header (e.g. `/Script/Engine.RendererSettings`). For `set_developer_setting`, `class` is a short-name (e.g. `MonolithReflectionIntelSettings`) or full path (`/Script/Module.Class`), `value` is text (`'true'`, `'42'`, `'0.75'`, `'(X=1,Y=2)'`), and `save_config=true` writes back to the persistent INI via `UObject::SaveConfig()`.
+`file`/`category` take a config category name (e.g. `Engine`, `Game`, `Input`); `section` is the INI section header (e.g. `/Script/Engine.RendererSettings`). `resolve_setting.file` is optional: omit it only when the category is unknown and inspect `category`, `searched_categories`, and per-category diagnostics in the response. For `set_developer_setting`, `class` is a short-name (e.g. `MonolithReflectionIntelSettings`) or full path (`/Script/Module.Class`), `value` is text (`'true'`, `'42'`, `'0.75'`, `'(X=1,Y=2)'`), and `save_config=true` writes back to the persistent INI via `UObject::SaveConfig()`.
 
 ## Common Workflows
 
@@ -59,7 +59,7 @@ Numbered recipes use only the actions in the table above. `file`/`category` is a
 ### Recipe 1 — Trace where a config value comes from
 
 1. `config_query("search_config", { query, category })` — full-text find the key across config files when you do not yet know its `file`/`section`; the hits give you the category and section header to use below.
-2. `config_query("resolve_setting", { file, section, key })` — read the single effective value after the whole INI hierarchy is applied.
+2. `config_query("resolve_setting", { section, key })` — when the category is still unknown, search the canonical categories and inspect the returned `category`/`searched_categories`; pass `{ file, section, key }` when the category is already known.
 3. `config_query("explain_setting", { file, section, key })` — show which Base->Default->User layer actually set that value (use the `setting` convenience form to search the key across common categories when the layer is unclear).
 4. `config_query("diff_from_default", { file, section })` — confirm whether the resolved value is a project override or the stock engine default, and see the other overrides in the same section.
 

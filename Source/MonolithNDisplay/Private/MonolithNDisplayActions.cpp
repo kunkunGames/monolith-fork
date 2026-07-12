@@ -48,6 +48,7 @@ void FMonolithNDisplayActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content package path under /Game"), TEXT("/Game"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum config assets to return, clamped to 1..500"), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Build());
 }
 

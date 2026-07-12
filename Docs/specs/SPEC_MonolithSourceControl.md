@@ -2,7 +2,7 @@
 
 **Parent:** [SPEC_CORE.md](../SPEC_CORE.md)
 **Engine:** Unreal Engine 5.7+
-**Version:** 0.14.10
+**Version:** 0.14.11
 **Status:** Implemented
 
 ---
@@ -20,6 +20,7 @@
 | `FMonolithSourceControlUtils` (`MonolithCore`) | Shared provider availability, package/filesystem path normalization, and checkout-or-add decision/execution helper. |
 | `FMonolithSourceControlModule` | Registers and unregisters the `source_control` namespace. |
 | `FMonolithSourceControlActions` | Exposes explicit source-control actions, delegates `checkout_or_add` to the shared core helper, and provides read-only `p4 -ztag opened/where` mapping helpers for changelist-to-package workflows. |
+| `MonolithSourceControlP4` private helpers | Encode Windows process arguments with Microsoft CRT backslash/quote rules, reject control characters, validate decimal/default changelists, build bounded `p4 opened -m (limit + 1)` commands, project honest observed/sentinel count semantics, and resolve at most 2,000 raw/unique depot paths through at most 16 `p4 where` commands. Tagged records are associated only by explicit depot/client/path identity; later client-view records, row-local errors, and aggregate counters remain deterministic. |
 
 | Dependency | Purpose |
 |------------|---------|
@@ -44,10 +45,12 @@
 | `source_control.mark_for_delete` | `paths`, `dry_run`?, `confirm`? | Explicit alias for provider mark-for-delete. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert` | `paths`, `dry_run`?, `confirm`? | Reverts files. Requires `confirm=true` unless `dry_run=true`. |
 | `source_control.revert_unchanged` | `paths`, `dry_run`?, `confirm`? | Reverts unchanged files. Requires `confirm=true` unless `dry_run=true`. |
-| `source_control.list_opened` | `changelist`?, `resolve_packages`?, `limit`? | Runs `p4 -ztag opened`, optionally scoped to one changelist, and maps opened depot paths back to local and Unreal package paths when `resolve_packages=true`. |
-| `source_control.map_depot_paths` | `paths` | Maps Perforce depot/client/local paths and `/Game` paths to local filesystem paths plus Unreal long package paths using `p4 -ztag where` and project mount points. |
+| `source_control.list_opened` | `changelist`?, `resolve_packages`?, `limit`? | Runs `p4 -ztag opened -m (limit + 1)` with `limit` in `[1, 2000]`. It returns at most `limit` rows plus honest bounded observation fields: `observed_count`, `sentinel_record_count`, `has_more`, `truncated`, `count_semantics`, and `count_is_lower_bound`. Backward `count` equals the bounded observed count and is exact only when `count_is_lower_bound=false`; no unbounded exact-count query runs. Selected depot paths are then mapped through the shared bounded `p4 where` resolver. |
+| `source_control.map_depot_paths` | `paths` | Maps at most 2,000 raw inputs across Perforce depot/client, local filesystem, and `/Game` paths. Depot/client paths are deduplicated, individually capped by the actual encoded command length, and resolved through at most 16 commands of at most 128 paths / 24,000 encoded characters each. Checkout-relative inputs resolve from `FPaths::ProjectDir`; mapping diagnostics expose raw, requested, unique, resolved, failed, and command counts. |
 
-Canonical calls should use `paths` as an array of filesystem or `/Game` paths. For additive agent-input tolerance, every `source_control` action that takes `paths` also accepts a single non-empty string and the alias key `files`; handlers normalize both forms to the same path row contract. Optional boolean fields (`dry_run`, `confirm`, and `resolve_packages`) accept booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`; malformed strings and numeric booleans remain validation errors. Destructive delete/revert actions still require `confirm=true` unless `dry_run=true`.
+Canonical calls should use `paths` as an array of filesystem or `/Game` paths. For additive agent-input tolerance, every `source_control` action that takes `paths` also accepts a single non-empty string and the alias key `files`; handlers normalize both forms to the same path row contract. `map_depot_paths` rejects raw arrays above 2,000 before any process launch, including 2,001 duplicate entries, and rejects NUL/CR/LF/tab/other control characters before trimming or quoting. Optional boolean fields (`dry_run`, `confirm`, and `resolve_packages`) accept booleans plus string literals `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and `off`; malformed strings and numeric booleans remain validation errors. Destructive delete/revert actions still require `confirm=true` unless `dry_run=true`.
+
+`list_opened` and `map_depot_paths` register an explicit `read_only` execution policy. This prevents action-name inference from classifying `map_depot_paths` as a transaction-wrapped asset mutation even though it only invokes read-only `p4 where` queries and package-name conversion.
 
 `source_control.checkout_or_add` and the central action execution guard both use `FMonolithSourceControlUtils::CheckoutOrAddFiles`. Existing source-controlled files are checked out; local files are marked for add; already checked-out or added files are skipped. Explicit `source_control.checkout_or_add` allows add planning for missing package filenames to preserve its manual prepare behavior. Automatic asset mutation prepare skips missing files before the handler runs, then retries after the handler succeeds so newly saved `.uasset` and `.umap` files can be marked for add. Automatic prepare is scoped to asset-mutation namespaces/actions and project-owned package files; read-only project/source/bridge/context/catalog calls are excluded even if legacy policy inference marks them as mutating.
 
@@ -68,8 +71,8 @@ All eleven `source_control` actions opt into registry-level top-level parameter 
 | `mark_for_delete` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, provider delete execution/state rows. |
 | `revert` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, revert execution/state rows. |
 | `revert_unchanged` | `paths` array/string with `files` alias; `dry_run` bool/string; `confirm` bool/string. | Tolerant bool parsing, confirm gate, path normalization, provider availability, revert-unchanged execution/state rows. |
-| `list_opened` | `changelist` string; `resolve_packages` bool/string; `limit` integer. | Tolerant bool parsing, bounded `p4 -ztag opened`, tagged-record parsing, and optional local/package path resolution through `p4 where` and `FPackageName`. |
-| `map_depot_paths` | `paths` array/string with `files` alias. | Validates non-empty path values, maps depot/client paths through `p4 where`, and converts local/package paths through Unreal mount points. |
+| `list_opened` | `changelist` string; `resolve_packages` bool/string; `limit` integer in `[1, 2000]`. | `changelist` is empty, `default`, or ASCII decimal only; control characters fail before execution. The backend receives `-m (limit + 1)` with a hard maximum of 2,001 records. Returned rows exclude the one sentinel, and count fields explicitly distinguish exact from lower-bound observations. |
+| `map_depot_paths` | `paths` array/string with `files` alias. | Rejects more than 2,000 raw inputs and all control characters before execution; deduplicates depot/client inputs; enforces 2,000 unique inputs, 128 paths / 24,000 actual encoded characters per command, and 16 total commands; preserves failures per row; resolves checkout-relative paths from the project root; emits absolute normalized local paths for package inputs. |
 
 Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 
@@ -80,7 +83,7 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 | Gate | Requirement |
 |------|-------------|
 | Provider boundary | Mutation actions use Unreal's active `ISourceControlProvider`; they do not shell out to P4, git, or external CLIs. |
-| Perforce mapping boundary | `list_opened` and `map_depot_paths` are read-only Perforce CLI wrappers. They only run bounded `p4 -ztag opened/where`, never print credentials, and return structured command errors when `p4` is unavailable or the workspace is unmapped. |
+| Perforce mapping boundary | `list_opened` and `map_depot_paths` are read-only Perforce CLI wrappers. `list_opened` is backend-bounded by `-m limit+1`; `map_depot_paths` is bounded by raw/unique path, actual encoded command-length, per-command path, and aggregate command caps. Windows argv uses CRT-compatible backslash/quote encoding, and command/control validation occurs before process launch. The wrappers do not place credentials on the command line and return structured command errors when `p4` is unavailable or the workspace is unmapped. |
 | Path boundary | Handlers normalize filesystem and `/Game` package/object paths before provider calls and report invalid entries per row. |
 | Mutation preview | `checkout`, `add`, `checkout_or_add`, `delete`, `mark_for_delete`, `revert`, and `revert_unchanged` support `dry_run=true`; delete/revert operations require either `confirm=true` or dry-run. |
 | Result shape | Actions return provider metadata, normalized path rows, operation booleans/results, messages/errors, and state rows only; no file contents or credential material are returned. |
@@ -93,8 +96,9 @@ Focused coverage: `FMonolithSourceControlTypedParamsTest`.
 | Gate | Evidence |
 |------|----------|
 | Registration | `FMonolithSourceControlModule::StartupModule` registers the `source_control` namespace. |
-| Parameter guard | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests are rejected by the registry and handlers. |
-| Input tolerance | `FMonolithSourceControlInputToleranceTest` verifies `files` aliases, scalar path strings, and supported boolean string literals are accepted without executing mutations. |
+| Parameter guard and policy | `FMonolithSourceControlTypedParamsTest` verifies malformed path/bool requests, non-integral limits, and limits outside `[1, 2000]` are rejected while both Perforce query actions remain explicitly `read_only`. A SourceControl-specific RAII fixture restores the production namespace after isolation, so running automation cannot remove live actions from the editor. |
+| Input tolerance and path roots | `FMonolithSourceControlInputToleranceTest` verifies `files` aliases, scalar path strings, supported boolean literals, project-root-relative resolution, and absolute `/Game` filename projection without executing mutations. |
+| Batched P4 mapping | `FMonolithSourceControlP4WindowsCommandLineTest` independently parses encoded arguments and covers spaces, literal quotes, quote-adjacent backslash runs, trailing backslashes, control rejection, and actual encoded-length bounds. `FMonolithSourceControlP4OpenedBoundsTest` verifies `-m limit+1`, decimal/default changelist validation, maximum backend 2,001, and exact/lower-bound sentinel windows. `FMonolithSourceControlP4BatchScaleTest` verifies 100/1,000/2,000 paths use 1/8/16 commands, rejects 2,001 raw duplicates or unique paths and a seventeenth command before dispatch, preserves character bounds, and rejects one oversized argument. Partial-failure, view-order, and row-local-stderr tests retain association and attribution coverage. |
 | P4 mapping | Manual or automation smoke should verify `source_control.list_opened(changelist)` maps opened `.uasset`/`.umap` files to `/Game` package paths and that `source_control.map_depot_paths(paths)` handles depot, local, and package inputs without mutation. |
 | UE 5.7 build | Full plugin UBT build must succeed with the engine root resolved from the host `.uproject`. |
 | Optional-off build | Full plugin UBT build must also pass with `MONOLITH_RELEASE_BUILD=1`, even though SourceControl itself has no optional compile guard. |

@@ -1,70 +1,90 @@
 ---
 name: unreal-pcg
-description: Use to INSPECT Procedural Content Generation (PCG) graphs via Monolith MCP (pcg namespace) — report PCG module/type availability, list PCG graph assets, inspect one PCG graph asset's metadata, and list PCG components in the world. This namespace is read-only inspection today; authoring (create/edit graph, add and wire nodes, set settings, run generation) is NOT exposed here — confirm via monolith_discover, and if it lands route by name. For fixed blockout/town/building/facade generation use unreal-worldgen; for a geometry/Chaos node graph use unreal-dataflow (PCG and Dataflow are different node-graph systems); to edit the source meshes a PCG graph scatters use unreal-mesh; to place the PCG component/volume actor and inspect spawned actors use unreal-scene. Triggers on PCG, procedural content generation, PCG graph, PCG node, inspect PCG graph, list PCG graphs, PCG component, PCG volume, PCG graph asset, PCG module status, PCG component list.
+description: Use when creating, editing, inspecting, validating, or migrating Unreal PCG graph assets through Monolith MCP. Covers typed UPCGGraph creation, reflected node-type discovery, node CRUD, pin wiring, strict node-settings writes, topology/settings read-back, structural validation, graph discovery, component listing, and guarded copied-graph reference remapping. For PCG component assignment or generation execution confirm a newer live action first; for fixed blockout generation use unreal-worldgen.
 ---
 
 # unreal-pcg
 
-Drives the Monolith **pcg** namespace for **inspecting** Procedural Content Generation (PCG) graphs. **4 actions** via `pcg_query(action, params)`, all read-only (status / list / read). Authoring a PCG graph (create/edit graph, add/wire nodes, set settings, run generation) is **not exposed by this namespace today** — verify the live catalog with `monolith_discover` before assuming a write action exists, and if one lands route to it by name. Action names below are the live registry surface; call `monolith_discover` for exact parameter schemas.
+Drive the Monolith `pcg` namespace for typed PCG graph-asset work. The checked-in surface has **14 actions**. Treat `monolith_discover({ namespace: "pcg" })` as authoritative for the running editor.
 
-## Discovery
+## Start here
 
-```
-monolith_discover({ namespace: "pcg" })                      # all actions in this namespace
-monolith_discover({ namespace: "pcg", action: "<action>", mode: "schema" })  # exact params
-```
-
-## When to use / Use a different skill for
-
-- **Use this skill** to inspect a reusable PCG graph — report PCG module/type availability, list PCG graph assets, read one graph asset's AssetRegistry metadata, and list the PCG components in the world. Inspection / read-only only.
-- **Authoring is not exposed here.** Creating/editing a graph, adding and wiring nodes, setting node settings, or running a generation pass is not in this namespace today — confirm with `monolith_discover({ namespace: "pcg" })` before assuming a write action exists.
-- **unreal-worldgen** for fixed blockout, town/building, facade, street, and furnishing generation — discrete placement passes rather than a reusable PCG node graph.
-- **unreal-dataflow** when the procedural node graph is a geometry/Chaos Dataflow graph. PCG and Dataflow are different node-graph systems — pick by which graph type the asset is.
-- **unreal-mesh** to edit the source StaticMesh/SkeletalMesh assets a PCG graph scatters, versus wiring the PCG graph nodes.
-- **unreal-scene** to place the PCG component/volume actor in the level and inspect the actors a generation pass spawned, versus building the graph.
-
-## Action Reference
-
-Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` allowed, `[w]` mutates. Signatures are a snapshot of the live catalog — for the exact full schema call `monolith_discover` with `mode: "schema"`. The discover-first block above is the authority. Authoring write actions are not in this snapshot — confirm them (and their `[w]` mutation policy) via discover before calling.
-
-### Core (4)
-
-| Action | Params | Purpose |
-|--------|--------|---------|
-| `get_status` | (none) | Report optional PCG module/type availability without loading PCG or mutating the level |
-| `list_graph_assets` | `package_path?=/Game` `limit?=100` | List PCG graph-like assets using AssetRegistry class paths without hard PCG dependencies (`limit` 1-500) |
-| `get_graph_asset` | `asset_path*` `include_tags?=true` `tag_limit?=50` | Inspect bounded AssetRegistry metadata for one PCG graph-like asset without loading PCG or mutating packages (`tag_limit` 0-200) |
-| `list_components` | `limit?=100` | List PCG-like components in the current editor world using reflected class names (`limit` 1-500) |
-
-## Common Workflows
-
-### 1. Survey PCG in the project and inspect one graph (read-only)
-
-```
-# 1. Confirm PCG support is available before touching graphs (PCG is an optional module)
-pcg_query("get_status", {})
-
-# 2. List PCG graph-like assets via AssetRegistry (limit 1-500)
-pcg_query("list_graph_assets", { "package_path": "/Game", "limit": 100 })
-
-# 3. List PCG-like components in the current editor world to see what runs a graph live
-pcg_query("list_components", { "limit": 100 })
-
-# 4. Read bounded AssetRegistry metadata for one PCG graph asset (tags included by default)
-pcg_query("get_graph_asset", { "asset_path": "/Game/PCG/PCG_Scatter", "include_tags": true, "tag_limit": 50 })
-
-# To author (create/edit graph, add/wire nodes, set settings, generate), confirm the action
-# and its params exist in the live catalog first — authoring is not in this snapshot:
+```text
+monolith_discover({ namespace: "pcg" })
 monolith_discover({ namespace: "pcg", action: "<action>", mode: "schema" })
+pcg_query("get_status", {})
 ```
 
-## Gotchas
+Use a different skill when the target is:
 
-- The four actions in the table are **read-only** — they inspect assets/components and report module availability without loading PCG or dirtying packages. Authoring intents (create/edit graph, add and wire nodes, set settings, run generation) must be resolved against the live catalog via `monolith_discover` before you call them; do not assume a write action exists from this snapshot.
-- `get_status` first — PCG is an optional module. If it reports the type/module unavailable, graph reads and authoring will not work until PCG is enabled for the project.
-- `list_graph_assets` / `get_graph_asset` use AssetRegistry class paths and stay decoupled from a hard PCG link dependency, so they work even when PCG is not loaded but report metadata only, not live graph node contents.
+- fixed blockout, building, facade, road, or furnishing generation: `unreal-worldgen`;
+- a geometry/Chaos Dataflow graph: `unreal-dataflow`;
+- a source StaticMesh/SkeletalMesh asset: `unreal-mesh`;
+- actor placement or live-level spatial work: `unreal-scene`.
 
-## Notes
+## Action reference
 
-- This reference is generated from the live `RegisterAction` surface. If an action is missing or renamed, re-run `monolith_discover({ namespace: "pcg" })` — the catalog is the source of truth.
-- Pass `mode: "schema"` to `monolith_discover` for required/optional params and types before calling an action.
+`*` means required; `[w]` mutates an asset.
+
+| Action | Key params | Purpose |
+|---|---|---|
+| `get_status` | none | Report the typed PCG module state and live registered actions. |
+| `list_graph_assets` | `package_path?`, `limit?` | Discover graph assets through AssetRegistry. |
+| `get_graph_asset` | `asset_path*`, `include_tags?`, `tag_limit?` | Read bounded registry metadata without loading graph topology. |
+| `list_components` | `limit?` | List PCG-like components in the editor world. |
+| `list_pcg_node_types` | `query?`, `include_properties?`, `property_limit?`, `limit?` | Resolve concrete loaded `UPCGSettings` types and editable fields. |
+| `create_pcg_graph` `[w]` | `asset_path*`, `existing_policy?=fail`, `save?=true` | Create a project-owned `UPCGGraph`; use `return_existing` for rerunnable automation. |
+| `get_pcg_graph_info` | `asset_path*`, `include_settings?`, `settings_fields?`, `property_limit?`, `array_limit?`, `node_limit?`, `edge_limit?`, `pin_limit?`, `response_item_limit?` | Read special/element nodes, pins, edges, positions, settings classes, and bounded values. |
+| `add_pcg_node` `[w]` | `asset_path*`, `node_type*`, `node_title?`, `position?`, `properties?`, `existing_policy?=fail`, `save?=true` | Add a typed settings node; a stable title plus `return_existing` makes the step rerunnable. |
+| `remove_pcg_node` `[w]` | `asset_path*`, `node_id*`, `save?=true` | Remove an element node and incident edges; special graph input/output nodes are protected. |
+| `connect_pcg_nodes` `[w]` | graph, source node/pin, target node/pin, `save?` | Validate ownership, direction, direct data compatibility, acyclicity, and target capacity, then add an edge idempotently. |
+| `disconnect_pcg_nodes` `[w]` | graph, source node/pin, target node/pin, `save?` | Remove one exact edge; a missing edge returns `not_connected`. |
+| `set_pcg_node_params` `[w]` | `asset_path*`, `node_id*`, `properties*`, `dry_run?`, `save?` | Strictly preflight and write editable settings through the canonical reflection walker. |
+| `validate_pcg_graph` | `asset_path*`, connectivity options, `issue_limit?` | Validate node ownership/settings and edge endpoints, direction, type, capacity, duplicates, cycles, ids, isolation, and output connectivity with bounded issue arrays. |
+| `remap_graph_references` `[w]` | `asset_path*`, `root_remaps*`, guards/bounds | Dry-run or confirm a bounded soft-reference migration, including scalar property-bag paths. |
+
+## Author a rerunnable graph
+
+```text
+pcg_query("create_pcg_graph", {
+  "asset_path": "/Game/PCG/PCG_Scatter",
+  "existing_policy": "return_existing",
+  "save": true
+})
+
+pcg_query("add_pcg_node", {
+  "asset_path": "/Game/PCG/PCG_Scatter",
+  "node_type": "PCGAddTagSettings",
+  "node_title": "AddGameplayTag",
+  "existing_policy": "return_existing",
+  "position": [320, 0],
+  "save": true
+})
+
+pcg_query("set_pcg_node_params", {
+  "asset_path": "/Game/PCG/PCG_Scatter",
+  "node_id": "AddGameplayTag",
+  "properties": { "TagsToAdd": "Gameplay.PCG" },
+  "dry_run": true
+})
+# Repeat with dry_run=false after inspecting the field report.
+```
+
+Connect only labels returned by `get_pcg_graph_info`. Use `__input__` and `__output__` for the special nodes. Repeat `connect_pcg_nodes` safely: an existing edge returns `already_connected` without saving again. Finish with `get_pcg_graph_info(include_settings=true)` and `validate_pcg_graph`.
+
+## Migrate copied graph references
+
+Run `remap_graph_references` with `dry_run=true`, inspect every candidate and target-resolution row, then repeat with `dry_run=false`, `confirm=true`, and `save=true`. Finish with `asset.validate_dependency_closure` and another dry-run; an idempotent migration reports no remaining candidates.
+
+## Safety and gotchas
+
+- Keep authoring under project-owned mounted packages. Exact object paths must match the package leaf and may not address subobjects.
+- Discover unfamiliar settings with `list_pcg_node_types(include_properties=true)`, then use `set_pcg_node_params(dry_run=true)` before committing.
+- Provide exact class paths when a friendly node type is ambiguous. Discovery includes native and currently loaded project settings classes; unloaded Blueprint-generated settings may require loading first.
+- Do not treat `UPCGGraph::AddEdge`/`AddLabeledEdge` return values as success. Monolith validates pins first and confirms the resulting topology.
+- Connections that require a PCG filter/conversion node are not inserted implicitly. Add that node explicitly. A single-connection input is never silently replaced; disconnect its existing edge first.
+- Settings writes honor the concrete object's `CanEditChange` rules and full nested property chain. A dry-run stages the same strict write on a transient duplicate; commit emits property-specific editor callbacks and restores the exact prior values/topology/dirty state if validation or save fails.
+- Graph mutations run the same bounded structural validator before persistence. This pre-save check is the commit boundary; a late validator is intentionally not used because it could report failure after the package file had already changed.
+- Use `pin_limit` and `response_item_limit` when inspecting large or project-defined settings graphs. Check `response_truncated`, per-node pin truncation flags, and returned counts before assuming a response is complete.
+- `remap_graph_references` is a migration surface, not a substitute for typed node/settings editing.
+- Component graph assignment, generation polling/output inspection, cleanup, and graph user-parameter schema editing are not part of this 14-action snapshot. Confirm the live catalog before assuming they exist.

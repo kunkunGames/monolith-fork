@@ -43,3 +43,7 @@ Acoustic design analysis lives here (not in MonolithAudio) because the work is l
 Current static registration audit reports 43 `leveldesign` actions. The same module also contributes 11 `scene`, 4 `mesh`, and 3 `level_instance` actions via owner-scoped shared namespace registration. For exact params and live ownership, call `monolith_discover({ "namespace": "<namespace>", "mode": "actions" })`.
 
 The `level_instance.create_level_instance`, `level_instance.create_packed_level_actor_blueprint`, and `level_instance.pack_level_actor` preview/confirm wrappers delegate their confirmed create-from-actors path to `level_instance.create_prefab`. They do not route through `mesh.create_prefab`; the returned preview `next_step` should name the same `level_instance` namespace that owns the create-prefab helper.
+
+| Shared action | Parameter contract | Behavior |
+|---------------|--------------------|----------|
+| `scene.get_level_actors` | Optional `radius` number, inclusive range `0..50000` cm | The registered schema and handler enforce the same bounds. `radius=0` and `radius=50000` are valid; negative or larger values fail before actor enumeration. |

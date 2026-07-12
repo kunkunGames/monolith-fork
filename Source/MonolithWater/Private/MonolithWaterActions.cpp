@@ -89,7 +89,8 @@ void FMonolithWaterActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("List Water-like actors/components in the current editor world using reflected class names only. Does not mutate actors, splines, landscapes, or zones."),
 		FMonolithActionHandler::CreateStatic(&FMonolithWaterActions::ListBodies),
 		FParamSchemaBuilder()
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Optional(TEXT("actor_name_filter"), TEXT("string"), TEXT("Optional case-insensitive substring filter on actor label/name."))
 			.Build());
 }

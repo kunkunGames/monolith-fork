@@ -52,7 +52,7 @@ monolith_discover({ namespace: "config" })
 
 | Action | Purpose | Params |
 |--------|---------|--------|
-| `resolve_setting` | Get the effective value of any CVar/config setting | `file*` `section*` `key*` |
+| `resolve_setting` | Get the effective value of any CVar/config setting; omit `file` to search the canonical config categories and return the resolved category plus search diagnostics | `file?` `section*` `key*` |
 | `explain_setting` | Understand where a value comes from across Base→Default→User | `file?` `section?` `key?` `setting?` (`setting` = convenience search across common categories) |
 | `diff_from_default` | See all project customizations vs engine defaults | `file*` `section?` |
 | `search_config` | Find settings by keyword | `query*` `category?` |
@@ -96,6 +96,7 @@ Use `monolith_discover({ namespace: "niagara" })` to see all available actions. 
 ```
 config_query({ action: "diff_from_default", params: { file: "DefaultEngine" } })
 config_query({ action: "resolve_setting", params: { file: "DefaultEngine", section: "/Script/Engine.RendererSettings", key: "r.Lumen.TraceMeshSDFs" } })
+config_query({ action: "resolve_setting", params: { section: "/Script/Engine.RendererSettings", key: "r.Lumen.TraceMeshSDFs" } })  # category unknown: inspect category/searched_categories
 config_query({ action: "explain_setting", params: { setting: "r.Lumen.TraceMeshSDFs" } })
 ```
 

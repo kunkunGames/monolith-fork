@@ -2,7 +2,9 @@
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/Paths.h"
 #include "MonolithSourceControlActions.h"
+#include "MonolithSourceControlP4Batch.h"
 #include "MonolithTestSupport.h"
 #include "MonolithToolRegistry.h"
 
@@ -10,10 +12,36 @@
 
 namespace
 {
+	class FScopedSourceControlTestNamespace
+	{
+	public:
+		FScopedSourceControlTestNamespace()
+		{
+			FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source_control"));
+		}
+
+		~FScopedSourceControlTestNamespace()
+		{
+			FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source_control"));
+			FMonolithSourceControlActions::RegisterActions();
+		}
+	};
+
 	void AddValidPathArray(TSharedRef<FJsonObject> Params)
 	{
 		TArray<TSharedPtr<FJsonValue>> Paths;
 		Paths.Add(MakeShared<FJsonValueString>(TEXT("Project.uproject")));
+		Params->SetArrayField(TEXT("paths"), Paths);
+	}
+
+	void AddRepeatedPathArray(TSharedRef<FJsonObject> Params, int32 Count, const FString& Path)
+	{
+		TArray<TSharedPtr<FJsonValue>> Paths;
+		Paths.Reserve(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			Paths.Add(MakeShared<FJsonValueString>(Path));
+		}
 		Params->SetArrayField(TEXT("paths"), Paths);
 	}
 
@@ -30,7 +58,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSourceControlTypedParamsTest, "Monolit
 
 bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 {
-	FMonolithScopedTestNamespace ScopedNamespace(TEXT("source_control"));
+	FScopedSourceControlTestNamespace ScopedNamespace;
 
 	bool bOk = FMonolithTestSupport::RunRegistryContractCases(
 		*this,
@@ -52,6 +80,15 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 			{ TEXT("list_opened"), true, TEXT("source_control.list_opened registers") },
 			{ TEXT("map_depot_paths"), true, TEXT("source_control.map_depot_paths registers") }
 		});
+
+	const FMonolithActionExecutionPolicy ListOpenedPolicy =
+		FMonolithToolRegistry::Get().GetActionExecutionPolicy(TEXT("source_control"), TEXT("list_opened"));
+	const FMonolithActionExecutionPolicy MapDepotPathsPolicy =
+		FMonolithToolRegistry::Get().GetActionExecutionPolicy(TEXT("source_control"), TEXT("map_depot_paths"));
+	bOk &= TestEqual(TEXT("source_control.list_opened is explicitly read-only"), ListOpenedPolicy.PolicyId, TEXT("read_only"));
+	bOk &= TestFalse(TEXT("source_control.list_opened does not rely on name inference"), ListOpenedPolicy.bDefaulted);
+	bOk &= TestEqual(TEXT("source_control.map_depot_paths is explicitly read-only"), MapDepotPathsPolicy.PolicyId, TEXT("read_only"));
+	bOk &= TestFalse(TEXT("source_control.map_depot_paths does not rely on name inference"), MapDepotPathsPolicy.bDefaulted);
 
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("source_control"));
 
@@ -142,6 +179,69 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				TEXT("source_control.list_opened rejects malformed resolve_packages string")
 			},
 			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("limit"), 0.0);
+				},
+				TEXT("limit"),
+				TEXT("source_control.list_opened rejects limit below 1")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("limit"), 2001.0);
+				},
+				TEXT("limit"),
+				TEXT("source_control.list_opened rejects limit above 2000")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("limit"), 1.5);
+				},
+				TEXT("limit"),
+				TEXT("source_control.list_opened rejects non-integral limit")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("limit"), TEXT("1"));
+				},
+				TEXT("limit"),
+				TEXT("source_control.list_opened rejects string-coerced numeric limits")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("changelist"), TEXT("1093-other"));
+				},
+				TEXT("changelist"),
+				TEXT("source_control.list_opened rejects non-decimal changelist values before p4")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetNumberField(TEXT("changelist"), 1093.0);
+				},
+				TEXT("changelist"),
+				TEXT("source_control.list_opened rejects number-coerced changelists")
+			},
+			{
+				TEXT("list_opened"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					Params->SetStringField(TEXT("changelist"), TEXT("1093\nother"));
+				},
+				TEXT("control character"),
+				TEXT("source_control.list_opened rejects changelist control characters before p4")
+			},
+			{
 				TEXT("map_depot_paths"),
 				[](TSharedRef<FJsonObject> Params)
 				{
@@ -149,6 +249,27 @@ bool FMonolithSourceControlTypedParamsTest::RunTest(const FString& Parameters)
 				},
 				TEXT("paths"),
 				TEXT("source_control.map_depot_paths rejects non-string/non-array paths")
+			},
+			{
+				TEXT("map_depot_paths"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					AddRepeatedPathArray(
+						Params,
+						MonolithSourceControlP4::MaxInputPathCount + 1,
+						TEXT("//speed/duplicate.uasset"));
+				},
+				TEXT("at most 2000"),
+				TEXT("source_control.map_depot_paths rejects 2001 raw duplicate paths before p4")
+			},
+			{
+				TEXT("map_depot_paths"),
+				[](TSharedRef<FJsonObject> Params)
+				{
+					AddRepeatedPathArray(Params, 1, TEXT("//speed/control\tpath.uasset"));
+				},
+				TEXT("control character"),
+				TEXT("source_control.map_depot_paths rejects path control characters before p4")
 			}
 		});
 
@@ -159,7 +280,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithSourceControlInputToleranceTest, "Mono
 
 bool FMonolithSourceControlInputToleranceTest::RunTest(const FString& Parameters)
 {
-	FMonolithScopedTestNamespace ScopedNamespace(TEXT("source_control"));
+	FScopedSourceControlTestNamespace ScopedNamespace;
 	FMonolithSourceControlActions::RegisterActions();
 
 	bool bOk = true;
@@ -193,8 +314,39 @@ bool FMonolithSourceControlInputToleranceTest::RunTest(const FString& Parameters
 
 	{
 		TSharedRef<FJsonObject> Params = MakeShared<FJsonObject>();
-		Params->SetStringField(TEXT("files"), TEXT("Project.uproject"));
-		bOk &= ExpectActionSuccess(*this, TEXT("map_depot_paths"), Params);
+		TArray<TSharedPtr<FJsonValue>> Paths;
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("Speed.uproject")));
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("/Game/Benchmarks/AI/BB_BenchAI.BB_BenchAI")));
+		Paths.Add(MakeShared<FJsonValueString>(TEXT("   ")));
+		Params->SetArrayField(TEXT("files"), Paths);
+		const FMonolithActionResult Result =
+			FMonolithToolRegistry::Get().ExecuteAction(TEXT("source_control"), TEXT("map_depot_paths"), Params);
+		bOk &= TestTrue(TEXT("source_control.map_depot_paths accepts relative and package paths"), Result.bSuccess);
+
+		const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+		bOk &= TestTrue(TEXT("source_control.map_depot_paths returns path rows"),
+			Result.Result.IsValid() && Result.Result->TryGetArrayField(TEXT("paths"), Rows) && Rows && Rows->Num() == 3);
+		if (Rows && Rows->Num() == 3)
+		{
+			const TSharedPtr<FJsonObject> RelativeRow = (*Rows)[0]->AsObject();
+			const TSharedPtr<FJsonObject> PackageRow = (*Rows)[1]->AsObject();
+			const TSharedPtr<FJsonObject> WhitespaceRow = (*Rows)[2]->AsObject();
+			FString RelativeLocalPath;
+			FString PackageLocalPath;
+			RelativeRow->TryGetStringField(TEXT("local_path"), RelativeLocalPath);
+			PackageRow->TryGetStringField(TEXT("local_path_no_extension"), PackageLocalPath);
+
+			const FString AbsoluteProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+			FString ExpectedProjectPath = FPaths::Combine(AbsoluteProjectDir, TEXT("Speed.uproject"));
+			FPaths::NormalizeFilename(ExpectedProjectPath);
+			bOk &= TestEqual(TEXT("relative paths resolve from the project root"), RelativeLocalPath, ExpectedProjectPath);
+			bOk &= TestTrue(TEXT("relative path resolution returns an absolute path"), !FPaths::IsRelative(RelativeLocalPath));
+			bOk &= TestTrue(TEXT("package local paths are absolute"), !PackageLocalPath.IsEmpty() && !FPaths::IsRelative(PackageLocalPath));
+			bOk &= TestTrue(TEXT("package local paths point into project Content"), PackageLocalPath.Contains(TEXT("/Content/Benchmarks/AI/BB_BenchAI")));
+			bool bWhitespaceValid = true;
+			WhitespaceRow->TryGetBoolField(TEXT("valid"), bWhitespaceValid);
+			bOk &= TestFalse(TEXT("whitespace-only path rows are invalid"), bWhitespaceValid);
+		}
 	}
 
 	return bOk;

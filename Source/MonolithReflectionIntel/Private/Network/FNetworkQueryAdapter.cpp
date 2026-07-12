@@ -26,6 +26,47 @@
 
 namespace
 {
+	constexpr int32 InvalidParamsError = -32602;
+	constexpr int32 DefaultPageLimit = 50;
+	constexpr int32 MaxPageLimit = 200;
+
+	bool TryReadPageLimit(
+		const TSharedPtr<FJsonObject>& Params,
+		int32& OutLimit,
+		FString& OutError)
+	{
+		OutLimit = DefaultPageLimit;
+		OutError.Reset();
+		if (!Params.IsValid())
+		{
+			return true;
+		}
+
+		const TSharedPtr<FJsonValue>* RawLimit = Params->Values.Find(TEXT("limit"));
+		if (!RawLimit)
+		{
+			return true;
+		}
+		if (!RawLimit->IsValid() || (*RawLimit)->Type != EJson::Number)
+		{
+			OutError = TEXT("limit must be a JSON integer between 1 and 200.");
+			return false;
+		}
+
+		const double Number = (*RawLimit)->AsNumber();
+		if (!FMath::IsFinite(Number)
+			|| Number != FMath::TruncToDouble(Number)
+			|| Number < 1.0
+			|| Number > static_cast<double>(MaxPageLimit))
+		{
+			OutError = TEXT("limit must be a JSON integer between 1 and 200.");
+			return false;
+		}
+
+		OutLimit = static_cast<int32>(Number);
+		return true;
+	}
+
 	// Cursor codec + filter-hash hoisted to Private/Shared/RICursorCodec.{h,cpp}
 	// to avoid unity-build collisions across the six query adapters. See that
 	// header for rationale. Wire format / behaviour unchanged.
@@ -70,6 +111,7 @@ void FNetworkQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"),
 				TEXT("Max rows per page (default 50, hard cap 200)"), TEXT("50"))
+			.Range(TEXT("limit"), 1, 200)
 			.Optional(TEXT("cursor"), TEXT("string"),
 				TEXT("Opaque pagination cursor"))
 			.Build());
@@ -91,6 +133,7 @@ void FNetworkQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 				TEXT("Restrict to one of: Server | Client | Multicast"))
 			.Optional(TEXT("limit"), TEXT("integer"),
 				TEXT("Max rows per page (default 50, hard cap 200)"), TEXT("50"))
+			.Range(TEXT("limit"), 1, 200)
 			.Optional(TEXT("cursor"), TEXT("string"),
 				TEXT("Opaque pagination cursor"))
 			.Build());
@@ -106,6 +149,7 @@ void FNetworkQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 				TEXT("Filter by owning_class (exact match)"))
 			.Optional(TEXT("limit"), TEXT("integer"),
 				TEXT("Max rows per page (default 50, hard cap 200)"), TEXT("50"))
+			.Range(TEXT("limit"), 1, 200)
 			.Optional(TEXT("cursor"), TEXT("string"),
 				TEXT("Opaque pagination cursor"))
 			.Build());
@@ -122,6 +166,7 @@ void FNetworkQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Optional(TEXT("limit"), TEXT("integer"),
 				TEXT("Max rows per page (default 50, hard cap 200)"), TEXT("50"))
+			.Range(TEXT("limit"), 1, 200)
 			.Optional(TEXT("cursor"), TEXT("string"),
 				TEXT("Opaque pagination cursor"))
 			.Build());
@@ -200,6 +245,13 @@ FSQLiteDatabase* FNetworkQueryAdapter::GetRawDB()
 
 FMonolithActionResult FNetworkQueryAdapter::HandleListReplicatedClasses(const TSharedPtr<FJsonObject>& Params)
 {
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadPageLimit(Params, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, InvalidParamsError);
+	}
+
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB)
 	{
@@ -208,13 +260,9 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListReplicatedClasses(const TS
 			     "or build the project at least once so UHT artefacts exist."));
 	}
 
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
+	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({});
 
 	int32 Page = 0;
@@ -299,6 +347,13 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListReplicatedClasses(const TS
 
 FMonolithActionResult FNetworkQueryAdapter::HandleListRPCFunctions(const TSharedPtr<FJsonObject>& Params)
 {
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadPageLimit(Params, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, InvalidParamsError);
+	}
+
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB)
 	{
@@ -306,17 +361,13 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListRPCFunctions(const TShared
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params->HasField(TEXT("class_name"))
+	const FString ClassName = Params.IsValid() && Params->HasField(TEXT("class_name"))
 		? Params->GetStringField(TEXT("class_name")) : FString();
-	const FString RpcKindFilter = Params->HasField(TEXT("rpc_kind"))
+	const FString RpcKindFilter = Params.IsValid() && Params->HasField(TEXT("rpc_kind"))
 		? Params->GetStringField(TEXT("rpc_kind")) : FString();
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
+	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName, RpcKindFilter });
 
 	int32 Page = 0;
@@ -409,6 +460,13 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListRPCFunctions(const TShared
 
 FMonolithActionResult FNetworkQueryAdapter::HandleListOnRepHandlers(const TSharedPtr<FJsonObject>& Params)
 {
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadPageLimit(Params, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, InvalidParamsError);
+	}
+
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB)
 	{
@@ -416,15 +474,11 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListOnRepHandlers(const TShare
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const FString ClassName = Params->HasField(TEXT("class_name"))
+	const FString ClassName = Params.IsValid() && Params->HasField(TEXT("class_name"))
 		? Params->GetStringField(TEXT("class_name")) : FString();
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
+	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({ ClassName });
 
 	int32 Page = 0;
@@ -494,6 +548,13 @@ FMonolithActionResult FNetworkQueryAdapter::HandleListOnRepHandlers(const TShare
 
 FMonolithActionResult FNetworkQueryAdapter::HandleAuditUnbalancedOnReps(const TSharedPtr<FJsonObject>& Params)
 {
+	int32 Limit = 0;
+	FString LimitError;
+	if (!TryReadPageLimit(Params, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, InvalidParamsError);
+	}
+
 	FSQLiteDatabase* DB = GetRawDB();
 	if (!DB)
 	{
@@ -501,13 +562,9 @@ FMonolithActionResult FNetworkQueryAdapter::HandleAuditUnbalancedOnReps(const TS
 			TEXT("EngineSource.db not available. Run source.trigger_reindex to bootstrap."));
 	}
 
-	const int32 ReqLimit = Params->HasField(TEXT("limit"))
-		? static_cast<int32>(Params->GetNumberField(TEXT("limit"))) : 50;
-	const FString CursorIn = Params->HasField(TEXT("cursor"))
+	const FString CursorIn = Params.IsValid() && Params->HasField(TEXT("cursor"))
 		? Params->GetStringField(TEXT("cursor")) : FString();
 
-	constexpr int32 HARD_CAP = 200;
-	const int32 Limit = FMath::Clamp(ReqLimit, 1, HARD_CAP);
 	const uint32 FilterHash = RIComputeFilterHash({});
 
 	int32 Page = 0;

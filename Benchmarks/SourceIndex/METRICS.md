@@ -33,6 +33,29 @@ truth and matches `aggregate()` in
 | `negative_recovery_rate` | Higher is better | Mean RESPONSE-QUALITY score (`0..1`) over `negative_recovery` tasks (deliberately bad input — nonexistent symbols, missing params, unqualified names). A transport crash or a silent empty success scores `0`; a structured error that names the offending identifier scores `0.7`; the same error plus a did-you-mean / qualified-symbol / retry hint scores `1.0`. For unqualified-resolution tasks (`expect_error:false`) a populated answer is the pass and a not-found rejection is the failure. |
 | `mean_results_per_lookup` | Higher is better (in range) | Average number of results returned per lookup task. Informational only; not included in the score. |
 
+## Run-integrity fields and gates
+
+Run integrity is not another score component. A baseline is valid only when the complete artifact has
+`run_valid=true`, `metrics_valid=true`, `metrics_scope=complete_run`, and
+`completion_status=completed`.
+
+| Field | Meaning |
+| --- | --- |
+| `transport_error` | The task's HTTP/SSE request failed before a tool result |
+| `transport_status` | HTTP status for the transport failure when available |
+| `transport_error_raw` | Bounded raw transport diagnostic |
+| `protocol_error` / `protocol_error_raw` | Invalid JSON, non-object JSON, top-level JSON-RPC error, or missing result envelope; invalidates the run |
+| `failure_kind` | Empty for a valid protocol response; otherwise `protocol_error` or `runner_exception` on a triggering task row |
+| `transport_failure_count` | Number of attempted task rows with `transport_error=true` |
+| `transport_failed_fraction` | `transport_failure_count / attempted_task_count` |
+| `last_transport_item_id` | Last actual transport-failed task, preserved when a later success triggers the fraction gate |
+
+Three consecutive transport failures abort immediately. At 20 attempted tasks, a transport-failure
+fraction strictly above `0.05` aborts; exactly `0.05` remains valid. `finalize()` applies the same
+fraction limit to a shorter completed corpus. Status transport/protocol failures, task protocol
+failures, and runner exceptions write `run_failure.json` and no `summary.json`; task-level evidence is
+retained in `per_task.jsonl` and `partial_summary.json` when execution had started.
+
 ## Interpretation
 
 A `source_index_score` at or above **0.80** indicates the source index is

@@ -1,5 +1,6 @@
 #include "MonolithGuideTool.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithParamSchema.h"
 
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -39,18 +40,20 @@ void FMonolithGuideTool::RegisterAll()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 
-	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
-	TSharedPtr<FJsonObject> SectionProp = MakeShared<FJsonObject>();
-	SectionProp->SetStringField(TEXT("type"), TEXT("string"));
-	SectionProp->SetStringField(TEXT("description"),
-		TEXT("Optional: return a single H2 section to bound context cost. One of: onboarding, recipes, decisions, errors, skills_map, gotchas. Omit for the full index + all sections."));
-	Schema->SetObjectField(TEXT("section"), SectionProp);
-
+	// The enum literals must stay in sync with GetCanonicalSectionOrder() above
+	// (FParamSchemaBuilder::Enum only accepts literal initializer lists). The
+	// builder — not a raw FJsonObject — keeps the boolean required flag and the
+	// enum domain on the wire schema; guide was the one catalog action missing
+	// its required marking (SchemaCompleteness baseline-20260711).
 	Registry.RegisterAction(
 		TEXT("monolith"), TEXT("guide"),
 		TEXT("Editorial cross-namespace workflow guide for AI agents: onboarding script, cross-namespace recipes, X-vs-Y decision matrices, error-to-recovery maps, namespace->Skill pointers, and Monolith-specific gotchas. Section-keyed (pass section=\"recipes\") to bound context cost. Hand-authored markdown + a live registry overlay (per-namespace action counts, plugin version)."),
 		FMonolithActionHandler::CreateStatic(&FMonolithGuideTool::HandleGuide),
-		Schema
+		FParamSchemaBuilder()
+			.Optional(TEXT("section"), TEXT("string"),
+				TEXT("Optional: return a single H2 section to bound context cost. Omit for the full index + all sections."))
+			.Enum(TEXT("section"), { TEXT("onboarding"), TEXT("recipes"), TEXT("decisions"), TEXT("errors"), TEXT("skills_map"), TEXT("gotchas") })
+			.Build()
 	);
 
 	// Survivor A (plan §3.A) — read-only + idempotent. The guide is

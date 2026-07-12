@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-06-17T13:19:20.944335+00:00",
-  "description": "Static seed manifest for the SchemaCompleteness benchmark. Expected namespace and action counts reflect the catalog as of the generated_at date. Re-run the scan subcommand to get live counts.",
-  "expected_namespace_count": 51,
-  "expected_action_count": 1766,
+  "generated_at": "2026-07-11T02:26:09.642697+00:00",
+  "description": "Targeted SchemaCompleteness probe contract. Required rows are preflighted against the complete live catalog; explicit optional/feature-gated absences are reported separately and excluded from schema scoring.",
+  "expected_namespace_count": 61,
+  "expected_action_count": 1840,
   "scoring": {
     "primary_metric": "schema_completeness_score",
     "formula": "0.25*param_types_declared_rate + 0.20*required_params_marked_rate + 0.20*value_domain_rate + 0.15*planning_signals_present_rate + 0.10*skill_routing_present_rate + 0.10*output_contract_declared_rate",
@@ -45,9 +45,42 @@
       }
     ]
   },
-  "probe_set_task_count": 385,
+  "probe_set_task_count": 330,
   "probe_set_file": "Plugins/Monolith/Benchmarks/SchemaCompleteness/probe_set.jsonl",
   "benchmark_script": "Scripts/schema_completeness_benchmark.py",
   "related_benchmark": "Benchmarks/ActionGuidance",
-  "notes": "Full scan issues one monolith_discover call per action. Use --max-actions 100 for CI smoke tests. Probe mode loads probe_set.jsonl and checks expected_dimensions pass rates for targeted namespace.action pairs."
+  "notes": "Probe mode validates JSONL syntax, uniqueness, manifest count, availability gates, and complete live catalog presence before fetching any schema. Required stale rows abort without writing a baseline; absent optional/feature-gated rows remain explicit skipped diagnostics. Full scan still covers every live action.",
+  "catalog_version": "sha256:ef52979d7e00a249",
+  "probe_set_availability_counts": {
+    "required": 315,
+    "optional": 4,
+    "feature_gated": 11
+  },
+  "run_gates": {
+    "max_failed_fraction": 0.05,
+    "max_transport_failed_fraction": 0.05,
+    "max_consecutive_transport_failures": 3,
+    "min_transport_fraction_sample": 20,
+    "invalid_status_response_aborts_before_schema_fetch": true,
+    "status_catalog_version_mismatch_aborts_before_schema_fetch": true,
+    "invalid_run_writes_summary": false
+  },
+  "probe_migration": {
+    "previous_probe_count": 388,
+    "stale_rows_removed": 122,
+    "replacement_actions_added": 64,
+    "newly_added_probe_action_count": 64,
+    "migration_mapping_count": 122,
+    "classification_counts": {
+      "direct": 75,
+      "partial": 31,
+      "composite": 12,
+      "no-equivalent": 4
+    },
+    "replacement_occurrence_count": 140,
+    "unique_replacement_action_count": 112,
+    "gated_action_count": 15,
+    "no_equivalent_intents_retired": 4,
+    "migration_map": "Benchmarks/SchemaCompleteness/probe_migration_20260711.json"
+  }
 }

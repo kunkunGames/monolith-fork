@@ -18,7 +18,6 @@
 #include "BehaviorTree/Blackboard/BlackboardKeyType_NativeEnum.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "ScopedTransaction.h"
@@ -685,19 +684,7 @@ FMonolithActionResult FMonolithAIBlackboardActions::HandleDeleteBlackboard(const
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Asset not found: %s"), *AssetPath));
 	}
 
-	TArray<UObject*> ObjectsToDelete;
-	ObjectsToDelete.Add(Asset);
-
-	int32 NumDeleted = ObjectTools::ForceDeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
-	if (NumDeleted == 0)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to delete: %s"), *AssetPath));
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("asset_path"), AssetPath);
-	Result->SetStringField(TEXT("message"), TEXT("Blackboard deleted"));
-	return FMonolithActionResult::Success(Result);
+	return MonolithAI::DeleteAssetVerified(AssetPath, TEXT("Blackboard"), TEXT("Blackboard deleted"));
 }
 
 // ============================================================

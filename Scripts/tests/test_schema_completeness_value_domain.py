@@ -122,6 +122,38 @@ UNBOUNDED_NUMERIC_SCHEMA = {
     },
 }
 
+# A mixed representation union is not a numeric-only domain.  The numeric
+# spelling is one accepted representation alongside an array, string, and
+# object, so a single numeric minimum/maximum cannot describe the whole input
+# contract.  This is the live imagegen resolution shape.
+MIXED_REPRESENTATION_UNION_SCHEMA = {
+    "skill": "unreal-imagegen",
+    "planning_signals": ["x"],
+    "output_contract_status": "declared",
+    "params": {
+        "resolution": {
+            "type": "array|string|object|number",
+            "description": "Image resolution in one of the documented representations",
+            "required": False,
+        },
+    },
+}
+
+# Nullable numeric input remains numeric-domain constrained: null is absence,
+# not an alternate non-numeric representation.
+UNBOUNDED_NULLABLE_NUMERIC_SCHEMA = {
+    "skill": "unreal-scene",
+    "planning_signals": ["x"],
+    "output_contract_status": "declared",
+    "params": {
+        "radius": {
+            "type": "number|null",
+            "description": "Optional search radius",
+            "required": False,
+        },
+    },
+}
+
 # A param-less action (no "params" key at all). The three param-gated dimensions
 # must be N/A (None), not auto-1.0.
 PARAMLESS_SCHEMA = {
@@ -129,6 +161,25 @@ PARAMLESS_SCHEMA = {
     "planning_signals": ["x"],
     "output_contract_status": "not_declared",
 }
+
+
+def schema_with_param(meta: dict, *, name: str = "value") -> dict:
+    return {
+        "skill": "unreal-cpp",
+        "planning_signals": ["x"],
+        "output_contract_status": "declared",
+        "params": {name: meta},
+    }
+
+
+def numeric_param(**extra) -> dict:
+    meta = {
+        "type": "number",
+        "description": "Numeric test value",
+        "required": False,
+    }
+    meta.update(extra)
+    return meta
 
 
 class ValueDomainScoringTests(unittest.TestCase):
@@ -162,6 +213,187 @@ class ValueDomainScoringTests(unittest.TestCase):
         q = scb.score_schema_quality(UNBOUNDED_NUMERIC_SCHEMA)
         self.assertIs(q["value_domain"], False)
         self.assertIs(q["param_types_declared"], True)
+
+    def test_mixed_representation_union_does_not_require_numeric_range(self):
+        q = scb.score_schema_quality(MIXED_REPRESENTATION_UNION_SCHEMA)
+        self.assertIs(q["value_domain"], True)
+
+    def test_nullable_numeric_union_still_requires_numeric_range(self):
+        q = scb.score_schema_quality(UNBOUNDED_NULLABLE_NUMERIC_SCHEMA)
+        self.assertIs(q["value_domain"], False)
+
+    def test_one_sided_numeric_bounds_pass(self):
+        cases = [
+            ({"minimum": 0}, "lower_bounded", "ok_lower_bounded"),
+            ({"maximum": 10}, "upper_bounded", "ok_upper_bounded"),
+        ]
+        for fields, expected_kind, expected_reason in cases:
+            with self.subTest(fields=fields):
+                q = scb.score_schema_quality(schema_with_param(numeric_param(**fields)))
+                self.assertIs(q["value_domain"], True)
+                diagnostic = q["value_domain_diagnostics"][0]
+                self.assertEqual(diagnostic["derived_domain_kind"], expected_kind)
+                self.assertEqual(diagnostic["reason"], expected_reason)
+
+    def test_each_explicit_domain_kind_passes_with_required_evidence(self):
+        cases = {
+            "unbounded": {
+                "kind": "unbounded",
+                "rationale": "Material scalar values have no universal static bounds.",
+            },
+            "dynamic": {
+                "kind": "dynamic",
+                "source": "Current animation play length",
+                "rationale": "The upper bound changes with the target animation asset.",
+                "sentinels": [{"value": -1, "meaning": "Append to the current collection."}],
+            },
+            "cross_field": {
+                "kind": "cross_field",
+                "rule": "delay_max must be greater than or equal to delay_min.",
+                "depends_on": ["delay_min"],
+            },
+            "composite": {
+                "kind": "composite",
+                "rule": "Every representation resolves to width and height.",
+                "variants": ["array", "string", "object", "number"],
+            },
+            "normalized": {
+                "kind": "normalized",
+                "mode": "clamp",
+                "minimum": 1,
+                "maximum": 1000,
+                "rationale": "The handler clamps result limits to its resource ceiling.",
+            },
+        }
+        for kind, domain in cases.items():
+            with self.subTest(kind=kind):
+                q = scb.score_schema_quality(
+                    schema_with_param(numeric_param(domain=domain))
+                )
+                self.assertIs(q["value_domain"], True)
+                diagnostic = q["value_domain_diagnostics"][0]
+                self.assertEqual(diagnostic["declared_domain_kind"], kind)
+                self.assertEqual(diagnostic["derived_domain_kind"], kind)
+                self.assertEqual(diagnostic["reason"], f"ok_explicit_{kind}")
+
+    def test_nullable_numeric_passes_with_explicit_domain(self):
+        schema = schema_with_param(
+            {
+                "type": "number|null",
+                "description": "Optional arbitrary scalar",
+                "required": False,
+                "domain": {
+                    "kind": "unbounded",
+                    "rationale": "Null means omitted; numeric values are intentionally unbounded.",
+                },
+            }
+        )
+        q = scb.score_schema_quality(schema)
+        self.assertIs(q["value_domain"], True)
+
+    def test_invalid_or_gameable_domain_metadata_fails(self):
+        invalid_domains = [
+            ({}, "domain_kind_required"),
+            ({"kind": "anything"}, "domain_kind_unknown"),
+            ({"kind": "unbounded", "rationale": "   "}, "unbounded_domain_rationale_required"),
+            (
+                {"kind": "dynamic", "source": "", "rationale": "Changes at runtime"},
+                "dynamic_domain_source_required",
+            ),
+            (
+                {"kind": "dynamic", "source": "asset", "rationale": ""},
+                "dynamic_domain_rationale_required",
+            ),
+            (
+                {"kind": "cross_field", "rule": "", "depends_on": ["other"]},
+                "cross_field_domain_rule_required",
+            ),
+            (
+                {"kind": "cross_field", "rule": "value >= other", "depends_on": []},
+                "cross_field_domain_depends_on_required",
+            ),
+            (
+                {"kind": "composite", "rule": "normalize", "variants": ["", "number"]},
+                "composite_domain_variants_required",
+            ),
+            (
+                {
+                    "kind": "normalized",
+                    "mode": "truncate",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "rationale": "bounded",
+                },
+                "normalized_domain_mode_must_be_clamp",
+            ),
+            (
+                {
+                    "kind": "normalized",
+                    "mode": "clamp",
+                    "minimum": 10,
+                    "maximum": 1,
+                    "rationale": "bounded",
+                },
+                "normalized_domain_bounds_inverted",
+            ),
+            (
+                {
+                    "kind": "dynamic",
+                    "source": "collection",
+                    "rationale": "runtime-sized",
+                    "sentinels": [{"value": -1, "meaning": ""}],
+                },
+                "domain_sentinel_meaning_required",
+            ),
+        ]
+        for domain, expected_reason in invalid_domains:
+            with self.subTest(domain=domain):
+                q = scb.score_schema_quality(
+                    schema_with_param(numeric_param(domain=domain))
+                )
+                self.assertIs(q["value_domain"], False)
+                self.assertEqual(
+                    q["value_domain_diagnostics"][0]["reason"], expected_reason
+                )
+
+    def test_invalid_top_level_bounds_fail(self):
+        cases = [
+            (numeric_param(minimum=True), "minimum_must_be_finite_number"),
+            (numeric_param(maximum=float("inf")), "maximum_must_be_finite_number"),
+            (numeric_param(minimum=2, maximum=1), "accepted_bounds_inverted"),
+            (
+                {
+                    "type": "string",
+                    "description": "Not numeric",
+                    "required": False,
+                    "minimum": 0,
+                },
+                "accepted_bounds_require_numeric_domain_type",
+            ),
+        ]
+        for meta, expected_reason in cases:
+            with self.subTest(meta=meta):
+                q = scb.score_schema_quality(schema_with_param(meta))
+                self.assertIs(q["value_domain"], False)
+                self.assertEqual(
+                    q["value_domain_diagnostics"][0]["reason"], expected_reason
+                )
+
+    def test_param_diagnostics_expose_stable_evidence(self):
+        q = scb.score_schema_quality(UNBOUNDED_NULLABLE_NUMERIC_SCHEMA)
+        self.assertEqual(
+            q["value_domain_diagnostics"],
+            [
+                {
+                    "param": "radius",
+                    "ok": False,
+                    "reason": "numeric_domain_missing",
+                    "type_variants": ["null", "number"],
+                    "derived_domain_kind": "missing",
+                    "declared_domain_kind": None,
+                }
+            ],
+        )
 
     def test_paramless_action_is_na_not_auto_pass(self):
         q = scb.score_schema_quality(PARAMLESS_SCHEMA)
@@ -232,6 +464,55 @@ class AggregateTests(unittest.TestCase):
         )
         self.assertEqual(round(total, 6), 1.0)
 
+    def test_paramless_namespace_score_renormalizes_not_caps(self):
+        # A namespace of ONLY param-less actions used to cap at 0.35 (the three
+        # param-gated dimensions folded in as 0.0). With renormalization over
+        # the applicable dimensions, an all-passing param-less namespace
+        # scores 1.0 and reports param_gated_applicable=False.
+        rows = [
+            dict(scb.score_schema_quality(PARAMLESS_SCHEMA), namespace="slate", action="a", error=""),
+            dict(scb.score_schema_quality(PARAMLESS_SCHEMA), namespace="slate", action="b", error=""),
+        ]
+        breakdown = scb.build_namespace_breakdown(rows)
+        ns = breakdown["slate"]
+        self.assertFalse(ns["param_gated_applicable"])
+        self.assertEqual(ns["schema_completeness_score"], 1.0)
+
+    def test_mixed_namespace_score_still_uses_full_weights(self):
+        # A namespace with at least one param-bearing action keeps all six
+        # dimensions in the score (weights un-renormalized sum to 1.0).
+        rows = [
+            dict(scb.score_schema_quality(HEALTHY_SCHEMA), namespace="a", action="h", error=""),
+            dict(scb.score_schema_quality(PARAMLESS_SCHEMA), namespace="a", action="p", error=""),
+        ]
+        breakdown = scb.build_namespace_breakdown(rows)
+        ns = breakdown["a"]
+        self.assertTrue(ns["param_gated_applicable"])
+        self.assertEqual(ns["schema_completeness_score"], 1.0)
+
+    def test_param_domain_aggregate_counts_and_coverage(self):
+        rows = [
+            dict(scb.score_schema_quality(HEALTHY_SCHEMA), namespace="a", action="healthy", error=""),
+            dict(
+                scb.score_schema_quality(UNBOUNDED_NUMERIC_SCHEMA),
+                namespace="a",
+                action="missing",
+                error="",
+            ),
+            dict(scb.score_schema_quality(PARAMLESS_SCHEMA), namespace="a", action="none", error=""),
+        ]
+        summary = scb.aggregate_metrics(
+            "aggregate", rows, len(rows), scb.build_namespace_breakdown(rows)
+        )
+        metrics = summary["metrics"]
+        self.assertEqual(metrics["param_domain_total"], 3)
+        self.assertEqual(metrics["param_domain_pass"], 2)
+        self.assertEqual(metrics["param_domain_coverage"], 0.666667)
+        ns = summary["namespace_breakdown"]["a"]
+        self.assertEqual(ns["param_domain_total"], 3)
+        self.assertEqual(ns["param_domain_pass"], 2)
+        self.assertEqual(ns["param_domain_coverage"], 0.666667)
+
 
 class TransportTests(unittest.TestCase):
     """Drive discover_schema_for_action through a fabricated MCP envelope."""
@@ -263,6 +544,22 @@ class TransportTests(unittest.TestCase):
         self.assertIsNotNone(schema)
         q = scb.score_schema_quality(schema)
         self.assertIs(q["value_domain"], False)
+
+    def test_fetch_row_carries_param_level_diagnostics(self):
+        original = scb.mcp_call
+        scb.mcp_call = self._patched_call({"schema": UNBOUNDED_NUMERIC_SCHEMA})
+        try:
+            outcome, row = scb.fetch_and_score_schema_target(
+                "http://x", "scene", "query", 1.0
+            )
+        finally:
+            scb.mcp_call = original
+        self.assertEqual(outcome.failure_kind, "ok")
+        self.assertEqual(row["value_domain_diagnostics"][0]["param"], "radius")
+        self.assertEqual(
+            row["value_domain_diagnostics"][0]["reason"],
+            "numeric_domain_missing",
+        )
 
 
 if __name__ == "__main__":

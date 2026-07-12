@@ -35,6 +35,11 @@ REQUIRED_HIGH_TRAFFIC_ACTIONS = {
     "blueprint.create_blueprint",
 }
 
+REQUIRED_SOURCE_CONTROL_POLICY_ACTIONS = {
+    "source_control.list_opened",
+    "source_control.map_depot_paths",
+}
+
 _FAILURES: List[str] = []
 
 
@@ -46,7 +51,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 
 def load_manifest() -> Dict[str, Any]:
-    return json.loads(agb.DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+    return json.loads(agb.resolve_plugin_path(agb.DEFAULT_MANIFEST).read_text(encoding="utf-8"))
 
 
 def action_id(task: Dict[str, Any]) -> str:
@@ -145,6 +150,65 @@ def test_demand_weighting(tasks: List[Dict[str, Any]], manifest: Dict[str, Any])
           f"monolith_discover_tasks={discovery_tool_count}")
 
 
+def test_source_control_read_only_policy_contract(tasks: List[Dict[str, Any]]) -> None:
+    policy_tasks = [
+        task for task in tasks
+        if action_id(task) in REQUIRED_SOURCE_CONTROL_POLICY_ACTIONS
+        and task.get("category") == "discovery_planning"
+        and task.get("expected", {}).get("execution_policy_id") == "read_only"
+    ]
+    counts = {required: 0 for required in REQUIRED_SOURCE_CONTROL_POLICY_ACTIONS}
+    bad_contracts: List[str] = []
+    for task in policy_tasks:
+        task_action_id = action_id(task)
+        counts[task_action_id] += 1
+        expected = task.get("expected", {})
+        if expected.get("execution_policy_defaulted") is not False or expected.get("mutates_assets") is not False:
+            bad_contracts.append(task_action_id)
+
+    check("source-control read-only policy tasks exist exactly once",
+          all(count == 1 for count in counts.values()),
+          f"counts={counts}")
+    check("source-control policy tasks require explicit non-mutating policy",
+          not bad_contracts,
+          f"bad={bad_contracts}")
+
+
+def test_transport_failure_gates(manifest: Dict[str, Any]) -> None:
+    gates = manifest.get("run_gates", {})
+    check(
+        "transport failure fraction matches runner default",
+        gates.get("max_transport_failed_fraction") == agb.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION,
+        f"manifest={gates.get('max_transport_failed_fraction')} runner={agb.DEFAULT_MAX_TRANSPORT_FAILED_FRACTION}",
+    )
+    check(
+        "consecutive transport gate matches runner default",
+        gates.get("max_consecutive_transport_failures") == agb.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES,
+        f"manifest={gates.get('max_consecutive_transport_failures')} runner={agb.DEFAULT_MAX_CONSECUTIVE_TRANSPORT_FAILURES}",
+    )
+    check(
+        "transport fraction minimum sample matches shared runner default",
+        gates.get("min_transport_fraction_sample") == agb.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES,
+        f"manifest={gates.get('min_transport_fraction_sample')} runner={agb.DEFAULT_MIN_TRANSPORT_FRACTION_SAMPLES}",
+    )
+    check(
+        "invalid transport run cannot write a normal summary",
+        gates.get("status_transport_failure_aborts_before_tasks") is True
+        and gates.get("invalid_status_response_aborts_before_tasks") is True
+        and gates.get("invalid_run_writes_summary") is False,
+        f"gates={gates}",
+    )
+
+
+def test_catalog_provenance(manifest: Dict[str, Any]) -> None:
+    catalog_version = manifest.get("catalog_version")
+    check(
+        "catalog version provenance is recorded",
+        isinstance(catalog_version, str) and catalog_version.startswith("sha256:"),
+        f"catalog_version={catalog_version!r}",
+    )
+
+
 def main() -> int:
     tasks = agb.load_jsonl(agb.DEFAULT_TASKS)
     manifest = load_manifest()
@@ -153,6 +217,9 @@ def main() -> int:
     test_required_categories(tasks, manifest)
     test_task_shape(tasks)
     test_demand_weighting(tasks, manifest)
+    test_source_control_read_only_policy_contract(tasks)
+    test_transport_failure_gates(manifest)
+    test_catalog_provenance(manifest)
 
     if _FAILURES:
         print(f"\nFAILED: {len(_FAILURES)} ActionGuidance benchmark check(s) failed")

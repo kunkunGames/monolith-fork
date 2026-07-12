@@ -8,7 +8,7 @@
 
 ## MonolithAI
 
-**Dependencies:** Core, CoreUObject, Engine, MonolithCore, UnrealEd, AIModule, GameplayTasks, NavigationSystem, Json, JsonUtilities
+**Dependencies:** Core, CoreUObject, Engine, MonolithCore, MonolithAsset, MonolithBlueprint, MonolithIndex, UnrealEd, AIModule, GameplayTasks, NavigationSystem, Json, JsonUtilities
 **Namespace:** `ai` | **Tool:** `ai_query(action, params)` | **Actions:** ~223 (Phase J F8: +`add_perception_to_actor`, +`get_bt_graph`; test/profiling harness Wave 1: +`rebuild_navigation`, +`validate_nav_points`). Counts approximate — query `monolith_discover("ai")` for the live figure.
 **Conditional:** State Trees (`#if WITH_STATETREE`) and Smart Objects (`#if WITH_SMARTOBJECTS`) are required dependencies. Mass Entity (`#if WITH_MASSENTITY`) and Zone Graph (`#if WITH_ZONEGRAPH`) are optional extensions. When required deps are absent, the module compiles to an empty stub (0 actions registered).
 **Settings toggle:** `bEnableAI` (default: True)
@@ -54,6 +54,19 @@ Two navigation actions added for the test/profiling harness workflow (`MonolithA
 - **F15 (2026-04-26)** — `MonolithAIBehaviorTreeActions.cpp` 16 sites hoisted into `RequireBtNodeByGuid` helper — invalid-GUID and unknown-GUID errors now distinct.
 
 See [SPEC_CORE.md §11 Recent Fixes](../SPEC_CORE.md#recent-fixes-phase-j--shipped-in-0147) for the long-form descriptions.
+
+### Verified delete and Behavior Tree edge postconditions (2026-07-11)
+
+| Surface | Contract |
+| --- | --- |
+| `delete_blackboard`, `delete_behavior_tree`, `delete_eqs_query` | The handler first resolves the expected AI asset class, then delegates deletion to `FMonolithAssetLifecycleActions::DeleteAssets` with `force=true` and an exact-path `allowed_prefixes` guard. Success requires the generic lifecycle postconditions: no loaded package, no Asset Registry row, no package header/sidecar file, and no failed source-control cleanup. The AI response retains `asset_path` and the domain message and embeds `delete_verification`. |
+| `add_bt_node` | A node is not reported as added unless `ConnectParentChild` accepts and creates the schema edge. Rejected wiring destroys the newly allocated graph node and returns an explicit error instead of leaving an orphan while reporting success. |
+| `build_behavior_tree_from_spec` and specialized BT task adders | Newly allocated nodes/tasks likewise destroy themselves and fail when the schema refuses the parent-child edge. This applies to spec-built nodes, RunEQSQuery, Smart Object, and TryActivateAbility task insertion. |
+
+`MonolithAI` therefore declares a direct private dependency on `MonolithAsset`; it does not duplicate
+package eviction, residual-file, or source-control deletion logic. The change closes the observed
+case where `ObjectTools::ForceDeleteObjects` counted a Behavior Tree or EQS object as deleted while
+its added `.uasset` remained on disk and in the default Perforce changelist.
 
 ### Motion Matching AI-wander runtime surface (2026-06-07)
 

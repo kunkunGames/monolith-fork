@@ -235,7 +235,8 @@ void FMonolithPaper2DActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FMonolithActionHandler::CreateStatic(&FMonolithPaper2DActions::ListAssets),
 		FParamSchemaBuilder()
 			.Optional(TEXT("package_path"), TEXT("string"), TEXT("Content path to scan, under /Game. Default: /Game"))
-			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."))
+			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum returned rows, clamped to 1..500. Default: 100."), TEXT("100"))
+			.Range(TEXT("limit"), 1, 500)
 			.Build());
 
 	Registry.RegisterAction(TEXT("paper2d"), TEXT("get_asset"),
@@ -244,7 +245,8 @@ void FMonolithPaper2DActions::RegisterActions(FMonolithToolRegistry& Registry)
 		FParamSchemaBuilder()
 			.Required(TEXT("asset_path"), TEXT("string"), TEXT("Paper2D package or object path under /Game"))
 			.Optional(TEXT("include_tags"), TEXT("boolean"), TEXT("Include bounded AssetRegistry tag rows. Default: true."))
-			.Optional(TEXT("tag_limit"), TEXT("integer"), TEXT("Maximum tag rows to return, clamped to 0..200. Default: 50."))
+			.Optional(TEXT("tag_limit"), TEXT("integer"), TEXT("Maximum tag rows to return, clamped to 0..200. Default: 50."), TEXT("50"))
+			.Range(TEXT("tag_limit"), 0, 200)
 			.Build());
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("paper2d"), TEXT("list_assets"),

@@ -11,7 +11,6 @@
 #include "EnvironmentQuery/EnvQueryTypes.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectIterator.h"
@@ -955,19 +954,7 @@ FMonolithActionResult FMonolithAIEQSActions::HandleDeleteEQSQuery(const TSharedP
 		return FMonolithActionResult::Error(FString::Printf(TEXT("EQS query not found: %s"), *AssetPath));
 	}
 
-	TArray<UObject*> ObjectsToDelete;
-	ObjectsToDelete.Add(Asset);
-
-	int32 NumDeleted = ObjectTools::ForceDeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
-	if (NumDeleted == 0)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to delete: %s"), *AssetPath));
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("asset_path"), AssetPath);
-	Result->SetStringField(TEXT("message"), TEXT("EQS query deleted"));
-	return FMonolithActionResult::Success(Result);
+	return MonolithAI::DeleteAssetVerified(AssetPath, TEXT("EQS query"), TEXT("EQS query deleted"));
 }
 
 // ============================================================

@@ -202,6 +202,7 @@ void FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry& Regis
 			.Required(TEXT("handle"), TEXT("string"), TEXT("Handle to generate collision for"))
 			.Optional(TEXT("method"), TEXT("string"), TEXT("Collision method: convex_decomp, auto_box, auto_sphere, auto_capsule, simplified"), TEXT("convex_decomp"))
 			.Optional(TEXT("max_hulls"), TEXT("integer"), TEXT("Max convex hulls (for convex_decomp)"), TEXT("4"))
+			.Range(TEXT("max_hulls"), 1, 256)
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("generate_lods"),
@@ -210,7 +211,9 @@ void FMonolithMeshOperationActions::RegisterActions(FMonolithToolRegistry& Regis
 		FParamSchemaBuilder()
 			.Required(TEXT("handle"), TEXT("string"), TEXT("Source handle for LOD0"))
 			.Required(TEXT("lod_count"), TEXT("integer"), TEXT("Number of LODs to generate (excluding LOD0)"))
-			.Optional(TEXT("reduction_per_lod"), TEXT("number"), TEXT("Triangle reduction ratio per LOD (0.0-1.0)"), TEXT("0.5"))
+			.Range(TEXT("lod_count"), 1, 8)
+			.Optional(TEXT("reduction_per_lod"), TEXT("number"), TEXT("Triangle reduction ratio per LOD (0.1-0.9)"), TEXT("0.5"))
+			.Range(TEXT("reduction_per_lod"), 0.1, 0.9)
 			.Build());
 
 	Registry.RegisterAction(TEXT("mesh"), TEXT("fill_holes"),

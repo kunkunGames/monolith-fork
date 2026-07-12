@@ -4,13 +4,13 @@
   "primary_score": "ai_capability_score",
   "expected_namespace": "ai",
   "ai_tool": "ai_query",
-  "generated_at": "2026-06-18T15:21:21.119982+00:00",
-  "task_count": 73,
+  "generated_at": "2026-07-11T13:35:55.461400+00:00",
+  "task_count": 74,
   "category_counts": {
     "compile_gate": 2,
     "discovery": 6,
     "duplicate_reject": 4,
-    "edit_execute": 9,
+    "edit_execute": 10,
     "edit_schema": 28,
     "error_path": 8,
     "read_schema": 16
@@ -40,9 +40,16 @@
   "fixture_paths": {
     "blackboard": "/Game/Benchmarks/AI/BB_BenchAI",
     "behavior_tree": "/Game/Benchmarks/AI/BT_BenchAI",
-    "eqs": "/Game/Benchmarks/AI/EQS_BenchAI",
-    "empty_scratch": "/Game/Benchmarks/AI/BT_BenchEmptyScratch",
-    "validate_scratch": "/Game/Benchmarks/AI/BT_BenchValidateScratch"
+    "eqs": "/Game/Benchmarks/AI/EQS_BenchAI"
+  },
+  "task_owned_scratch_paths": {
+    "template_behavior_tree": "/Game/Benchmarks/AI/BT_BenchTemplateScratch",
+    "template_blackboard": "/Game/Benchmarks/AI/BB_BenchTemplateScratch",
+    "negative_compile_gate": "/Game/Benchmarks/AI/BT_BenchNegativeGateScratch",
+    "positive_compile_gate": "/Game/Benchmarks/AI/BT_BenchPositiveGateScratch",
+    "duplicate_blackboard": "/Game/Benchmarks/AI/BB_BenchDuplicateScratch",
+    "duplicate_behavior_tree": "/Game/Benchmarks/AI/BT_BenchDuplicateScratch",
+    "duplicate_eqs": "/Game/Benchmarks/AI/EQS_BenchDuplicateScratch"
   },
   "fixture_root": "/Game/Benchmarks/AI",
   "setup_fixtures_command": "python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp",
@@ -56,6 +63,14 @@
     "discovery_rate",
     "read_schema_rate"
   ],
+  "run_gates": {
+    "max_transport_failed_fraction": 0.05,
+    "max_consecutive_transport_failures": 3,
+    "min_transport_fraction_sample": 20,
+    "status_transport_failure_aborts_before_tasks": true,
+    "invalid_status_response_aborts_before_tasks": true,
+    "invalid_run_writes_summary": false
+  },
   "catalog_version_verified": "ai-182-actions (Saved/Monolith/LogAnalysis/_ai_catalog.txt + Source/MonolithAI RegisterAction verified 2026-06-18; StateTree create/lint registered but stubbed on WITH_STATETREE=0)",
   "task_file": "Benchmarks/AICapability/tasks.jsonl"
 }

@@ -22,7 +22,7 @@
 
 | Action | Description |
 |--------|-------------|
-| `resolve_setting` | Get effective value via `GConfig->GetString`. Params: `file` (category), `section`, `key` |
+| `resolve_setting` | Get effective value via `GConfig->GetString`. Params: `file` (category, optional — when omitted the section/key is searched across Engine/Game/Input/Editor/Scalability/GameUserSettings and the response reports `category` + `searched_categories`), `section`, `key` |
 | `explain_setting` | Show where value comes from across Base->Default->User layers. Auto-searches Engine/Game/Input/Editor if only `setting` given |
 | `diff_from_default` | Compare config layers using GConfig API. Supports 5 INI layers (Base, Default, Project, User, Saved). Reports modified + added. Optional `section` filter |
 | `search_config` | Full-text search across all config files. Max 100 results. Optional `file` filter |

@@ -55,6 +55,17 @@ namespace MonolithAI
 	// Build a standard success result with asset_path field
 	TSharedPtr<FJsonObject> MakeAssetResult(const FString& AssetPath, const FString& Message = TEXT(""));
 
+	/**
+	 * Delete one already-resolved AI asset through MonolithAsset's verified lifecycle path.
+	 * The operation succeeds only after the loaded package, Asset Registry entry, package files,
+	 * and source-control add/edit state are all absent. This avoids ObjectTools reporting an object
+	 * deletion while a residual .uasset remains on disk.
+	 */
+	FMonolithActionResult DeleteAssetVerified(
+		const FString& AssetPath,
+		const FString& AssetTypeLabel,
+		const FString& SuccessMessage);
+
 	// Parse a JSON array field into TArray<FString>
 	TArray<FString> ParseStringArray(const TSharedPtr<FJsonObject>& Params, const FString& FieldName);
 

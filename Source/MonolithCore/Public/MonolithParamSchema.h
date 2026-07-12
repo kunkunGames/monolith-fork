@@ -1,6 +1,8 @@
-#pragma once
+﻿#pragma once
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Math/UnrealMathUtility.h"
+#include "Misc/AssertionMacros.h"
 #include <initializer_list>
 
 /**
@@ -93,6 +95,167 @@ public:
 			(*Param)->SetNumberField(TEXT("minimum"), MinValue);
 			(*Param)->SetNumberField(TEXT("maximum"), MaxValue);
 		}
+		return *this;
+	}
+
+	/**
+	 * Declare one accepted numeric boundary. Like Range(), these fields are
+	 * enforcement metadata: ValidateTypedParams rejects values outside them
+	 * before the action handler runs.
+	 */
+	FParamSchemaBuilder& Minimum(const FString& Name, double MinValue)
+	{
+		if (TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
+		{
+			(*Param)->SetNumberField(TEXT("minimum"), MinValue);
+		}
+		return *this;
+	}
+
+	FParamSchemaBuilder& Maximum(const FString& Name, double MaxValue)
+	{
+		if (TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name))
+		{
+			(*Param)->SetNumberField(TEXT("maximum"), MaxValue);
+		}
+		return *this;
+	}
+
+	/**
+	 * Non-enforcing value-domain metadata. These helpers write only the nested
+	 * per-param "domain" object; ValidateTypedParams intentionally ignores it.
+	 * Use Range/Minimum/Maximum for accepted-input rejection semantics.
+	 */
+	FParamSchemaBuilder& UnboundedDomain(const FString& Name, const FString& Rationale)
+	{
+		if (!EnsureNonEmpty(Rationale, Name, TEXT("unbounded rationale")))
+		{
+			return *this;
+		}
+
+		TSharedPtr<FJsonObject> Domain = MakeShared<FJsonObject>();
+		Domain->SetStringField(TEXT("kind"), TEXT("unbounded"));
+		Domain->SetStringField(TEXT("rationale"), Rationale.TrimStartAndEnd());
+		SetDomain(Name, Domain);
+		return *this;
+	}
+
+	FParamSchemaBuilder& DynamicDomain(
+		const FString& Name,
+		const FString& Source,
+		const FString& Rationale)
+	{
+		if (!EnsureNonEmpty(Source, Name, TEXT("dynamic source"))
+			|| !EnsureNonEmpty(Rationale, Name, TEXT("dynamic rationale")))
+		{
+			return *this;
+		}
+
+		TSharedPtr<FJsonObject> Domain = MakeShared<FJsonObject>();
+		Domain->SetStringField(TEXT("kind"), TEXT("dynamic"));
+		Domain->SetStringField(TEXT("source"), Source.TrimStartAndEnd());
+		Domain->SetStringField(TEXT("rationale"), Rationale.TrimStartAndEnd());
+		SetDomain(Name, Domain);
+		return *this;
+	}
+
+	FParamSchemaBuilder& CrossFieldDomain(
+		const FString& Name,
+		const FString& Rule,
+		std::initializer_list<const TCHAR*> DependsOn)
+	{
+		TArray<TSharedPtr<FJsonValue>> DependencyValues;
+		if (!EnsureNonEmpty(Rule, Name, TEXT("cross-field rule"))
+			|| !BuildNonEmptyStringArray(DependsOn, Name, TEXT("cross-field dependency"), DependencyValues))
+		{
+			return *this;
+		}
+
+		TSharedPtr<FJsonObject> Domain = MakeShared<FJsonObject>();
+		Domain->SetStringField(TEXT("kind"), TEXT("cross_field"));
+		Domain->SetStringField(TEXT("rule"), Rule.TrimStartAndEnd());
+		Domain->SetArrayField(TEXT("depends_on"), DependencyValues);
+		SetDomain(Name, Domain);
+		return *this;
+	}
+
+	FParamSchemaBuilder& CompositeDomain(
+		const FString& Name,
+		const FString& Rule,
+		std::initializer_list<const TCHAR*> Variants)
+	{
+		TArray<TSharedPtr<FJsonValue>> VariantValues;
+		if (!EnsureNonEmpty(Rule, Name, TEXT("composite rule"))
+			|| !BuildNonEmptyStringArray(Variants, Name, TEXT("composite variant"), VariantValues))
+		{
+			return *this;
+		}
+
+		TSharedPtr<FJsonObject> Domain = MakeShared<FJsonObject>();
+		Domain->SetStringField(TEXT("kind"), TEXT("composite"));
+		Domain->SetStringField(TEXT("rule"), Rule.TrimStartAndEnd());
+		Domain->SetArrayField(TEXT("variants"), VariantValues);
+		SetDomain(Name, Domain);
+		return *this;
+	}
+
+	FParamSchemaBuilder& NormalizedDomain(
+		const FString& Name,
+		double MinValue,
+		double MaxValue,
+		const FString& Rationale)
+	{
+		if (!EnsureNonEmpty(Rationale, Name, TEXT("normalized rationale"))
+			|| !ensureMsgf(
+				FMath::IsFinite(MinValue) && FMath::IsFinite(MaxValue) && MinValue <= MaxValue,
+				TEXT("Param '%s' normalized domain requires finite minimum <= maximum."),
+				*Name))
+		{
+			return *this;
+		}
+
+		TSharedPtr<FJsonObject> Domain = MakeShared<FJsonObject>();
+		Domain->SetStringField(TEXT("kind"), TEXT("normalized"));
+		Domain->SetStringField(TEXT("mode"), TEXT("clamp"));
+		Domain->SetNumberField(TEXT("minimum"), MinValue);
+		Domain->SetNumberField(TEXT("maximum"), MaxValue);
+		Domain->SetStringField(TEXT("rationale"), Rationale.TrimStartAndEnd());
+		SetDomain(Name, Domain);
+		return *this;
+	}
+
+	/** Add one numeric sentinel without replacing existing domain metadata. */
+	FParamSchemaBuilder& Sentinel(const FString& Name, double Value, const FString& Meaning)
+	{
+		TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name);
+		if (!ensureMsgf(Param && Param->IsValid(), TEXT("Param '%s' must be declared before sentinel metadata."), *Name)
+			|| !ensureMsgf(FMath::IsFinite(Value), TEXT("Param '%s' sentinel value must be finite."), *Name)
+			|| !EnsureNonEmpty(Meaning, Name, TEXT("sentinel meaning")))
+		{
+			return *this;
+		}
+
+		const TSharedPtr<FJsonObject>* DomainPtr = nullptr;
+		if (!ensureMsgf(
+			(*Param)->TryGetObjectField(TEXT("domain"), DomainPtr) && DomainPtr && DomainPtr->IsValid(),
+			TEXT("Param '%s' must declare a domain before sentinel metadata."),
+			*Name))
+		{
+			return *this;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> Sentinels;
+		const TArray<TSharedPtr<FJsonValue>>* ExistingSentinels = nullptr;
+		if ((*DomainPtr)->TryGetArrayField(TEXT("sentinels"), ExistingSentinels) && ExistingSentinels)
+		{
+			Sentinels = *ExistingSentinels;
+		}
+
+		TSharedPtr<FJsonObject> SentinelValue = MakeShared<FJsonObject>();
+		SentinelValue->SetNumberField(TEXT("value"), Value);
+		SentinelValue->SetStringField(TEXT("meaning"), Meaning.TrimStartAndEnd());
+		Sentinels.Add(MakeShared<FJsonValueObject>(SentinelValue));
+		(*DomainPtr)->SetArrayField(TEXT("sentinels"), Sentinels);
 		return *this;
 	}
 
@@ -225,6 +388,54 @@ public:
 private:
 	TSharedPtr<FJsonObject> Schema = MakeShared<FJsonObject>();
 	TMap<FString, TSharedPtr<FJsonObject>> ParamsByName;
+
+	static bool EnsureNonEmpty(const FString& Value, const FString& ParamName, const TCHAR* FieldLabel)
+	{
+		return ensureMsgf(
+			!Value.TrimStartAndEnd().IsEmpty(),
+			TEXT("Param '%s' %s must be non-empty."),
+			*ParamName,
+			FieldLabel);
+	}
+
+	static bool BuildNonEmptyStringArray(
+		std::initializer_list<const TCHAR*> Values,
+		const FString& ParamName,
+		const TCHAR* ItemLabel,
+		TArray<TSharedPtr<FJsonValue>>& OutValues)
+	{
+		if (!ensureMsgf(Values.size() > 0, TEXT("Param '%s' requires at least one %s."), *ParamName, ItemLabel))
+		{
+			return false;
+		}
+
+		OutValues.Reserve(Values.size());
+		for (const TCHAR* RawValue : Values)
+		{
+			const FString Value = RawValue ? FString(RawValue).TrimStartAndEnd() : FString();
+			if (!ensureMsgf(!Value.IsEmpty(), TEXT("Param '%s' %s must be non-empty."), *ParamName, ItemLabel))
+			{
+				OutValues.Reset();
+				return false;
+			}
+			OutValues.Add(MakeShared<FJsonValueString>(Value));
+		}
+		return true;
+	}
+
+	void SetDomain(const FString& Name, const TSharedPtr<FJsonObject>& Domain)
+	{
+		TSharedPtr<FJsonObject>* Param = ParamsByName.Find(Name);
+		if (!ensureMsgf(Param && Param->IsValid(), TEXT("Param '%s' must be declared before domain metadata."), *Name))
+		{
+			return;
+		}
+		if (!ensureMsgf(!(*Param)->HasField(TEXT("domain")), TEXT("Param '%s' already has domain metadata."), *Name))
+		{
+			return;
+		}
+		(*Param)->SetObjectField(TEXT("domain"), Domain);
+	}
 
 	void AddParam(const FString& Name, const FString& Type, const FString& Desc, bool bRequired,
 		const FString& Default, bool bHasDefault, std::initializer_list<const TCHAR*> Aliases,

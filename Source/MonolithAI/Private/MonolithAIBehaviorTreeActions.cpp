@@ -39,7 +39,6 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "EdGraphSchema_BehaviorTree.h"
-#include "ObjectTools.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "UObject/UObjectIterator.h"
@@ -1214,7 +1213,15 @@ namespace
 		// Wire to parent
 		if (ParentGraphNode)
 		{
-			ConnectParentChild(ParentGraphNode, NewGraphNode);
+			if (!ConnectParentChild(ParentGraphNode, NewGraphNode))
+			{
+				Ctx.Warnings.Add(FString::Printf(
+					TEXT("Failed to connect '%s' under parent '%s'; node was not added"),
+					*TypeName,
+					*ParentGraphNode->NodeGuid.ToString()));
+				NewGraphNode->DestroyNode();
+				return nullptr;
+			}
 		}
 
 		// Apply properties
@@ -2134,21 +2141,10 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleDeleteBehaviorTree(c
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Behavior Tree not found: %s"), *AssetPath));
 	}
 
-	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Delete Behavior Tree")));
-
-	TArray<UObject*> ObjectsToDelete;
-	ObjectsToDelete.Add(Asset);
-
-	int32 NumDeleted = ObjectTools::ForceDeleteObjects(ObjectsToDelete, /*bShowConfirmation=*/false);
-	if (NumDeleted == 0)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Failed to delete: %s"), *AssetPath));
-	}
-
-	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
-	Result->SetStringField(TEXT("asset_path"), AssetPath);
-	Result->SetStringField(TEXT("message"), TEXT("Behavior Tree deleted"));
-	return FMonolithActionResult::Success(Result);
+	return MonolithAI::DeleteAssetVerified(
+		AssetPath,
+		TEXT("Behavior Tree"),
+		TEXT("Behavior Tree deleted"));
 }
 
 // ============================================================
@@ -2411,7 +2407,15 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTNode(const TSha
 	NewGraphNode->NodePosY = ParentGraphNode->NodePosY + 150;
 
 	// Wire parent → child via pins
-	ConnectParentChild(ParentGraphNode, NewGraphNode);
+	if (!ConnectParentChild(ParentGraphNode, NewGraphNode))
+	{
+		const FString ParentGuid = ParentGraphNode->NodeGuid.ToString();
+		NewGraphNode->DestroyNode();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to connect node '%s' under parent '%s'; the Behavior Tree schema rejected the edge"),
+			*NodeClassName,
+			*ParentGuid));
+	}
 
 	// Apply optional properties
 	const TSharedPtr<FJsonObject>* PropsObj = nullptr;
@@ -3208,7 +3212,14 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTRunEQSTask(cons
 	TaskGraphNode->NodePosY = ParentGraphNode->NodePosY + 150;
 
 	// Wire
-	ConnectParentChild(ParentGraphNode, TaskGraphNode);
+	if (!ConnectParentChild(ParentGraphNode, TaskGraphNode))
+	{
+		const FString ParentGuid = ParentGraphNode->NodeGuid.ToString();
+		TaskGraphNode->DestroyNode();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to connect RunEQSQuery task under parent '%s'; the Behavior Tree schema rejected the edge"),
+			*ParentGuid));
+	}
 
 	// Set properties: QueryTemplate, EQSQueryBlackboardKey, RunMode
 	FString PropError;
@@ -3363,7 +3374,14 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTSmartObjectTask
 	TaskGraphNode->NodePosY = ParentGraphNode->NodePosY + 150;
 
 	// Wire
-	ConnectParentChild(ParentGraphNode, TaskGraphNode);
+	if (!ConnectParentChild(ParentGraphNode, TaskGraphNode))
+	{
+		const FString ParentGuid = ParentGraphNode->NodeGuid.ToString();
+		TaskGraphNode->DestroyNode();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to connect Smart Object task under parent '%s'; the Behavior Tree schema rejected the edge"),
+			*ParentGuid));
+	}
 
 	// Apply activity tags
 	FString PropError;
@@ -3627,7 +3645,14 @@ FMonolithActionResult FMonolithAIBehaviorTreeActions::HandleAddBTUseAbilityTask(
 	TaskGraphNode->NodePosY = ParentGraphNode->NodePosY + 150;
 
 	// Wire parent -> child
-	ConnectParentChild(ParentGraphNode, TaskGraphNode);
+	if (!ConnectParentChild(ParentGraphNode, TaskGraphNode))
+	{
+		const FString ParentGuid = ParentGraphNode->NodeGuid.ToString();
+		TaskGraphNode->DestroyNode();
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Failed to connect TryActivateAbility task under parent '%s'; the Behavior Tree schema rejected the edge"),
+			*ParentGuid));
+	}
 
 	// 8. Apply configuration directly (we own the UCLASS so no reflection needed)
 	if (ResolvedAbilityClass)

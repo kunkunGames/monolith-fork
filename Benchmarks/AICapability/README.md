@@ -37,6 +37,12 @@ The four adversarial categories carry **0.72** of the score. A server that schem
 `ai` action but cannot actually edit an asset, name a bad identifier, reject a duplicate, or
 validate a tree correctly scores **at most 0.28**.
 
+Every create-based row owns a dedicated scratch lifecycle. The template scaffold, duplicate, and
+compile-gate rows reset only benchmark-owned paths, reject every reset failure except an explicit
+already-absent response, and cannot pass until follow-up public reads prove that cleanup removed each
+key or made every generated package unresolvable. Persistent `*_BenchDup` or compile-gate assets from
+another changelist are never reused.
+
 > **StateTree coverage note — compiled out (`WITH_STATETREE=0`).** On this build StateTree is
 > compiled out, so `create_st_from_template` and `lint_state_tree` are **runtime stubs** that return
 > `isError` "StateTree module not available (WITH_STATETREE=0)". No StateTree EXECUTE or lint task can
@@ -52,12 +58,12 @@ validate a tree correctly scores **at most 0.28**.
 
 | File | Purpose |
 | --- | --- |
-| `manifest.json` | Generated: task counts, weights, score formula, fixture paths, verified catalog version |
-| `tasks.jsonl` | Generated: one JSON object per task (73 tasks) |
+| `manifest.json` | Generated: task counts, weights, score formula, fixture paths, verified catalog version, run-integrity gates |
+| `tasks.jsonl` | Generated: one JSON object per task (74 tasks) |
 | `README.md` | This file |
 | `METRICS.md` | Per-category scoring rules + the verified `ai` action/param/error evidence (file:line) |
 | `RESULTS.md` | Run history + the exact live run commands (run requires the shared editor) |
-| `test_fixtures.md` | The AI fixture contract created by `setup_fixtures` |
+| `test_fixtures.md` | Standing fixtures plus task-owned reset/create/assert/cleanup/readback contracts |
 
 ## Usage
 
@@ -68,7 +74,7 @@ python Scripts/ai_capability_benchmark.py generate
 # 2. (offline) self-test the scoring branches with fabricated MCP responses — no editor
 python Scripts/test_ai_capability_benchmark.py
 
-# 3. (live editor) seed the AI fixtures at /Game/Benchmarks/AI/
+# 3. (live editor) seed only the three standing AI fixtures at /Game/Benchmarks/AI/
 python Scripts/ai_capability_benchmark.py setup_fixtures --mcp-url http://localhost:9316/mcp
 
 # 4. (live editor) preflight, then score a run
@@ -81,10 +87,36 @@ python Scripts/ai_capability_benchmark.py compare `
     --baseline <a>/summary.json --current <b>/summary.json --output-dir <out>
 ```
 
-`generate`, `setup_fixtures`, `preflight`, `run`, and `compare` mirror the gold-standard
-AssetEditing runner one-for-one. **`run` requires the single shared editor** (`ai` is an
+`generate`, `setup_fixtures`, `preflight`, `run`, and `compare` retain the established benchmark
+command surface. **`run` requires the single shared editor** (`ai` is an
 editor-only namespace; there is no offline `monolith_query.exe` equivalent), so a scored run is left
 to a coordinated session — see `RESULTS.md`.
+
+### Run-integrity contract
+
+`run` owns a mandatory strict `monolith_status` preflight. `--skip-preflight` skips only the
+fixture-readiness probes; it can never bypass status validation. Invalid JSON, a non-object JSON
+envelope, a top-level JSON-RPC error, a missing MCP result, `isError` status, or a status payload that
+does not declare `server_running=true` aborts before the first scored task.
+
+Every MCP call made by a task is attributed to its row, including setup, edit, duplicate first/second
+calls, readback, compile/validate, cleanup, and cleanup-readback calls. The shared transport gate aborts after three
+consecutive transport-failed tasks or when the failure fraction exceeds 5% after 20 attempted tasks.
+Exactly 5% is allowed. A completed corpus shorter than 20 tasks applies the same fraction budget in
+`finalize()`.
+
+| Output | Contract |
+| --- | --- |
+| `summary.json` | Valid completed run only; contains `run_valid=true`, `metrics_valid=true`, completion status, and transport counters |
+| `per_task.json` | Valid completed run only |
+| `per_task.jsonl` | Incremental diagnostic rows, including a triggering transport/protocol/runner-error row |
+| `partial_summary.json` | In-progress or invalid-run diagnostics; removed after a valid completion |
+| `run_failure.json` | Machine-readable invalid-run reason; mutually exclusive with `summary.json` |
+
+Known outputs are removed before input/status validation, so a failed rerun cannot expose a stale
+success. Task protocol failures and runner exceptions invalidate the run, write diagnostic artifacts,
+and make the CLI exit non-zero. A valid semantic `result.isError=true` remains a scoreable domain
+response for the negative and duplicate-rejection tasks; it is not a transport/protocol failure.
 
 ## Action-name provenance
 

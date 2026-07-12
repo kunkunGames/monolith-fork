@@ -144,6 +144,26 @@ bool FMonolithBuildArtifactRegistryAndGuardTest::RunTest(const FString& /*Parame
 		}
 	}
 
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& InvalidLimit : {
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("below range"), MakeShared<FJsonValueNumber>(0.0)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("above range"), MakeShared<FJsonValueNumber>(50001.0)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("fractional"), MakeShared<FJsonValueNumber>(1.5)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("string-coerced"), MakeShared<FJsonValueString>(TEXT("1")))
+	})
+	{
+		TSharedPtr<FJsonObject> InvalidPackageParams = MakeParams();
+		InvalidPackageParams->SetStringField(TEXT("archive_dir"), ArchiveDir);
+		InvalidPackageParams->SetField(TEXT("limit"), InvalidLimit.Value);
+		const FMonolithActionResult InvalidPackage =
+			FMonolithBuildArtifactActions::PackageBuildOutputs(InvalidPackageParams);
+		TestFalse(
+			FString::Printf(TEXT("package_build_outputs rejects %s limit"), *InvalidLimit.Key),
+			InvalidPackage.bSuccess);
+		TestTrue(
+			FString::Printf(TEXT("package_build_outputs %s limit reports contract"), *InvalidLimit.Key),
+			InvalidPackage.ErrorMessage.Contains(TEXT("limit")));
+	}
+
 	TSharedPtr<FJsonObject> PackageNoConfirmParams = MakeParams();
 	PackageNoConfirmParams->SetStringField(TEXT("archive_dir"), ArchiveDir);
 	PackageNoConfirmParams->SetBoolField(TEXT("dry_run"), false);
@@ -166,6 +186,27 @@ bool FMonolithBuildArtifactRegistryAndGuardTest::RunTest(const FString& /*Parame
 		FString Status;
 		TestTrue(TEXT("mirror status exists"), MirrorDryRun.Result->TryGetStringField(TEXT("status"), Status));
 		TestEqual(TEXT("mirror status planned"), Status, FString(TEXT("planned")));
+	}
+
+	for (const TPair<FString, TSharedPtr<FJsonValue>>& InvalidLimit : {
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("below range"), MakeShared<FJsonValueNumber>(0.0)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("above range"), MakeShared<FJsonValueNumber>(10001.0)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("fractional"), MakeShared<FJsonValueNumber>(1.5)),
+		TPair<FString, TSharedPtr<FJsonValue>>(TEXT("string-coerced"), MakeShared<FJsonValueString>(TEXT("1")))
+	})
+	{
+		TSharedPtr<FJsonObject> InvalidMirrorParams = MakeParams();
+		InvalidMirrorParams->SetArrayField(TEXT("files"), Files);
+		InvalidMirrorParams->SetStringField(TEXT("dest_dir"), MirrorDir);
+		InvalidMirrorParams->SetField(TEXT("limit"), InvalidLimit.Value);
+		const FMonolithActionResult InvalidMirror =
+			FMonolithBuildArtifactActions::MirrorScreenshotEvidence(InvalidMirrorParams);
+		TestFalse(
+			FString::Printf(TEXT("mirror_screenshot_evidence rejects %s limit"), *InvalidLimit.Key),
+			InvalidMirror.bSuccess);
+		TestTrue(
+			FString::Printf(TEXT("mirror_screenshot_evidence %s limit reports contract"), *InvalidLimit.Key),
+			InvalidMirror.ErrorMessage.Contains(TEXT("limit")));
 	}
 
 	TSharedPtr<FJsonObject> MirrorNoConfirmParams = MakeParams();

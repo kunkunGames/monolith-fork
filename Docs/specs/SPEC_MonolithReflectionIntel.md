@@ -786,12 +786,11 @@ The `flags` column stores UHT metadata keys (`IsBlueprintBase`, `BlueprintType`,
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
-| `specifier` | string | `Other` | yes | — | Substring match against the stored token, case-insensitive — `"BlueprintType"` matches both `BlueprintType` and `IsBlueprintBase:BlueprintType,...`. Well-known C++ specifiers (`Blueprintable`) are alias-mapped to the stored token. |
-| `module_filter` | string | `Other` | no | `""` | Optional module-name substring. |
-| `limit` | integer | `Other` | no | `100` | Hard cap `500`. |
+| `specifier_name` | string | `Other` | yes | — | Token match against the stored colon-delimited flags, case-insensitive. Well-known C++ specifiers (`Blueprintable`) are alias-mapped to the stored token. |
+| `limit` | integer | `Other` | no | `50` | Inclusive range `1..200`. |
 | `cursor` | string | `Other` | no | `""` | Opaque base64+JSON cursor. |
 
-**Response:** `{ "classes": [ { "class_name", "module_name", "parent_class", "class_specifiers", "source_path", "source_line" } ], "effective_token": "<translated-token>", "total_estimate": N, "next_cursor": "<opaque>" }`. When the requested specifier is one UHT drops (`MinimalAPI` / `NotBlueprintable`), the response carries a not-captured note explaining it is not stored and refers the caller to `list_class_specifiers`.
+**Response:** `{ "specifier_name": "<requested-token>", "effective_token"?: "<translated-token>", "uclasses": [ { "class_name", "module_name", "parent_class", "source_path", "flags" } ], "known_tokens"?: [...], "next_cursor"?: "<opaque>" }`. The first empty page includes `known_tokens`; alias translation emits `effective_token`. When the requested specifier is one UHT drops (`MinimalAPI` / `NotBlueprintable`), the response instead includes `token_stored=false`, an empty `uclasses` array, an explanatory `note`, and `known_tokens`.
 
 #### `cppreflect_query("list_class_specifiers")`
 
@@ -859,7 +858,7 @@ The network slice answers the four highest-frequency replication-edge questions 
 
 - **"Which UCLASSes declare replicated state?"** — `list_replicated_classes` enumerates every UCLASS that carries at least one replicated `UPROPERTY`, sortable by replicated-property count. **As of the [Unreleased] network-completeness workstream this now captures bare `UPROPERTY(Replicated)` + `DOREPLIFETIME` (via the `CPF_Net` flag), not just `ReplicatedUsing` declarations** — verified end-to-end (the query returned `Athe host projectCharacterBase` + `Uthe host projectVitalsSet`).
 - **"Which UFUNCTIONs are RPCs of a given kind?"** — `list_rpc_functions` filters `reflect_ufunctions` by **replication specifier** (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags` — `FUNC_NetServer` / `FUNC_NetClient` / `FUNC_NetMulticast`), as of the [Unreleased] workstream. **This now covers project plugins by default** (the scan-scope ladder in §5.2 walks `LoadedFrom == Project` plugins), so the project's actual RPCs — which live in project plugins — are in scope. E2E returned 28 RPCs including the project's project-plugin Server RPCs. The prior "empty because the scan is the game module only" limitation is resolved.
-- **"Which OnRep handlers exist?"** — `list_onrep_handlers` returns every UFUNCTION named `OnRep_*` paired with the property it covers (resolved via name-suffix match against `reflect_replicated_properties.rep_notify_func`).
+- **"Which OnRep handlers exist?"** — `list_onrep_handlers` returns every UFUNCTION named `OnRep_*`. It is intentionally a name-pattern list over `reflect_ufunctions`; it does not join properties or synthesize a `covered_property` field.
 - **"Which `ReplicatedUsing=` declarations point at OnRep handlers that don't exist?"** — `audit_unbalanced_onreps` is the consistency check that catches typos and rename drift between the property declaration and the handler definition.
 
 All four actions are read-only. The substrate is a second UHT-artefact regex sweep (independent of Phase 3a's `FUHTArtefactReader` for separation of concerns) focused on per-property `MetaData` blocks and (as of the [Unreleased] network-completeness workstream) the `CPF_Net` property-flag emission for bare-`Replicated` capture. As of the [Unreleased] workstream the sweep follows the §5.2 scan-scope ladder — game module + project plugins by default (marketplace plugins when enabled) — so replicated state and RPCs declared in project plugins (your project plugins, etc.) are in scope, not just the game module. Cross-joins are against `reflect_ufunctions` from Phase 3a, so Phase 4a depends on Phase 3a's reflection-edge tables being populated.
@@ -906,11 +905,10 @@ Enumerate UCLASSes carrying at least one replicated property. **As of the [Unrel
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
-| `module_filter` | string | `Other` | no | `""` | Substring match against `module_name`. |
-| `limit` | integer | `Other` | no | `50` | Hard cap `200`. |
+| `limit` | integer | `Other` | no | `50` | Accepted range `1..200`; values outside the range are invalid params. |
 | `cursor` | string | `Other` | no | `""` | Opaque base64+JSON cursor. |
 
-**Response:** `{ "classes": [ { "class_name", "module_name", "replicated_property_count" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. Sorted by `replicated_property_count DESC, class_name ASC`.
+**Response:** `{ "classes": [ { "owning_class", "cpp_module", "replicated_property_count" } ], "total_estimate": N?, "next_cursor": "<opaque>"? }`. `total_estimate` is computed on the first page. Rows are sorted by `cpp_module, owning_class`.
 
 #### `network_query("list_rpc_functions", params)`
 
@@ -918,26 +916,24 @@ Filter `reflect_ufunctions` by **replication specifier** (`reflect_ufunctions.sp
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
-| `rpc_kind` | string | `Other` | no | `""` | Exact match — `server`, `client`, `multicast`, `netmulticast`. Empty returns all four. |
+| `rpc_kind` | string | `Other` | no | `""` | Case-insensitive match of `Server`, `Client`, or `Multicast`. Empty returns all RPC endpoint kinds. |
 | `class_name` | string | `Other` | no | `""` | Optional UCLASS filter. |
-| `module_filter` | string | `Other` | no | `""` | Substring match against module name. |
-| `limit` | integer | `Other` | no | `100` | Hard cap `500`. |
+| `limit` | integer | `Other` | no | `50` | Accepted range `1..200`; values outside the range are invalid params. |
 | `cursor` | string | `Other` | no | `""` | Opaque cursor. |
 
-**Response:** `{ "rpcs": [ { "class_name", "module_name", "function_name", "rpc_kind", "function_flags", "return_type", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `rpc_kind` is derived from the replication specifier (`reflect_ufunctions.specifiers` parsed from `EFunctionFlags`) at query time. With project plugins in scope by default (§5.2) the array populates from project-plugin RPCs — e.g. the a project plugin Server RPCs on the E2E run.
+**Response:** `{ "rpcs": [ { "owning_class", "function_name", "cpp_module", "rpc_kind", "specifiers", "blueprint_callable" } ], "next_cursor": "<opaque>"? }`. `rpc_kind` is derived from `reflect_ufunctions.specifiers` at query time. There is no `module_filter`, source-location, return-type, or function-flags field on this action.
 
 #### `network_query("list_onrep_handlers", params)`
 
-List every `OnRep_*` UFUNCTION paired with the property it covers. Cursor-paginated.
+List every `OnRep_*` UFUNCTION by name pattern. Cursor-paginated; this action does not perform a property join.
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
 | `class_name` | string | `Other` | no | `""` | Optional UCLASS filter. |
-| `module_filter` | string | `Other` | no | `""` | Substring match. |
-| `limit` | integer | `Other` | no | `100` | Hard cap `500`. |
+| `limit` | integer | `Other` | no | `50` | Accepted range `1..200`; values outside the range are invalid params. |
 | `cursor` | string | `Other` | no | `""` | Opaque cursor. |
 
-**Response:** `{ "handlers": [ { "class_name", "module_name", "function_name", "covered_property", "source_path", "source_line" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. `covered_property` is resolved by joining `reflect_replicated_properties.rep_notify_func == function_name`; if no match is found the field is empty (handler is orphaned — the inverse of `audit_unbalanced_onreps`).
+**Response:** `{ "handlers": [ { "owning_class", "function_name", "cpp_module" } ], "next_cursor": "<opaque>"? }`. No `covered_property` or source-location field is produced; use the replicated-property audit for declaration-to-handler consistency.
 
 #### `network_query("audit_unbalanced_onreps", params)`
 
@@ -945,11 +941,10 @@ Find `ReplicatedUsing=OnRep_X` declarations whose `OnRep_X` function does NOT ex
 
 | Param | Type | EMonolithParamKind | Required | Default | Notes |
 |-------|------|---------------------|----------|---------|-------|
-| `module_filter` | string | `Other` | no | `""` | Substring match. |
-| `limit` | integer | `Other` | no | `100` | Hard cap `500`. |
+| `limit` | integer | `Other` | no | `50` | Accepted range `1..200`; values outside the range are invalid params. |
 | `cursor` | string | `Other` | no | `""` | Opaque cursor. |
 
-**Response:** `{ "violations": [ { "class_name", "module_name", "property_name", "missing_handler" } ], "total_estimate": N, "next_cursor": "<opaque>" }`. Sorted by `(module_name, class_name, property_name)` so multi-row violations within a single class clump together.
+**Response:** `{ "violations": [ { "owning_class", "property_name", "cpp_module", "missing_function", "violation" } ], "next_cursor": "<opaque>"? }`. Sorted by `(cpp_module, owning_class, property_name)` so multi-row violations within a class clump together.
 
 ### 6.5 Known limitations
 

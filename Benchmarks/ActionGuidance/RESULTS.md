@@ -1,5 +1,29 @@
 # Action Guidance Benchmark Results
 
+## 2026-07-11 baseline-20260711 — first run on the 281-task corpus
+
+First live baseline of the expanded, demand-weighted 281-task corpus (the
+2026-06-16 scores below used the older 161-task set and are not comparable).
+Run alongside the suite-wide baseline refresh (Speed CL 1093,
+`Docs/testing/2026-07-11-benchmark-contract-failfast-and-n3-guards.md`), after
+the error-recovery enumeration switched to paginated `mode="actions"` discover
+(the default 50-row page hid actions past page 1 for large namespaces and
+failed recovery scoring through no fault of the server).
+
+| Metric | Value |
+| --- | ---: |
+| `effectiveness_score` | **0.8721** |
+| `task_success_rate` | 0.8990 |
+| `first_recovery_success_rate` | 0.8309 |
+| `action_selection_accuracy` | 0.8741 |
+| `param_correction_accuracy` | 0.8663 |
+| `mean_tool_calls_to_success` | 1.258 |
+| `invalid_retry_rate` | 0.1691 |
+| `hallucinated_workflow_rate` | 0.1193 |
+
+Output: `Saved\Monolith\Benchmarks\ActionGuidance\baseline-20260711`.
+Editor 0.20.3, 1831 actions / 61 namespaces, engine `++UE5+Release-5.8`.
+
 ## 2026-06-16 Legacy vs Current
 
 This historical run used the then-current 161-task benchmark set against a

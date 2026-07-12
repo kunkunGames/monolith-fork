@@ -14,6 +14,7 @@
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
 #include "PropertyEditorModule.h"
+#include "CoreGlobals.h"
 #include "Editor.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/OutputDeviceRedirector.h"
@@ -240,6 +241,19 @@ void FMonolithEditorModule::StartupModule()
 {
 	if (!GetDefault<UMonolithSettings>()->bEnableEditor) return;
 
+	bPreviousRunningUnattendedScript = GIsRunningUnattendedScript;
+	if (!FApp::CanEverRender() && !GIsRunningUnattendedScript)
+	{
+		// FSlateApplication::AddModalWindow cancels non-slow-task modals on this
+		// engine-supported guard. FApp::IsUnattended() alone is not consulted there.
+		GIsRunningUnattendedScript = true;
+		bOwnsHeadlessUnattendedScriptGuard = true;
+		UE_LOG(
+			LogMonolith,
+			Log,
+			TEXT("HeadlessUnattendedScriptGuard: CanEverRender=false — non-slow-task Slate modals will be canceled"));
+	}
+
 	LogCapture = new FMonolithLogCapture();
 	GLog->AddOutputDevice(LogCapture);
 
@@ -277,25 +291,29 @@ void FMonolithEditorModule::StartupModule()
 #endif
 }
 
-void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowContext& /*Context*/)
+void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowContext& Context)
 {
-	// Always emit at least a timestamped "modal opening" line — text extraction below
-	// is best-effort (the window may not yet be on the modal stack at broadcast time).
+	// PreSlateModalWithContext fires before Slate pushes the window onto its active-modal
+	// stack. Use the supplied stable identifier instead of harvesting the unrelated active
+	// top-level window, which can report background dock-hint text as the modal message.
 	FString Title;
 	FString Text;
 
 	if (FSlateApplication::IsInitialized())
 	{
-		FSlateApplication& Slate = FSlateApplication::Get();
-		TSharedPtr<SWindow> Window = Slate.GetActiveModalWindow();
-		if (!Window.IsValid())
+		SWindow* ContextWindow = reinterpret_cast<SWindow*>(Context.WindowIdentifier);
+		if (ContextWindow)
 		{
-			Window = Slate.GetActiveTopLevelWindow();
+			Title = ContextWindow->GetTitle().ToString();
+			HarvestTextBlocks(ContextWindow->GetContent(), Text, 0);
 		}
-		if (Window.IsValid())
+		else
 		{
-			Title = Window->GetTitle().ToString();
-			HarvestTextBlocks(Window->GetContent(), Text, 0);
+			TSharedPtr<SWindow> ActiveWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
+			if (ActiveWindow.IsValid())
+			{
+				Title = ActiveWindow->GetTitle().ToString();
+			}
 		}
 	}
 
@@ -329,6 +347,12 @@ void FMonolithEditorModule::ShutdownModule()
 		GLog->RemoveOutputDevice(LogCapture);
 		delete LogCapture;
 		LogCapture = nullptr;
+	}
+
+	if (bOwnsHeadlessUnattendedScriptGuard)
+	{
+		GIsRunningUnattendedScript = bPreviousRunningUnattendedScript;
+		bOwnsHeadlessUnattendedScriptGuard = false;
 	}
 }
 

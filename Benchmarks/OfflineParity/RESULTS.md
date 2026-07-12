@@ -1,5 +1,40 @@
 # Offline Parity Benchmark Results
 
+## 2026-07-11 run-20260711-final — post-CRG-repair final
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 total; 311 comparable; 6 decision-chain skips |
+| MATCH / DIFF / real ERROR | 311 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 (`2026-05-29.1` on both implementations) |
+| Input fingerprint | `92f6717c9d99e528792dbc2215e9cf822b2358b40a386b5336f6c8b67708ae3e` |
+| Output | `Saved\Monolith\Benchmarks\OfflineParity\run-20260711-final` |
+
+This explicit final run followed the health-directed EngineSource CRG rebuild.
+The C++ `monolith_query.exe` and Python `monolith_offline.py` implementations
+matched on every comparable action with zero diffs, zero real errors, and no
+environment-blocked rows. The six skips are the decision-ID-dependent rows;
+the current database has no decision to chain, so they are non-comparable by
+contract rather than failures.
+
+## 2026-07-11 baseline-20260711 run
+
+| Item | Value |
+| --- | ---: |
+| `offline_parity_score` | **1.0** |
+| Actions | 317 (all comparable) |
+| MATCH / DIFF / real ERROR | 317 / 0 / 0 |
+| Expected-error cases | 5 (0 problems) |
+| `version_parity_score` | 1.0 |
+| Output | `Saved\Monolith\Benchmarks\OfflineParity\baseline-20260711` |
+
+Run alongside the 2026-07-11 suite-wide baseline refresh (Speed CL 1093,
+`Docs/testing/2026-07-11-benchmark-contract-failfast-and-n3-guards.md`).
+Consistent with the 2026-07-10 `parity-20260710` run (score 1.0) — the offline
+CLI fallback surface remains healthy.
+
 ## 2026-06-18 Externalization + offline-unsupported bucket
 
 This update externalizes the action table to `actions.jsonl` + `manifest.json`

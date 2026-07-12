@@ -277,6 +277,7 @@ void FCppReflectQueryAdapter::RegisterActions(FMonolithToolRegistry& Registry)
 				TEXT("UCLASS specifier or metadata-key token to search the flags column for"))
 			.Optional(TEXT("limit"), TEXT("integer"),
 				TEXT("Max rows per page (default 50, hard cap 200)"), TEXT("50"))
+			.Range(TEXT("limit"), 1, 200)
 			.Optional(TEXT("cursor"), TEXT("string"),
 				TEXT("Opaque pagination cursor"))
 			.Build());

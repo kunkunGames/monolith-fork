@@ -18,7 +18,11 @@ machine-readable evidence an agent needs to recover or plan.
 | `RESULTS.md` | Latest checked-in benchmark result summary and evidence paths. |
 | `Plugins/Monolith/Scripts/action_guidance_benchmark.py` | Generator, runner, and comparison tool. |
 
-Checked-in corpus size: **281 tasks**. The live catalog generator appends a
+Checked-in corpus size: **289 tasks** over the 2026-07-11 live catalog snapshot
+(61 namespaces / 1840 actions). The generator parses compact
+`structuredContent`, enumerates every namespace through paginated
+`mode=actions`, and rejects namespace or total action-count mismatches before
+writing the corpus. It then appends a
 deduplicated Unreal practical supplement after catalog-derived tasks so the
 domain cases survive regeneration without keeping repeated task fingerprints.
 
@@ -75,6 +79,12 @@ python Plugins\Monolith\Scripts\action_guidance_benchmark.py generate `
   --manifest Plugins\Monolith\Benchmarks\ActionGuidance\manifest.json
 ```
 
+Generation fingerprints `monolith_status` and the compact discovery summary at
+both the start and end. Their `catalog_version`, action count, and namespace
+count must agree throughout the run; otherwise generation fails before
+overwriting either `tasks.jsonl` or `manifest.json`. A successful manifest
+records the verified `catalog_version` used to build the corpus.
+
 ## Run
 
 ```powershell
@@ -86,9 +96,23 @@ python Plugins\Monolith\Scripts\action_guidance_benchmark.py run `
   --request-timeout-s 8
 ```
 
-Each run writes `summary.json`, `per_task.json`, incremental
+Each valid completed run writes `summary.json`, `per_task.json`, incremental
 `per_task.jsonl`, and `partial_summary.json`. The incremental files make slow
 or non-closing legacy MCP responses visible during a long run.
+
+The runner validates `monolith_status` before the first task and aborts without
+`summary.json` after three consecutive transport failures (configurable with
+`--max-consecutive-transport-failures`) or when the transport-failure fraction
+exceeds 5% after 20 tasks (configurable with
+`--max-transport-failed-fraction` and `--min-transport-fraction-sample`). A
+completed short run applies the same fraction budget at finalization. An invalid
+run writes `run_failure.json`
+plus the last partial evidence and exits non-zero, so an editor shutdown cannot
+be recorded as a low benchmark baseline or consume the rest of the corpus in
+timeout retries.
+Transport accounting covers every MCP request made by a task, including
+deterministic discovery/schema recovery calls; a healthy initial response can
+therefore no longer hide a failed recovery request.
 
 ## Compare
 
@@ -104,5 +128,5 @@ python Plugins\Monolith\Scripts\action_guidance_benchmark.py compare `
 | Benchmark | Script | Primary Score | What it tests |
 | --- | --- | --- | --- |
 | [SourceIndex](../SourceIndex/README.md) | Scripts/source_index_benchmark.py | source_index_score | C++ symbol index data quality and recall |
-| [SchemaCompleteness](../SchemaCompleteness/README.md) | Scripts/schema_completeness_benchmark.py | schema_completeness_score | Full 1766-action catalog schema quality |
+| [SchemaCompleteness](../SchemaCompleteness/README.md) | Scripts/schema_completeness_benchmark.py | schema_completeness_score | Full live-catalog schema quality plus a strict 330-probe contract |
 | [OfflineParity](../OfflineParity/README.md) | Scripts/offline_parity_benchmark.py | offline_parity_score | exe-vs-py offline parity trend tracking |

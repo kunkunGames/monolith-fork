@@ -63,5 +63,13 @@
     "ergonomics_success_rate": "fraction of ergonomics_text tasks with non-empty, non-error response",
     "negative_recovery_rate": "mean response-quality score (0..1) on deliberately bad input: transport crash / silent empty = 0, structured error naming the offending identifier = 0.7, + did-you-mean/qualified hint = 1.0",
     "mean_results_per_lookup": "average result count across symbol_lookup + review_context_lookup + impact_radius_lookup tasks"
+  },
+  "run_gates": {
+    "max_transport_failed_fraction": 0.05,
+    "max_consecutive_transport_failures": 3,
+    "min_transport_fraction_sample": 20,
+    "status_transport_failure_aborts_before_tasks": true,
+    "invalid_status_response_aborts_before_tasks": true,
+    "invalid_run_writes_summary": false
   }
 }

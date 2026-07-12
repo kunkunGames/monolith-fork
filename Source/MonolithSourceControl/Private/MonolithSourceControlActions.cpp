@@ -1,6 +1,7 @@
 #include "MonolithSourceControlActions.h"
 
 #include "MonolithParamSchema.h"
+#include "MonolithSourceControlP4Batch.h"
 #include "MonolithSourceControlUtils.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -327,13 +328,6 @@ namespace
 		return FMonolithActionResult::Success(Result);
 	}
 
-	FString QuoteP4Arg(const FString& Arg)
-	{
-		FString Escaped = Arg;
-		Escaped.ReplaceInline(TEXT("\""), TEXT("\\\""));
-		return TEXT("\"") + Escaped + TEXT("\"");
-	}
-
 	bool RunP4(const FString& Args, FString& OutStdOut, FString& OutStdErr, int32& OutReturnCode)
 	{
 		OutStdOut.Reset();
@@ -396,35 +390,19 @@ namespace
 		return FString();
 	}
 
-	bool DepotPathToLocalPath(const FString& DepotPath, FString& OutLocalPath, FString& OutError)
+	MonolithSourceControlP4::FDepotPathBatchResult ResolveDepotPathsWithP4(const TArray<FString>& DepotPaths)
 	{
-		FString StdOut;
-		FString StdErr;
-		int32 ReturnCode = 0;
-		if (!RunP4(TEXT("-ztag where ") + QuoteP4Arg(DepotPath), StdOut, StdErr, ReturnCode))
-		{
-			OutError = TEXT("Failed to execute p4 where.");
-			return false;
-		}
-		if (ReturnCode != 0)
-		{
-			OutError = StdErr.IsEmpty() ? StdOut : StdErr;
-			return false;
-		}
-		const TArray<TMap<FString, FString>> Records = ParseTaggedRecords(StdOut);
-		if (Records.Num() == 0)
-		{
-			OutError = FString::Printf(TEXT("p4 where returned no records for '%s'."), *DepotPath);
-			return false;
-		}
-		OutLocalPath = RecordValue(Records[0], TEXT("path"));
-		if (OutLocalPath.IsEmpty())
-		{
-			OutError = FString::Printf(TEXT("p4 where returned no local path for '%s'."), *DepotPath);
-			return false;
-		}
-		FPaths::NormalizeFilename(OutLocalPath);
-		return true;
+		return MonolithSourceControlP4::ResolveDepotPathsBatched(
+			DepotPaths,
+			[](const TArray<FString>& Batch, FString& OutStdOut, FString& OutStdErr, int32& OutReturnCode)
+			{
+				FString Args = TEXT("-ztag where");
+				for (const FString& DepotPath : Batch)
+				{
+					Args += TEXT(" ") + MonolithSourceControlP4::QuoteCommandLineArgument(DepotPath);
+				}
+				return RunP4(Args, OutStdOut, OutStdErr, OutReturnCode);
+			});
 	}
 
 	FString LocalPathToPackagePath(FString LocalPath)
@@ -438,7 +416,10 @@ namespace
 		return FString();
 	}
 
-	TSharedPtr<FJsonObject> OpenedRecordToJson(const TMap<FString, FString>& Record, bool bResolvePackages)
+	TSharedPtr<FJsonObject> OpenedRecordToJson(
+		const TMap<FString, FString>& Record,
+		bool bResolvePackages,
+		const MonolithSourceControlP4::FDepotPathBatchResult& MappingResult)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		const FString DepotFile = RecordValue(Record, TEXT("depotFile"));
@@ -455,18 +436,19 @@ namespace
 
 		if (bResolvePackages && !DepotFile.IsEmpty())
 		{
-			FString LocalPath;
-			FString Error;
-			if (DepotPathToLocalPath(DepotFile, LocalPath, Error))
+			const MonolithSourceControlP4::FDepotPathMapping* Mapping = MappingResult.Mappings.Find(DepotFile);
+			if (Mapping && Mapping->IsResolved())
 			{
-				Row->SetStringField(TEXT("local_path"), LocalPath);
-				const FString PackagePath = LocalPathToPackagePath(LocalPath);
+				Row->SetStringField(TEXT("local_path"), Mapping->LocalPath);
+				const FString PackagePath = LocalPathToPackagePath(Mapping->LocalPath);
 				Row->SetStringField(TEXT("package_path"), PackagePath);
 				Row->SetBoolField(TEXT("is_package"), !PackagePath.IsEmpty());
 			}
 			else
 			{
-				Row->SetStringField(TEXT("where_error"), Error);
+				Row->SetStringField(
+					TEXT("where_error"),
+					Mapping ? Mapping->Error : TEXT("No batched p4 where result was produced for this depot path."));
 				Row->SetBoolField(TEXT("is_package"), false);
 			}
 		}
@@ -478,6 +460,8 @@ namespace
 void FMonolithSourceControlActions::RegisterActions()
 {
 	FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
+	FMonolithActionExecutionPolicy ExplicitReadOnly = FMonolithActionExecutionPolicy::DefaultReadOnly();
+	ExplicitReadOnly.bDefaulted = false;
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("get_capabilities"),
 		TEXT("Return the active Unreal source-control provider and Phase 1 Monolith action capabilities."),
@@ -562,22 +546,27 @@ void FMonolithSourceControlActions::RegisterActions()
 			.Build());
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("list_opened"),
-		TEXT("List Perforce opened files through `p4 -ztag opened`, optionally scoped to a changelist, and map opened depot files back to local and Unreal package paths."),
+		TEXT("List a bounded Perforce opened-file window through `p4 -ztag opened -m (limit + 1)`, optionally scoped to a decimal/default changelist, and map returned depot files back to local and Unreal package paths."),
 		FMonolithActionHandler::CreateStatic(&HandleListOpened),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Perforce changelist number or 'default'. Omit for all opened files."))
-			.Optional(TEXT("resolve_packages"), TEXT("bool|string"), TEXT("Run p4 where for each opened file and emit local_path/package_path. Default true. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("true"))
+			.Optional(TEXT("changelist"), TEXT("string"), TEXT("Decimal Perforce changelist number or 'default'. Omit for all opened files."))
+			.Optional(TEXT("resolve_packages"), TEXT("bool|string"), TEXT("Resolve opened files through bounded p4 where batches and emit local_path/package_path. Default true. String literals true/false/1/0/yes/no/on/off are accepted."), TEXT("true"))
 			.Optional(TEXT("limit"), TEXT("integer"), TEXT("Maximum opened records to return. Default 200, max 2000."), TEXT("200"))
-			.Build());
+			.Range(TEXT("limit"), 1.0, 2000.0)
+			.Build(),
+		FString(),
+		ExplicitReadOnly);
 
 	Registry.RegisterAction(TEXT("source_control"), TEXT("map_depot_paths"),
-		TEXT("Map Perforce depot/client/local paths to local filesystem and Unreal long package paths. Depot paths are resolved with `p4 -ztag where`; local paths are converted with FPackageName mount points."),
+		TEXT("Map at most 2000 Perforce depot/client/local paths to local filesystem and Unreal long package paths. Depot paths are resolved with at most 16 bounded `p4 -ztag where` commands; local paths are converted with FPackageName mount points."),
 		FMonolithActionHandler::CreateStatic(&HandleMapDepotPaths),
 		FParamSchemaBuilder()
 			.EnableValidation()
-			.Required(TEXT("paths"), TEXT("array|string"), TEXT("Depot, client, local filesystem, or /Game package/object paths to map. Alias: files."), { TEXT("files") })
-			.Build());
+			.Required(TEXT("paths"), TEXT("array|string"), TEXT("At most 2000 depot, client, local filesystem, or /Game package/object paths to map. Control characters are rejected. Alias: files."), { TEXT("files") })
+			.Build(),
+		FString(),
+		ExplicitReadOnly);
 
 	FMonolithToolRegistry::Get().SetActionSearchMetadata(TEXT("source_control"), TEXT("get_status"),
 		{ TEXT("perforce"), TEXT("p4"), TEXT("checked out by"), TEXT("depot revision"), TEXT("changelist"), TEXT("pending changes") },
@@ -695,22 +684,48 @@ FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSha
 	double LimitValue = 200.0;
 	if (Params.IsValid())
 	{
-		Params->TryGetStringField(TEXT("changelist"), Changelist);
+		if (const TSharedPtr<FJsonValue>* ChangelistValue = Params->Values.Find(TEXT("changelist")))
+		{
+			if (!ChangelistValue->IsValid() || (*ChangelistValue)->Type != EJson::String)
+			{
+				return FMonolithActionResult::Error(TEXT("changelist must be a string."), -32602);
+			}
+			Changelist = (*ChangelistValue)->AsString();
+		}
 		FString BoolError;
 		if (!TryReadTolerantBoolField(Params, TEXT("resolve_packages"), bResolvePackages, BoolError))
 		{
 			return FMonolithActionResult::Error(BoolError);
 		}
-		Params->TryGetNumberField(TEXT("limit"), LimitValue);
+		if (const TSharedPtr<FJsonValue>* LimitValueField = Params->Values.Find(TEXT("limit")))
+		{
+			if (!LimitValueField->IsValid() || (*LimitValueField)->Type != EJson::Number)
+			{
+				return FMonolithActionResult::Error(TEXT("limit must be a number."), -32602);
+			}
+			LimitValue = (*LimitValueField)->AsNumber();
+		}
+	}
+	int32 Limit = 0;
+	FString LimitError;
+	if (!MonolithSourceControlP4::TryValidateOpenedLimit(LimitValue, Limit, LimitError))
+	{
+		return FMonolithActionResult::Error(LimitError, -32602);
+	}
+
+	FString Args;
+	FString CommandError;
+	int32 BackendRecordLimit = 0;
+	if (!MonolithSourceControlP4::TryBuildOpenedCommandArgs(
+		Changelist,
+		Limit,
+		Args,
+		BackendRecordLimit,
+		CommandError))
+	{
+		return FMonolithActionResult::Error(CommandError, -32602);
 	}
 	Changelist.TrimStartAndEndInline();
-	const int32 Limit = FMath::Clamp(static_cast<int32>(LimitValue), 1, 2000);
-
-	FString Args = TEXT("-ztag opened");
-	if (!Changelist.IsEmpty())
-	{
-		Args += TEXT(" -c ") + QuoteP4Arg(Changelist);
-	}
 
 	FString StdOut;
 	FString StdErr;
@@ -731,21 +746,62 @@ FMonolithActionResult FMonolithSourceControlActions::HandleListOpened(const TSha
 	const TArray<TMap<FString, FString>> Records = bNoOpenedFiles
 		? TArray<TMap<FString, FString>>()
 		: ParseTaggedRecords(StdOut);
+	const MonolithSourceControlP4::FOpenedRecordWindow RecordWindow =
+		MonolithSourceControlP4::MakeOpenedRecordWindow(Records.Num(), Limit);
+	const int32 ReturnedRecordCount = RecordWindow.ReturnedRecordCount;
+	TArray<FString> DepotPaths;
+	DepotPaths.Reserve(ReturnedRecordCount);
+	if (bResolvePackages)
+	{
+		for (int32 Index = 0; Index < ReturnedRecordCount; ++Index)
+		{
+			const FString DepotFile = RecordValue(Records[Index], TEXT("depotFile"));
+			if (!DepotFile.IsEmpty())
+			{
+				DepotPaths.Add(DepotFile);
+			}
+		}
+	}
+	const MonolithSourceControlP4::FDepotPathBatchResult MappingResult = bResolvePackages
+		? ResolveDepotPathsWithP4(DepotPaths)
+		: MonolithSourceControlP4::FDepotPathBatchResult();
+	if (MappingResult.bRejected)
+	{
+		return FMonolithActionResult::Error(MappingResult.Error, -32602);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
-	for (int32 Index = 0; Index < Records.Num() && Rows.Num() < Limit; ++Index)
+	Rows.Reserve(ReturnedRecordCount);
+	for (int32 Index = 0; Index < ReturnedRecordCount; ++Index)
 	{
-		Rows.Add(MakeShared<FJsonValueObject>(OpenedRecordToJson(Records[Index], bResolvePackages)));
+		Rows.Add(MakeShared<FJsonValueObject>(OpenedRecordToJson(Records[Index], bResolvePackages, MappingResult)));
 	}
 
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("ok"), true);
 	Result->SetStringField(TEXT("changelist"), Changelist);
 	Result->SetBoolField(TEXT("resolve_packages"), bResolvePackages);
-	Result->SetNumberField(TEXT("count"), Records.Num());
+	// Backward field: `count` is now the bounded observed count. When
+	// count_is_lower_bound=true, at least one sentinel row proves that more
+	// records exist, but no unbounded exact-count query is performed.
+	Result->SetNumberField(TEXT("count"), RecordWindow.ObservedRecordCount);
+	Result->SetStringField(
+		TEXT("count_semantics"),
+		RecordWindow.bCountIsLowerBound ? TEXT("lower_bound") : TEXT("exact"));
+	Result->SetBoolField(TEXT("count_is_lower_bound"), RecordWindow.bCountIsLowerBound);
+	Result->SetNumberField(TEXT("observed_count"), RecordWindow.ObservedRecordCount);
 	Result->SetNumberField(TEXT("returned_count"), Rows.Num());
+	Result->SetNumberField(TEXT("sentinel_record_count"), RecordWindow.SentinelRecordCount);
 	Result->SetNumberField(TEXT("limit"), Limit);
-	Result->SetBoolField(TEXT("truncated"), Records.Num() > Rows.Num());
+	Result->SetNumberField(TEXT("backend_record_limit"), BackendRecordLimit);
+	Result->SetBoolField(TEXT("has_more"), RecordWindow.bHasMore);
+	Result->SetBoolField(TEXT("truncated"), RecordWindow.bHasMore);
+	Result->SetNumberField(TEXT("mapping_raw_count"), MappingResult.RawPathCount);
+	Result->SetNumberField(TEXT("mapping_requested_count"), MappingResult.RequestedPathCount);
+	Result->SetNumberField(TEXT("mapping_unique_count"), MappingResult.UniquePathCount);
+	Result->SetNumberField(TEXT("mapping_resolved_count"), MappingResult.ResolvedPathCount);
+	Result->SetNumberField(TEXT("mapping_failed_count"), MappingResult.FailedPathCount);
+	Result->SetNumberField(TEXT("mapping_command_count"), MappingResult.CommandCount);
 	Result->SetArrayField(TEXT("opened"), Rows);
 	return FMonolithActionResult::Success(Result);
 }
@@ -758,29 +814,76 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 	{
 		return FMonolithActionResult::Error(Error, -32602);
 	}
+	if (Values.Num() > MonolithSourceControlP4::MaxInputPathCount)
+	{
+		return FMonolithActionResult::Error(
+			FString::Printf(
+				TEXT("paths accepts at most %d entries; received %d."),
+				MonolithSourceControlP4::MaxInputPathCount,
+				Values.Num()),
+			-32602);
+	}
+	for (int32 Index = 0; Index < Values.Num(); ++Index)
+	{
+		FString Input;
+		if (Values[Index].IsValid() && Values[Index]->TryGetString(Input))
+		{
+			FString ArgumentError;
+			if (!MonolithSourceControlP4::ValidateCommandLineArgument(Input, ArgumentError))
+			{
+				return FMonolithActionResult::Error(
+					FString::Printf(TEXT("paths[%d] %s"), Index, *ArgumentError),
+					-32602);
+			}
+		}
+	}
+
+	TArray<FString> DepotPaths;
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		FString Input;
+		if (Value.IsValid() && Value->TryGetString(Input))
+		{
+			Input.TrimStartAndEndInline();
+			if (Input.StartsWith(TEXT("//")))
+			{
+				DepotPaths.Add(Input);
+			}
+		}
+	}
+	const MonolithSourceControlP4::FDepotPathBatchResult MappingResult = ResolveDepotPathsWithP4(DepotPaths);
+	if (MappingResult.bRejected)
+	{
+		return FMonolithActionResult::Error(MappingResult.Error, -32602);
+	}
 
 	TArray<TSharedPtr<FJsonValue>> Rows;
 	for (const TSharedPtr<FJsonValue>& Value : Values)
 	{
 		TSharedPtr<FJsonObject> Row = MakeShared<FJsonObject>();
 		FString Input;
-		if (!Value.IsValid() || !Value->TryGetString(Input) || Input.IsEmpty())
+		if (Value.IsValid())
+		{
+			Value->TryGetString(Input);
+			Input.TrimStartAndEndInline();
+		}
+		if (!Value.IsValid() || Input.IsEmpty())
 		{
 			Row->SetBoolField(TEXT("valid"), false);
 			Row->SetStringField(TEXT("error"), TEXT("path entry is not a non-empty string"));
 			Rows.Add(MakeShared<FJsonValueObject>(Row));
 			continue;
 		}
-		Input.TrimStartAndEndInline();
 		Row->SetStringField(TEXT("input"), Input);
 
 		FString LocalPath;
 		FString PackagePath;
 		if (Input.StartsWith(TEXT("//")))
 		{
-			FString DepotError;
-			if (DepotPathToLocalPath(Input, LocalPath, DepotError))
+			const MonolithSourceControlP4::FDepotPathMapping* Mapping = MappingResult.Mappings.Find(Input);
+			if (Mapping && Mapping->IsResolved())
 			{
+				LocalPath = Mapping->LocalPath;
 				PackagePath = LocalPathToPackagePath(LocalPath);
 				Row->SetBoolField(TEXT("valid"), true);
 				Row->SetStringField(TEXT("local_path"), LocalPath);
@@ -790,7 +893,9 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 			else
 			{
 				Row->SetBoolField(TEXT("valid"), false);
-				Row->SetStringField(TEXT("error"), DepotError);
+				Row->SetStringField(
+					TEXT("error"),
+					Mapping ? Mapping->Error : TEXT("No batched p4 where result was produced for this depot path."));
 			}
 		}
 		else if (Input.StartsWith(TEXT("/")))
@@ -803,6 +908,7 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 			FString Filename;
 			if (FPackageName::TryConvertLongPackageNameToFilename(PackageName, Filename))
 			{
+				Filename = FPaths::ConvertRelativePathToFull(Filename);
 				FPaths::NormalizeFilename(Filename);
 				Row->SetStringField(TEXT("local_path_no_extension"), Filename);
 			}
@@ -810,7 +916,15 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 		}
 		else
 		{
-			LocalPath = FPaths::ConvertRelativePathToFull(Input);
+			if (FPaths::IsRelative(Input))
+			{
+				const FString AbsoluteProjectDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+				LocalPath = FPaths::ConvertRelativePathToFull(AbsoluteProjectDir, Input);
+			}
+			else
+			{
+				LocalPath = FPaths::ConvertRelativePathToFull(Input);
+			}
 			FPaths::NormalizeFilename(LocalPath);
 			PackagePath = LocalPathToPackagePath(LocalPath);
 			Row->SetBoolField(TEXT("valid"), true);
@@ -825,6 +939,12 @@ FMonolithActionResult FMonolithSourceControlActions::HandleMapDepotPaths(const T
 	TSharedPtr<FJsonObject> Result = MakeShared<FJsonObject>();
 	Result->SetBoolField(TEXT("ok"), true);
 	Result->SetNumberField(TEXT("count"), Rows.Num());
+	Result->SetNumberField(TEXT("mapping_raw_count"), MappingResult.RawPathCount);
+	Result->SetNumberField(TEXT("mapping_requested_count"), MappingResult.RequestedPathCount);
+	Result->SetNumberField(TEXT("mapping_unique_count"), MappingResult.UniquePathCount);
+	Result->SetNumberField(TEXT("mapping_resolved_count"), MappingResult.ResolvedPathCount);
+	Result->SetNumberField(TEXT("mapping_failed_count"), MappingResult.FailedPathCount);
+	Result->SetNumberField(TEXT("mapping_command_count"), MappingResult.CommandCount);
 	Result->SetArrayField(TEXT("paths"), Rows);
 	return FMonolithActionResult::Success(Result);
 }
