@@ -156,6 +156,22 @@ namespace
 		return EditorData->GetMutableStateByID(TargetGuid);
 	}
 
+	static UStateTreeState* GetStateOrError(UStateTreeEditorData* EditorData, const FString& StateId, FMonolithActionResult& OutError)
+	{
+		if (StateId.IsEmpty())
+		{
+			OutError = FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
+			return nullptr;
+		}
+		UStateTreeState* State = FindStateByGuid(EditorData, StateId);
+		if (!State)
+		{
+			OutError = FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
+			return nullptr;
+		}
+		return State;
+	}
+
 	/** Recursively serialize a UStateTreeState to JSON. */
 	TSharedPtr<FJsonObject> SerializeState(const UStateTreeState* State)
 	{
@@ -1307,16 +1323,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTState(const TSh
 	FString StateId;
 
 	Params->TryGetStringField(TEXT("state_id"), StateId);
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Remove ST State")));
 
@@ -1401,16 +1410,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleMoveSTState(const TShar
 	FString NewParentId;
 	Params->TryGetStringField(TEXT("new_parent_id"), NewParentId);
 
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Move ST State")));
 
@@ -1481,16 +1483,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleSetSTStateProperties(co
 	FString StateId;
 
 	Params->TryGetStringField(TEXT("state_id"), StateId);
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	FScopedTransaction Transaction(FText::FromString(TEXT("Monolith: Set ST State Properties")));
 
@@ -1637,16 +1632,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTask(const TSha
 		return TaskIndexError;
 	}
 
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	if (!State->Tasks.IsValidIndex(TaskIndex))
 	{
@@ -1842,16 +1830,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTEnterCondition(
 		return CondIndexError;
 	}
 
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	if (!State->EnterConditions.IsValidIndex(CondIndex))
 	{
@@ -1998,16 +1979,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleRemoveSTTransition(cons
 		return TransIndexError;
 	}
 
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	if (!State->Transitions.IsValidIndex(TransIndex))
 	{
@@ -2382,16 +2356,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTTransitionConditio
 	FString StateId;
 
 	Params->TryGetStringField(TEXT("state_id"), StateId);
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	int32 TransIndex = INDEX_NONE;
 	FMonolithActionResult TransIndexError;
@@ -2469,16 +2436,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleAddSTConsideration(cons
 	FString StateId;
 
 	Params->TryGetStringField(TEXT("state_id"), StateId);
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	FString ConsClassName;
 
@@ -2540,16 +2500,9 @@ FMonolithActionResult FMonolithAIStateTreeActions::HandleConfigureSTConsideratio
 	FString StateId;
 
 	Params->TryGetStringField(TEXT("state_id"), StateId);
-	if (StateId.IsEmpty())
-	{
-		return FMonolithActionResult::Error(TEXT("Missing required param 'state_id'"));
-	}
-
-	UStateTreeState* State = FindStateByGuid(EditorData, StateId);
-	if (!State)
-	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("State '%s' not found"), *StateId));
-	}
+	FMonolithActionResult StateErr;
+	UStateTreeState* State = GetStateOrError(EditorData, StateId, StateErr);
+	if (!State) return StateErr;
 
 	int32 ConsIndex = INDEX_NONE;
 	FMonolithActionResult ConsIndexError;
