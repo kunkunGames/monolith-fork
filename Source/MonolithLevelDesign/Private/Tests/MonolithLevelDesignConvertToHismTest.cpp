@@ -8,7 +8,7 @@
 
 namespace
 {
-	FMonolithActionResult ExecuteEditingAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	FMonolithActionResult ExecuteMeshEditingAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 		if (!Registry.HasAction(TEXT("mesh"), Action))
@@ -31,7 +31,7 @@ bool FMonolithLevelDesignConvertToHismTest::RunTest(const FString& Parameters)
 		ActorsArr.Add(MakeShared<FJsonValueString>(TEXT("TestActor")));
 		Params->SetArrayField(TEXT("actors"), ActorsArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("convert_to_hism"), Params);
+		FMonolithActionResult Result = ExecuteMeshEditingAction(TEXT("convert_to_hism"), Params);
 		TestFalse(TEXT("Missing mesh should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention mesh"), Result.ErrorMessage.Contains(TEXT("mesh")));
 	}
@@ -41,7 +41,7 @@ bool FMonolithLevelDesignConvertToHismTest::RunTest(const FString& Parameters)
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("mesh"), TEXT("/Game/Meshes/SM_Test"));
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("convert_to_hism"), Params);
+		FMonolithActionResult Result = ExecuteMeshEditingAction(TEXT("convert_to_hism"), Params);
 		TestFalse(TEXT("Missing actors should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention actors"), Result.ErrorMessage.Contains(TEXT("actors")));
 	}
@@ -54,7 +54,7 @@ bool FMonolithLevelDesignConvertToHismTest::RunTest(const FString& Parameters)
 		TArray<TSharedPtr<FJsonValue>> ActorsArr;
 		Params->SetArrayField(TEXT("actors"), ActorsArr);
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("convert_to_hism"), Params);
+		FMonolithActionResult Result = ExecuteMeshEditingAction(TEXT("convert_to_hism"), Params);
 		TestFalse(TEXT("Empty actors array should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention actors"), Result.ErrorMessage.Contains(TEXT("actors")));
 	}
@@ -65,7 +65,7 @@ bool FMonolithLevelDesignConvertToHismTest::RunTest(const FString& Parameters)
 		Params->SetStringField(TEXT("mesh"), TEXT("/Game/Meshes/SM_Test"));
 		Params->SetStringField(TEXT("actors"), TEXT("NotAnArray"));
 
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("convert_to_hism"), Params);
+		FMonolithActionResult Result = ExecuteMeshEditingAction(TEXT("convert_to_hism"), Params);
 		TestFalse(TEXT("Invalid actors type should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention actors"), Result.ErrorMessage.Contains(TEXT("actors")));
 	}

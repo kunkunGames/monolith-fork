@@ -8,7 +8,7 @@
 
 namespace
 {
-	FMonolithActionResult ExecuteEditingAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
+	FMonolithActionResult ExecuteSceneEditingAction(const FString& Action, const TSharedPtr<FJsonObject>& Params)
 	{
 		FMonolithToolRegistry& Registry = FMonolithToolRegistry::Get();
 		if (!Registry.HasAction(TEXT("scene"), Action))
@@ -27,7 +27,7 @@ bool FMonolithLevelDesignSetActorMaterialTest::RunTest(const FString& Parameters
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("material"), TEXT("/Game/Materials/M_Test"));
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("set_actor_material"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("set_actor_material"), Params);
 		TestFalse(TEXT("Missing actor_name should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention actor_name"), Result.ErrorMessage.Contains(TEXT("actor_name")));
 	}
@@ -36,7 +36,7 @@ bool FMonolithLevelDesignSetActorMaterialTest::RunTest(const FString& Parameters
 	{
 		TSharedPtr<FJsonObject> Params = MakeShared<FJsonObject>();
 		Params->SetStringField(TEXT("actor_name"), TEXT("TestActor"));
-		FMonolithActionResult Result = ExecuteEditingAction(TEXT("set_actor_material"), Params);
+		FMonolithActionResult Result = ExecuteSceneEditingAction(TEXT("set_actor_material"), Params);
 		TestFalse(TEXT("Missing material should fail"), Result.bSuccess);
 		TestTrue(TEXT("Error message should mention material"), Result.ErrorMessage.Contains(TEXT("material")));
 	}
