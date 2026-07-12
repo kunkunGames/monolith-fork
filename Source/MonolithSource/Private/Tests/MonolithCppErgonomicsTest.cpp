@@ -16,6 +16,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "MonolithSourceActions.h"
+#include "MonolithCppParser.h"
 #include "MonolithSourceDatabase.h"
 #include "MonolithSourceIndexer.h"
 #include "MonolithSourceSchema.h"
@@ -1142,6 +1143,100 @@ bool FCppErgoAllmanClassIndexingTest::RunTest(const FString& /*Parameters*/)
 	DB.Close();
 	IFileManager::Get().Delete(*DbPath, false, true);
 	IFileManager::Get().DeleteDirectory(*StagedDir, /*bRequireExists=*/false, /*bTree=*/true);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// ReflectedAllmanMemberIndexing — Phase A (UCLASS/USTRUCT) must use the same
+// 0-based-brace to 1-based-body conversion as Phase B. This test writes a
+// synthetic reflected header outside the module tree so UHT never sees it,
+// parses it directly, and verifies that members immediately inside allman
+// bodies are retained with their reflection/access metadata.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FCppErgoReflectedAllmanMemberIndexingTest,
+	"Monolith.Source.CppErgonomics.ReflectedAllmanMemberIndexing",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCppErgoReflectedAllmanMemberIndexingTest::RunTest(const FString& /*Parameters*/)
+{
+	using namespace MonolithCppErgoTestDetail;
+
+	const FString FixtureDir = FPaths::AutomationTransientDir();
+	FPlatformFileManager::Get().GetPlatformFile().CreateDirectoryTree(*FixtureDir);
+	const FString HeaderPath = FixtureDir
+		/ FString::Printf(TEXT("ReflectedAllman-%s.h"), *FGuid::NewGuid().ToString());
+	const FString HeaderText =
+		TEXT("#pragma once\n")
+		TEXT("\n")
+		TEXT("UCLASS()\n")
+		TEXT("class CPPERGOTESTMOD_API UReflectedAllman\n")
+		TEXT("{\n")
+		TEXT("\tGENERATED_BODY()\n")
+		TEXT("public:\n")
+		TEXT("\tUFUNCTION()\n")
+		TEXT("\tvoid ReflectedFunction();\n")
+		TEXT("\tUPROPERTY()\n")
+		TEXT("\tint32 ReflectedValue;\n")
+		TEXT("};\n")
+		TEXT("\n")
+		TEXT("USTRUCT()\n")
+		TEXT("struct FReflectedAllmanStruct\n")
+		TEXT("{\n")
+		TEXT("\tGENERATED_BODY()\n")
+		TEXT("\tUPROPERTY()\n")
+		TEXT("\tint32 StructValue;\n")
+		TEXT("};\n");
+
+	if (!FFileHelper::SaveStringToFile(HeaderText, *HeaderPath))
+	{
+		AddError(FString::Printf(TEXT("Failed to write reflected allman fixture: %s"), *HeaderPath));
+		return false;
+	}
+
+	FMonolithCppParser Parser;
+	const FParsedFileResult Parsed = Parser.ParseFile(HeaderPath);
+	IFileManager::Get().Delete(*HeaderPath, /*bRequireExists=*/false, /*bEvenReadOnly=*/true);
+
+	auto FindSymbol = [&Parsed](const TCHAR* Kind, const TCHAR* Name, const TCHAR* Parent) -> const FParsedSourceSymbol*
+	{
+		for (const FParsedSourceSymbol& Symbol : Parsed.Symbols)
+		{
+			if (Symbol.Kind == Kind && Symbol.Name == Name && Symbol.ParentClass == Parent)
+			{
+				return &Symbol;
+			}
+		}
+		return nullptr;
+	};
+
+	const FParsedSourceSymbol* Function = FindSymbol(
+		TEXT("function"), TEXT("ReflectedFunction"), TEXT("UReflectedAllman"));
+	TestNotNull(TEXT("UReflectedAllman::ReflectedFunction extracted"), Function);
+	if (Function)
+	{
+		TestTrue(TEXT("ReflectedFunction preserves UFUNCTION marker"), Function->bIsUEMacro);
+		TestEqual(TEXT("ReflectedFunction is public"), Function->Access, FString(TEXT("public")));
+	}
+
+	const FParsedSourceSymbol* Value = FindSymbol(
+		TEXT("variable"), TEXT("ReflectedValue"), TEXT("UReflectedAllman"));
+	TestNotNull(TEXT("UReflectedAllman::ReflectedValue extracted"), Value);
+	if (Value)
+	{
+		TestTrue(TEXT("ReflectedValue preserves UPROPERTY marker"), Value->bIsUEMacro);
+		TestEqual(TEXT("ReflectedValue is public"), Value->Access, FString(TEXT("public")));
+	}
+
+	const FParsedSourceSymbol* StructValue = FindSymbol(
+		TEXT("variable"), TEXT("StructValue"), TEXT("FReflectedAllmanStruct"));
+	TestNotNull(TEXT("FReflectedAllmanStruct::StructValue extracted"), StructValue);
+	if (StructValue)
+	{
+		TestTrue(TEXT("StructValue preserves UPROPERTY marker"), StructValue->bIsUEMacro);
+		TestEqual(TEXT("USTRUCT default access is public"), StructValue->Access, FString(TEXT("public")));
+	}
+
 	return true;
 }
 

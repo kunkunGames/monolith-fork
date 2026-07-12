@@ -138,12 +138,18 @@ void FMonolithCppParser::ExtractClassesAndStructs(const TArray<FString>& OrigLin
 				FoundNames.Add(Sym.Name);
 				Result.Symbols.Add(MoveTemp(Sym));
 
-				// Extract members within the body. COPY the parent name first — passing
-				// Result.Symbols.Last().Name by reference is a use-after-free: ExtractMembers
-				// Adds member symbols to Result.Symbols, and a reallocation frees the backing
-				// store the reference points into (AV when the next member reads ParentClass).
+				// Extract members within the body. BraceLineIdx is a 0-based index while
+				// ExtractMembers expects 1-based line numbers, so the first body line is
+				// BraceLineIdx + 2. Starting at +1 scans the opening-brace line itself; that
+				// raises BraceDepth for the entire range and silently drops every member from
+				// reflected Allman-style UCLASS/USTRUCT bodies.
+				//
+				// COPY the parent name first — passing Result.Symbols.Last().Name by reference
+				// is a use-after-free: ExtractMembers Adds member symbols to Result.Symbols,
+				// and a reallocation frees the backing store the reference points into (AV
+				// when the next member reads ParentClass).
 				const FString ParentName = Result.Symbols.Last().Name;
-				ExtractMembers(OrigLines, BraceLineIdx + 1, CloseLine - 1,
+				ExtractMembers(OrigLines, BraceLineIdx + 2, CloseLine - 1,
 					ParentName, DefaultAccess, Result);
 			}
 			else
