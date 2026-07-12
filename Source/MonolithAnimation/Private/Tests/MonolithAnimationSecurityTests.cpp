@@ -2,7 +2,9 @@
 #include "Misc/AutomationTest.h"
 #include "MonolithAnimationActions.h"
 #include "MonolithLocomotionAuthoringActions.h"
+#include "MonolithJsonUtils.h"
 #include "MonolithToolRegistry.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
 #include "Dom/JsonObject.h"
 #include "Misc/PackageName.h"
@@ -19,6 +21,24 @@ namespace
 		return Package
 			? NewObject<UAnimSequence>(Package, FName(*AssetName), RF_Public | RF_Standalone)
 			: nullptr;
+	}
+
+	UAnimMontage* CreateMontageContractFixture(const FString& AssetPath)
+	{
+		const FString AssetName = FPackageName::GetShortName(AssetPath);
+		UPackage* Package = CreatePackage(*AssetPath);
+		UAnimMontage* Montage = Package
+			? NewObject<UAnimMontage>(Package, FName(*AssetName), RF_Public | RF_Standalone | RF_Transactional)
+			: nullptr;
+		if (Montage)
+		{
+			FAnimNotifyTrack Track;
+			Track.TrackName = FName(TEXT("Gameplay"));
+			Track.TrackColor = FLinearColor::White;
+			Montage->AnimNotifyTracks.Add(Track);
+			Package->SetDirtyFlag(false);
+		}
+		return Montage;
 	}
 }
 
@@ -138,6 +158,97 @@ bool FMonolithAnimMontageBlendParamGuardTest::RunTest(const FString& Parameters)
 	FMonolithActionResult Result = FMonolithAnimationActions::HandleSetMontageBlend(Params);
 	TestFalse(TEXT("SetMontageBlend with malformed params should return Error"), Result.bSuccess);
 	TestTrue(TEXT("Error message should mention number"), Result.ErrorMessage.Contains(TEXT("must be a number")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMonolithAnimMontageSemanticContractTest, "Monolith.Animation.Montage.SemanticBlendAndNamedNotifyContract", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FMonolithAnimMontageSemanticContractTest::RunTest(const FString& Parameters)
+{
+	const FString AssetPath = FString::Printf(
+		TEXT("/Game/Tests/Monolith/Animation/AM_SemanticContract_%s"),
+		*FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	UAnimMontage* Montage = CreateMontageContractFixture(AssetPath);
+	if (!TestNotNull(TEXT("Montage fixture is available"), Montage))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> BlendParams = MakeShared<FJsonObject>();
+	BlendParams->SetStringField(TEXT("asset_path"), AssetPath);
+	BlendParams->SetNumberField(TEXT("blend_in_time"), 0.15);
+	BlendParams->SetNumberField(TEXT("blend_out_time"), 0.25);
+	BlendParams->SetStringField(TEXT("blend_in_option"), TEXT("HermiteCubic"));
+	BlendParams->SetStringField(TEXT("blend_out_option"), TEXT("CubicInOut"));
+	BlendParams->SetNumberField(TEXT("blend_out_trigger_time"), -1.0);
+	BlendParams->SetBoolField(TEXT("enable_auto_blend_out"), true);
+	const FMonolithActionResult BlendResult = FMonolithAnimationActions::HandleSetMontageBlend(BlendParams);
+	TestTrue(TEXT("Typed montage blend write succeeds"), BlendResult.bSuccess);
+	TestEqual(TEXT("Blend-in option is HermiteCubic"), static_cast<int32>(Montage->BlendIn.GetBlendOption()), static_cast<int32>(EAlphaBlendOption::HermiteCubic));
+	TestEqual(TEXT("Blend-out option is CubicInOut"), static_cast<int32>(Montage->BlendOut.GetBlendOption()), static_cast<int32>(EAlphaBlendOption::CubicInOut));
+
+	const FMonolithActionResult MontageInfo = FMonolithAnimationActions::HandleGetMontageInfo(BlendParams);
+	TestTrue(TEXT("Montage readback succeeds"), MontageInfo.bSuccess);
+	if (MontageInfo.bSuccess && MontageInfo.Result.IsValid())
+	{
+		TestEqual(TEXT("Readback includes blend_in_option"), MontageInfo.Result->GetStringField(TEXT("blend_in_option")), FString(TEXT("HermiteCubic")));
+		TestEqual(TEXT("Readback includes blend_out_option"), MontageInfo.Result->GetStringField(TEXT("blend_out_option")), FString(TEXT("CubicInOut")));
+	}
+
+	TSharedPtr<FJsonObject> InvalidBlend = MakeShared<FJsonObject>();
+	InvalidBlend->SetStringField(TEXT("asset_path"), AssetPath);
+	InvalidBlend->SetStringField(TEXT("blend_in_option"), TEXT("Hermite"));
+	const FMonolithActionResult InvalidBlendResult = FMonolithAnimationActions::HandleSetMontageBlend(InvalidBlend);
+	TestFalse(TEXT("Unknown EAlphaBlendOption is rejected"), InvalidBlendResult.bSuccess);
+	TestEqual(TEXT("Rejected blend leaves the previous option intact"), static_cast<int32>(Montage->BlendIn.GetBlendOption()), static_cast<int32>(EAlphaBlendOption::HermiteCubic));
+
+	const FMonolithActionResult SchemaInvalidBlendResult = FMonolithToolRegistry::Get().ExecuteAction(
+		TEXT("animation"),
+		TEXT("set_montage_blend"),
+		InvalidBlend);
+	TestFalse(TEXT("Registered schema rejects an unknown EAlphaBlendOption"), SchemaInvalidBlendResult.bSuccess);
+	TestEqual(TEXT("Schema enum rejection uses InvalidParams"), SchemaInvalidBlendResult.ErrorCode, FMonolithJsonUtils::ErrInvalidParams);
+	TestTrue(TEXT("Schema enum rejection reports the exact allowed domain"), SchemaInvalidBlendResult.ErrorMessage.Contains(TEXT("must be one of")));
+
+	TSharedPtr<FJsonObject> AddNamed = MakeShared<FJsonObject>();
+	AddNamed->SetStringField(TEXT("asset_path"), AssetPath);
+	AddNamed->SetStringField(TEXT("notify_name"), TEXT("ActionPoint"));
+	AddNamed->SetNumberField(TEXT("time"), 0.0);
+	AddNamed->SetStringField(TEXT("track_name"), TEXT("Gameplay"));
+	AddNamed->SetStringField(TEXT("montage_tick_type"), TEXT("BranchingPoint"));
+	const FMonolithActionResult AddNamedResult = FMonolithAnimationActions::HandleAddNamedNotify(AddNamed);
+	TestTrue(TEXT("Classless named notify creation succeeds"), AddNamedResult.bSuccess);
+	TestEqual(TEXT("One named notify exists"), Montage->Notifies.Num(), 1);
+	if (Montage->Notifies.Num() == 1)
+	{
+		TestNull(TEXT("Named notify has no UAnimNotify object"), Montage->Notifies[0].Notify.Get());
+		TestNull(TEXT("Named notify has no UAnimNotifyState object"), Montage->Notifies[0].NotifyStateClass.Get());
+		TestEqual(TEXT("Named notify tick type is BranchingPoint"), static_cast<int32>(Montage->Notifies[0].MontageTickType), static_cast<int32>(EMontageNotifyTickType::BranchingPoint));
+	}
+
+	const FMonolithActionResult DuplicateResult = FMonolithAnimationActions::HandleAddNamedNotify(AddNamed);
+	TestFalse(TEXT("Duplicate named notify on the same track/time is rejected"), DuplicateResult.bSuccess);
+	TestEqual(TEXT("Duplicate rejection leaves one notify"), Montage->Notifies.Num(), 1);
+
+	TSharedPtr<FJsonObject> SetTickType = MakeShared<FJsonObject>();
+	SetTickType->SetStringField(TEXT("asset_path"), AssetPath);
+	SetTickType->SetNumberField(TEXT("notify_index"), 0);
+	SetTickType->SetStringField(TEXT("montage_tick_type"), TEXT("Queued"));
+	const FMonolithActionResult SetTickResult = FMonolithAnimationActions::HandleSetNotifyTickType(SetTickType);
+	TestTrue(TEXT("Classless named notify tick type update succeeds"), SetTickResult.bSuccess);
+	TestEqual(TEXT("Named notify tick type becomes Queued"), static_cast<int32>(Montage->Notifies[0].MontageTickType), static_cast<int32>(EMontageNotifyTickType::Queued));
+
+	const FMonolithActionResult NotifyReadback = FMonolithAnimationActions::HandleGetSequenceNotifies(BlendParams);
+	TestTrue(TEXT("Notify readback succeeds"), NotifyReadback.bSuccess);
+	if (NotifyReadback.bSuccess && NotifyReadback.Result.IsValid())
+	{
+		const TArray<TSharedPtr<FJsonValue>>& Notifies = NotifyReadback.Result->GetArrayField(TEXT("notifies"));
+		TestEqual(TEXT("Readback contains one notify"), Notifies.Num(), 1);
+		if (Notifies.Num() == 1)
+		{
+			TestEqual(TEXT("Readback includes montage_tick_type"), Notifies[0]->AsObject()->GetStringField(TEXT("montage_tick_type")), FString(TEXT("Queued")));
+		}
+	}
 
 	return true;
 }

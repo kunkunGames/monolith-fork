@@ -52,9 +52,21 @@ animation_query({ action: "get_montage_info", params: { asset_path: "/Game/Anima
 // 2. Read existing notifies so you know current indices before mutating
 animation_query({ action: "get_sequence_notifies", params: { asset_path: "/Game/Animations/AM_Attack" } })
 // 3. Add the point notify at the chosen time on a named track
-animation_query({ action: "add_notify", params: { asset_path: "/Game/Animations/AM_Attack", notify_class: "AnimNotify_PlaySound", time: 0.35, track_name: 1 } })
+animation_query({ action: "add_notify", params: { asset_path: "/Game/Animations/AM_Attack", notify_class: "AnimNotify_PlaySound", time: 0.35, track_name: "1" } })
 // 4. Re-read to confirm placement and capture the new notify_index (later edits index by notify_index, not name)
 animation_query({ action: "get_sequence_notifies", params: { asset_path: "/Game/Animations/AM_Attack" } })
+```
+
+### Recipe — Classless named montage action point (add → verify → change tick type)
+```
+// 1. Inspect existing tracks/notifies. Index-based edits always use this fresh readback.
+animation_query({ action: "get_sequence_notifies", params: { asset_path: "/Game/Animations/AM_Attack" } })
+// 2. Add a named event without creating or substituting a UAnimNotify class.
+animation_query({ action: "add_named_notify", params: { asset_path: "/Game/Animations/AM_Attack", notify_name: "ActionPoint", time: 0.35, track_name: "Gameplay", montage_tick_type: "BranchingPoint" } })
+// 3. Re-read and use the returned index; every row includes montage_tick_type.
+animation_query({ action: "get_sequence_notifies", params: { asset_path: "/Game/Animations/AM_Attack" } })
+// 4. Change only the event-level tick mode. This action intentionally rejects class-backed notifies.
+animation_query({ action: "set_notify_tick_type", params: { asset_path: "/Game/Animations/AM_Attack", notify_index: 0, montage_tick_type: "Queued" } })
 ```
 
 ### Recipe — Add an AnimBP state-machine transition (EXPERIMENTAL writes; compile after)
@@ -107,4 +119,6 @@ This is an **editor**-namespace action, not an animation-table action — call i
 - `set_retarget_chain_mapping`: `auto_map` is a string (`exact`/`fuzzy`/`clear`), not a bool -- OR pass explicit `source_chain`+`target_chain`
 - `add_control_rig_element`: `animatable=true` default; control kinds via `control_type` (Float/Integer/Transform/Rotator/Position/Scale/Vector2D)
 - Notify, section, blend-space, and bone-track edits index by `*_index` (`notify_index`, `section_index`, `sample_index`), not by name -- read the list action first (`get_sequence_notifies`, `get_montage_info`, `get_blend_space_info`, `list_bone_tracks`)
+- Montage blend options use exact `EAlphaBlendOption` tokens such as `HermiteCubic`; `get_montage_info` returns `blend_in_option` / `blend_out_option` for readback.
+- `add_named_notify` creates a classless named event and requires exactly one existing `track_name` or `track_index`; `set_notify_tick_type` is limited to those classless named events.
 - Bone params are `bone_name` / `source_bone` / `target_bone` / `bone_names`, not `bone`/`source`/`target`/`bones`

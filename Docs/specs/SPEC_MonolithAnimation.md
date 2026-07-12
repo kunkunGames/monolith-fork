@@ -32,7 +32,7 @@
 | Action | Description |
 |--------|-------------|
 | `get_sequence_info` | Get sequence metadata (duration, frames, root motion, compression, etc.) |
-| `get_sequence_notifies` | Get all notifies on an animation asset (sequence, montage, composite) |
+| `get_sequence_notifies` | Get all notifies on an animation asset (sequence, montage, composite), including `montage_tick_type` (`Queued` / `BranchingPoint`) for event-level readback |
 | `get_bone_track_keys` | Get position/rotation/scale keys for a bone track (with optional frame range) (rewritten v0.14.10 to use non-deprecated `IsValidBoneTrackName` + `GetBoneTrackTransforms`; emits scales unconditionally — see CHANGELOG behaviour note) |
 | `get_sequence_curves` | Get float and transform curves on an animation sequence |
 | `list_bone_tracks` | List all bone tracks present on an animation sequence (returns `count` + `bone_names: [..]`). Discovery action for `get_bone_track_keys`. (PR #54, v0.14.10) |
@@ -45,13 +45,15 @@
 | `remove_bone_track` | Remove a bone track (with optional `include_children`) |
 | `copy_bone_pose_between_sequences` | Read evaluated pose from source `UAnimSequence` at a time and write as keys to a destination sequence for a list of bones. Per-bone skip with structured `reason`. (PR #51 v0.14.9 by @MaxenceEpitech) |
 
-**Notify Operations (6)**
+**Notify Operations (8)**
 | Action | Description |
 |--------|-------------|
 | `add_notify` | Add a point notify to an animation asset |
+| `add_named_notify` | Add a classless named point notify to a montage. Requires exactly one existing `track_name` or `track_index`; validates time range, same-track/time duplicates, and BranchingPoint trigger-time conflicts. `montage_tick_type` is `Queued` (default) or `BranchingPoint`. Refreshes montage notify/branching caches and marks the package dirty. |
 | `add_notify_state` | Add a state notify (with duration) to an animation asset |
 | `remove_notify` | Remove a notify by index |
-| `set_notify_time` | Set trigger time of an animation notify |
+| `set_notify_time` | Set trigger time of an animation notify with finite/range/same-track collision validation, trigger-offset refresh, cache rebuild, and package dirtying |
+| `set_notify_tick_type` | Set `Queued` / `BranchingPoint` on an existing classless named point notify. Rejects class-backed notifies and conflicting BranchingPoint trigger times, then refreshes montage caches and marks dirty. |
 | `set_notify_duration` | Set duration of a state animation notify |
 | `set_notify_track` | Move a notify to a different track |
 
@@ -100,12 +102,12 @@
 **Montage Operations (8)**
 | Action | Description |
 |--------|-------------|
-| `get_montage_info` | Get montage sections, slots, blend settings |
+| `get_montage_info` | Get montage sections, slots, blend settings, and exact `blend_in_option` / `blend_out_option` `EAlphaBlendOption` names |
 | `add_montage_section` | Add a section to an animation montage |
 | `delete_montage_section` | Delete a section by index |
 | `set_section_next` | Set the next section for a montage section |
 | `set_section_time` | Set start time of a montage section |
-| `set_montage_blend` | Set blend in/out times and auto blend out |
+| `set_montage_blend` | Set blend in/out times, `blend_in_option` / `blend_out_option`, trigger time, and auto blend out. The option fields validate exact `EAlphaBlendOption` tokens (`HermiteCubic` included); all parameters are parsed before a scoped transaction, followed by cache refresh and dirtying. |
 | `add_montage_slot` | Add a slot track to a montage |
 | `set_montage_slot` | Rename a slot track by index |
 

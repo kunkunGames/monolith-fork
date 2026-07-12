@@ -11,10 +11,11 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] delete_montage_section` | `asset_path*`, `section_index*` | Remove section by index |
 | `[w] set_section_next` | `asset_path*`, `section_name*`, `next_section_name*` | Set section playback order |
 | `[w] set_section_time` | `asset_path*`, `section_name*`, `new_time*` | Move section to specific time |
-| `get_montage_info` | `asset_path*` | Sections, slots, blend settings |
+| `get_montage_info` | `asset_path*` | Sections, slots, blend times/options, auto blend-out settings |
 | `[w] create_montage` | `asset_path*`, `skeleton_path*` | New empty montage |
-| `[w] set_montage_blend` | `asset_path*`, `blend_in_time?`, `blend_out_time?`, `blend_out_trigger_time?`, `enable_auto_blend_out?` | Blend in/out times |
+| `[w] set_montage_blend` | `asset_path*`, `blend_in_time?`, `blend_out_time?`, `blend_in_option?`, `blend_out_option?`, `blend_out_trigger_time?`, `enable_auto_blend_out?`; options: `Linear/Cubic/HermiteCubic/Sinusoidal/QuadraticInOut/CubicInOut/QuarticInOut/QuinticInOut/CircularIn/CircularOut/CircularInOut/ExpIn/ExpOut/ExpInOut/Custom` | Blend times, exact `EAlphaBlendOption` modes, trigger, auto blend-out |
 | `[w] add_montage_slot` | `asset_path*`, `slot_name*` | Add slot track |
+| `[w] set_montage_slot` | `asset_path*`, `slot_index*`, `slot_name*` | Rename a slot track by index |
 | `[w] add_montage_anim_segment` | `asset_path*`, `anim_path*`, `slot_index?`, `start_pos?`, `anim_start_time?`, `anim_end_time?`, `play_rate?`, `looping_count?` | Add anim segment to slot |
 | **Blend Space** | | |
 | `[w] add_blendspace_sample` | `asset_path*`, `anim_path*`, `x*`, `y*` | Add animation at X/Y |
@@ -59,11 +60,13 @@ Param notation: `name*` required, `name?` optional, `name=val` default, `a/b/c` 
 | `[w] set_anim_graph_node_property` | `asset_path*`, `node_id*`, `property_path*`, `value*`, `graph_name?`, `state_name?` | Mutate a node's FAnimNode property |
 | `[w] auto_layout` | `asset_path*`, `graph_name=AnimGraph`, `formatter=auto` | Auto-layout graph (Blueprint Assist) |
 | **Notifies** | | |
-| `get_sequence_notifies` | `asset_path*` | List all notifies on an asset |
+| `get_sequence_notifies` | `asset_path*` | List all notifies, including `montage_tick_type` readback |
 | `[w] add_notify` | `asset_path*`, `notify_class*`, `time*`, `track_name=1` | Add point notify |
+| `[w] add_named_notify` | `asset_path*`, `notify_name*`, `time*`, exactly one of `track_name?` / `track_index?`, `montage_tick_type=Queued` (`Queued/BranchingPoint`) | Add a classless named montage point notify |
 | `[w] add_notify_state` | `asset_path*`, `notify_class*`, `time*`, `duration*`, `track_name=1` | Add state notify (duration) |
 | `[w] remove_notify` | `asset_path*`, `notify_index*` | Remove notify by index |
-| `[w] set_notify_time` | `asset_path*`, `notify_index*`, `new_time*` | Move notify |
+| `[w] set_notify_time` | `asset_path*`, `notify_index*`, `new_time*` | Move notify with range/collision validation and cache refresh |
+| `[w] set_notify_tick_type` | `asset_path*`, `notify_index*`, `montage_tick_type*` (`Queued/BranchingPoint`) | Change a classless named montage notify's tick type |
 | `[w] set_notify_duration` | `asset_path*`, `notify_index*`, `new_duration*` | Set notify state duration |
 | `[w] set_notify_track` | `asset_path*`, `notify_index*`, `track_index*` | Move notify to a track |
 | `[w] set_notify_properties` | `asset_path*`, `notify_index*`, `properties*` | Reflection-set notify UPROPERTYs |

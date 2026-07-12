@@ -12,7 +12,7 @@ class USkeletalMesh;
 
 /**
  * Animation domain action handlers for Monolith.
- * Ported from AnimationMCPReaderLibrary — 23 proven actions.
+ * Ported from AnimationMCPReaderLibrary and extended with typed semantic actions.
  */
 class FMonolithAnimationActions
 {
@@ -47,8 +47,9 @@ public:
 	// optional recursive nested-tree expansion via the Phase-2 MonolithChooserTreeCollector.
 	static FMonolithActionResult HandleGetAnimGraphChoosers(const TSharedPtr<FJsonObject>& Params);
 
-	// --- Notify Editing (2) ---
+	// --- Notify Editing (3) ---
 	static FMonolithActionResult HandleSetNotifyTime(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleSetNotifyTickType(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetNotifyDuration(const TSharedPtr<FJsonObject>& Params);
 
 	// --- Bone Tracks (3) ---
@@ -90,8 +91,9 @@ public:
 	static FMonolithActionResult HandleGetAbpInfo(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleGetLiveLinkStatus(const TSharedPtr<FJsonObject>& Params);
 
-	// --- Wave 2: Notify CRUD (4) ---
+	// --- Wave 2: Notify CRUD (5) ---
 	static FMonolithActionResult HandleAddNotify(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult HandleAddNamedNotify(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleAddNotifyState(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleRemoveNotify(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult HandleSetNotifyTrack(const TSharedPtr<FJsonObject>& Params);

@@ -8,6 +8,8 @@
 
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequence.h"
+#include "Animation/AnimTypes.h"
+#include "AlphaBlend.h"
 #include "Animation/AnimationAsset.h"
 #include "Animation/BlendSpace.h"
 #include "Animation/BlendSpace1D.h"
@@ -71,6 +73,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonReader.h"
 #include "Editor.h"
+#include "ScopedTransaction.h"
 #include "AnimationStateMachineSchema.h"
 #include "AnimationGraphSchema.h"
 #include "AnimationStateGraph.h"
@@ -102,6 +105,157 @@
 
 namespace
 {
+	struct FAlphaBlendOptionEntry
+	{
+		const TCHAR* Name;
+		EAlphaBlendOption Value;
+	};
+
+	constexpr FAlphaBlendOptionEntry AlphaBlendOptions[] =
+	{
+		{ TEXT("Linear"), EAlphaBlendOption::Linear },
+		{ TEXT("Cubic"), EAlphaBlendOption::Cubic },
+		{ TEXT("HermiteCubic"), EAlphaBlendOption::HermiteCubic },
+		{ TEXT("Sinusoidal"), EAlphaBlendOption::Sinusoidal },
+		{ TEXT("QuadraticInOut"), EAlphaBlendOption::QuadraticInOut },
+		{ TEXT("CubicInOut"), EAlphaBlendOption::CubicInOut },
+		{ TEXT("QuarticInOut"), EAlphaBlendOption::QuarticInOut },
+		{ TEXT("QuinticInOut"), EAlphaBlendOption::QuinticInOut },
+		{ TEXT("CircularIn"), EAlphaBlendOption::CircularIn },
+		{ TEXT("CircularOut"), EAlphaBlendOption::CircularOut },
+		{ TEXT("CircularInOut"), EAlphaBlendOption::CircularInOut },
+		{ TEXT("ExpIn"), EAlphaBlendOption::ExpIn },
+		{ TEXT("ExpOut"), EAlphaBlendOption::ExpOut },
+		{ TEXT("ExpInOut"), EAlphaBlendOption::ExpInOut },
+		{ TEXT("Custom"), EAlphaBlendOption::Custom },
+	};
+
+	constexpr const TCHAR* AlphaBlendOptionDomain =
+		TEXT("Linear, Cubic, HermiteCubic, Sinusoidal, QuadraticInOut, CubicInOut, QuarticInOut, QuinticInOut, CircularIn, CircularOut, CircularInOut, ExpIn, ExpOut, ExpInOut, Custom");
+
+	bool TryParseAlphaBlendOption(const FString& Name, EAlphaBlendOption& OutOption)
+	{
+		for (const FAlphaBlendOptionEntry& Entry : AlphaBlendOptions)
+		{
+			if (Name.Equals(Entry.Name, ESearchCase::CaseSensitive))
+			{
+				OutOption = Entry.Value;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	FString AlphaBlendOptionToString(EAlphaBlendOption Option)
+	{
+		for (const FAlphaBlendOptionEntry& Entry : AlphaBlendOptions)
+		{
+			if (Option == Entry.Value)
+			{
+				return Entry.Name;
+			}
+		}
+		return TEXT("Unknown");
+	}
+
+	bool TryParseMontageNotifyTickType(const FString& Name, EMontageNotifyTickType::Type& OutTickType)
+	{
+		if (Name.Equals(TEXT("Queued"), ESearchCase::CaseSensitive))
+		{
+			OutTickType = EMontageNotifyTickType::Queued;
+			return true;
+		}
+		if (Name.Equals(TEXT("BranchingPoint"), ESearchCase::CaseSensitive))
+		{
+			OutTickType = EMontageNotifyTickType::BranchingPoint;
+			return true;
+		}
+		return false;
+	}
+
+	const TCHAR* MontageNotifyTickTypeToString(EMontageNotifyTickType::Type TickType)
+	{
+		return TickType == EMontageNotifyTickType::BranchingPoint
+			? TEXT("BranchingPoint")
+			: TEXT("Queued");
+	}
+
+	bool IsClasslessNamedPointNotify(const FAnimNotifyEvent& Event)
+	{
+		return Event.Notify.Get() == nullptr
+			&& Event.NotifyStateClass.Get() == nullptr
+			&& !Event.NotifyName.IsNone();
+	}
+
+	bool TryReadFiniteFloat(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		float& OutValue,
+		FString& OutError)
+	{
+		double RawValue = 0.0;
+		if (!Params->TryGetNumberField(FieldName, RawValue))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a number"), FieldName);
+			return false;
+		}
+		if (!FMath::IsFinite(RawValue)
+			|| RawValue < -static_cast<double>(MAX_flt)
+			|| RawValue > static_cast<double>(MAX_flt))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a finite float"), FieldName);
+			return false;
+		}
+		OutValue = static_cast<float>(RawValue);
+		return true;
+	}
+
+	bool TryReadNonNegativeIndex(
+		const TSharedPtr<FJsonObject>& Params,
+		const TCHAR* FieldName,
+		int32& OutIndex,
+		FString& OutError)
+	{
+		double RawValue = 0.0;
+		if (!Params->TryGetNumberField(FieldName, RawValue)
+			|| !FMath::IsFinite(RawValue)
+			|| RawValue < 0.0
+			|| RawValue > static_cast<double>(MAX_int32))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a non-negative integer"), FieldName);
+			return false;
+		}
+
+		const int32 Candidate = static_cast<int32>(RawValue);
+		if (static_cast<double>(Candidate) != RawValue)
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be an integer"), FieldName);
+			return false;
+		}
+
+		OutIndex = Candidate;
+		return true;
+	}
+
+	int32 FindNotifyEventIndex(
+		const UAnimSequenceBase* Sequence,
+		FName NotifyName,
+		float Time,
+		int32 TrackIndex,
+		const UAnimNotify* NotifyObject,
+		const UAnimNotifyState* NotifyStateObject)
+	{
+		return Sequence ? Sequence->Notifies.IndexOfByPredicate(
+			[NotifyName, Time, TrackIndex, NotifyObject, NotifyStateObject](const FAnimNotifyEvent& Candidate)
+			{
+				return Candidate.NotifyName == NotifyName
+					&& Candidate.TrackIndex == TrackIndex
+					&& Candidate.Notify.Get() == NotifyObject
+					&& Candidate.NotifyStateClass.Get() == NotifyStateObject
+					&& FMath::IsNearlyEqual(Candidate.GetTime(), Time, UE_SMALL_NUMBER);
+			}) : INDEX_NONE;
+	}
+
 	TSharedPtr<FJsonObject> BuildOptionalModuleStatus(const TCHAR* ModuleName)
 	{
 		FModuleManager& ModuleManager = FModuleManager::Get();
@@ -412,9 +566,23 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 		TEXT("Set the trigger time of an animation notify"),
 		FMonolithActionHandler::CreateStatic(&HandleSetNotifyTime),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Animation asset path"))
 			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of the notify"))
+			.Minimum(TEXT("notify_index"), 0)
 			.Required(TEXT("new_time"), TEXT("number"), TEXT("New trigger time in seconds"))
+			.Minimum(TEXT("new_time"), 0.0)
+			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("set_notify_tick_type"),
+		TEXT("Set the Montage tick type on an existing classless named point notify"),
+		FMonolithActionHandler::CreateStatic(&HandleSetNotifyTickType),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
+			.Required(TEXT("notify_index"), TEXT("integer"), TEXT("Index of the existing classless named notify"))
+			.Minimum(TEXT("notify_index"), 0)
+			.Required(TEXT("montage_tick_type"), TEXT("string"), TEXT("Montage notify ticking mode: Queued or BranchingPoint"))
+			.Enum(TEXT("montage_tick_type"), { TEXT("Queued"), TEXT("BranchingPoint") })
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_notify_duration"),
 		TEXT("Set the duration of a state animation notify"),
@@ -591,6 +759,21 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.Required(TEXT("time"), TEXT("number"), TEXT("Trigger time in seconds"))
 			.Optional(TEXT("track_name"), TEXT("string"), TEXT("Notify track name"), TEXT("1"))
 			.Build());
+	Registry.RegisterAction(TEXT("animation"), TEXT("add_named_notify"),
+		TEXT("Add a classless named point notify to a montage with an explicit track and Montage tick type"),
+		FMonolithActionHandler::CreateStatic(&HandleAddNamedNotify),
+		FParamSchemaBuilder()
+			.EnableValidation()
+			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
+			.Required(TEXT("notify_name"), TEXT("string"), TEXT("Named notify event name; no UAnimNotify class is created"))
+			.Required(TEXT("time"), TEXT("number"), TEXT("Trigger time in seconds"))
+			.Minimum(TEXT("time"), 0.0)
+			.Optional(TEXT("track_name"), TEXT("string"), TEXT("Existing notify track name; provide exactly one of track_name or track_index"))
+			.Optional(TEXT("track_index"), TEXT("integer"), TEXT("Existing notify track index; provide exactly one of track_name or track_index"))
+			.Minimum(TEXT("track_index"), 0)
+			.Optional(TEXT("montage_tick_type"), TEXT("string"), TEXT("Montage notify ticking mode: Queued or BranchingPoint"), TEXT("Queued"))
+			.Enum(TEXT("montage_tick_type"), { TEXT("Queued"), TEXT("BranchingPoint") })
+			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("add_notify_state"),
 		TEXT("Add a state notify (with duration) to an animation asset"),
 		FMonolithActionHandler::CreateStatic(&HandleAddNotifyState),
@@ -738,12 +921,19 @@ void FMonolithAnimationActions::RegisterActions(FMonolithToolRegistry& Registry)
 			.RequiredAssetPath(TEXT("skeleton_path"), TEXT("Skeleton asset path"))
 			.Build());
 	Registry.RegisterAction(TEXT("animation"), TEXT("set_montage_blend"),
-		TEXT("Set blend in/out times and auto blend out on a montage"),
+		TEXT("Set blend in/out times, EAlphaBlendOption modes, and auto blend out settings on a montage"),
 		FMonolithActionHandler::CreateStatic(&HandleSetMontageBlend),
 		FParamSchemaBuilder()
+			.EnableValidation()
 			.RequiredAssetPath(TEXT("asset_path"), TEXT("Montage asset path"))
 			.Optional(TEXT("blend_in_time"), TEXT("number"), TEXT("Blend in duration in seconds"))
+			.Minimum(TEXT("blend_in_time"), 0.0)
 			.Optional(TEXT("blend_out_time"), TEXT("number"), TEXT("Blend out duration in seconds"))
+			.Minimum(TEXT("blend_out_time"), 0.0)
+			.Optional(TEXT("blend_in_option"), TEXT("string"), TEXT("EAlphaBlendOption for blend in"))
+			.Enum(TEXT("blend_in_option"), { TEXT("Linear"), TEXT("Cubic"), TEXT("HermiteCubic"), TEXT("Sinusoidal"), TEXT("QuadraticInOut"), TEXT("CubicInOut"), TEXT("QuarticInOut"), TEXT("QuinticInOut"), TEXT("CircularIn"), TEXT("CircularOut"), TEXT("CircularInOut"), TEXT("ExpIn"), TEXT("ExpOut"), TEXT("ExpInOut"), TEXT("Custom") })
+			.Optional(TEXT("blend_out_option"), TEXT("string"), TEXT("EAlphaBlendOption for blend out"))
+			.Enum(TEXT("blend_out_option"), { TEXT("Linear"), TEXT("Cubic"), TEXT("HermiteCubic"), TEXT("Sinusoidal"), TEXT("QuadraticInOut"), TEXT("CubicInOut"), TEXT("QuarticInOut"), TEXT("QuinticInOut"), TEXT("CircularIn"), TEXT("CircularOut"), TEXT("CircularInOut"), TEXT("ExpIn"), TEXT("ExpOut"), TEXT("ExpInOut"), TEXT("Custom") })
 			.Optional(TEXT("blend_out_trigger_time"), TEXT("number"), TEXT("Time before end to trigger blend out"))
 			.Optional(TEXT("enable_auto_blend_out"), TEXT("bool"), TEXT("Enable automatic blend out"))
 			.Build());
@@ -1793,9 +1983,29 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetBlendSpaceInterpolatio
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTime(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
-	int32 NotifyIndex = 0; if (double TempVal; Params->TryGetNumberField(TEXT("notify_index"), TempVal)) NotifyIndex = static_cast<int32>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'notify_index' must be a number"));
-	float NewTime = 0.0f; if (double TempVal; Params->TryGetNumberField(TEXT("new_time"), TempVal)) NewTime = static_cast<float>(TempVal); else return FMonolithActionResult::Error(TEXT("Parameter 'new_time' must be a number"));
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_notify_time requires params"));
+	}
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a non-empty string"));
+	}
+
+	FString ParseError;
+	int32 NotifyIndex = INDEX_NONE;
+	if (!TryReadNonNegativeIndex(Params, TEXT("notify_index"), NotifyIndex, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
+
+	float NewTime = 0.0f;
+	if (!TryReadFiniteFloat(Params, TEXT("new_time"), NewTime, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
 
 	UAnimSequenceBase* Seq = FMonolithAssetUtils::LoadAssetByPath<UAnimSequenceBase>(AssetPath);
 	if (!Seq) return FMonolithActionResult::Error(FString::Printf(TEXT("Animation asset not found: %s"), *AssetPath));
@@ -1803,15 +2013,182 @@ FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTime(const TShar
 	if (!Seq->Notifies.IsValidIndex(NotifyIndex))
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Invalid notify index: %d (total: %d)"), NotifyIndex, Seq->Notifies.Num()));
 
-	GEditor->BeginTransaction(FText::FromString(TEXT("Set Notify Time")));
+	if (NewTime < 0.0f || NewTime > Seq->GetPlayLength())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("new_time %.6f is outside animation range [0, %.6f]"),
+			NewTime,
+			Seq->GetPlayLength()));
+	}
+
+	const FAnimNotifyEvent& CurrentEvent = Seq->Notifies[NotifyIndex];
+	for (int32 OtherIndex = 0; OtherIndex < Seq->Notifies.Num(); ++OtherIndex)
+	{
+		if (OtherIndex == NotifyIndex)
+		{
+			continue;
+		}
+
+		const FAnimNotifyEvent& OtherEvent = Seq->Notifies[OtherIndex];
+		if (OtherEvent.TrackIndex == CurrentEvent.TrackIndex
+			&& FMath::IsNearlyEqual(OtherEvent.GetTime(), NewTime, UE_SMALL_NUMBER))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Notify track %d already contains notify '%s' at time %.6f"),
+				CurrentEvent.TrackIndex,
+				*OtherEvent.NotifyName.ToString(),
+				NewTime));
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("MonolithAnimation", "SetNotifyTime", "Monolith Set Notify Time"));
 	Seq->Modify();
-	Seq->Notifies[NotifyIndex].SetTime(NewTime);
-	GEditor->EndTransaction();
+	FAnimNotifyEvent& NotifyEvent = Seq->Notifies[NotifyIndex];
+	const FName NotifyName = NotifyEvent.NotifyName;
+	const int32 TrackIndex = NotifyEvent.TrackIndex;
+	const UAnimNotify* NotifyObject = NotifyEvent.Notify.Get();
+	const UAnimNotifyState* NotifyStateObject = NotifyEvent.NotifyStateClass.Get();
+	NotifyEvent.SetTime(NewTime);
+#if WITH_EDITOR
+	NotifyEvent.RefreshTriggerOffset(Seq->CalculateOffsetForNotify(NewTime));
+#endif
+	Seq->RefreshCacheData();
+	Seq->MarkPackageDirty();
+
+	const int32 ResultIndex = FindNotifyEventIndex(
+		Seq,
+		NotifyName,
+		NewTime,
+		TrackIndex,
+		NotifyObject,
+		NotifyStateObject);
+	const int32 ReadbackIndex = ResultIndex != INDEX_NONE ? ResultIndex : NotifyIndex;
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	Root->SetNumberField(TEXT("index"), NotifyIndex);
+	Root->SetStringField(TEXT("asset_path"), Seq->GetPathName());
+	Root->SetNumberField(TEXT("index"), ReadbackIndex);
 	Root->SetNumberField(TEXT("new_time"), NewTime);
-	Root->SetStringField(TEXT("notify_name"), Seq->Notifies[NotifyIndex].NotifyName.ToString());
+	Root->SetStringField(TEXT("notify_name"), Seq->Notifies[ReadbackIndex].NotifyName.ToString());
+	Root->SetStringField(TEXT("montage_tick_type"), MontageNotifyTickTypeToString(Seq->Notifies[ReadbackIndex].MontageTickType));
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleSetNotifyTickType(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_notify_tick_type requires params"));
+	}
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a non-empty string"));
+	}
+
+	FString ParseError;
+	int32 NotifyIndex = INDEX_NONE;
+	if (!TryReadNonNegativeIndex(Params, TEXT("notify_index"), NotifyIndex, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
+
+	FString TickTypeString;
+	if (!Params->TryGetStringField(TEXT("montage_tick_type"), TickTypeString))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'montage_tick_type' must be a string"));
+	}
+
+	EMontageNotifyTickType::Type NewTickType = EMontageNotifyTickType::Queued;
+	if (!TryParseMontageNotifyTickType(TickTypeString, NewTickType))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid montage_tick_type '%s'. Expected Queued or BranchingPoint"),
+			*TickTypeString));
+	}
+
+	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
+	if (!Montage)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
+	}
+
+	if (!Montage->Notifies.IsValidIndex(NotifyIndex))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid notify_index %d (montage has %d notifies)"),
+			NotifyIndex,
+			Montage->Notifies.Num()));
+	}
+
+	FAnimNotifyEvent& Event = Montage->Notifies[NotifyIndex];
+	if (!IsClasslessNamedPointNotify(Event))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Notify at index %d is not a classless named point notify"),
+			NotifyIndex));
+	}
+
+	const EMontageNotifyTickType::Type OldTickType = Event.MontageTickType;
+	if (OldTickType == NewTickType)
+	{
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("asset_path"), Montage->GetPathName());
+		Root->SetNumberField(TEXT("notify_index"), NotifyIndex);
+		Root->SetStringField(TEXT("notify_name"), Event.NotifyName.ToString());
+		Root->SetStringField(TEXT("old_montage_tick_type"), MontageNotifyTickTypeToString(OldTickType));
+		Root->SetStringField(TEXT("montage_tick_type"), MontageNotifyTickTypeToString(NewTickType));
+		Root->SetBoolField(TEXT("changed"), false);
+		return FMonolithActionResult::Success(Root);
+	}
+
+	const FName NotifyName = Event.NotifyName;
+	const float NotifyTime = Event.GetTime();
+	const int32 TrackIndex = Event.TrackIndex;
+
+	if (NewTickType == EMontageNotifyTickType::BranchingPoint)
+	{
+		for (int32 OtherIndex = 0; OtherIndex < Montage->Notifies.Num(); ++OtherIndex)
+		{
+			if (OtherIndex == NotifyIndex)
+			{
+				continue;
+			}
+
+			const FAnimNotifyEvent& OtherEvent = Montage->Notifies[OtherIndex];
+			if (OtherEvent.IsBranchingPoint()
+				&& FMath::IsNearlyEqual(OtherEvent.GetTriggerTime(), Event.GetTriggerTime(), UE_SMALL_NUMBER))
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Cannot set BranchingPoint: notify '%s' at index %d already uses trigger time %.6f"),
+					*OtherEvent.NotifyName.ToString(),
+					OtherIndex,
+					Event.GetTriggerTime()));
+			}
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("MonolithAnimation", "SetNotifyTickType", "Monolith Set Notify Tick Type"));
+	Montage->Modify();
+	Event.MontageTickType = NewTickType;
+	Montage->RefreshCacheData();
+	Montage->MarkPackageDirty();
+	const int32 ResultIndex = FindNotifyEventIndex(
+		Montage,
+		NotifyName,
+		NotifyTime,
+		TrackIndex,
+		nullptr,
+		nullptr);
+	const int32 ReadbackIndex = ResultIndex != INDEX_NONE ? ResultIndex : NotifyIndex;
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), Montage->GetPathName());
+	Root->SetNumberField(TEXT("notify_index"), ReadbackIndex);
+	Root->SetStringField(TEXT("notify_name"), NotifyName.ToString());
+	Root->SetStringField(TEXT("old_montage_tick_type"), MontageNotifyTickTypeToString(OldTickType));
+	Root->SetStringField(TEXT("montage_tick_type"), MontageNotifyTickTypeToString(NewTickType));
+	Root->SetBoolField(TEXT("changed"), true);
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -2950,6 +3327,7 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetSequenceNotifies(const
 		NotifyObj->SetStringField(TEXT("state_class"),
 			Event.NotifyStateClass ? Event.NotifyStateClass->GetClass()->GetName() : TEXT(""));
 		NotifyObj->SetNumberField(TEXT("track_index"), Event.TrackIndex);
+		NotifyObj->SetStringField(TEXT("montage_tick_type"), MontageNotifyTickTypeToString(Event.MontageTickType));
 
 		// Get track name if valid
 		FString TrackName;
@@ -3135,6 +3513,8 @@ FMonolithActionResult FMonolithAnimationActions::HandleGetMontageInfo(const TSha
 	Root->SetNumberField(TEXT("rate_scale"), Montage->RateScale);
 	Root->SetNumberField(TEXT("blend_in_time"), Montage->BlendIn.GetBlendTime());
 	Root->SetNumberField(TEXT("blend_out_time"), Montage->BlendOut.GetBlendTime());
+	Root->SetStringField(TEXT("blend_in_option"), AlphaBlendOptionToString(Montage->BlendIn.GetBlendOption()));
+	Root->SetStringField(TEXT("blend_out_option"), AlphaBlendOptionToString(Montage->BlendOut.GetBlendOption()));
 	Root->SetNumberField(TEXT("blend_out_trigger_time"), Montage->BlendOutTriggerTime);
 	Root->SetBoolField(TEXT("enable_auto_blend_out"), Montage->bEnableAutoBlendOut);
 
@@ -3736,6 +4116,213 @@ FMonolithActionResult FMonolithAnimationActions::HandleAddNotify(const TSharedPt
 	Root->SetStringField(TEXT("notify_class"), NotifyClass->GetName());
 	Root->SetNumberField(TEXT("time"), Time);
 	Root->SetStringField(TEXT("track_name"), TrackName);
+	return FMonolithActionResult::Success(Root);
+}
+
+FMonolithActionResult FMonolithAnimationActions::HandleAddNamedNotify(const TSharedPtr<FJsonObject>& Params)
+{
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("add_named_notify requires params"));
+	}
+
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a non-empty string"));
+	}
+
+	FString NotifyNameString;
+	if (!Params->TryGetStringField(TEXT("notify_name"), NotifyNameString))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'notify_name' must be a string"));
+	}
+	NotifyNameString.TrimStartAndEndInline();
+	const FName NotifyName(*NotifyNameString);
+	if (NotifyNameString.IsEmpty() || NotifyName.IsNone())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'notify_name' must identify a non-empty named notify"));
+	}
+
+	FString ParseError;
+	float Time = 0.0f;
+	if (!TryReadFiniteFloat(Params, TEXT("time"), Time, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
+
+	const bool bHasTrackName = Params->HasField(TEXT("track_name"));
+	const bool bHasTrackIndex = Params->HasField(TEXT("track_index"));
+	if (bHasTrackName == bHasTrackIndex)
+	{
+		return FMonolithActionResult::Error(TEXT("Provide exactly one of 'track_name' or 'track_index'"));
+	}
+
+	FString RequestedTrackName;
+	int32 RequestedTrackIndex = INDEX_NONE;
+	if (bHasTrackName)
+	{
+		if (!Params->TryGetStringField(TEXT("track_name"), RequestedTrackName))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'track_name' must be a string"));
+		}
+		RequestedTrackName.TrimStartAndEndInline();
+		if (RequestedTrackName.IsEmpty())
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'track_name' must be non-empty"));
+		}
+	}
+	else if (!TryReadNonNegativeIndex(Params, TEXT("track_index"), RequestedTrackIndex, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
+
+	FString TickTypeString = TEXT("Queued");
+	if (Params->HasField(TEXT("montage_tick_type"))
+		&& !Params->TryGetStringField(TEXT("montage_tick_type"), TickTypeString))
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'montage_tick_type' must be a string"));
+	}
+
+	EMontageNotifyTickType::Type TickType = EMontageNotifyTickType::Queued;
+	if (!TryParseMontageNotifyTickType(TickTypeString, TickType))
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("Invalid montage_tick_type '%s'. Expected Queued or BranchingPoint"),
+			*TickTypeString));
+	}
+
+	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
+	if (!Montage)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
+	}
+
+	if (Time < 0.0f || Time > Montage->GetPlayLength())
+	{
+		return FMonolithActionResult::Error(FString::Printf(
+			TEXT("time %.6f is outside montage range [0, %.6f]"),
+			Time,
+			Montage->GetPlayLength()));
+	}
+
+	int32 TrackIndex = INDEX_NONE;
+	FName TrackName = NAME_None;
+	if (bHasTrackName)
+	{
+		TrackName = FName(*RequestedTrackName);
+		for (int32 Index = 0; Index < Montage->AnimNotifyTracks.Num(); ++Index)
+		{
+			if (Montage->AnimNotifyTracks[Index].TrackName == TrackName)
+			{
+				TrackIndex = Index;
+				break;
+			}
+		}
+		if (TrackIndex == INDEX_NONE)
+		{
+			TArray<FString> AvailableTracks;
+			AvailableTracks.Reserve(Montage->AnimNotifyTracks.Num());
+			for (const FAnimNotifyTrack& Track : Montage->AnimNotifyTracks)
+			{
+				AvailableTracks.Add(Track.TrackName.ToString());
+			}
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Notify track '%s' does not exist. Available tracks: [%s]"),
+				*RequestedTrackName,
+				*FString::Join(AvailableTracks, TEXT(", "))));
+		}
+	}
+	else
+	{
+		if (!Montage->AnimNotifyTracks.IsValidIndex(RequestedTrackIndex))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Invalid track_index %d (montage has %d notify tracks)"),
+				RequestedTrackIndex,
+				Montage->AnimNotifyTracks.Num()));
+		}
+		TrackIndex = RequestedTrackIndex;
+		TrackName = Montage->AnimNotifyTracks[TrackIndex].TrackName;
+	}
+
+	FAnimNotifyEvent NewEvent;
+	NewEvent.NotifyName = NotifyName;
+	NewEvent.Notify = nullptr;
+	NewEvent.NotifyStateClass = nullptr;
+	NewEvent.TrackIndex = TrackIndex;
+	NewEvent.MontageTickType = TickType;
+	NewEvent.Link(Montage, Time);
+#if WITH_EDITOR
+	NewEvent.RefreshTriggerOffset(Montage->CalculateOffsetForNotify(Time));
+#endif
+#if WITH_EDITORONLY_DATA
+	NewEvent.Guid = FGuid::NewGuid();
+#endif
+
+	for (int32 ExistingIndex = 0; ExistingIndex < Montage->Notifies.Num(); ++ExistingIndex)
+	{
+		const FAnimNotifyEvent& Existing = Montage->Notifies[ExistingIndex];
+		if (Existing.TrackIndex == TrackIndex
+			&& FMath::IsNearlyEqual(Existing.GetTime(), NewEvent.GetTime(), UE_SMALL_NUMBER))
+		{
+			const bool bSameNamedEvent = IsClasslessNamedPointNotify(Existing) && Existing.NotifyName == NotifyName;
+			if (bSameNamedEvent)
+			{
+				return FMonolithActionResult::Error(FString::Printf(
+					TEXT("Duplicate named notify '%s' already exists on track '%s' at time %.6f"),
+					*NotifyName.ToString(),
+					*TrackName.ToString(),
+					Time));
+			}
+
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Notify track '%s' already contains notify '%s' at time %.6f"),
+				*TrackName.ToString(),
+				*Existing.NotifyName.ToString(),
+				Time));
+		}
+
+		if (TickType == EMontageNotifyTickType::BranchingPoint
+			&& Existing.IsBranchingPoint()
+			&& FMath::IsNearlyEqual(Existing.GetTriggerTime(), NewEvent.GetTriggerTime(), UE_SMALL_NUMBER))
+		{
+			return FMonolithActionResult::Error(FString::Printf(
+				TEXT("Cannot add BranchingPoint '%s': notify '%s' at index %d already uses trigger time %.6f"),
+				*NotifyName.ToString(),
+				*Existing.NotifyName.ToString(),
+				ExistingIndex,
+				NewEvent.GetTriggerTime()));
+		}
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("MonolithAnimation", "AddNamedNotify", "Monolith Add Named Notify"));
+	Montage->Modify();
+	Montage->Notifies.Add(MoveTemp(NewEvent));
+	Montage->RefreshCacheData();
+	Montage->MarkPackageDirty();
+
+	const int32 NewIndex = FindNotifyEventIndex(
+		Montage,
+		NotifyName,
+		Time,
+		TrackIndex,
+		nullptr,
+		nullptr);
+	if (NewIndex == INDEX_NONE)
+	{
+		return FMonolithActionResult::Error(TEXT("Named notify was added but could not be resolved after cache refresh"));
+	}
+
+	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+	Root->SetStringField(TEXT("asset_path"), Montage->GetPathName());
+	Root->SetNumberField(TEXT("index"), NewIndex);
+	Root->SetStringField(TEXT("notify_name"), NotifyName.ToString());
+	Root->SetNumberField(TEXT("time"), Montage->Notifies[NewIndex].GetTime());
+	Root->SetNumberField(TEXT("track_index"), Montage->Notifies[NewIndex].TrackIndex);
+	Root->SetStringField(TEXT("track_name"), TrackName.ToString());
+	Root->SetStringField(TEXT("montage_tick_type"), MontageNotifyTickTypeToString(Montage->Notifies[NewIndex].MontageTickType));
+	Root->SetStringField(TEXT("notify_class"), TEXT(""));
 	return FMonolithActionResult::Success(Root);
 }
 
@@ -4743,58 +5330,141 @@ FMonolithActionResult FMonolithAnimationActions::HandleCreateMontage(const TShar
 
 FMonolithActionResult FMonolithAnimationActions::HandleSetMontageBlend(const TSharedPtr<FJsonObject>& Params)
 {
-	FString AssetPath = Params->GetStringField(TEXT("asset_path"));
+	if (!Params.IsValid())
+	{
+		return FMonolithActionResult::Error(TEXT("set_montage_blend requires params"));
+	}
 
-	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
-	if (!Montage) return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
+	FString AssetPath;
+	if (!Params->TryGetStringField(TEXT("asset_path"), AssetPath) || AssetPath.IsEmpty())
+	{
+		return FMonolithActionResult::Error(TEXT("Parameter 'asset_path' must be a non-empty string"));
+	}
 
-	bool bAnySet = false;
-
-	GEditor->BeginTransaction(FText::FromString(TEXT("Set Montage Blend")));
-	Montage->Modify();
+	TOptional<float> BlendInTime;
+	TOptional<float> BlendOutTime;
+	TOptional<float> BlendOutTriggerTime;
+	TOptional<bool> bEnableAutoBlendOut;
+	TOptional<EAlphaBlendOption> BlendInOption;
+	TOptional<EAlphaBlendOption> BlendOutOption;
+	FString ParseError;
 
 	if (Params->HasField(TEXT("blend_in_time")))
 	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("blend_in_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_in_time' must be a number"));
-		Montage->BlendIn.SetBlendTime(static_cast<float>(TempVal));
-		bAnySet = true;
+		float Value = 0.0f;
+		if (!TryReadFiniteFloat(Params, TEXT("blend_in_time"), Value, ParseError))
+		{
+			return FMonolithActionResult::Error(ParseError);
+		}
+		if (Value < 0.0f)
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'blend_in_time' must be >= 0"));
+		}
+		BlendInTime = Value;
 	}
+
 	if (Params->HasField(TEXT("blend_out_time")))
 	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("blend_out_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_time' must be a number"));
-		Montage->BlendOut.SetBlendTime(static_cast<float>(TempVal));
-		bAnySet = true;
+		float Value = 0.0f;
+		if (!TryReadFiniteFloat(Params, TEXT("blend_out_time"), Value, ParseError))
+		{
+			return FMonolithActionResult::Error(ParseError);
+		}
+		if (Value < 0.0f)
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_time' must be >= 0"));
+		}
+		BlendOutTime = Value;
 	}
+
+	auto ParseBlendOption = [&Params](const TCHAR* FieldName, TOptional<EAlphaBlendOption>& OutOption, FString& OutError) -> bool
+	{
+		if (!Params->HasField(FieldName))
+		{
+			return true;
+		}
+
+		FString OptionString;
+		if (!Params->TryGetStringField(FieldName, OptionString))
+		{
+			OutError = FString::Printf(TEXT("Parameter '%s' must be a string"), FieldName);
+			return false;
+		}
+
+		EAlphaBlendOption ParsedOption = EAlphaBlendOption::Linear;
+		if (!TryParseAlphaBlendOption(OptionString, ParsedOption))
+		{
+			OutError = FString::Printf(
+				TEXT("Invalid %s '%s'. Expected one of: %s"),
+				FieldName,
+				*OptionString,
+				AlphaBlendOptionDomain);
+			return false;
+		}
+
+		OutOption = ParsedOption;
+		return true;
+	};
+
+	if (!ParseBlendOption(TEXT("blend_in_option"), BlendInOption, ParseError)
+		|| !ParseBlendOption(TEXT("blend_out_option"), BlendOutOption, ParseError))
+	{
+		return FMonolithActionResult::Error(ParseError);
+	}
+
 	if (Params->HasField(TEXT("blend_out_trigger_time")))
 	{
-		double TempVal;
-		if (!Params->TryGetNumberField(TEXT("blend_out_trigger_time"), TempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'blend_out_trigger_time' must be a number"));
-		Montage->BlendOutTriggerTime = static_cast<float>(TempVal);
-		bAnySet = true;
+		float Value = 0.0f;
+		if (!TryReadFiniteFloat(Params, TEXT("blend_out_trigger_time"), Value, ParseError))
+		{
+			return FMonolithActionResult::Error(ParseError);
+		}
+		BlendOutTriggerTime = Value;
 	}
+
 	if (Params->HasField(TEXT("enable_auto_blend_out")))
 	{
-		bool bTempVal;
-		if (!Params->TryGetBoolField(TEXT("enable_auto_blend_out"), bTempVal)) return FMonolithActionResult::Error(TEXT("Parameter 'enable_auto_blend_out' must be a boolean"));
-		Montage->bEnableAutoBlendOut = bTempVal;
-		bAnySet = true;
+		bool Value = false;
+		if (!Params->TryGetBoolField(TEXT("enable_auto_blend_out"), Value))
+		{
+			return FMonolithActionResult::Error(TEXT("Parameter 'enable_auto_blend_out' must be a boolean"));
+		}
+		bEnableAutoBlendOut = Value;
 	}
 
-	if (!bAnySet)
+	if (!BlendInTime.IsSet()
+		&& !BlendOutTime.IsSet()
+		&& !BlendInOption.IsSet()
+		&& !BlendOutOption.IsSet()
+		&& !BlendOutTriggerTime.IsSet()
+		&& !bEnableAutoBlendOut.IsSet())
 	{
-		GEditor->EndTransaction();
-		return FMonolithActionResult::Error(TEXT("At least one of blend_in_time, blend_out_time, blend_out_trigger_time, or enable_auto_blend_out must be provided"));
+		return FMonolithActionResult::Error(TEXT("At least one of blend_in_time, blend_out_time, blend_in_option, blend_out_option, blend_out_trigger_time, or enable_auto_blend_out must be provided"));
 	}
 
-	GEditor->EndTransaction();
+	UAnimMontage* Montage = FMonolithAssetUtils::LoadAssetByPath<UAnimMontage>(AssetPath);
+	if (!Montage)
+	{
+		return FMonolithActionResult::Error(FString::Printf(TEXT("Montage not found: %s"), *AssetPath));
+	}
+
+	const FScopedTransaction Transaction(NSLOCTEXT("MonolithAnimation", "SetMontageBlend", "Monolith Set Montage Blend"));
+	Montage->Modify();
+	if (BlendInTime.IsSet()) Montage->BlendIn.SetBlendTime(BlendInTime.GetValue());
+	if (BlendOutTime.IsSet()) Montage->BlendOut.SetBlendTime(BlendOutTime.GetValue());
+	if (BlendInOption.IsSet()) Montage->BlendIn.SetBlendOption(BlendInOption.GetValue());
+	if (BlendOutOption.IsSet()) Montage->BlendOut.SetBlendOption(BlendOutOption.GetValue());
+	if (BlendOutTriggerTime.IsSet()) Montage->BlendOutTriggerTime = BlendOutTriggerTime.GetValue();
+	if (bEnableAutoBlendOut.IsSet()) Montage->bEnableAutoBlendOut = bEnableAutoBlendOut.GetValue();
+	Montage->RefreshCacheData();
 	Montage->MarkPackageDirty();
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
-	Root->SetStringField(TEXT("asset_path"), AssetPath);
+	Root->SetStringField(TEXT("asset_path"), Montage->GetPathName());
 	Root->SetNumberField(TEXT("blend_in_time"), Montage->BlendIn.GetBlendTime());
 	Root->SetNumberField(TEXT("blend_out_time"), Montage->BlendOut.GetBlendTime());
+	Root->SetStringField(TEXT("blend_in_option"), AlphaBlendOptionToString(Montage->BlendIn.GetBlendOption()));
+	Root->SetStringField(TEXT("blend_out_option"), AlphaBlendOptionToString(Montage->BlendOut.GetBlendOption()));
 	Root->SetNumberField(TEXT("blend_out_trigger_time"), Montage->BlendOutTriggerTime);
 	Root->SetBoolField(TEXT("enable_auto_blend_out"), Montage->bEnableAutoBlendOut);
 	return FMonolithActionResult::Success(Root);
