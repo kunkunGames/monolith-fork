@@ -28,6 +28,7 @@ private:
 	FDelegateHandle PreSlateModalHandle;
 
 	// Harvest the about-to-open modal identified by FModalWindowContext, then emit
-	// the MODAL_OPEN log line. Always emits at least a timestamped "modal opening" line.
+	// MODAL_PROGRESS for an engine-classified slow-task window or MODAL_OPEN otherwise.
+	// Missing context/classification data is surfaced explicitly and fails closed to warning.
 	void OnPreSlateModal(const FCoreDelegates::FModalWindowContext& Context);
 };

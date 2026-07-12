@@ -4,6 +4,7 @@
 #include "MonolithEditorSelectionActions.h"
 #include "MonolithEditorLevelMetadataActions.h"
 #include "MonolithEditorCrashActions.h"
+#include "MonolithEditorModalDiagnostics.h"
 #include "MonolithBuildArtifactActions.h"
 #include "MonolithPieInputActions.h"
 #include "MonolithPieObjectActions.h"
@@ -21,11 +22,8 @@
 #include "UObject/UObjectGlobals.h"
 
 // PART C — passive modal watcher.
-#include "Misc/CoreDelegates.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
-#include "Widgets/Text/STextBlock.h"
-#include "Layout/Children.h"
 
 // Headless layout-save guard.
 #include "Containers/Ticker.h"
@@ -206,35 +204,6 @@ private:
 
 FMonolithHeadlessLayoutSaveGuard GMonolithHeadlessLayoutSaveGuard;
 
-	// Recursively walk a Slate widget subtree, appending the text of every STextBlock
-	// found to OutText (newline-joined). Best-effort and depth-bounded so a pathological
-	// tree can't stall the broadcast. The broadcasting thread is the game thread; this
-	// runs before the modal's nested loop starts.
-	void HarvestTextBlocks(const TSharedPtr<SWidget>& Widget, FString& OutText, int32 Depth)
-	{
-		if (!Widget.IsValid() || Depth > 12)
-		{
-			return;
-		}
-		// STextBlock is a SLeafWidget — identify by widget type name (no RTTI dependency).
-		if (Widget->GetType() == TEXT("STextBlock"))
-		{
-			const FText Text = StaticCastSharedPtr<STextBlock>(Widget)->GetText();
-			if (!Text.IsEmpty())
-			{
-				if (!OutText.IsEmpty()) { OutText.Append(TEXT(" | ")); }
-				OutText.Append(Text.ToString());
-			}
-		}
-		if (FChildren* Children = Widget->GetChildren())
-		{
-			const int32 Num = Children->Num();
-			for (int32 Index = 0; Index < Num; ++Index)
-			{
-				HarvestTextBlocks(Children->GetChildAt(Index), OutText, Depth + 1);
-			}
-		}
-	}
 }
 
 void FMonolithEditorModule::StartupModule()
@@ -297,29 +266,44 @@ void FMonolithEditorModule::OnPreSlateModal(const FCoreDelegates::FModalWindowCo
 	// stack. Use the supplied stable identifier instead of harvesting the unrelated active
 	// top-level window, which can report background dock-hint text as the modal message.
 	FString Title;
-	FString Text;
+	FMonolithModalWidgetSnapshot Snapshot;
+	bool bContextWindowAvailable = false;
 
 	if (FSlateApplication::IsInitialized())
 	{
 		SWindow* ContextWindow = reinterpret_cast<SWindow*>(Context.WindowIdentifier);
 		if (ContextWindow)
 		{
+			bContextWindowAvailable = true;
 			Title = ContextWindow->GetTitle().ToString();
-			HarvestTextBlocks(ContextWindow->GetContent(), Text, 0);
-		}
-		else
-		{
-			TSharedPtr<SWindow> ActiveWindow = FSlateApplication::Get().GetActiveTopLevelWindow();
-			if (ActiveWindow.IsValid())
-			{
-				Title = ActiveWindow->GetTitle().ToString();
-			}
+			MonolithEditorModalDiagnostics::HarvestWidgetTree(ContextWindow->GetContent(), Snapshot);
 		}
 	}
 
+	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S"));
+	if (MonolithEditorModalDiagnostics::IsAutoDismissProgressModal(Context.bIsSlowTaskWindow))
+	{
+		UE_LOG(LogMonolith, Log,
+			TEXT("MODAL_PROGRESS ts='%s' context_valid=%s classification_valid=%s widgets=%d truncated=%s title='%s' text='%s' — auto-dismiss progress window; the current editor action remains synchronous until it closes."),
+			*Timestamp,
+			bContextWindowAvailable ? TEXT("true") : TEXT("false"),
+			Context.bIsSlowTaskWindow.IsSet() ? TEXT("true") : TEXT("false"),
+			Snapshot.VisitedWidgetCount,
+			Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
+			*Title,
+			*Snapshot.Text);
+		return;
+	}
+
 	UE_LOG(LogMonolith, Warning,
-		TEXT("MODAL_OPEN ts='%s' title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
-		*FDateTime::Now().ToString(TEXT("%Y-%m-%dT%H:%M:%S")), *Title, *Text);
+		TEXT("MODAL_OPEN ts='%s' context_valid=%s classification_valid=%s widgets=%d truncated=%s title='%s' text='%s' — game thread is about to enter a blocking modal loop; MCP will be unresponsive until dismissed."),
+		*Timestamp,
+		bContextWindowAvailable ? TEXT("true") : TEXT("false"),
+		Context.bIsSlowTaskWindow.IsSet() ? TEXT("true") : TEXT("false"),
+		Snapshot.VisitedWidgetCount,
+		Snapshot.bTruncated ? TEXT("true") : TEXT("false"),
+		*Title,
+		*Snapshot.Text);
 }
 
 void FMonolithEditorModule::ShutdownModule()
